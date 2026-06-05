@@ -114,6 +114,12 @@
             android:exported="false"
             android:screenOrientation="landscape" />
 
+        <!-- Global search (Live + Movies + Series). -->
+        <activity
+            android:name=".ui.search.SearchActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
         <!-- Settings + sub-screens. -->
         <activity
             android:name=".ui.settings.SettingsActivity"

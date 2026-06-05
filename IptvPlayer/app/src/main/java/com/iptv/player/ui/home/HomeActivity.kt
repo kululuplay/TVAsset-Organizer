@@ -44,6 +44,14 @@ class HomeActivity : BaseActivity() {
     /** Last channels rendered, used by the number-key zap lookup. */
     private var currentChannels: List<Channel> = emptyList()
 
+    /** Guards the one-time initial category selection on first category emission. */
+    private var initialSelectionDone = false
+
+    companion object {
+        /** Optional category id to open on (e.g. Favorites from the dashboard). */
+        const val EXTRA_INITIAL_CATEGORY = "extra_initial_category"
+    }
+
     private val zap by lazy {
         NumberZapInputHelper(
             lookup = { num -> currentChannels.firstOrNull { it.number == num } },
@@ -106,10 +114,15 @@ class HomeActivity : BaseActivity() {
         lifecycleScope.launch {
             viewModel.categories.collectLatest { cats ->
                 categoryAdapter.submitList(cats)
-                if (cats.isNotEmpty()) {
-                    // Default selection: first real category after the pinned ones.
-                    val defaultCat = cats.getOrNull(2) ?: cats.first()
-                    viewModel.selectCategory(defaultCat.id)
+                if (cats.isNotEmpty() && !initialSelectionDone) {
+                    initialSelectionDone = true
+                    // Honour an explicitly requested category (e.g. Favorites from the
+                    // dashboard); otherwise land on the first real category after the
+                    // pinned Favorites/Recent entries.
+                    val requested = intent.getStringExtra(EXTRA_INITIAL_CATEGORY)
+                    val target = cats.firstOrNull { it.id == requested }
+                        ?: cats.getOrNull(2) ?: cats.first()
+                    viewModel.selectCategory(target.id)
                 }
             }
         }

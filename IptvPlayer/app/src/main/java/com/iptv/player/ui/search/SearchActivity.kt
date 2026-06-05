@@ -1,0 +1,152 @@
+/*
+ * SearchActivity.kt
+ * Global search across Live channels, Movies and Series. A single query field
+ * fans out to three result columns; clicking a result opens the right screen
+ * (live player, movie detail, or series detail). Fully D-pad driven for TV.
+ */
+package com.iptv.player.ui.search
+
+import android.content.Intent
+import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.View
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.iptv.player.databinding.ActivitySearchBinding
+import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.ui.home.ChannelAdapter
+import com.iptv.player.ui.player.PlayerActivity
+import com.iptv.player.ui.series.SeriesAdapter
+import com.iptv.player.ui.series.SeriesDetailActivity
+import com.iptv.player.ui.vod.VodAdapter
+import com.iptv.player.ui.vod.VodDetailActivity
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+import java.text.DateFormat
+import java.util.Date
+import java.util.Locale
+
+class SearchActivity : BaseActivity() {
+
+    private lateinit var binding: ActivitySearchBinding
+    private val viewModel: SearchViewModel by lazy {
+        ViewModelProvider(this)[SearchViewModel::class.java]
+    }
+
+    private lateinit var liveAdapter: ChannelAdapter
+    private lateinit var movieAdapter: VodAdapter
+    private lateinit var seriesAdapter: SeriesAdapter
+
+    private var hasLive = false
+    private var hasMovies = false
+    private var hasSeries = false
+    private var hasQuery = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivitySearchBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        setupLists()
+        setupSearch()
+        observe()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        binding.dateText.text = DateFormat
+            .getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
+            .format(Date())
+    }
+
+    private fun setupLists() {
+        liveAdapter = ChannelAdapter(
+            onFocused = { },
+            onClicked = { openLive(it.id) },
+            onToggleFavorite = { /* favorite toggling isn't offered from search */ }
+        )
+        binding.liveList.layoutManager = LinearLayoutManager(this)
+        binding.liveList.adapter = liveAdapter
+
+        movieAdapter = VodAdapter(
+            onFocused = { },
+            onClicked = { openMovie(it.id) }
+        )
+        binding.movieGrid.layoutManager = GridLayoutManager(this, 2)
+        binding.movieGrid.adapter = movieAdapter
+
+        seriesAdapter = SeriesAdapter(
+            onFocused = { },
+            onClicked = { openSeries(it.id) }
+        )
+        binding.seriesGrid.layoutManager = GridLayoutManager(this, 2)
+        binding.seriesGrid.adapter = seriesAdapter
+    }
+
+    private fun setupSearch() {
+        binding.searchInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val text = s?.toString().orEmpty()
+                hasQuery = text.isNotBlank()
+                viewModel.setQuery(text)
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+    }
+
+    private fun observe() {
+        lifecycleScope.launch {
+            viewModel.channels.collectLatest { list ->
+                liveAdapter.submitList(list)
+                hasLive = list.isNotEmpty()
+                updateEmptyState()
+            }
+        }
+        lifecycleScope.launch {
+            viewModel.movies.collectLatest { list ->
+                movieAdapter.submitList(list)
+                hasMovies = list.isNotEmpty()
+                updateEmptyState()
+            }
+        }
+        lifecycleScope.launch {
+            viewModel.series.collectLatest { list ->
+                seriesAdapter.submitList(list)
+                hasSeries = list.isNotEmpty()
+                updateEmptyState()
+            }
+        }
+    }
+
+    /** Show the "no results" hint only once a query is entered and nothing matched. */
+    private fun updateEmptyState() {
+        val nothing = hasQuery && !hasLive && !hasMovies && !hasSeries
+        binding.emptyState.visibility = if (nothing) View.VISIBLE else View.GONE
+        binding.resultsRow.visibility = if (nothing) View.GONE else View.VISIBLE
+    }
+
+    private fun openLive(id: String) {
+        startActivity(
+            Intent(this, PlayerActivity::class.java)
+                .putExtra(PlayerActivity.EXTRA_CHANNEL_ID, id)
+        )
+    }
+
+    private fun openMovie(id: String) {
+        startActivity(
+            Intent(this, VodDetailActivity::class.java)
+                .putExtra(VodDetailActivity.EXTRA_VOD_ID, id)
+        )
+    }
+
+    private fun openSeries(id: String) {
+        startActivity(
+            Intent(this, SeriesDetailActivity::class.java)
+                .putExtra(SeriesDetailActivity.EXTRA_SERIES_ID, id)
+        )
+    }
+}

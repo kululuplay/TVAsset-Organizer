@@ -19,7 +19,9 @@ import com.iptv.player.ui.account.AccountActivity
 import com.iptv.player.ui.catchup.CatchupActivity
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.home.HomeActivity
+import com.iptv.player.ui.home.HomeViewModel
 import com.iptv.player.ui.profiles.ProfilesActivity
+import com.iptv.player.ui.search.SearchActivity
 import com.iptv.player.ui.series.SeriesActivity
 import com.iptv.player.ui.settings.SettingsActivity
 import com.iptv.player.ui.vod.VodActivity
@@ -56,12 +58,17 @@ class DashboardActivity : BaseActivity() {
         binding.tileSeries.setOnClickListener { open(SeriesActivity::class.java) }
         binding.tilePlaylists.setOnClickListener { open(ProfilesActivity::class.java) }
         binding.tileCatchup.setOnClickListener { open(CatchupActivity::class.java) }
-        // No dedicated favorites screen yet; the Live browser pins a Favorites category.
-        binding.tileFavorites.setOnClickListener { open(HomeActivity::class.java) }
+        // Open the Live browser straight on its pinned Favorites category.
+        binding.tileFavorites.setOnClickListener {
+            startActivity(
+                Intent(this, HomeActivity::class.java)
+                    .putExtra(HomeActivity.EXTRA_INITIAL_CATEGORY, HomeViewModel.CAT_FAVORITES)
+            )
+        }
     }
 
     private fun wireActions() {
-        binding.btnSearch.setOnClickListener { open(HomeActivity::class.java) }
+        binding.btnSearch.setOnClickListener { open(SearchActivity::class.java) }
         binding.btnSettings.setOnClickListener { open(SettingsActivity::class.java) }
         binding.btnAccount.setOnClickListener { open(AccountActivity::class.java) }
         binding.btnExit.setOnClickListener { finishAffinity() }
