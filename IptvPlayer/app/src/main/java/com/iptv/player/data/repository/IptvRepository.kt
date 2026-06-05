@@ -10,6 +10,7 @@ package com.iptv.player.data.repository
 import android.util.Base64
 import com.iptv.player.data.local.AppDatabase
 import com.iptv.player.data.local.entity.ChannelEntity
+import com.iptv.player.data.local.entity.ChannelOverrideEntity
 import com.iptv.player.data.local.entity.EpgMappingEntity
 import com.iptv.player.data.local.entity.EpisodeEntity
 import com.iptv.player.data.local.entity.FavoriteEntity
@@ -25,6 +26,7 @@ import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.DiagnosticResult
 import com.iptv.player.data.model.Episode
+import com.iptv.player.data.model.ManagedChannel
 import com.iptv.player.data.model.NowNext
 import com.iptv.player.data.model.Profile
 import com.iptv.player.data.model.Program
@@ -43,6 +45,7 @@ import com.iptv.player.util.AppError
 import com.iptv.player.util.Outcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -60,6 +63,7 @@ class IptvRepository(
 ) {
 
     private val channelDao = db.channelDao()
+    private val channelOverrideDao = db.channelOverrideDao()
     private val favoriteDao = db.favoriteDao()
     private val recentDao = db.recentDao()
     private val epgDao = db.epgDao()
@@ -92,6 +96,45 @@ class IptvRepository(
         channelDao.search(query, type.name).map { list -> list.map { it.toModel() } }
 
     suspend fun getChannel(id: String): Channel? = channelDao.getById(id)?.toModel()
+
+    /** Live channels that advertise a catch-up / timeshift archive. */
+    fun observeCatchupChannels(): Flow<List<Channel>> =
+        channelDao.observeByType(ContentType.LIVE.name)
+            .map { list -> list.map { it.toModel() }.filter { it.catchupDays > 0 } }
+
+    /** All channels of a type (including hidden) plus their manager state. */
+    fun observeManagedChannels(type: ContentType): Flow<List<ManagedChannel>> =
+        combine(
+            channelDao.observeForManagement(type.name),
+            favoriteDao.observeFavoriteChannels()
+        ) { rows, favorites ->
+            val favoriteIds = favorites.map { it.id }.toHashSet()
+            rows.map {
+                ManagedChannel(
+                    channel = it.channel.toModel(),
+                    hidden = it.hidden,
+                    isFavorite = it.channel.id in favoriteIds
+                )
+            }
+        }
+
+    // ---- Channel overrides (hide / custom order) ------------------------
+
+    suspend fun setChannelHidden(channelId: String, hidden: Boolean) = withContext(Dispatchers.IO) {
+        val existing = channelOverrideDao.get(channelId)
+        channelOverrideDao.upsert(
+            ChannelOverrideEntity(channelId, hidden, existing?.sortOrder)
+        )
+    }
+
+    /** Persists a custom order; index in [orderedIds] becomes the sort key. */
+    suspend fun applyChannelOrder(orderedIds: List<String>) = withContext(Dispatchers.IO) {
+        val existing = channelOverrideDao.getAll().associateBy { it.channelId }
+        val updated = orderedIds.mapIndexed { index, id ->
+            ChannelOverrideEntity(id, existing[id]?.hidden ?: false, index)
+        }
+        channelOverrideDao.upsertAll(updated)
+    }
 
     // ---- Favorites / recents -------------------------------------------
 
@@ -170,7 +213,8 @@ class IptvRepository(
                 categoryName = categories[s.categoryId] ?: "Uncategorized",
                 epgChannelId = s.epgChannelId?.takeIf { it.isNotBlank() },
                 number = s.num,
-                type = ContentType.LIVE
+                type = ContentType.LIVE,
+                catchupDays = if (s.tvArchive == 1) (s.tvArchiveDuration ?: 7).coerceAtLeast(1) else 0
             )
         }
     }
@@ -397,6 +441,59 @@ class IptvRepository(
             epgMappingDao.set(EpgMappingEntity(channelId, epgChannelId))
         }
 
+    // ---- Catch-up / timeshift -------------------------------------------
+
+    /**
+     * Past programs available in a channel's archive, newest first. Bounded by
+     * the channel's advertised archive window and only programs that have already
+     * started are returned.
+     */
+    suspend fun getCatchupPrograms(channel: Channel): List<Program> =
+        withContext(Dispatchers.IO) {
+            if (channel.catchupDays <= 0) return@withContext emptyList()
+            val now = System.currentTimeMillis()
+            val from = now - channel.catchupDays.toLong() * 86_400_000L
+            getProgramsWindow(channel, from, now)
+                .filter { it.startMs < now }
+                .sortedByDescending { it.startMs }
+        }
+
+    /**
+     * Builds a timeshift URL for a past [program] on [channel]. Only Xtream live
+     * channels support catch-up; returns null otherwise.
+     */
+    suspend fun buildCatchupUrl(channel: Channel, program: Program): String? =
+        withContext(Dispatchers.IO) {
+            val config = settings.getSourceConfig() ?: return@withContext null
+            if (config.type != SourceType.XTREAM) return@withContext null
+            val streamId = channel.id.removePrefix("xt_live_").toLongOrNull()
+                ?: return@withContext null
+            val durationMin = ((program.stopMs - program.startMs) / 60_000L)
+                .toInt().coerceAtLeast(1)
+            val formatter = java.text.SimpleDateFormat("yyyy-MM-dd:HH-mm", java.util.Locale.US)
+            val start = formatter.format(java.util.Date(program.startMs))
+            XtreamUrlBuilder.catchupUrl(
+                config.serverUrl, config.username, config.password,
+                streamId, start, durationMin
+            )
+        }
+
+    // ---- Background sync ------------------------------------------------
+
+    /**
+     * Refreshes live channels + EPG (and VOD/series when present) for background
+     * auto-sync. Returns true if at least the live refresh succeeded.
+     */
+    suspend fun syncAll(config: SourceConfig): Boolean = withContext(Dispatchers.IO) {
+        val liveOk = refreshLive(config) is Outcome.Success
+        refreshEpg(config)
+        if (config.type == SourceType.XTREAM) {
+            runCatching { refreshVod(config) }
+            runCatching { refreshSeries(config) }
+        }
+        liveOk
+    }
+
     private suspend fun resolveEpgId(channel: Channel): String? =
         epgMappingDao.get(channel.id) ?: channel.epgChannelId
 
@@ -525,13 +622,14 @@ class IptvRepository(
         id = id, name = name, streamUrl = streamUrl, logoUrl = logoUrl,
         categoryId = categoryId, categoryName = categoryName,
         epgChannelId = epgChannelId, number = number,
-        type = ContentType.valueOf(type), isFavorite = isFav
+        type = ContentType.valueOf(type), isFavorite = isFav, catchupDays = catchupDays
     )
 
     private fun Channel.toEntity() = ChannelEntity(
         id = id, name = name, streamUrl = streamUrl, logoUrl = logoUrl,
         categoryId = categoryId, categoryName = categoryName,
-        epgChannelId = epgChannelId, number = number, type = type.name
+        epgChannelId = epgChannelId, number = number, type = type.name,
+        catchupDays = catchupDays
     )
 
     private fun VodEntity.toModel() = VodItem(

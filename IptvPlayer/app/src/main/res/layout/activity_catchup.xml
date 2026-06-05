@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Catch-up / timeshift: channels with an archive on the left, that channel's
+     past programs on the right. -->
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_root"
+    android:paddingHorizontal="@dimen/safe_area_h"
+    android:paddingVertical="@dimen/safe_area_v">
+
+    <TextView
+        android:id="@+id/title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/catchup_title"
+        android:textColor="@color/accent"
+        android:textSize="@dimen/text_title"
+        android:textStyle="bold"
+        android:layout_marginBottom="@dimen/space_m"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Left: catch-up channels -->
+    <LinearLayout
+        android:id="@+id/channelPanel"
+        android:layout_width="@dimen/category_width"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        android:background="@drawable/bg_panel"
+        android:padding="@dimen/space_s"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/title"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/channelList"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false" />
+
+        <TextView
+            android:id="@+id/emptyChannels"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/catchup_no_channels"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_caption"
+            android:gravity="center"
+            android:padding="@dimen/space_m"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- Right: past programs -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        android:layout_marginStart="@dimen/space_m"
+        app:layout_constraintStart_toEndOf="@id/channelPanel"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/title"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <TextView
+            android:id="@+id/focusedChannelName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_body"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:layout_marginBottom="@dimen/space_s" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/programList"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false" />
+
+        <TextView
+            android:id="@+id/emptyPrograms"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/catchup_no_programs"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_caption"
+            android:gravity="center"
+            android:padding="@dimen/space_m"
+            android:visibility="gone" />
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

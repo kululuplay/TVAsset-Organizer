@@ -22,6 +22,8 @@ class SettingsViewModel : ViewModel() {
     val languageTag: Flow<String> = settings.languageTag
     val tmdbKey: Flow<String> = settings.tmdbKey
     val lockAdult: Flow<Boolean> = settings.lockAdult
+    val autoSyncEnabled: Flow<Boolean> = settings.autoSyncEnabled
+    val autoSyncHours: Flow<Int> = settings.autoSyncHours
 
     fun setPlayerMode(mode: PlayerMode) = viewModelScope.launch { settings.setPlayerMode(mode) }
 
@@ -37,6 +39,12 @@ class SettingsViewModel : ViewModel() {
     fun setLockAdult(enabled: Boolean) = viewModelScope.launch { settings.setLockAdult(enabled) }
 
     fun setPin(pin: String) = viewModelScope.launch { settings.setPin(pin) }
+
+    fun setAutoSyncEnabled(enabled: Boolean) =
+        viewModelScope.launch { settings.setAutoSyncEnabled(enabled) }
+
+    fun setAutoSyncHours(hours: Int) =
+        viewModelScope.launch { settings.setAutoSyncHours(hours) }
 
     fun clearSource() = viewModelScope.launch { settings.clearSource() }
 }

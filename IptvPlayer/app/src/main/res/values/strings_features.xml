@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English (default) strings for the added features: catch-up, channel manager,
+     auto-sync, in-app update, Chromecast, sleep timer, A/V delay. -->
+<resources>
+
+    <!-- Navigation -->
+    <string name="nav_catchup">Catch-up</string>
+
+    <!-- Catch-up / timeshift -->
+    <string name="catchup_title">Catch-up TV</string>
+    <string name="catchup_days">%d days</string>
+    <string name="catchup_no_channels">No channels with catch-up are available.</string>
+    <string name="catchup_no_programs">No catch-up programmes for this channel.</string>
+    <string name="catchup_unavailable">Catch-up is not available for this programme.</string>
+
+    <!-- Channel manager -->
+    <string name="channel_manager_title">Manage channels</string>
+    <string name="channel_manager_hint">Hide, reorder and favourite your channels.</string>
+    <string name="channel_manager_show">Show</string>
+    <string name="channel_manager_hide">Hide</string>
+    <string name="channel_manager_hidden">Hidden</string>
+    <string name="channel_manager_move_up">Move up</string>
+    <string name="channel_manager_move_down">Move down</string>
+    <string name="channel_manager_favorite">Add to favourites</string>
+    <string name="channel_manager_unfavorite">Remove from favourites</string>
+
+    <!-- Settings: content / sync -->
+    <string name="settings_content">Content</string>
+    <string name="settings_channel_manager">Manage channels</string>
+    <string name="settings_channel_manager_hint">Hide, reorder and favourite channels</string>
+    <string name="settings_auto_sync">Automatic sync</string>
+    <string name="settings_auto_sync_hint">Refresh channels and guide in the background</string>
+    <string name="settings_auto_sync_interval">Sync interval</string>
+    <string name="settings_every_hours">Every %d h</string>
+
+    <!-- Player menu: sleep timer + A/V delay + cast -->
+    <string name="player_menu">Options</string>
+    <string name="sleep_timer">Sleep timer</string>
+    <string name="sleep_timer_off">Off</string>
+    <string name="sleep_timer_minutes">%d min</string>
+    <string name="sleep_timer_set">Sleep timer set for %d min</string>
+    <string name="audio_delay">Audio delay</string>
+    <string name="subtitle_delay">Subtitle delay</string>
+    <string name="delay_ms">%d ms</string>
+
+    <!-- Chromecast -->
+    <string name="cast">Cast</string>
+    <string name="cast_unavailable">No cast device available.</string>
+    <string name="cast_started">Casting started.</string>
+
+    <!-- In-app update -->
+    <string name="about_checking">Checking for updates…</string>
+    <string name="about_update_failed">Update check failed. Please try again.</string>
+    <string name="about_download_started">Downloading update…</string>
+    <string name="about_install_permission">Allow installing apps from this source to update.</string>
+
+</resources>

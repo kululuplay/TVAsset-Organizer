@@ -10,6 +10,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.iptv.player.data.local.dao.ChannelDao
+import com.iptv.player.data.local.dao.ChannelOverrideDao
 import com.iptv.player.data.local.dao.EpgDao
 import com.iptv.player.data.local.dao.EpgMappingDao
 import com.iptv.player.data.local.dao.FavoriteDao
@@ -19,6 +20,7 @@ import com.iptv.player.data.local.dao.ResumeDao
 import com.iptv.player.data.local.dao.SeriesDao
 import com.iptv.player.data.local.dao.VodDao
 import com.iptv.player.data.local.entity.ChannelEntity
+import com.iptv.player.data.local.entity.ChannelOverrideEntity
 import com.iptv.player.data.local.entity.EpgMappingEntity
 import com.iptv.player.data.local.entity.EpisodeEntity
 import com.iptv.player.data.local.entity.FavoriteEntity
@@ -32,6 +34,7 @@ import com.iptv.player.data.local.entity.VodEntity
 @Database(
     entities = [
         ChannelEntity::class,
+        ChannelOverrideEntity::class,
         FavoriteEntity::class,
         RecentEntity::class,
         ProgramEntity::class,
@@ -42,12 +45,13 @@ import com.iptv.player.data.local.entity.VodEntity
         ResumeEntity::class,
         EpgMappingEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun channelDao(): ChannelDao
+    abstract fun channelOverrideDao(): ChannelOverrideDao
     abstract fun favoriteDao(): FavoriteDao
     abstract fun recentDao(): RecentDao
     abstract fun epgDao(): EpgDao

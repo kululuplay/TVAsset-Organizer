@@ -6,10 +6,12 @@
 package com.iptv.player.data.local.dao
 
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.iptv.player.data.local.entity.ChannelEntity
+import com.iptv.player.data.local.entity.ChannelOverrideEntity
 import com.iptv.player.data.local.entity.FavoriteEntity
 import com.iptv.player.data.local.entity.RecentEntity
 import kotlinx.coroutines.flow.Flow
@@ -23,11 +25,32 @@ interface ChannelDao {
     @Query("DELETE FROM channels WHERE type = :type")
     suspend fun clearType(type: String)
 
-    @Query("SELECT * FROM channels WHERE type = :type ORDER BY number IS NULL, number, name")
+    // Visible list: hides channels flagged hidden and applies any custom order.
+    @Query("""
+        SELECT c.* FROM channels c
+        LEFT JOIN channel_overrides o ON o.channelId = c.id
+        WHERE c.type = :type AND COALESCE(o.hidden, 0) = 0
+        ORDER BY COALESCE(o.sortOrder, 2147483647), c.number IS NULL, c.number, c.name
+    """)
     fun observeByType(type: String): Flow<List<ChannelEntity>>
 
-    @Query("SELECT * FROM channels WHERE type = :type AND categoryId = :categoryId ORDER BY number IS NULL, number, name")
+    @Query("""
+        SELECT c.* FROM channels c
+        LEFT JOIN channel_overrides o ON o.channelId = c.id
+        WHERE c.type = :type AND c.categoryId = :categoryId AND COALESCE(o.hidden, 0) = 0
+        ORDER BY COALESCE(o.sortOrder, 2147483647), c.number IS NULL, c.number, c.name
+    """)
     fun observeByCategory(type: String, categoryId: String): Flow<List<ChannelEntity>>
+
+    // Manager list: ALL channels (incl. hidden) with their override state.
+    @Query("""
+        SELECT c.*, COALESCE(o.hidden, 0) AS hidden, o.sortOrder AS sortOrder
+        FROM channels c
+        LEFT JOIN channel_overrides o ON o.channelId = c.id
+        WHERE c.type = :type
+        ORDER BY COALESCE(o.sortOrder, 2147483647), c.number IS NULL, c.number, c.name
+    """)
+    fun observeForManagement(type: String): Flow<List<ManagedChannelRow>>
 
     @Query("SELECT DISTINCT categoryId, categoryName FROM channels WHERE type = :type AND categoryId IS NOT NULL ORDER BY categoryName")
     fun observeCategories(type: String): Flow<List<CategoryRow>>
@@ -47,6 +70,29 @@ data class CategoryRow(
     val categoryId: String,
     val categoryName: String?
 )
+
+/** Projection joining a channel with its (optional) per-user override state. */
+data class ManagedChannelRow(
+    @Embedded val channel: ChannelEntity,
+    val hidden: Boolean,
+    val sortOrder: Int?
+)
+
+@Dao
+interface ChannelOverrideDao {
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(override: ChannelOverrideEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(overrides: List<ChannelOverrideEntity>)
+
+    @Query("SELECT * FROM channel_overrides WHERE channelId = :channelId LIMIT 1")
+    suspend fun get(channelId: String): ChannelOverrideEntity?
+
+    @Query("SELECT * FROM channel_overrides")
+    suspend fun getAll(): List<ChannelOverrideEntity>
+}
 
 @Dao
 interface FavoriteDao {

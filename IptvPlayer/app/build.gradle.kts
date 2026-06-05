@@ -83,6 +83,13 @@ dependencies {
     // --- DataStore (settings / saved login) ---
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
+    // --- Background sync (auto-refresh playlist + EPG) ---
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+    // --- Chromecast (sender; optional, guarded by Play-services availability) ---
+    implementation("androidx.mediarouter:mediarouter:1.6.0")
+    implementation("com.google.android.gms:play-services-cast-framework:21.4.0")
+
     // --- Networking (Retrofit + OkHttp + Gson) ---
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")

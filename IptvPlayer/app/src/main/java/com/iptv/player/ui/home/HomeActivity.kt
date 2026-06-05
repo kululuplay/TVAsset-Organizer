@@ -22,6 +22,7 @@ import com.iptv.player.data.model.Channel
 import com.iptv.player.databinding.ActivityHomeBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
+import com.iptv.player.ui.catchup.CatchupActivity
 import com.iptv.player.ui.common.NumberZapInputHelper
 import com.iptv.player.ui.guide.GuideActivity
 import com.iptv.player.ui.player.PlayerActivity
@@ -68,6 +69,7 @@ class HomeActivity : BaseActivity() {
     private fun setupNav() {
         binding.navLive.setOnClickListener { binding.channelList.requestFocus() }
         binding.navGuide.setOnClickListener { startActivity(Intent(this, GuideActivity::class.java)) }
+        binding.navCatchup.setOnClickListener { startActivity(Intent(this, CatchupActivity::class.java)) }
         binding.navMovies.setOnClickListener { startActivity(Intent(this, VodActivity::class.java)) }
         binding.navSeries.setOnClickListener { startActivity(Intent(this, SeriesActivity::class.java)) }
         binding.navSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }

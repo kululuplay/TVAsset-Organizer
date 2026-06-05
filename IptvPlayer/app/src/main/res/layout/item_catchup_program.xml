@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A single past program row: title + start/stop time. Focusable for D-pad. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_card_selectable"
+    android:focusable="true"
+    android:focusableInTouchMode="false"
+    android:padding="@dimen/space_m"
+    android:layout_marginBottom="@dimen/space_xs">
+
+    <TextView
+        android:id="@+id/programTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_body"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/programTime"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_caption"
+        android:layout_marginTop="@dimen/space_xs" />
+</LinearLayout>

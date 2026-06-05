@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- In-app updates: download + install the latest APK from GitHub Releases. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- TV apps must not require a touchscreen. -->
     <uses-feature
@@ -128,11 +130,39 @@
             android:exported="false"
             android:screenOrientation="landscape" />
 
+        <!-- Catch-up / timeshift TV. -->
+        <activity
+            android:name=".ui.catchup.CatchupActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <!-- Channel manager (hide / reorder / favorites). -->
+        <activity
+            android:name=".ui.channels.ChannelManagerActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
         <!-- Idle screensaver (burn-in protection). -->
         <activity
             android:name=".ui.screensaver.ScreensaverActivity"
             android:exported="false"
             android:screenOrientation="landscape" />
+
+        <!-- Chromecast: register the options provider for the Cast framework. -->
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="com.iptv.player.cast.CastOptionsProvider" />
+
+        <!-- FileProvider used to hand downloaded update APKs to the installer. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 

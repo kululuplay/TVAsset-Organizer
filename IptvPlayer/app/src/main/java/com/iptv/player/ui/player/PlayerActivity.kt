@@ -15,16 +15,19 @@ import android.os.Looper
 import android.view.KeyEvent
 import android.view.View
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import coil.load
 import com.iptv.player.R
+import com.iptv.player.cast.CastController
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.databinding.ActivityPlayerBinding
 import com.iptv.player.player.PlayerController
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
+import com.iptv.player.ui.common.SleepTimer
 import kotlinx.coroutines.launch
 
 class PlayerActivity : BaseActivity(), PlayerController.Callback {
@@ -45,10 +48,20 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     private val overlayHandler = Handler(Looper.getMainLooper())
     private var okDownTime = 0L
 
+    private val sleepTimer = SleepTimer { finish() }
+    private val castController by lazy {
+        CastController(this) {
+            val channel = currentChannel ?: return@CastController null
+            CastController.CastMedia(channel.streamUrl, channel.name, channel.logoUrl, isLive = true)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        castController.attach()
 
         val channelId = intent.getStringExtra(EXTRA_CHANNEL_ID)
         if (channelId == null) {
@@ -96,6 +109,10 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
                 if (okDownTime == 0L) okDownTime = event.eventTime
                 return true
             }
+            KeyEvent.KEYCODE_MENU -> {
+                showPlayerMenu()
+                return true
+            }
         }
         return super.onKeyDown(keyCode, event)
     }
@@ -133,6 +150,68 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         } else {
             super.onBackPressed()
         }
+    }
+
+    // ---- Player menu (MENU key) ----------------------------------------
+
+    private fun showPlayerMenu() {
+        val labels = mutableListOf<String>()
+        val actions = mutableListOf<() -> Unit>()
+
+        labels.add(getString(R.string.sleep_timer))
+        actions.add { showSleepDialog() }
+
+        if (::controller.isInitialized && controller.supportsDelay) {
+            labels.add(getString(R.string.audio_delay))
+            actions.add { showDelayDialog(audio = true) }
+            labels.add(getString(R.string.subtitle_delay))
+            actions.add { showDelayDialog(audio = false) }
+        }
+
+        if (castController.isAvailable) {
+            labels.add(getString(R.string.cast))
+            actions.add { castController.onCastButtonClicked() }
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.player_menu)
+            .setItems(labels.toTypedArray()) { _, which -> actions[which].invoke() }
+            .show()
+    }
+
+    private fun showSleepDialog() {
+        val options = intArrayOf(0, 15, 30, 45, 60, 90)
+        val labels = options.map { min ->
+            if (min == 0) getString(R.string.sleep_timer_off)
+            else getString(R.string.sleep_timer_minutes, min)
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.sleep_timer)
+            .setItems(labels) { _, which ->
+                val min = options[which]
+                sleepTimer.set(min)
+                val msg = if (min == 0) getString(R.string.sleep_timer_off)
+                else getString(R.string.sleep_timer_set, min)
+                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            }
+            .show()
+    }
+
+    private fun showDelayDialog(audio: Boolean) {
+        if (!::controller.isInitialized) return
+        val steps = (-2000..2000 step 250).toList()
+        val current = if (audio) controller.currentAudioDelayMs else controller.currentSubtitleDelayMs
+        val labels = steps.map { getString(R.string.delay_ms, it) }.toTypedArray()
+        val checked = steps.indexOf(current.toInt()).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle(if (audio) R.string.audio_delay else R.string.subtitle_delay)
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                val ms = steps[which].toLong()
+                if (audio) controller.setAudioDelay(ms) else controller.setSubtitleDelay(ms)
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.action_cancel, null)
+            .show()
     }
 
     // ---- Overlay --------------------------------------------------------
@@ -194,6 +273,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     override fun onDestroy() {
         super.onDestroy()
+        sleepTimer.release()
+        castController.detach()
         overlayHandler.removeCallbacksAndMessages(null)
         if (::controller.isInitialized) controller.release()
     }

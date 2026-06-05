@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Français — textes pour les fonctionnalités ajoutées. -->
+<resources>
+
+    <!-- Navigation -->
+    <string name="nav_catchup">Replay</string>
+
+    <!-- Replay / différé -->
+    <string name="catchup_title">TV en replay</string>
+    <string name="catchup_days">%d jours</string>
+    <string name="catchup_no_channels">Aucune chaîne avec replay disponible.</string>
+    <string name="catchup_no_programs">Aucun programme en replay pour cette chaîne.</string>
+    <string name="catchup_unavailable">Le replay n\'est pas disponible pour ce programme.</string>
+
+    <!-- Gestion des chaînes -->
+    <string name="channel_manager_title">Gérer les chaînes</string>
+    <string name="channel_manager_hint">Masquez, réorganisez et mettez en favori vos chaînes.</string>
+    <string name="channel_manager_show">Afficher</string>
+    <string name="channel_manager_hide">Masquer</string>
+    <string name="channel_manager_hidden">Masquée</string>
+    <string name="channel_manager_move_up">Monter</string>
+    <string name="channel_manager_move_down">Descendre</string>
+    <string name="channel_manager_favorite">Ajouter aux favoris</string>
+    <string name="channel_manager_unfavorite">Retirer des favoris</string>
+
+    <!-- Paramètres : contenu / synchronisation -->
+    <string name="settings_content">Contenu</string>
+    <string name="settings_channel_manager">Gérer les chaînes</string>
+    <string name="settings_channel_manager_hint">Masquer, réorganiser et mettre en favori les chaînes</string>
+    <string name="settings_auto_sync">Synchronisation automatique</string>
+    <string name="settings_auto_sync_hint">Actualiser les chaînes et le guide en arrière-plan</string>
+    <string name="settings_auto_sync_interval">Intervalle de synchronisation</string>
+    <string name="settings_every_hours">Toutes les %d h</string>
+
+    <!-- Menu du lecteur : minuteur de veille + décalage A/V + cast -->
+    <string name="player_menu">Options</string>
+    <string name="sleep_timer">Minuteur de veille</string>
+    <string name="sleep_timer_off">Désactivé</string>
+    <string name="sleep_timer_minutes">%d min</string>
+    <string name="sleep_timer_set">Minuteur de veille réglé sur %d min</string>
+    <string name="audio_delay">Décalage audio</string>
+    <string name="subtitle_delay">Décalage des sous-titres</string>
+    <string name="delay_ms">%d ms</string>
+
+    <!-- Chromecast -->
+    <string name="cast">Diffuser</string>
+    <string name="cast_unavailable">Aucun appareil de diffusion disponible.</string>
+    <string name="cast_started">Diffusion démarrée.</string>
+
+    <!-- Mise à jour intégrée -->
+    <string name="about_checking">Recherche de mises à jour…</string>
+    <string name="about_update_failed">Échec de la vérification. Veuillez réessayer.</string>
+    <string name="about_download_started">Téléchargement de la mise à jour…</string>
+    <string name="about_install_permission">Autorisez l\'installation depuis cette source pour mettre à jour.</string>
+
+</resources>

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Channel editor: a single scrolling list of live channels. Click a row to
+     show/hide or reorder it. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_root"
+    android:paddingHorizontal="@dimen/safe_area_h"
+    android:paddingVertical="@dimen/safe_area_v">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/channel_manager_title"
+        android:textColor="@color/accent"
+        android:textSize="@dimen/text_title"
+        android:textStyle="bold"
+        android:layout_marginBottom="@dimen/space_xs" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/channel_manager_hint"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_caption"
+        android:layout_marginBottom="@dimen/space_m" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/channelList"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false" />
+
+    <TextView
+        android:id="@+id/emptyState"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/empty_channels"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_body"
+        android:gravity="center"
+        android:padding="@dimen/space_l"
+        android:visibility="gone" />
+</LinearLayout>

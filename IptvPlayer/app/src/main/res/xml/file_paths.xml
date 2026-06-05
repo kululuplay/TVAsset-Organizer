@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Paths shared via FileProvider. Downloaded update APKs live in the app's
+     external files dir; exposing it lets the system installer read the file. -->
+<paths>
+    <external-files-path
+        name="updates"
+        path="." />
+</paths>

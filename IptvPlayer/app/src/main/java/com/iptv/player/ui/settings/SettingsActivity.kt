@@ -22,12 +22,14 @@ import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.databinding.ActivitySettingsBinding
 import com.iptv.player.ui.account.AccountActivity
+import com.iptv.player.ui.channels.ChannelManagerActivity
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.PinDialog
 import com.iptv.player.ui.diagnostics.DiagnosticsActivity
 import com.iptv.player.ui.login.LoginActivity
 import com.iptv.player.ui.profiles.ProfilesActivity
 import com.iptv.player.util.LocaleManager
+import com.iptv.player.work.SyncScheduler
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -45,6 +47,11 @@ class SettingsActivity : BaseActivity() {
     private lateinit var languageValue: TextView
     private lateinit var tmdbValue: TextView
     private lateinit var lockAdultValue: TextView
+    private lateinit var autoSyncValue: TextView
+    private lateinit var autoSyncHoursValue: TextView
+
+    private var autoSyncEnabled = false
+    private var autoSyncHours = 12
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,6 +79,22 @@ class SettingsActivity : BaseActivity() {
             getString(R.string.settings_tmdb),
             getString(R.string.settings_tmdb_hint)
         ) { showTmdbDialog() }
+
+        // ---- Content / sync ----
+        addHeader(c, R.string.settings_content)
+        addRow(
+            c,
+            getString(R.string.settings_channel_manager),
+            getString(R.string.settings_channel_manager_hint)
+        ) { startActivity(Intent(this, ChannelManagerActivity::class.java)) }
+        autoSyncValue = addRow(
+            c,
+            getString(R.string.settings_auto_sync),
+            getString(R.string.settings_auto_sync_hint)
+        ) { toggleAutoSync() }
+        autoSyncHoursValue = addRow(c, getString(R.string.settings_auto_sync_interval)) {
+            showAutoSyncIntervalDialog()
+        }
 
         // ---- Parental control ----
         addHeader(c, R.string.settings_parental)
@@ -118,6 +141,18 @@ class SettingsActivity : BaseActivity() {
         }
         lifecycleScope.launch {
             viewModel.lockAdult.collectLatest { lockAdultValue.text = onOff(it) }
+        }
+        lifecycleScope.launch {
+            viewModel.autoSyncEnabled.collectLatest {
+                autoSyncEnabled = it
+                autoSyncValue.text = onOff(it)
+            }
+        }
+        lifecycleScope.launch {
+            viewModel.autoSyncHours.collectLatest {
+                autoSyncHours = it
+                autoSyncHoursValue.text = getString(R.string.settings_every_hours, it)
+            }
         }
     }
 
@@ -174,6 +209,26 @@ class SettingsActivity : BaseActivity() {
                 viewModel.setTmdbKey(input.text.toString().trim())
             }
             .setNegativeButton(R.string.action_cancel, null)
+            .show()
+    }
+
+    private fun toggleAutoSync() {
+        val enabled = !autoSyncEnabled
+        viewModel.setAutoSyncEnabled(enabled)
+        if (enabled) SyncScheduler.schedule(this, autoSyncHours)
+        else SyncScheduler.cancel(this)
+    }
+
+    private fun showAutoSyncIntervalDialog() {
+        val options = listOf(6, 12, 24, 48)
+        val labels = options.map { getString(R.string.settings_every_hours, it) }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings_auto_sync_interval)
+            .setItems(labels) { _, which ->
+                val hours = options[which]
+                viewModel.setAutoSyncHours(hours)
+                if (autoSyncEnabled) SyncScheduler.schedule(this, hours)
+            }
             .show()
     }
 

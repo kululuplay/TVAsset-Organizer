@@ -123,6 +123,22 @@
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="@dimen/space_xs"
                 android:text="@string/aspect_ratio" />
+
+            <Button
+                android:id="@+id/sleepButton"
+                style="@style/Widget.Iptv.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/space_xs"
+                android:text="@string/sleep_timer" />
+
+            <Button
+                android:id="@+id/castButton"
+                style="@style/Widget.Iptv.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="@dimen/space_xs"
+                android:text="@string/cast" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

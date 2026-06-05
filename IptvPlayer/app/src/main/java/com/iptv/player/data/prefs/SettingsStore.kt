@@ -46,6 +46,8 @@ class SettingsStore(private val context: Context) {
         val SCREENSAVER_MIN = intPreferencesKey("screensaver_min")
         val EPG_UPDATED_AT = longPreferencesKey("epg_updated_at")
         val WIZARD_DONE = booleanPreferencesKey("wizard_done")
+        val AUTO_SYNC = booleanPreferencesKey("auto_sync")
+        val AUTO_SYNC_HOURS = intPreferencesKey("auto_sync_hours")
     }
 
     // ---- Routing flags --------------------------------------------------
@@ -161,6 +163,23 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setScreensaverMinutes(minutes: Int) =
         context.dataStore.edit { it[Keys.SCREENSAVER_MIN] = minutes }
+
+    // ---- Background auto-sync -------------------------------------------
+
+    val autoSyncEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.AUTO_SYNC] ?: false }
+
+    suspend fun isAutoSyncEnabled(): Boolean = context.dataStore.data.first()[Keys.AUTO_SYNC] ?: false
+
+    suspend fun setAutoSyncEnabled(enabled: Boolean) =
+        context.dataStore.edit { it[Keys.AUTO_SYNC] = enabled }
+
+    /** Sync interval in hours (default 12; minimum enforced by the scheduler). */
+    val autoSyncHours: Flow<Int> = context.dataStore.data.map { it[Keys.AUTO_SYNC_HOURS] ?: 12 }
+
+    suspend fun getAutoSyncHours(): Int = context.dataStore.data.first()[Keys.AUTO_SYNC_HOURS] ?: 12
+
+    suspend fun setAutoSyncHours(hours: Int) =
+        context.dataStore.edit { it[Keys.AUTO_SYNC_HOURS] = hours }
 
     // ---- EPG bookkeeping ------------------------------------------------
 

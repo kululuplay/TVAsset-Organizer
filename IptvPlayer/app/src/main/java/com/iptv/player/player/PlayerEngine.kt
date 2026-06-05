@@ -25,6 +25,18 @@ interface PlayerEngine {
 
     fun setListener(listener: PlayerListener?)
 
+    /**
+     * Audio sync offset in milliseconds (positive = delay audio). Only libVLC
+     * supports this; the ExoPlayer backend ignores it (no public offset API).
+     */
+    fun setAudioDelayMs(ms: Long) {}
+
+    /** Subtitle sync offset in milliseconds. libVLC only; ExoPlayer ignores it. */
+    fun setSubtitleDelayMs(ms: Long) {}
+
+    /** True when this backend can actually apply audio/subtitle delay. */
+    val supportsDelay: Boolean get() = false
+
     /** Identifies which backend this is (for UI badges / logging). */
     val engineName: String
 }

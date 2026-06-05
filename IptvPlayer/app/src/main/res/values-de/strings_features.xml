@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Deutsch — Texte für die hinzugefügten Funktionen. -->
+<resources>
+
+    <!-- Navigation -->
+    <string name="nav_catchup">Rückblick</string>
+
+    <!-- Rückblick / Timeshift -->
+    <string name="catchup_title">Rückblick-TV</string>
+    <string name="catchup_days">%d Tage</string>
+    <string name="catchup_no_channels">Keine Sender mit Rückblick verfügbar.</string>
+    <string name="catchup_no_programs">Keine Rückblick-Sendungen für diesen Sender.</string>
+    <string name="catchup_unavailable">Rückblick ist für diese Sendung nicht verfügbar.</string>
+
+    <!-- Senderverwaltung -->
+    <string name="channel_manager_title">Sender verwalten</string>
+    <string name="channel_manager_hint">Sender ausblenden, sortieren und favorisieren.</string>
+    <string name="channel_manager_show">Anzeigen</string>
+    <string name="channel_manager_hide">Ausblenden</string>
+    <string name="channel_manager_hidden">Ausgeblendet</string>
+    <string name="channel_manager_move_up">Nach oben</string>
+    <string name="channel_manager_move_down">Nach unten</string>
+    <string name="channel_manager_favorite">Zu Favoriten</string>
+    <string name="channel_manager_unfavorite">Aus Favoriten entfernen</string>
+
+    <!-- Einstellungen: Inhalt / Synchronisierung -->
+    <string name="settings_content">Inhalt</string>
+    <string name="settings_channel_manager">Sender verwalten</string>
+    <string name="settings_channel_manager_hint">Sender ausblenden, sortieren und favorisieren</string>
+    <string name="settings_auto_sync">Automatische Synchronisierung</string>
+    <string name="settings_auto_sync_hint">Sender und Programm im Hintergrund aktualisieren</string>
+    <string name="settings_auto_sync_interval">Sync-Intervall</string>
+    <string name="settings_every_hours">Alle %d Std.</string>
+
+    <!-- Player-Menü: Sleep-Timer + A/V-Verzögerung + Cast -->
+    <string name="player_menu">Optionen</string>
+    <string name="sleep_timer">Sleep-Timer</string>
+    <string name="sleep_timer_off">Aus</string>
+    <string name="sleep_timer_minutes">%d Min.</string>
+    <string name="sleep_timer_set">Sleep-Timer auf %d Min. gestellt</string>
+    <string name="audio_delay">Audio-Verzögerung</string>
+    <string name="subtitle_delay">Untertitel-Verzögerung</string>
+    <string name="delay_ms">%d ms</string>
+
+    <!-- Chromecast -->
+    <string name="cast">Übertragen</string>
+    <string name="cast_unavailable">Kein Übertragungsgerät verfügbar.</string>
+    <string name="cast_started">Übertragung gestartet.</string>
+
+    <!-- In-App-Update -->
+    <string name="about_checking">Suche nach Updates…</string>
+    <string name="about_update_failed">Update-Prüfung fehlgeschlagen. Bitte erneut versuchen.</string>
+    <string name="about_download_started">Update wird heruntergeladen…</string>
+    <string name="about_install_permission">Zum Aktualisieren Installation aus dieser Quelle erlauben.</string>
+
+</resources>

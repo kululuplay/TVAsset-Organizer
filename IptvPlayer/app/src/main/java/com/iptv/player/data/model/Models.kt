@@ -24,7 +24,16 @@ data class Channel(
     val epgChannelId: String? = null,
     val number: Int? = null,
     val type: ContentType = ContentType.LIVE,
-    var isFavorite: Boolean = false
+    var isFavorite: Boolean = false,
+    /** Catch-up / archive window in days (0 = no timeshift available). */
+    val catchupDays: Int = 0
+)
+
+/** A channel paired with its manager state (hidden flag) for the channel editor. */
+data class ManagedChannel(
+    val channel: Channel,
+    val hidden: Boolean,
+    val isFavorite: Boolean = false
 )
 
 enum class ContentType { LIVE, VOD, SERIES }

@@ -36,7 +36,26 @@ class PlayerController(
     private var triedVlcFallback = false
     private var retryCount = 0
 
+    private var audioDelayMs = 0L
+    private var subtitleDelayMs = 0L
+
     private val maxRetries = 4
+
+    /** True when the active engine can apply audio/subtitle delay (libVLC). */
+    val supportsDelay: Boolean get() = engine?.supportsDelay == true
+
+    val currentAudioDelayMs: Long get() = audioDelayMs
+    val currentSubtitleDelayMs: Long get() = subtitleDelayMs
+
+    fun setAudioDelay(ms: Long) {
+        audioDelayMs = ms
+        engine?.setAudioDelayMs(ms)
+    }
+
+    fun setSubtitleDelay(ms: Long) {
+        subtitleDelayMs = ms
+        engine?.setSubtitleDelayMs(ms)
+    }
 
     fun play(url: String) {
         // Cancel any pending retry from a previous stream so zapping is clean.
@@ -55,6 +74,9 @@ class PlayerController(
         newEngine.bind(container)
         newEngine.setListener(engineListener)
         engine = newEngine
+        // Re-apply any user delay offsets to the (new) engine.
+        newEngine.setAudioDelayMs(audioDelayMs)
+        newEngine.setSubtitleDelayMs(subtitleDelayMs)
         currentUrl?.let { newEngine.play(it) }
     }
 

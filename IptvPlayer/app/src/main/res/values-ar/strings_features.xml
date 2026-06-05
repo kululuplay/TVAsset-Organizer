@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- العربية — نصوص الميزات المضافة. -->
+<resources>
+
+    <!-- التنقل -->
+    <string name="nav_catchup">المشاهدة اللاحقة</string>
+
+    <!-- المشاهدة اللاحقة / الإزاحة الزمنية -->
+    <string name="catchup_title">تلفزيون المشاهدة اللاحقة</string>
+    <string name="catchup_days">%d أيام</string>
+    <string name="catchup_no_channels">لا توجد قنوات تدعم المشاهدة اللاحقة.</string>
+    <string name="catchup_no_programs">لا توجد برامج للمشاهدة اللاحقة لهذه القناة.</string>
+    <string name="catchup_unavailable">المشاهدة اللاحقة غير متاحة لهذا البرنامج.</string>
+
+    <!-- إدارة القنوات -->
+    <string name="channel_manager_title">إدارة القنوات</string>
+    <string name="channel_manager_hint">إخفاء القنوات وإعادة ترتيبها وإضافتها للمفضلة.</string>
+    <string name="channel_manager_show">إظهار</string>
+    <string name="channel_manager_hide">إخفاء</string>
+    <string name="channel_manager_hidden">مخفية</string>
+    <string name="channel_manager_move_up">تحريك لأعلى</string>
+    <string name="channel_manager_move_down">تحريك لأسفل</string>
+    <string name="channel_manager_favorite">إضافة إلى المفضلة</string>
+    <string name="channel_manager_unfavorite">إزالة من المفضلة</string>
+
+    <!-- الإعدادات: المحتوى / المزامنة -->
+    <string name="settings_content">المحتوى</string>
+    <string name="settings_channel_manager">إدارة القنوات</string>
+    <string name="settings_channel_manager_hint">إخفاء القنوات وإعادة ترتيبها وإضافتها للمفضلة</string>
+    <string name="settings_auto_sync">المزامنة التلقائية</string>
+    <string name="settings_auto_sync_hint">تحديث القنوات والدليل في الخلفية</string>
+    <string name="settings_auto_sync_interval">فترة المزامنة</string>
+    <string name="settings_every_hours">كل %d ساعة</string>
+
+    <!-- قائمة المشغل: مؤقت النوم + تأخير الصوت/الترجمة + البث -->
+    <string name="player_menu">خيارات</string>
+    <string name="sleep_timer">مؤقت النوم</string>
+    <string name="sleep_timer_off">إيقاف</string>
+    <string name="sleep_timer_minutes">%d دقيقة</string>
+    <string name="sleep_timer_set">تم ضبط مؤقت النوم على %d دقيقة</string>
+    <string name="audio_delay">تأخير الصوت</string>
+    <string name="subtitle_delay">تأخير الترجمة</string>
+    <string name="delay_ms">%d مل/ث</string>
+
+    <!-- Chromecast -->
+    <string name="cast">بث</string>
+    <string name="cast_unavailable">لا يوجد جهاز بث متاح.</string>
+    <string name="cast_started">بدأ البث.</string>
+
+    <!-- التحديث داخل التطبيق -->
+    <string name="about_checking">جارٍ البحث عن تحديثات…</string>
+    <string name="about_update_failed">فشل التحقق من التحديث. حاول مرة أخرى.</string>
+    <string name="about_download_started">جارٍ تنزيل التحديث…</string>
+    <string name="about_install_permission">اسمح بتثبيت التطبيقات من هذا المصدر للتحديث.</string>
+
+</resources>

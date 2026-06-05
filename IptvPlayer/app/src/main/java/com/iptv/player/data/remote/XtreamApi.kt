@@ -121,4 +121,18 @@ object XtreamUrlBuilder {
     fun xmltvUrl(
         serverUrl: String, username: String, password: String
     ): String = "${serverUrl.trimEnd('/')}/xmltv.php?username=$username&password=$password"
+
+    /**
+     * Catch-up / timeshift URL for a past live program. Uses the widely supported
+     * timeshift.php endpoint:
+     *   {server}/streaming/timeshift.php?username=&password=&stream={id}
+     *       &start={yyyy-MM-dd:HH-mm}&duration={minutes}
+     * [startLocal] must already be formatted in the panel's expected local form.
+     */
+    fun catchupUrl(
+        serverUrl: String, username: String, password: String,
+        streamId: Long, startLocal: String, durationMinutes: Int
+    ): String =
+        "${serverUrl.trimEnd('/')}/streaming/timeshift.php?username=$username" +
+            "&password=$password&stream=$streamId&start=$startLocal&duration=$durationMinutes"
 }

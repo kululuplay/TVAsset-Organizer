@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Türkçe — eklenen özellikler için metinler. -->
+<resources>
+
+    <!-- Gezinme -->
+    <string name="nav_catchup">Geri Sar</string>
+
+    <!-- Geri sarma / zaman kaydırma -->
+    <string name="catchup_title">Geri Sarmalı TV</string>
+    <string name="catchup_days">%d gün</string>
+    <string name="catchup_no_channels">Geri sarma özellikli kanal yok.</string>
+    <string name="catchup_no_programs">Bu kanal için geri sarma programı yok.</string>
+    <string name="catchup_unavailable">Bu program için geri sarma kullanılamıyor.</string>
+
+    <!-- Kanal yöneticisi -->
+    <string name="channel_manager_title">Kanalları yönet</string>
+    <string name="channel_manager_hint">Kanalları gizle, sırala ve favorile.</string>
+    <string name="channel_manager_show">Göster</string>
+    <string name="channel_manager_hide">Gizle</string>
+    <string name="channel_manager_hidden">Gizli</string>
+    <string name="channel_manager_move_up">Yukarı taşı</string>
+    <string name="channel_manager_move_down">Aşağı taşı</string>
+    <string name="channel_manager_favorite">Favorilere ekle</string>
+    <string name="channel_manager_unfavorite">Favorilerden çıkar</string>
+
+    <!-- Ayarlar: içerik / eşitleme -->
+    <string name="settings_content">İçerik</string>
+    <string name="settings_channel_manager">Kanalları yönet</string>
+    <string name="settings_channel_manager_hint">Kanalları gizle, sırala ve favorile</string>
+    <string name="settings_auto_sync">Otomatik eşitleme</string>
+    <string name="settings_auto_sync_hint">Kanalları ve rehberi arka planda yenile</string>
+    <string name="settings_auto_sync_interval">Eşitleme aralığı</string>
+    <string name="settings_every_hours">Her %d saatte</string>
+
+    <!-- Oynatıcı menüsü: uyku zamanlayıcı + A/V gecikmesi + cast -->
+    <string name="player_menu">Seçenekler</string>
+    <string name="sleep_timer">Uyku zamanlayıcı</string>
+    <string name="sleep_timer_off">Kapalı</string>
+    <string name="sleep_timer_minutes">%d dk</string>
+    <string name="sleep_timer_set">Uyku zamanlayıcı %d dk için ayarlandı</string>
+    <string name="audio_delay">Ses gecikmesi</string>
+    <string name="subtitle_delay">Altyazı gecikmesi</string>
+    <string name="delay_ms">%d ms</string>
+
+    <!-- Chromecast -->
+    <string name="cast">Yayınla</string>
+    <string name="cast_unavailable">Yayın cihazı bulunamadı.</string>
+    <string name="cast_started">Yayın başladı.</string>
+
+    <!-- Uygulama içi güncelleme -->
+    <string name="about_checking">Güncellemeler denetleniyor…</string>
+    <string name="about_update_failed">Güncelleme denetimi başarısız. Tekrar deneyin.</string>
+    <string name="about_download_started">Güncelleme indiriliyor…</string>
+    <string name="about_install_permission">Güncellemek için bu kaynaktan uygulama yüklemeye izin verin.</string>
+
+</resources>

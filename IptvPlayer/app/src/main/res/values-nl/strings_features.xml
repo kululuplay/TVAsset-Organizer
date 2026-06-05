@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nederlands — teksten voor de toegevoegde functies. -->
+<resources>
+
+    <!-- Navigatie -->
+    <string name="nav_catchup">Terugkijken</string>
+
+    <!-- Terugkijken / timeshift -->
+    <string name="catchup_title">Terugkijk-tv</string>
+    <string name="catchup_days">%d dagen</string>
+    <string name="catchup_no_channels">Geen zenders met terugkijken beschikbaar.</string>
+    <string name="catchup_no_programs">Geen terugkijkprogramma\'s voor deze zender.</string>
+    <string name="catchup_unavailable">Terugkijken is niet beschikbaar voor dit programma.</string>
+
+    <!-- Zenderbeheer -->
+    <string name="channel_manager_title">Zenders beheren</string>
+    <string name="channel_manager_hint">Zenders verbergen, herordenen en als favoriet instellen.</string>
+    <string name="channel_manager_show">Tonen</string>
+    <string name="channel_manager_hide">Verbergen</string>
+    <string name="channel_manager_hidden">Verborgen</string>
+    <string name="channel_manager_move_up">Omhoog</string>
+    <string name="channel_manager_move_down">Omlaag</string>
+    <string name="channel_manager_favorite">Aan favorieten toevoegen</string>
+    <string name="channel_manager_unfavorite">Uit favorieten verwijderen</string>
+
+    <!-- Instellingen: inhoud / synchronisatie -->
+    <string name="settings_content">Inhoud</string>
+    <string name="settings_channel_manager">Zenders beheren</string>
+    <string name="settings_channel_manager_hint">Zenders verbergen, herordenen en als favoriet instellen</string>
+    <string name="settings_auto_sync">Automatische synchronisatie</string>
+    <string name="settings_auto_sync_hint">Zenders en gids op de achtergrond vernieuwen</string>
+    <string name="settings_auto_sync_interval">Synchronisatie-interval</string>
+    <string name="settings_every_hours">Elke %d u</string>
+
+    <!-- Spelermenu: slaaptimer + A/V-vertraging + cast -->
+    <string name="player_menu">Opties</string>
+    <string name="sleep_timer">Slaaptimer</string>
+    <string name="sleep_timer_off">Uit</string>
+    <string name="sleep_timer_minutes">%d min</string>
+    <string name="sleep_timer_set">Slaaptimer ingesteld op %d min</string>
+    <string name="audio_delay">Audiovertraging</string>
+    <string name="subtitle_delay">Ondertitelvertraging</string>
+    <string name="delay_ms">%d ms</string>
+
+    <!-- Chromecast -->
+    <string name="cast">Casten</string>
+    <string name="cast_unavailable">Geen castapparaat beschikbaar.</string>
+    <string name="cast_started">Casten gestart.</string>
+
+    <!-- In-app-update -->
+    <string name="about_checking">Controleren op updates…</string>
+    <string name="about_update_failed">Controle op updates mislukt. Probeer opnieuw.</string>
+    <string name="about_download_started">Update downloaden…</string>
+    <string name="about_install_permission">Sta installatie vanaf deze bron toe om bij te werken.</string>
+
+</resources>

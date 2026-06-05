@@ -22,7 +22,21 @@ data class ChannelEntity(
     val categoryName: String?,
     val epgChannelId: String?,
     val number: Int?,
-    val type: String
+    val type: String,
+    /** Catch-up archive window in days (0 = none). */
+    val catchupDays: Int = 0
+)
+
+/**
+ * Per-user overrides for a channel that must SURVIVE a playlist refresh (the
+ * channels table is wiped & rebuilt on every refresh). Holds the hidden flag and
+ * a custom sort order set from the channel manager.
+ */
+@Entity(tableName = "channel_overrides")
+data class ChannelOverrideEntity(
+    @PrimaryKey val channelId: String,
+    val hidden: Boolean = false,
+    val sortOrder: Int? = null
 )
 
 @Entity(tableName = "favorites")

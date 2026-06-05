@@ -17,10 +17,16 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
 
     override val engineName: String = "VLC"
 
+    override val supportsDelay: Boolean = true
+
     private var libVlc: LibVLC? = null
     private var mediaPlayer: MediaPlayer? = null
     private var videoLayout: VLCVideoLayout? = null
     private var listener: PlayerListener? = null
+
+    // Stored so they can be re-applied once playback (re)starts.
+    private var audioDelayMs = 0L
+    private var subtitleDelayMs = 0L
 
     override fun bind(container: ViewGroup) {
         // Low network-caching for fast live startup; enable HW decode.
@@ -47,7 +53,11 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
         mp.setEventListener { event ->
             when (event.type) {
                 MediaPlayer.Event.Buffering -> listener?.onBuffering()
-                MediaPlayer.Event.Playing -> listener?.onPlaying()
+                MediaPlayer.Event.Playing -> {
+                    // VLC only accepts delays once the track is running.
+                    applyDelays()
+                    listener?.onPlaying()
+                }
                 MediaPlayer.Event.EndReached -> listener?.onEnded()
                 MediaPlayer.Event.EncounteredError -> listener?.onError("VLC error")
             }
@@ -89,5 +99,23 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
 
     override fun setListener(listener: PlayerListener?) {
         this.listener = listener
+    }
+
+    // VLC delays are expressed in microseconds.
+    override fun setAudioDelayMs(ms: Long) {
+        audioDelayMs = ms
+        mediaPlayer?.audioDelay = ms * 1000
+    }
+
+    override fun setSubtitleDelayMs(ms: Long) {
+        subtitleDelayMs = ms
+        mediaPlayer?.spuDelay = ms * 1000
+    }
+
+    private fun applyDelays() {
+        mediaPlayer?.let {
+            it.audioDelay = audioDelayMs * 1000
+            it.spuDelay = subtitleDelayMs * 1000
+        }
     }
 }

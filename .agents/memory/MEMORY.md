@@ -1,2 +1,1 @@
-- [Native Android in this repl](android-build-limitation.md) — this env can't compile/run Android; we generate source as a deliverable only.
-- [DataStore vs attachBaseContext locale](datastore-attachbasecontext-locale.md) — locale read at attach time uses a synchronous SharedPreferences mirror, never runBlocking on DataStore.
+- [IPTV Android build constraints](iptv-android-build.md) — source-only/CI-built; R8 strips manifest-name-only classes (need -keep); split per-locale strings need parity + no cross-file dup keys.

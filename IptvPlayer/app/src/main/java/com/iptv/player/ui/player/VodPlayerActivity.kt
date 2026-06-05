@@ -17,6 +17,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.widget.SeekBar
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.C
@@ -30,9 +31,11 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.iptv.player.R
+import com.iptv.player.cast.CastController
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.AspectRatio
 import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.ui.common.SleepTimer
 import com.iptv.player.databinding.ActivityVodPlayerBinding
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -59,6 +62,14 @@ class VodPlayerActivity : BaseActivity() {
 
     private var aspect: AspectRatio = AspectRatio.ORIGINAL
     private var userSeeking = false
+
+    private val sleepTimer = SleepTimer { finish() }
+    private val castController by lazy {
+        CastController(this) {
+            val url = streamUrl ?: return@CastController null
+            CastController.CastMedia(url, binding.titleText.text.toString(), null, isLive = false)
+        }
+    }
 
     private val handler = Handler(Looper.getMainLooper())
     private val progressRunnable = object : Runnable {
@@ -99,6 +110,9 @@ class VodPlayerActivity : BaseActivity() {
         binding.audioButton.setOnClickListener { showTrackMenu(C.TRACK_TYPE_AUDIO) }
         binding.subtitleButton.setOnClickListener { showTrackMenu(C.TRACK_TYPE_TEXT) }
         binding.aspectButton.setOnClickListener { cycleAspect() }
+        binding.sleepButton.setOnClickListener { showSleepDialog() }
+        binding.castButton.setOnClickListener { castController.onCastButtonClicked() }
+        castController.attach()
 
         binding.seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -260,6 +274,26 @@ class VodPlayerActivity : BaseActivity() {
             .show()
     }
 
+    // ---- Sleep timer ----------------------------------------------------
+
+    private fun showSleepDialog() {
+        val options = intArrayOf(0, 15, 30, 45, 60, 90)
+        val labels = options.map { min ->
+            if (min == 0) getString(R.string.sleep_timer_off)
+            else getString(R.string.sleep_timer_minutes, min)
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.sleep_timer)
+            .setItems(labels) { _, which ->
+                val min = options[which]
+                sleepTimer.set(min)
+                val msg = if (min == 0) getString(R.string.sleep_timer_off)
+                else getString(R.string.sleep_timer_set, min)
+                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            }
+            .show()
+    }
+
     // ---- Progress / resume ---------------------------------------------
 
     private fun updateDuration() {
@@ -308,6 +342,8 @@ class VodPlayerActivity : BaseActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        sleepTimer.release()
+        castController.detach()
         handler.removeCallbacksAndMessages(null)
         player?.release()
         player = null
