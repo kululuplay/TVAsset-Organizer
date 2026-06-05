@@ -1,0 +1,158 @@
+You are a senior Android (Kotlin) developer. Build a professional, libVLC-based IPTV player app for Android TV and Android Stick devices. The app MUST run smoothly even on the oldest, low-end devices (cheap sticks with little RAM and old chipsets). Code must be clean, modular, commented, and compilable. Do NOT leave anything incomplete — actually implement every feature, no "TODO" placeholders.
+MANDATORY TECHNICAL CONSTRAINTS (FOLLOW THESE)
+
+Language: Kotlin. Build: Gradle (Kotlin DSL or Groovy, either is fine).
+minSdkVersion = 21 (Android 5.0 Lollipop) — critical for covering old sticks. targetSdk = latest stable version.
+UI architecture: AndroidX Leanback library (TV-focused), plus custom ConstraintLayout/RecyclerView screens where needed. Everything MUST be usable with the D-pad (directional keys) — do NOT assume touch input. All focus states must be clearly visible (focus highlight).
+Player engine: libVLC for Android (org.videolan.android:libvlc-all). All video/audio decoding goes through libVLC. Hardware acceleration (MediaCodec) enabled, but it MUST automatically fall back to software decoding when hardware fails.
+Formats that MUST play without issues: DTS, AAC, AC3, EAC3, MP2, MP3, HEVC/H265, H264, MP4, MKV, AVI, TS.
+Performance: Target old/weak devices. NO heavy visual effects, unnecessary animations, or large bitmap loads. Cache and downscale images (logos/posters) using Coil or Glide. List scrolling must be smooth (DiffUtil, view recycling).
+AndroidManifest: LEANBACK_LAUNCHER intent-filter (appears on the TV home screen), android.software.leanback required=false (so it can also install on sticks), INTERNET and ACCESS_NETWORK_STATE permissions. Add a banner and icon.
+Architecture: MVVM + Repository pattern. Coroutines + Flow. Use Room for persistence (favorites, recently watched, settings, EPG cache). Use Retrofit + OkHttp for networking.
+
+SOURCE / INPUT TYPES
+The app must support channels/content from:
+
+Xtream Codes API (login with username + password + server URL). Fetch Live, VOD, Series, and EPG from the Xtream API.
+M3U / M3U8 playlist (URL or file). Parse #EXTINF tags for channel name, logo (tvg-logo), group (group-title), EPG id (tvg-id).
+XMLTV EPG (external URL) — when Xtream EPG is unavailable or as a supplement.
+
+PLAYER REQUIREMENTS
+
+Protocols: HLS/M3U8, MPEG-TS, DASH/MPD, MP4/MKV/VOD — all must play.
+Fast channel startup (optimize buffer/caching for live streams: low network-caching).
+Auto-reconnect on freeze, auto-retry on error (exponential backoff, max retry count, simple user-facing message).
+Last-watched channel memory (optionally resume from the last channel on app launch).
+Audio track selection, subtitle selection, external subtitle loading (.srt/.ass).
+Aspect ratio switching (Original / 16:9 / 4:3 / Fill / Zoom cycle).
+Full-screen playback.
+
+REMOTE / D-PAD CONTROLS (FULL SUPPORT)
+
+OK key: during playback, toggle the channel list / control panel.
+Back key: must work correctly (first close overlay, then go to previous screen, finally confirm exit).
+Long-press OK: add/remove channel to favorites.
+Up / Down: go to next / previous channel.
+Number keys: open channel by number (overlay with short timeout for number entry).
+Audio / subtitle menus navigable with the D-pad.
+Large, remote-readable fonts (for TV viewing distance).
+
+HOME SCREEN LAYOUT (TV / 10-foot UI)
+
+Category list on the left (groups / categories).
+Channel list in the center (logo + channel name + currently playing program).
+Small preview area or EPG info on the right (now / next program).
+Each channel card shows: channel logo, currently playing program, next program.
+Sections: Favorites, Recently Watched, Search.
+
+EPG (TV GUIDE)
+
+Support XMLTV EPG and Xtream Codes EPG.
+For each program: title, description, start/end time, now / next.
+EPG timeline scrubbing (navigate across hours with the D-pad).
+EPG refresh button (manual update).
+Channel–EPG matching correction screen (if tvg-id doesn't match, let the user map it manually). Cache EPG in Room.
+
+VOD (MOVIES & SERIES) SECTION
+
+Movies and Series (Season → Episode hierarchy).
+Poster image, TMDB info (synopsis/poster), IMDb rating, cast, trailer.
+Continue watching (resume), watch history, add to favorites.
+Category filtering and search.
+In the VOD player: fast-forward/rewind, 10s forward / 10s back, resume from last position, subtitle selection, audio selection, external subtitles.
+
+MULTILINGUAL (i18n)
+The entire UI must support these languages (as string resources): Turkish, German, English, French, Dutch, Arabic. RTL (right-to-left) layout must work correctly for Arabic. Language must be switchable from settings.
+CONNECTION / DIAGNOSTICS / ACCOUNT TOOLS
+Under "Settings / Help":
+
+Connection test, Server ping test, Internet speed test.
+DNS / ISP warning (warn that the stream may be blocked).
+Show error code, Send logs (write logs to file, share/send option).
+Show device info (model, Android version, resolution, RAM).
+From the Xtream account: subscription expiry date, days remaining, account active/inactive, maximum concurrent connections.
+
+SIMPLE ERROR MESSAGES (no technical jargon for the user)
+Use these messages (translated into the selected language):
+
+"Check your internet connection."
+"Could not connect to the server."
+"Incorrect username or password."
+"Your subscription has expired."
+"This account may be in use on another device."
+"The stream is not responding right now, retrying."
+
+DELIVERY EXPECTATIONS
+
+A full, compilable Android Studio project: build.gradle (all dependencies including libVLC), AndroidManifest.xml, all Kotlin classes, layout XMLs, string resources (6 languages), Room entities/DAOs, Retrofit services.
+Clearly separate modules: player, data (Xtream/M3U/XMLTV parser + repository), ui (live/vod/epg/settings), db, util.
+Document the code: add a short comment block at the top of each main file.
+First set up the project skeleton and dependencies, then complete all features piece by piece. Do not skip any feature.
+
+DEVELOPMENT PRIORITY ORDER (build in this sequence)
+
+Project skeleton + libVLC integration + play a single test stream (verify it works on the oldest device).
+Xtream + M3U parsing → channel list → 3-column TV home screen + D-pad navigation.
+Player controls (OK/Back/up-down/number, favorites, reconnect/retry).
+EPG (XMLTV + Xtream) + EPG screen.
+VOD/Series + TMDB/IMDb + VOD player controls.
+Localization (6 languages) + RTL.
+Diagnostic tools (ping/speed/log/device info) + account info + simple error messages.
+Performance optimization and old-device testing.
+
+
+PREMIUM POLISH (MAKE THE APP FEEL EXPENSIVE / PROFESSIONAL)
+The following items are MANDATORY so the app looks like a paid store product, not an amateur build. Do not treat these as minor details — most of the premium perception comes from here.
+Design System & Typography
+
+Define a single design system: consistent color palette, one accent color, dark theme by default (standard for TV, easy on the eyes), consistent spacing scale (8dp grid).
+Minimum font sizes: body text at least 18–20sp, titles 24–32sp, channel names clearly readable. Do NOT use small phone-sized text. Text must be comfortably readable from TV viewing distance.
+Use an embedded custom font (don't rely on the system font) — like Inter or Roboto; must look identical on every device.
+SAFE AREA / OVERSCAN MARGIN (critical for TV): Old TVs crop screen edges. Keep all content ~5% inside the screen edges, otherwise text/buttons get cut off. This alone delivers a professional feel.
+
+Focus & Animation
+
+The focused card should have smooth scale-up + subtle glow/border + elevation (but light enough not to hurt performance on old devices).
+Focus must ALWAYS be clearly visible; the user must never lose track of where they are with the remote.
+Screen transitions should be smooth but FAST (no heavy animations that lag old devices).
+
+Loading & Empty Screens
+
+Skeleton / shimmer loading screens (instead of a blank white screen, show gray shimmering placeholders before content arrives). One of the biggest triggers of premium perception.
+Branded splash screen (logo + smooth intro).
+Auto placeholder when a logo/poster is missing (colored box with the channel's initial). Never show a broken-image icon.
+Friendly empty-state messages ("You haven't added any favorites yet"), not blank gray screens.
+
+Player Polish
+
+Zapping overlay: when changing channels, briefly show channel number + logo + name + "now / next program + progress bar", then auto-hide.
+Branded buffering indicator; simple messaging during freeze/reconnect.
+Resume dialog: in VOD, "Resume from X minutes / Start over".
+Mini-player: while watching, when the channel list opens, the stream keeps playing small in a corner.
+A persistent clock in the top corner.
+
+Onboarding & Account Management
+
+First-launch setup wizard: entering Xtream/M3U info should be step-by-step and friendly, not a bare form.
+Multiple profiles / multiple playlists support (several subscriptions).
+PIN / parental lock: hide/lock adult categories.
+
+TV-Specific Behaviors
+
+Screensaver / standby: auto-activate after a period of inactivity (prevents screen burn-in).
+Background auto-refresh of EPG/playlist.
+D-pad-optimized search keyboard, voice search if possible.
+Remember the last used category/position; return the user where they left off.
+
+General Refinement
+
+Consistent icon set (Material Icons or a custom set).
+All dialogs/confirmations in the same design language — NOT ugly default system pop-ups.
+"About" screen, version info.
+
+THE HIGHEST-IMPACT THREE (must do)
+
+Safe-area / overscan margin — without it, content gets cut off and looks amateur.
+Shimmer/skeleton loading screens — the source of the "fast and expensive" perception.
+Smooth focus animations — make the remote experience feel premium.
+Without these three, even the best feature list looks amateur; with them, even a mediocre app looks expensive.
