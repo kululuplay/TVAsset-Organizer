@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- List item background. Focused state gets accent border + lighter fill so the
+     user never loses track of the cursor with the remote. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/bg_card_focused" />
+            <corners android:radius="@dimen/card_radius" />
+            <stroke android:width="@dimen/focus_stroke" android:color="@color/focus_border" />
+        </shape>
+    </item>
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/bg_card" />
+            <corners android:radius="@dimen/card_radius" />
+            <stroke android:width="1dp" android:color="@color/accent_dim" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" />
+            <corners android:radius="@dimen/card_radius" />
+        </shape>
+    </item>
+</selector>

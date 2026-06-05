@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Single dark theme palette with one accent color. -->
+<resources>
+    <color name="bg_root">#0E1116</color>
+    <color name="bg_panel">#161B22</color>
+    <color name="bg_card">#1C232D</color>
+    <color name="bg_card_focused">#2A3340</color>
+
+    <color name="accent">#3DA9FC</color>
+    <color name="accent_dim">#1E5F8C</color>
+
+    <color name="text_primary">#F5F7FA</color>
+    <color name="text_secondary">#9AA7B4</color>
+    <color name="text_muted">#5B6877</color>
+
+    <color name="focus_border">#3DA9FC</color>
+    <color name="overlay_scrim">#CC000000</color>
+    <color name="star">#FFC857</color>
+</resources>

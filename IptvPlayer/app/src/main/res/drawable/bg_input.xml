@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Text input background with a clear focus border (D-pad visibility). -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/bg_card_focused" />
+            <corners android:radius="@dimen/card_radius" />
+            <stroke android:width="@dimen/focus_stroke" android:color="@color/focus_border" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/bg_card" />
+            <corners android:radius="@dimen/card_radius" />
+            <stroke android:width="1dp" android:color="@color/text_muted" />
+        </shape>
+    </item>
+</selector>

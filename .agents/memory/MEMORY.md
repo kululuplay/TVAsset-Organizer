@@ -1,0 +1,1 @@
+- [Native Android in this repl](android-build-limitation.md) — this env can't compile/run Android; we generate source as a deliverable only.

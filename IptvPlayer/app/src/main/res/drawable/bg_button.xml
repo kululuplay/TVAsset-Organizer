@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Focusable button background: accent fill + scale-like elevation on focus. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/accent" />
+            <corners android:radius="@dimen/card_radius" />
+            <stroke android:width="@dimen/focus_stroke" android:color="@color/text_primary" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/accent_dim" />
+            <corners android:radius="@dimen/card_radius" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/bg_card" />
+            <corners android:radius="@dimen/card_radius" />
+        </shape>
+    </item>
+</selector>

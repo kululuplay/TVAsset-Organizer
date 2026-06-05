@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Channel row: logo + name (+ current/next program placeholders for EPG later)
+     + number + favorite star. Focusable for D-pad navigation. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_card_selectable"
+    android:focusable="true"
+    android:focusableInTouchMode="false"
+    android:padding="@dimen/space_s"
+    android:layout_marginBottom="@dimen/space_xs">
+
+    <TextView
+        android:id="@+id/channelNumber"
+        android:layout_width="48dp"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:textColor="@color/text_muted"
+        android:textSize="@dimen/text_caption" />
+
+    <ImageView
+        android:id="@+id/channelLogo"
+        android:layout_width="@dimen/channel_logo"
+        android:layout_height="@dimen/channel_logo"
+        android:scaleType="fitCenter"
+        android:layout_marginHorizontal="@dimen/space_s"
+        android:contentDescription="@string/now_playing" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/channelName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_body"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/channelProgram"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_caption"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/favStar"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:src="@drawable/ic_star"
+        android:layout_marginStart="@dimen/space_s"
+        android:visibility="gone"
+        android:contentDescription="@string/section_favorites" />
+</LinearLayout>

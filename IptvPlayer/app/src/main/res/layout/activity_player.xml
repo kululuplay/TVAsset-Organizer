@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Full-screen playback. Video container fills the screen; the zapping overlay
+     and buffering indicator sit on top. Overlay uses safe-area padding. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <!-- Engine (ExoPlayer / VLC) attaches its surface here. -->
+    <FrameLayout
+        android:id="@+id/videoContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Branded buffering indicator -->
+    <LinearLayout
+        android:id="@+id/bufferingIndicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:visibility="gone">
+
+        <ProgressBar
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:indeterminateTint="@color/accent" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/buffering"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_body"
+            android:layout_marginTop="@dimen/space_s" />
+    </LinearLayout>
+
+    <!-- Engine badge (which backend is playing) -->
+    <TextView
+        android:id="@+id/engineBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_margin="@dimen/safe_area_v"
+        android:background="@drawable/bg_overlay"
+        android:paddingHorizontal="@dimen/space_s"
+        android:paddingVertical="@dimen/space_xs"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_caption" />
+
+    <!-- Zapping / info overlay -->
+    <LinearLayout
+        android:id="@+id/infoOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_overlay"
+        android:layout_margin="@dimen/safe_area_v"
+        android:padding="@dimen/space_m"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/overlayLogo"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:scaleType="fitCenter"
+            android:layout_marginEnd="@dimen/space_m"
+            android:contentDescription="@string/now_playing" />
+
+        <TextView
+            android:id="@+id/overlayNumber"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/accent"
+            android:textSize="@dimen/text_big_title"
+            android:textStyle="bold"
+            android:minWidth="56dp"
+            android:gravity="center"
+            android:layout_marginEnd="@dimen/space_m" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/overlayName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_title"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/overlayCategory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_caption"
+                android:layout_marginTop="@dimen/space_xs" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>
