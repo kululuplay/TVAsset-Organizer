@@ -1,2 +1,3 @@
 - [Focus-driven row recoloring](android-focus-row-recolor.md) — focusable parent row recolors on focus, but children need `android:duplicateParentState="true"` to follow the color selector.
 - [API21-safe vector launcher icons](android-vector-launcher-icons.md) — system-drawn icon VectorDrawables can't use inline gradients on API21-23; use flat fills + alpha.
+- [Kotlin trailing-lambda param order](kotlin-trailing-lambda-param-order.md) — required action lambda must stay LAST; appending a defaulted lambda after it breaks every trailing-lambda caller.

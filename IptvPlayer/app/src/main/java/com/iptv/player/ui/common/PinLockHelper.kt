@@ -23,14 +23,14 @@ object PinLockHelper {
 
     /**
      * @param isAdult whether the target content/category is flagged adult.
-     * @param onAllowed run when access is granted (no lock, or correct PIN).
      * @param onDenied  optional, run when the user cancels/fails the prompt.
+     * @param onAllowed run when access is granted (no lock, or correct PIN).
      */
     fun guard(
         activity: AppCompatActivity,
         isAdult: Boolean,
-        onAllowed: () -> Unit,
-        onDenied: () -> Unit = {}
+        onDenied: () -> Unit = {},
+        onAllowed: () -> Unit
     ) {
         if (!isAdult) {
             onAllowed()
