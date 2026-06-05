@@ -47,6 +47,12 @@ class HomeActivity : BaseActivity() {
     /** Guards the one-time initial category selection on first category emission. */
     private var initialSelectionDone = false
 
+    /** When the category changes, the channel list must snap back to its top. */
+    private var pendingScrollReset = false
+
+    /** Last category actually selected; used to detect real category changes. */
+    private var lastSelectedCategoryId: String? = null
+
     companion object {
         /** Optional category id to open on (e.g. Favorites from the dashboard). */
         const val EXTRA_INITIAL_CATEGORY = "extra_initial_category"
@@ -85,8 +91,17 @@ class HomeActivity : BaseActivity() {
 
     private fun setupLists() {
         categoryAdapter = CategoryAdapter(
-            onFocused = { viewModel.selectCategory(it.id) },
-            onClicked = { binding.channelList.requestFocus() }
+            onFocused = {
+                // Only reset scroll/focus when the category truly changes, so a
+                // re-focus of the same category can't leave the flag armed and make
+                // an unrelated emission (e.g. a favorite toggle) jump to the top.
+                if (it.id != lastSelectedCategoryId) {
+                    lastSelectedCategoryId = it.id
+                    pendingScrollReset = true
+                    viewModel.selectCategory(it.id)
+                }
+            },
+            onClicked = { focusFirstChannel() }
         )
         binding.categoryList.layoutManager = LinearLayoutManager(this)
         binding.categoryList.adapter = categoryAdapter
@@ -122,6 +137,7 @@ class HomeActivity : BaseActivity() {
                     val requested = intent.getStringExtra(EXTRA_INITIAL_CATEGORY)
                     val target = cats.firstOrNull { it.id == requested }
                         ?: cats.getOrNull(2) ?: cats.first()
+                    lastSelectedCategoryId = target.id
                     viewModel.selectCategory(target.id)
                 }
             }
@@ -129,7 +145,14 @@ class HomeActivity : BaseActivity() {
         lifecycleScope.launch {
             viewModel.channels.collectLatest { channels ->
                 currentChannels = channels
-                channelAdapter.submitList(channels)
+                channelAdapter.submitList(channels) {
+                    // After a category switch, jump the list back to the first item
+                    // so focus starts there (not on a leftover scroll position).
+                    if (pendingScrollReset) {
+                        pendingScrollReset = false
+                        binding.channelList.scrollToPosition(0)
+                    }
+                }
                 binding.emptyState.visibility =
                     if (channels.isEmpty()) View.VISIBLE else View.GONE
             }
@@ -185,6 +208,15 @@ class HomeActivity : BaseActivity() {
                 binding.infoNext.text = next.title
                 binding.infoNextTime.text = "${timeFmt.format(Date(next.startMs))} - ${timeFmt.format(Date(next.stopMs))}"
             }
+        }
+    }
+
+    /** Moves focus into the channel list, always landing on the first channel. */
+    private fun focusFirstChannel() {
+        binding.channelList.scrollToPosition(0)
+        binding.channelList.post {
+            (binding.channelList.findViewHolderForAdapterPosition(0)?.itemView
+                ?: binding.channelList).requestFocus()
         }
     }
 

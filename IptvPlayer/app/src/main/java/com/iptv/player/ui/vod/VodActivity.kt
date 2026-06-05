@@ -54,7 +54,7 @@ class VodActivity : BaseActivity() {
     private fun setupLists() {
         categoryAdapter = CategoryAdapter(
             onFocused = { viewModel.selectCategory(it.id) },
-            onClicked = { binding.posterGrid.requestFocus() }
+            onClicked = { focusFirstItem() }
         )
         binding.categoryList.layoutManager = LinearLayoutManager(this)
         binding.categoryList.adapter = categoryAdapter
@@ -86,10 +86,22 @@ class VodActivity : BaseActivity() {
         }
         lifecycleScope.launch {
             viewModel.items.collectLatest { items ->
-                vodAdapter.submitList(items)
+                vodAdapter.submitList(items) {
+                    // New category / search result: start from the first poster.
+                    binding.posterGrid.scrollToPosition(0)
+                }
                 binding.emptyState.visibility =
                     if (items.isEmpty()) View.VISIBLE else View.GONE
             }
+        }
+    }
+
+    /** Moves focus into the poster grid, always landing on the first item. */
+    private fun focusFirstItem() {
+        binding.posterGrid.scrollToPosition(0)
+        binding.posterGrid.post {
+            (binding.posterGrid.findViewHolderForAdapterPosition(0)?.itemView
+                ?: binding.posterGrid).requestFocus()
         }
     }
 
