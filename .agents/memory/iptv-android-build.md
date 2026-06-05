@@ -35,3 +35,12 @@ still PASS (it's an Android-specific rule, not an XML rule). High risk in fr/it 
 **How to apply:** apostrophes inside string values must be `\'` (or the whole value wrapped
 in "double quotes"). When touching locale strings, scan ALL locales:
 `grep -rn "'" values*/*.xml | grep '<string' | grep -v "\\'"` should return nothing.
+
+## aapt: dotted style names imply a parent
+A style named `Foo.Bar` with NO `parent=` attribute implicitly inherits from `Foo`
+(everything before the last dot). If that base style doesn't exist, aapt fails at link time:
+"resource style/Foo not found ... failed linking references". Seen with Widget.Iptv.Feature /
+Widget.Iptv.IconButton implying a non-existent Widget.Iptv.
+**How to apply:** any dotted-name style without an explicit parent must either have a real base
+style of that name, or set `parent=""` to opt out. Scan:
+`rg '<style name="[^"]*\.' values*/*.xml | rg -v 'parent='` should return nothing.
