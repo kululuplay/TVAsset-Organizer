@@ -172,4 +172,9 @@
     <string name="error_stream_not_responding">The stream is not responding right now, retrying.</string>
     <string name="error_empty_playlist">No channels were found in this playlist.</string>
     <string name="error_unknown">Something went wrong. Please try again.</string>
+
+    <!-- Update prompt (shown automatically at launch) -->
+    <string name="update_available_title">Update available</string>
+    <string name="update_available_message">Version %1$s is available. Would you like to update now?</string>
+    <string name="update_later">Later</string>
 </resources>

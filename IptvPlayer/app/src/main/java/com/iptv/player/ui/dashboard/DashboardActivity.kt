@@ -32,6 +32,7 @@ import com.iptv.player.ui.search.SearchActivity
 import com.iptv.player.ui.series.SeriesActivity
 import com.iptv.player.ui.settings.SettingsActivity
 import com.iptv.player.ui.vod.VodActivity
+import com.iptv.player.update.UpdatePrompt
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.text.DateFormat
@@ -53,6 +54,9 @@ class DashboardActivity : BaseActivity() {
 
         // Land on the Live hero so the remote has an obvious starting point.
         binding.tileLive.requestFocus()
+
+        // Quietly check for a newer build once per session and offer to update.
+        UpdatePrompt.maybeShow(this)
     }
 
     private fun setupContinueRail() {

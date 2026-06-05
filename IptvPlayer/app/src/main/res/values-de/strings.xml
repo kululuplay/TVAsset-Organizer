@@ -200,4 +200,9 @@
     <string name="settings_enter_old_pin">Aktuelle PIN eingeben</string>
     <string name="settings_enter_new_pin">Neue PIN eingeben</string>
     <string name="settings_pin_changed">PIN aktualisiert</string>
+
+    <!-- Update-Hinweis (wird beim Start automatisch angezeigt) -->
+    <string name="update_available_title">Update verfügbar</string>
+    <string name="update_available_message">Version %1$s ist verfügbar. Möchten Sie jetzt aktualisieren?</string>
+    <string name="update_later">Später</string>
 </resources>

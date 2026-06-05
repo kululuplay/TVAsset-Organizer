@@ -37,8 +37,22 @@ jobs:
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
 
-      - name: Build release APK (unsigned)
+      - name: Decode release keystore
+        id: keystore
+        if: env.KEYSTORE_BASE64 != ''
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "path=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
+
+      - name: Build release APK
         continue-on-error: true
+        env:
+          KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease --stacktrace
 
       - name: Upload debug APK
@@ -48,24 +62,35 @@ jobs:
           path: IptvPlayer/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
-      - name: Upload release APK (unsigned)
+      - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: iptv-player-release-unsigned
+          name: iptv-player-release
           path: IptvPlayer/app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
 
       # ---- Publish a GitHub Release so the in-app updater can find a build. ----
-      # Only the debug APK is attached: it is signed with the debug key and can be
-      # sideloaded/installed, whereas the release APK is unsigned and won't install.
+      # Prefer the release APK signed with the STABLE keystore (from secrets): only
+      # a stable signature lets users install each update over the previous one
+      # without losing their data. Fall back to the debug APK when signing secrets
+      # are absent, so the pipeline still produces an installable build.
       - name: Stage APK for release
         if: github.event_name != 'pull_request'
         id: stage
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           VER=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -1)
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           mkdir -p release-assets
-          cp app/build/outputs/apk/debug/app-debug.apk "release-assets/KululuIPTV-v${VER}.apk"
+          RELEASE_APK=app/build/outputs/apk/release/app-release.apk
+          if [ -n "$KEYSTORE_BASE64" ] && [ -f "$RELEASE_APK" ]; then
+            echo "Publishing stable-signed release APK."
+            cp "$RELEASE_APK" "release-assets/KululuIPTV-v${VER}.apk"
+          else
+            echo "No signing secrets or release APK present; falling back to debug APK."
+            cp app/build/outputs/apk/debug/app-debug.apk "release-assets/KululuIPTV-v${VER}.apk"
+          fi
 
       - name: Publish GitHub Release
         if: github.event_name != 'pull_request'

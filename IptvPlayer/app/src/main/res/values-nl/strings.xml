@@ -200,4 +200,9 @@
     <string name="settings_enter_old_pin">Voer je huidige pincode in</string>
     <string name="settings_enter_new_pin">Voer een nieuwe pincode in</string>
     <string name="settings_pin_changed">Pincode bijgewerkt</string>
+
+    <!-- Updatemelding (wordt automatisch bij het opstarten getoond) -->
+    <string name="update_available_title">Update beschikbaar</string>
+    <string name="update_available_message">Versie %1$s is beschikbaar. Wil je nu bijwerken?</string>
+    <string name="update_later">Later</string>
 </resources>

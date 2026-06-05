@@ -200,4 +200,9 @@
     <string name="settings_enter_old_pin">Mevcut PIN kodunuzu girin</string>
     <string name="settings_enter_new_pin">Yeni bir PIN kodu girin</string>
     <string name="settings_pin_changed">PIN güncellendi</string>
+
+    <!-- Güncelleme uyarısı (açılışta otomatik gösterilir) -->
+    <string name="update_available_title">Güncelleme mevcut</string>
+    <string name="update_available_message">%1$s sürümü çıktı. Şimdi güncellemek ister misiniz?</string>
+    <string name="update_later">Sonra</string>
 </resources>

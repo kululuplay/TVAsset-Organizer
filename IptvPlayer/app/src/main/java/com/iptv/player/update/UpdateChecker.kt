@@ -5,6 +5,7 @@
  */
 package com.iptv.player.update
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -90,6 +91,9 @@ class UpdateChecker(private val httpClient: OkHttpClient) {
                     UpdateResult.UpToDate
                 }
             }
+        } catch (e: CancellationException) {
+            // Never swallow cancellation: let the caller's coroutine unwind cleanly.
+            throw e
         } catch (e: Exception) {
             UpdateResult.Failed
         }

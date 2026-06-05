@@ -23,6 +23,23 @@ android {
         }
     }
 
+    signingConfigs {
+        // Release signing is driven entirely by environment variables so the
+        // keystore file and its passwords never live in the repository. CI decodes
+        // a base64 keystore secret and exports these vars. When they are absent
+        // (local debug builds, or a fork without secrets) the release stays
+        // unsigned and the signingConfig below is simply not applied.
+        create("release") {
+            val storePath = System.getenv("KEYSTORE_FILE")
+            if (!storePath.isNullOrBlank()) {
+                storeFile = file(storePath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -31,6 +48,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Apply the stable release key only when a keystore was provided via
+            // the environment; otherwise Gradle would fail signing with an empty
+            // config and the unsigned APK still builds for inspection.
+            if (!System.getenv("KEYSTORE_FILE").isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         debug {
             isMinifyEnabled = false

@@ -40,6 +40,11 @@ class AboutActivity : BaseActivity() {
     private var downloadFile: File? = null
     private var downloadReceiver: BroadcastReceiver? = null
 
+    companion object {
+        /** When passed as true, the screen runs the update check immediately on open. */
+        const val EXTRA_AUTO_CHECK = "extra_auto_check"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityAboutBinding.inflate(layoutInflater)
@@ -48,6 +53,12 @@ class AboutActivity : BaseActivity() {
         binding.aboutVersion.text = getString(R.string.about_version, BuildConfig.VERSION_NAME)
         binding.btnCheckUpdate.setOnClickListener { checkForUpdate() }
         binding.btnUpdateNow.setOnClickListener { startUpdate() }
+
+        // Arrived from the launch-time prompt: run the check straight away so the
+        // user lands on a focused "Update now" button.
+        if (intent.getBooleanExtra(EXTRA_AUTO_CHECK, false)) {
+            checkForUpdate()
+        }
     }
 
     private fun checkForUpdate() {

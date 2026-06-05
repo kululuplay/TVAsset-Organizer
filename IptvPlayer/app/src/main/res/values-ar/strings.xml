@@ -200,4 +200,9 @@
     <string name="settings_enter_old_pin">أدخل رمز PIN الحالي</string>
     <string name="settings_enter_new_pin">أدخل رمز PIN جديد</string>
     <string name="settings_pin_changed">تم تحديث رمز PIN</string>
+
+    <!-- إشعار التحديث (يظهر تلقائيًا عند بدء التشغيل) -->
+    <string name="update_available_title">يتوفر تحديث</string>
+    <string name="update_available_message">الإصدار %1$s متوفر. هل تريد التحديث الآن؟</string>
+    <string name="update_later">لاحقًا</string>
 </resources>
