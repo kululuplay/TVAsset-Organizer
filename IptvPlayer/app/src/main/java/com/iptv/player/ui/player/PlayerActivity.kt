@@ -100,12 +100,14 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP -> {
-                viewModel.previous()?.let { startChannel(it) }
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_CHANNEL_UP -> {
+                // CH+ / UP -> next channel.
+                viewModel.next()?.let { startChannel(it) }
                 return true
             }
-            KeyEvent.KEYCODE_DPAD_DOWN -> {
-                viewModel.next()?.let { startChannel(it) }
+            KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_CHANNEL_DOWN -> {
+                // CH- / DOWN -> previous channel.
+                viewModel.previous()?.let { startChannel(it) }
                 return true
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
