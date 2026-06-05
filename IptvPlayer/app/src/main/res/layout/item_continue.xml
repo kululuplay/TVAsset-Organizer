@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Continue Watching card: poster artwork with a resume-progress bar overlaid
+     along the bottom edge, plus title and (for episodes) an SxEy subtitle.
+     Focusable for D-pad; clicking resumes playback from the saved position. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="130dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_poster"
+    android:focusable="true"
+    android:focusableInTouchMode="false"
+    android:padding="@dimen/space_s"
+    android:layout_marginEnd="@dimen/space_s">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="180dp">
+
+        <ImageView
+            android:id="@+id/continuePoster"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:contentDescription="@string/section_continue_watching" />
+
+        <ProgressBar
+            android:id="@+id/continueProgress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_gravity="bottom"
+            android:max="100"
+            android:progressTint="@color/accent"
+            android:progressBackgroundTint="@color/bg_card_focused" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/continueTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_xs"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_caption"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/continueSubtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_caption"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:visibility="gone" />
+</LinearLayout>

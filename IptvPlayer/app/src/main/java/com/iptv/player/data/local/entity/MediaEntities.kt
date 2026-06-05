@@ -98,13 +98,31 @@ data class ProfileEntity(
     val createdAt: Long
 )
 
-/** Resume position (ms) for VOD movies and series episodes. */
-@Entity(tableName = "resume")
+/**
+ * Resume position (ms) for VOD movies and series episodes. Display + navigation
+ * metadata is denormalized here so the "Continue Watching" rail and detail
+ * screens can render and reopen content without another network/cache lookup.
+ * contentId is prefixed: "vod_<id>" for movies, "ep_<id>" for episodes.
+ */
+@Entity(tableName = "resume", indices = [Index("updatedAt"), Index("seriesId")])
 data class ResumeEntity(
     @PrimaryKey val contentId: String,
     val positionMs: Long,
     val durationMs: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    /** "movie" or "episode". */
+    val type: String = "movie",
+    /** Primary display label: movie name, or the series name for an episode. */
+    val title: String = "",
+    val posterUrl: String? = null,
+    /** Stream to play directly when resumed from the rail. */
+    val streamUrl: String = "",
+    /** Set for movies → reopen VodDetailActivity. */
+    val vodId: String? = null,
+    /** Set for episodes → reopen SeriesDetailActivity and group by series. */
+    val seriesId: String? = null,
+    val seasonNumber: Int = 0,
+    val episodeNumber: Int = 0
 )
 
 /** Manual override of a channel's EPG id when tvg-id doesn't match. */

@@ -72,6 +72,7 @@
     <string name="resume_prompt_message">Continue from where you left off?</string>
     <string name="resume_from_start">Start over</string>
     <string name="resume_continue">Resume</string>
+    <string name="episode_se_format">S%1$d · E%2$d</string>
     <string name="skip_forward">+10s</string>
     <string name="skip_back">-10s</string>
 

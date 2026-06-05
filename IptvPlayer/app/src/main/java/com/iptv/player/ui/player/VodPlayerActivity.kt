@@ -26,6 +26,8 @@ import com.iptv.player.R
 import com.iptv.player.cast.CastController
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.AspectRatio
+import com.iptv.player.data.model.ResumeKind
+import com.iptv.player.data.model.ResumeMeta
 import com.iptv.player.databinding.ActivityVodPlayerBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.SleepTimer
@@ -43,6 +45,17 @@ class VodPlayerActivity : BaseActivity() {
         const val EXTRA_STREAM_URL = "extra_stream_url"
         const val EXTRA_TITLE = "extra_title"
         const val EXTRA_RESUME_ID = "extra_resume_id"
+        // Display + navigation metadata persisted with the resume position so the
+        // Continue Watching rail can render and reopen this content later.
+        const val EXTRA_RESUME_TITLE = "extra_resume_title"
+        const val EXTRA_RESUME_TYPE = "extra_resume_type"
+        const val EXTRA_POSTER_URL = "extra_poster_url"
+        const val EXTRA_VOD_ID = "extra_vod_id"
+        const val EXTRA_SERIES_ID = "extra_series_id"
+        const val EXTRA_SEASON = "extra_season"
+        const val EXTRA_EPISODE = "extra_episode"
+        // When true (e.g. launched from the rail) skip the prompt and resume directly.
+        const val EXTRA_AUTO_RESUME = "extra_auto_resume"
         private const val SKIP_MS = 10_000L
         private const val SAVE_INTERVAL_MS = 10_000L
         // Buffer (ms) for smooth start-up and seeking on jittery connections.
@@ -59,6 +72,8 @@ class VodPlayerActivity : BaseActivity() {
 
     private var streamUrl: String? = null
     private var resumeId: String? = null
+    private var resumeMeta: ResumeMeta? = null
+    private var autoResume = false
 
     private var aspect: AspectRatio = AspectRatio.ORIGINAL
     private var userSeeking = false
@@ -96,11 +111,29 @@ class VodPlayerActivity : BaseActivity() {
 
         streamUrl = intent.getStringExtra(EXTRA_STREAM_URL)
         resumeId = intent.getStringExtra(EXTRA_RESUME_ID)
+        autoResume = intent.getBooleanExtra(EXTRA_AUTO_RESUME, false)
         binding.titleText.text = intent.getStringExtra(EXTRA_TITLE).orEmpty()
 
         if (streamUrl.isNullOrBlank()) {
             finish()
             return
+        }
+
+        // Build the metadata persisted alongside the resume position. Falls back to
+        // the player title when no explicit resume title is supplied (movies).
+        resumeId?.let { id ->
+            resumeMeta = ResumeMeta(
+                contentId = id,
+                kind = ResumeKind.fromRaw(intent.getStringExtra(EXTRA_RESUME_TYPE)),
+                title = intent.getStringExtra(EXTRA_RESUME_TITLE)
+                    ?: intent.getStringExtra(EXTRA_TITLE).orEmpty(),
+                posterUrl = intent.getStringExtra(EXTRA_POSTER_URL),
+                streamUrl = streamUrl.orEmpty(),
+                vodId = intent.getStringExtra(EXTRA_VOD_ID),
+                seriesId = intent.getStringExtra(EXTRA_SERIES_ID),
+                seasonNumber = intent.getIntExtra(EXTRA_SEASON, 0),
+                episodeNumber = intent.getIntExtra(EXTRA_EPISODE, 0)
+            )
         }
 
         setupControls()
@@ -206,7 +239,12 @@ class VodPlayerActivity : BaseActivity() {
         lifecycleScope.launch {
             aspect = settings.aspectRatio.first()
             val saved = resumeId?.let { repo.getResume(it) } ?: 0L
-            if (saved > 0L) promptResume(saved) else preparePlayback(0L)
+            when {
+                saved <= 0L -> preparePlayback(0L)
+                // From the Continue Watching rail the user already chose to resume.
+                autoResume -> preparePlayback(saved)
+                else -> promptResume(saved)
+            }
         }
     }
 
@@ -387,11 +425,11 @@ class VodPlayerActivity : BaseActivity() {
 
     private fun persistResume() {
         val mp = mediaPlayer ?: return
-        val id = resumeId ?: return
+        val meta = resumeMeta ?: return
         val position = mp.time
         val duration = mp.length.coerceAtLeast(0L)
         if (duration <= 0L) return
-        lifecycleScope.launch { repo.saveResume(id, position, duration) }
+        lifecycleScope.launch { repo.saveResume(meta, position, duration) }
     }
 
     private fun formatTime(ms: Long): String {

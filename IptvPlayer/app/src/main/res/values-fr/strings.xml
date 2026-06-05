@@ -62,6 +62,7 @@
     <string name="resume_prompt_message">Reprendre où vous vous êtes arrêté ?</string>
     <string name="resume_from_start">Depuis le début</string>
     <string name="resume_continue">Reprendre</string>
+    <string name="episode_se_format">S%1$d · É%2$d</string>
     <string name="skip_forward">+10s</string>
     <string name="skip_back">-10s</string>
 

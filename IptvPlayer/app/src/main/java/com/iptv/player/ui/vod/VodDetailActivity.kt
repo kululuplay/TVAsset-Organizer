@@ -15,6 +15,7 @@ import androidx.lifecycle.lifecycleScope
 import coil.load
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
+import com.iptv.player.data.model.ResumeKind
 import com.iptv.player.data.model.VodItem
 import com.iptv.player.databinding.ActivityVodDetailBinding
 import com.iptv.player.ui.common.BaseActivity
@@ -45,7 +46,8 @@ class VodDetailActivity : BaseActivity() {
             return
         }
 
-        binding.playButton.setOnClickListener { play() }
+        binding.playButton.setOnClickListener { launchPlayer(autoResume = false) }
+        binding.resumeButton.setOnClickListener { launchPlayer(autoResume = true) }
         binding.trailerButton.setOnClickListener { openTrailer() }
 
         load(id)
@@ -62,6 +64,9 @@ class VodDetailActivity : BaseActivity() {
             }
             current = item
             bind(item)
+            // Offer a one-tap "continue" when a resume position already exists.
+            val resumed = repo.getResume("vod_" + item.id) > 0L
+            binding.resumeButton.visibility = if (resumed) View.VISIBLE else View.GONE
         }
     }
 
@@ -106,12 +111,16 @@ class VodDetailActivity : BaseActivity() {
         }
     }
 
-    private fun play() {
+    private fun launchPlayer(autoResume: Boolean) {
         val item = current ?: return
         val intent = Intent(this, VodPlayerActivity::class.java).apply {
             putExtra(VodPlayerActivity.EXTRA_STREAM_URL, item.streamUrl)
             putExtra(VodPlayerActivity.EXTRA_TITLE, item.name)
             putExtra(VodPlayerActivity.EXTRA_RESUME_ID, "vod_" + item.id)
+            putExtra(VodPlayerActivity.EXTRA_RESUME_TYPE, ResumeKind.MOVIE.raw)
+            putExtra(VodPlayerActivity.EXTRA_POSTER_URL, item.posterUrl)
+            putExtra(VodPlayerActivity.EXTRA_VOD_ID, item.id)
+            putExtra(VodPlayerActivity.EXTRA_AUTO_RESUME, autoResume)
         }
         startActivity(intent)
     }

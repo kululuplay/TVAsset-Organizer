@@ -24,8 +24,11 @@ import com.iptv.player.data.model.AccountInfo
 import com.iptv.player.data.model.Category
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.ContentType
+import com.iptv.player.data.model.ContinueItem
 import com.iptv.player.data.model.DiagnosticResult
 import com.iptv.player.data.model.Episode
+import com.iptv.player.data.model.ResumeKind
+import com.iptv.player.data.model.ResumeMeta
 import com.iptv.player.data.model.ManagedChannel
 import com.iptv.player.data.model.NowNext
 import com.iptv.player.data.model.Profile
@@ -637,19 +640,69 @@ class IptvRepository(
 
     // ---- Resume positions ----------------------------------------------
 
-    suspend fun saveResume(contentId: String, positionMs: Long, durationMs: Long) =
+    suspend fun saveResume(meta: ResumeMeta, positionMs: Long, durationMs: Long) =
         withContext(Dispatchers.IO) {
-            // Don't persist trivial or near-complete positions.
+            // Don't persist trivial or near-complete positions: clearing them keeps
+            // the Continue Watching rail to genuinely in-progress content.
             if (positionMs < 10_000 || (durationMs > 0 && positionMs > durationMs - 30_000)) {
-                resumeDao.clear(contentId)
+                resumeDao.clear(meta.contentId)
             } else {
-                resumeDao.save(ResumeEntity(contentId, positionMs, durationMs, System.currentTimeMillis()))
+                resumeDao.save(
+                    ResumeEntity(
+                        contentId = meta.contentId,
+                        positionMs = positionMs,
+                        durationMs = durationMs,
+                        updatedAt = System.currentTimeMillis(),
+                        type = meta.kind.raw,
+                        title = meta.title,
+                        posterUrl = meta.posterUrl,
+                        streamUrl = meta.streamUrl,
+                        vodId = meta.vodId,
+                        seriesId = meta.seriesId,
+                        seasonNumber = meta.seasonNumber,
+                        episodeNumber = meta.episodeNumber
+                    )
+                )
             }
         }
 
     suspend fun getResume(contentId: String): Long = withContext(Dispatchers.IO) {
         resumeDao.get(contentId)?.positionMs ?: 0L
     }
+
+    suspend fun clearResume(contentId: String) = withContext(Dispatchers.IO) {
+        resumeDao.clear(contentId)
+    }
+
+    /** Reactive Continue Watching rail: most recent in-progress items first. */
+    fun observeContinueWatching(limit: Int = 20): Flow<List<ContinueItem>> =
+        resumeDao.observeRecent(limit).map { rows -> rows.map { it.toContinueItem() } }
+
+    /** Saved positions (ms) keyed by raw episode id for one series. */
+    suspend fun episodeProgress(seriesId: String): Map<String, Long> =
+        withContext(Dispatchers.IO) {
+            resumeDao.forSeries(seriesId).associate { it.contentId.removePrefix("ep_") to it.positionMs }
+        }
+
+    /** Last-watched episode of a series for a one-tap continue action. */
+    suspend fun latestSeriesResume(seriesId: String): ContinueItem? =
+        withContext(Dispatchers.IO) {
+            resumeDao.latestForSeries(seriesId)?.toContinueItem()
+        }
+
+    private fun ResumeEntity.toContinueItem() = ContinueItem(
+        contentId = contentId,
+        kind = ResumeKind.fromRaw(type),
+        title = title,
+        posterUrl = posterUrl,
+        streamUrl = streamUrl,
+        positionMs = positionMs,
+        durationMs = durationMs,
+        vodId = vodId,
+        seriesId = seriesId,
+        seasonNumber = seasonNumber,
+        episodeNumber = episodeNumber
+    )
 
     // ---- TMDB enrichment ------------------------------------------------
 

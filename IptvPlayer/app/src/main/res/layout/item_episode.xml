@@ -44,5 +44,17 @@
             android:maxLines="2"
             android:ellipsize="end"
             android:visibility="gone" />
+
+        <!-- Resume progress for partially-watched episodes. -->
+        <ProgressBar
+            android:id="@+id/episodeProgress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginTop="@dimen/space_xs"
+            android:max="100"
+            android:progressTint="@color/accent"
+            android:progressBackgroundTint="@color/bg_card_focused"
+            android:visibility="gone" />
     </LinearLayout>
 </LinearLayout>

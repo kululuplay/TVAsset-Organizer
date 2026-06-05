@@ -28,6 +28,15 @@
                 android:contentDescription="@string/nav_movies" />
 
             <Button
+                android:id="@+id/resumeButton"
+                style="@style/Widget.Iptv.Button"
+                android:layout_width="@dimen/poster_width"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_m"
+                android:text="@string/resume_continue"
+                android:visibility="gone" />
+
+            <Button
                 android:id="@+id/playButton"
                 style="@style/Widget.Iptv.Button"
                 android:layout_width="@dimen/poster_width"

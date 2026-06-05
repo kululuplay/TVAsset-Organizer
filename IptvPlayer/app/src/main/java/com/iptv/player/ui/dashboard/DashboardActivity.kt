@@ -10,21 +10,28 @@ package com.iptv.player.ui.dashboard
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import android.widget.Toast
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
+import com.iptv.player.data.model.ContinueItem
 import com.iptv.player.databinding.ActivityDashboardBinding
 import com.iptv.player.ui.account.AccountActivity
 import com.iptv.player.ui.catchup.CatchupActivity
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.home.HomeActivity
 import com.iptv.player.ui.home.HomeViewModel
+import com.iptv.player.ui.player.VodPlayerActivity
 import com.iptv.player.ui.profiles.ProfilesActivity
 import com.iptv.player.ui.search.SearchActivity
 import com.iptv.player.ui.series.SeriesActivity
 import com.iptv.player.ui.settings.SettingsActivity
 import com.iptv.player.ui.vod.VodActivity
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -32,6 +39,7 @@ import java.util.Date
 class DashboardActivity : BaseActivity() {
 
     private lateinit var binding: ActivityDashboardBinding
+    private lateinit var continueAdapter: ContinueWatchingAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,9 +48,44 @@ class DashboardActivity : BaseActivity() {
 
         wireTiles()
         wireActions()
+        setupContinueRail()
 
         // Land on the Live hero so the remote has an obvious starting point.
         binding.tileLive.requestFocus()
+    }
+
+    private fun setupContinueRail() {
+        continueAdapter = ContinueWatchingAdapter(onClicked = { resume(it) })
+        binding.continueList.layoutManager =
+            LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        binding.continueList.adapter = continueAdapter
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                ServiceLocator.repository.observeContinueWatching().collectLatest { items ->
+                    continueAdapter.submitList(items)
+                    binding.continueSection.visibility =
+                        if (items.isEmpty()) View.GONE else View.VISIBLE
+                }
+            }
+        }
+    }
+
+    private fun resume(item: ContinueItem) {
+        val intent = Intent(this, VodPlayerActivity::class.java).apply {
+            putExtra(VodPlayerActivity.EXTRA_STREAM_URL, item.streamUrl)
+            putExtra(VodPlayerActivity.EXTRA_TITLE, item.title)
+            putExtra(VodPlayerActivity.EXTRA_RESUME_ID, item.contentId)
+            putExtra(VodPlayerActivity.EXTRA_RESUME_TYPE, item.kind.raw)
+            putExtra(VodPlayerActivity.EXTRA_RESUME_TITLE, item.title)
+            putExtra(VodPlayerActivity.EXTRA_POSTER_URL, item.posterUrl)
+            putExtra(VodPlayerActivity.EXTRA_VOD_ID, item.vodId)
+            putExtra(VodPlayerActivity.EXTRA_SERIES_ID, item.seriesId)
+            putExtra(VodPlayerActivity.EXTRA_SEASON, item.seasonNumber)
+            putExtra(VodPlayerActivity.EXTRA_EPISODE, item.episodeNumber)
+            putExtra(VodPlayerActivity.EXTRA_AUTO_RESUME, true)
+        }
+        startActivity(intent)
     }
 
     override fun onResume() {

@@ -16,6 +16,7 @@ import coil.load
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Episode
+import com.iptv.player.data.model.ResumeKind
 import com.iptv.player.data.model.Season
 import com.iptv.player.databinding.ActivitySeriesDetailBinding
 import com.iptv.player.ui.common.BaseActivity
@@ -38,6 +39,8 @@ class SeriesDetailActivity : BaseActivity() {
     private lateinit var episodeAdapter: EpisodeAdapter
 
     private var seriesId: String? = null
+    private var seriesName: String = ""
+    private var seriesPoster: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,6 +57,7 @@ class SeriesDetailActivity : BaseActivity() {
         setupLists()
         loadHeader(id)
         loadSeasons(id)
+        loadResumeState(id)
     }
 
     private fun setupLists() {
@@ -67,10 +71,43 @@ class SeriesDetailActivity : BaseActivity() {
         binding.episodeList.adapter = episodeAdapter
     }
 
+    /** Per-episode progress + a one-tap continue for the last-watched episode. */
+    private fun loadResumeState(id: String) {
+        binding.continueButton.visibility = View.GONE
+        lifecycleScope.launch {
+            episodeAdapter.setProgress(repo.episodeProgress(id))
+            val latest = repo.latestSeriesResume(id)
+            if (latest != null) {
+                binding.continueButton.text = getString(R.string.resume_continue) + "  " +
+                    getString(R.string.episode_se_format, latest.seasonNumber, latest.episodeNumber)
+                binding.continueButton.visibility = View.VISIBLE
+                binding.continueButton.setOnClickListener { resumeLatest(latest) }
+            }
+        }
+    }
+
+    private fun resumeLatest(item: com.iptv.player.data.model.ContinueItem) {
+        val intent = Intent(this, VodPlayerActivity::class.java).apply {
+            putExtra(VodPlayerActivity.EXTRA_STREAM_URL, item.streamUrl)
+            putExtra(VodPlayerActivity.EXTRA_TITLE, item.title)
+            putExtra(VodPlayerActivity.EXTRA_RESUME_ID, item.contentId)
+            putExtra(VodPlayerActivity.EXTRA_RESUME_TYPE, item.kind.raw)
+            putExtra(VodPlayerActivity.EXTRA_RESUME_TITLE, item.title)
+            putExtra(VodPlayerActivity.EXTRA_POSTER_URL, item.posterUrl)
+            putExtra(VodPlayerActivity.EXTRA_SERIES_ID, item.seriesId)
+            putExtra(VodPlayerActivity.EXTRA_SEASON, item.seasonNumber)
+            putExtra(VodPlayerActivity.EXTRA_EPISODE, item.episodeNumber)
+            putExtra(VodPlayerActivity.EXTRA_AUTO_RESUME, true)
+        }
+        startActivity(intent)
+    }
+
     private fun loadHeader(id: String) {
         lifecycleScope.launch {
             val series = repo.observeSeries().first().firstOrNull { it.id == id }
             if (series != null) {
+                seriesName = series.name
+                seriesPoster = series.posterUrl
                 binding.detailTitle.text = series.name
                 val placeholder = LogoPlaceholder.forName(this@SeriesDetailActivity, series.name)
                 if (series.posterUrl.isNullOrBlank()) {
@@ -124,6 +161,13 @@ class SeriesDetailActivity : BaseActivity() {
             putExtra(VodPlayerActivity.EXTRA_STREAM_URL, episode.streamUrl)
             putExtra(VodPlayerActivity.EXTRA_TITLE, episode.title)
             putExtra(VodPlayerActivity.EXTRA_RESUME_ID, "ep_" + episode.id)
+            putExtra(VodPlayerActivity.EXTRA_RESUME_TYPE, ResumeKind.EPISODE.raw)
+            // Use the series name as the rail label; episode title stays the player bar.
+            putExtra(VodPlayerActivity.EXTRA_RESUME_TITLE, seriesName.ifBlank { episode.title })
+            putExtra(VodPlayerActivity.EXTRA_POSTER_URL, episode.posterUrl ?: seriesPoster)
+            putExtra(VodPlayerActivity.EXTRA_SERIES_ID, episode.seriesId)
+            putExtra(VodPlayerActivity.EXTRA_SEASON, episode.seasonNumber)
+            putExtra(VodPlayerActivity.EXTRA_EPISODE, episode.episodeNumber)
         }
         startActivity(intent)
     }

@@ -126,6 +126,24 @@ interface ResumeDao {
     @Query("SELECT * FROM resume WHERE contentId = :contentId LIMIT 1")
     suspend fun get(contentId: String): ResumeEntity?
 
+    /**
+     * Most recently watched, in-progress movies/episodes for the Continue Watching
+     * rail. Catch-up sessions keep a resume position but are excluded by type.
+     */
+    @Query(
+        "SELECT * FROM resume WHERE positionMs > 0 AND type IN ('movie', 'episode') " +
+            "ORDER BY updatedAt DESC LIMIT :limit"
+    )
+    fun observeRecent(limit: Int): Flow<List<ResumeEntity>>
+
+    /** All saved positions for a series' episodes (for per-row progress). */
+    @Query("SELECT * FROM resume WHERE seriesId = :seriesId")
+    suspend fun forSeries(seriesId: String): List<ResumeEntity>
+
+    /** Last-watched episode of a series, for a one-tap "continue" action. */
+    @Query("SELECT * FROM resume WHERE seriesId = :seriesId ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun latestForSeries(seriesId: String): ResumeEntity?
+
     @Query("DELETE FROM resume WHERE contentId = :contentId")
     suspend fun clear(contentId: String)
 }

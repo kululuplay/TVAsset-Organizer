@@ -113,6 +113,35 @@
             android:contentDescription="@string/action_exit" />
     </LinearLayout>
 
+    <!-- ===== Continue Watching rail (hidden until there is in-progress content) ===== -->
+    <LinearLayout
+        android:id="@+id/continueSection"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginTop="@dimen/space_l"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/topBar">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/section_continue_watching"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_title"
+            android:textStyle="bold" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/continueList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_s"
+            android:clipToPadding="false"
+            android:focusable="false" />
+    </LinearLayout>
+
     <!-- ===== Tile grid ===== -->
     <LinearLayout
         android:id="@+id/grid"
@@ -122,7 +151,7 @@
         android:layout_marginTop="@dimen/space_l"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:layout_constraintTop_toBottomOf="@id/continueSection"
         app:layout_constraintBottom_toTopOf="@id/footer">
 
         <!-- Top: Live hero + (Movies / Series) -->
