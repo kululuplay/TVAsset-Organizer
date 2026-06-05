@@ -15,6 +15,8 @@ jobs:
   build:
     name: Build debug & release APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -52,3 +54,28 @@ jobs:
           name: iptv-player-release-unsigned
           path: IptvPlayer/app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
+
+      # ---- Publish a GitHub Release so the in-app updater can find a build. ----
+      # Only the debug APK is attached: it is signed with the debug key and can be
+      # sideloaded/installed, whereas the release APK is unsigned and won't install.
+      - name: Stage APK for release
+        if: github.event_name != 'pull_request'
+        id: stage
+        run: |
+          VER=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -1)
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          mkdir -p release-assets
+          cp app/build/outputs/apk/debug/app-debug.apk "release-assets/KululuIPTV-v${VER}.apk"
+
+      - name: Publish GitHub Release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.stage.outputs.version }}
+          name: Kululu IPTV v${{ steps.stage.outputs.version }}
+          body: Automated build from commit ${{ github.sha }}.
+          make_latest: true
+          files: IptvPlayer/release-assets/*.apk
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

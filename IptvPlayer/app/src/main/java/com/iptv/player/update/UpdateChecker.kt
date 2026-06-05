@@ -9,13 +9,22 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 
 /** GitHub repository that publishes the APK releases. */
 object UpdateConfig {
     const val OWNER = "kululuplay"
     const val REPO = "TVAsset-Organizer"
-    const val LATEST_RELEASE_API = "https://api.github.com/repos/$OWNER/$REPO/releases/latest"
+
+    /**
+     * List endpoint (newest first) instead of `/releases/latest`: the latter only
+     * returns full, non-prerelease releases and 404s when the newest publish is a
+     * prerelease or when no full release exists yet. Listing lets us pick the most
+     * recent published (non-draft) release, including prereleases.
+     */
+    const val RELEASES_API =
+        "https://api.github.com/repos/$OWNER/$REPO/releases?per_page=10"
 }
 
 data class UpdateInfo(
@@ -37,17 +46,29 @@ class UpdateChecker(private val httpClient: OkHttpClient) {
     suspend fun check(currentVersionName: String): UpdateResult = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder()
-                .url(UpdateConfig.LATEST_RELEASE_API)
+                .url(UpdateConfig.RELEASES_API)
                 .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
                 .build()
 
             httpClient.newCall(request).execute().use { resp ->
                 if (!resp.isSuccessful) return@withContext UpdateResult.Failed
                 val body = resp.body?.string() ?: return@withContext UpdateResult.Failed
-                val json = JSONObject(body)
+                val releases = JSONArray(body)
 
-                val tag = json.optString("tag_name").ifBlank { json.optString("name") }
-                if (tag.isBlank()) return@withContext UpdateResult.Failed
+                // Newest published (non-draft) release with a usable version tag.
+                // The list is ordered newest first; skip drafts and malformed
+                // entries (blank tag/name) instead of failing on the first one.
+                val candidate = (0 until releases.length())
+                    .asSequence()
+                    .map { releases.getJSONObject(it) }
+                    .filterNot { it.optBoolean("draft", false) }
+                    .map { it to it.optString("tag_name").ifBlank { it.optString("name") } }
+                    .firstOrNull { (_, tag) -> tag.isNotBlank() }
+                    ?: return@withContext UpdateResult.Failed
+
+                val json = candidate.first
+                val tag = candidate.second
 
                 val apkUrl = json.optJSONArray("assets")?.let { assets ->
                     (0 until assets.length())
