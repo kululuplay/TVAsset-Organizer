@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Français -->
 <resources>
-    <string name="app_name">Lecteur IPTV</string>
+    <string name="app_name">Kululu IPTV</string>
 
     <string name="action_ok">OK</string>
     <string name="action_cancel">Annuler</string>

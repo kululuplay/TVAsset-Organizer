@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- English (default) strings. Other languages live in values-<lang>/strings.xml. -->
 <resources>
-    <string name="app_name">IPTV Player</string>
+    <string name="app_name">Kululu IPTV</string>
 
     <!-- Generic -->
     <string name="action_ok">OK</string>

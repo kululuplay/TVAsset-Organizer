@@ -1,8 +1,9 @@
 /*
  * LoginActivity.kt
  * Launcher screen. On start, if a source is already saved it routes straight to
- * Home. Otherwise it shows a D-pad friendly login with two modes: Xtream Codes
- * and M3U URL. All controls are focusable and usable with a remote.
+ * Home. Otherwise it shows a D-pad friendly login asking only for a username and
+ * password; the Xtream server is fixed (http://kululu.live:8080) and the app
+ * connects to it automatically. All controls are focusable and remote-usable.
  */
 package com.iptv.player.ui.login
 
@@ -11,7 +12,6 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
-import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.databinding.ActivityLoginBinding
 import com.iptv.player.ui.common.BaseActivity
@@ -43,34 +43,20 @@ class LoginActivity : BaseActivity() {
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Toggle between Xtream and M3U input groups.
-        binding.tabXtream.setOnClickListener { showXtream(true) }
-        binding.tabM3u.setOnClickListener { showXtream(false) }
-        showXtream(true)
-        binding.tabXtream.requestFocus()
-
         binding.btnConnect.setOnClickListener { onConnect() }
+        binding.inputUsername.requestFocus()
 
         observeState()
     }
 
-    private fun showXtream(xtream: Boolean) {
-        binding.groupXtream.visibility = if (xtream) View.VISIBLE else View.GONE
-        binding.groupM3u.visibility = if (xtream) View.GONE else View.VISIBLE
-        binding.tabXtream.isSelected = xtream
-        binding.tabM3u.isSelected = !xtream
-    }
-
     private fun onConnect() {
-        if (binding.groupXtream.visibility == View.VISIBLE) {
-            viewModel.loginXtream(
-                serverUrl = binding.inputServer.text.toString(),
-                username = binding.inputUsername.text.toString(),
-                password = binding.inputPassword.text.toString()
-            )
-        } else {
-            viewModel.loginM3u(binding.inputM3u.text.toString())
-        }
+        // Fixed Xtream server: users only supply credentials. Must stay http://
+        // (not https) — the provider serves on plain HTTP over port 8080.
+        viewModel.loginXtream(
+            serverUrl = FIXED_SERVER_URL,
+            username = binding.inputUsername.text.toString(),
+            password = binding.inputPassword.text.toString()
+        )
     }
 
     private fun observeState() {
@@ -101,5 +87,9 @@ class LoginActivity : BaseActivity() {
     private fun goHome() {
         startActivity(Intent(this, DashboardActivity::class.java))
         finish()
+    }
+
+    companion object {
+        private const val FIXED_SERVER_URL = "http://kululu.live:8080"
     }
 }

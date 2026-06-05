@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Deutsch -->
 <resources>
-    <string name="app_name">IPTV Player</string>
+    <string name="app_name">Kululu IPTV</string>
 
     <string name="action_ok">OK</string>
     <string name="action_cancel">Abbrechen</string>

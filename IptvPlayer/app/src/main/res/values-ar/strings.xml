@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- العربية (RTL) -->
 <resources>
-    <string name="app_name">مشغل IPTV</string>
+    <string name="app_name">Kululu IPTV</string>
 
     <string name="action_ok">حسناً</string>
     <string name="action_cancel">إلغاء</string>

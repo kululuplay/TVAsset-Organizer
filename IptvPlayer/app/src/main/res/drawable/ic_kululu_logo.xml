@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Kululu IPTV brand mark (white, transparent background).
+  A rounded play triangle emitting two broadcast arcs = streaming / live TV.
+  Tint or place on a gradient badge as needed. Works on API 21+.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- Play triangle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M16,13.5 L16,34.5 C16,35.8 17.4,36.6 18.5,35.9 L34.5,25.4 C35.5,24.7 35.5,23.3 34.5,22.6 L18.5,12.1 C17.4,11.4 16,12.2 16,13.5 Z" />
+    <!-- Inner broadcast arc -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M37,19 A6.5,6.5 0 0 1 37,29" />
+    <!-- Outer broadcast arc -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M40.5,15.5 A11,11 0 0 1 40.5,32.5" />
+</vector>

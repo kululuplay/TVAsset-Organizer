@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Cinematic split login. Left: brand hero (logo, tagline, feature highlights).
-     Right: frosted glass sign-in card with Xtream / M3U pill tabs. All controls
-     are focusable and D-pad friendly; view IDs are unchanged for LoginActivity. -->
+<!-- Cinematic split login. Left: Kululu IPTV brand hero (logo, tagline,
+     feature highlights). Right: frosted glass sign-in card asking only for
+     username + password; the server is fixed (http://kululu.live:8080) and the
+     app connects automatically. All controls are focusable and D-pad friendly. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -24,12 +25,11 @@
             android:layout_marginEnd="@dimen/space_xl">
 
             <ImageView
-                android:layout_width="80dp"
-                android:layout_height="80dp"
+                android:layout_width="84dp"
+                android:layout_height="84dp"
                 android:background="@drawable/bg_logo_badge"
-                android:padding="18dp"
-                android:src="@drawable/ic_tv"
-                android:tint="@color/text_primary"
+                android:padding="16dp"
+                android:src="@drawable/ic_kululu_logo"
                 android:contentDescription="@string/app_name" />
 
             <TextView
@@ -111,101 +111,26 @@
                         android:layout_marginTop="@dimen/space_xs"
                         android:layout_marginBottom="@dimen/space_l" />
 
-                    <!-- Pill segmented tabs -->
-                    <LinearLayout
+                    <EditText
+                        android:id="@+id/inputUsername"
+                        style="@style/Widget.Iptv.Input"
+                        android:background="@drawable/bg_input_modern"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:background="@drawable/bg_pill_track"
-                        android:padding="@dimen/space_xs"
-                        android:layout_marginBottom="@dimen/space_l">
+                        android:hint="@string/hint_username"
+                        android:inputType="text"
+                        android:layout_marginBottom="@dimen/space_s"
+                        android:importantForAutofill="no" />
 
-                        <TextView
-                            android:id="@+id/tabXtream"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:gravity="center"
-                            android:text="@string/tab_xtream"
-                            android:textColor="@color/text_primary"
-                            android:textSize="@dimen/text_caption"
-                            android:padding="@dimen/space_m"
-                            android:background="@drawable/bg_tab_pill"
-                            android:focusable="true"
-                            android:layout_marginEnd="@dimen/space_xs" />
-
-                        <TextView
-                            android:id="@+id/tabM3u"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:gravity="center"
-                            android:text="@string/tab_m3u"
-                            android:textColor="@color/text_primary"
-                            android:textSize="@dimen/text_caption"
-                            android:padding="@dimen/space_m"
-                            android:background="@drawable/bg_tab_pill"
-                            android:focusable="true" />
-                    </LinearLayout>
-
-                    <!-- Xtream input group -->
-                    <LinearLayout
-                        android:id="@+id/groupXtream"
+                    <EditText
+                        android:id="@+id/inputPassword"
+                        style="@style/Widget.Iptv.Input"
+                        android:background="@drawable/bg_input_modern"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical">
-
-                        <EditText
-                            android:id="@+id/inputServer"
-                            style="@style/Widget.Iptv.Input"
-                            android:background="@drawable/bg_input_modern"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:hint="@string/hint_server"
-                            android:inputType="textUri"
-                            android:layout_marginBottom="@dimen/space_s"
-                            android:importantForAutofill="no" />
-
-                        <EditText
-                            android:id="@+id/inputUsername"
-                            style="@style/Widget.Iptv.Input"
-                            android:background="@drawable/bg_input_modern"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:hint="@string/hint_username"
-                            android:inputType="text"
-                            android:layout_marginBottom="@dimen/space_s"
-                            android:importantForAutofill="no" />
-
-                        <EditText
-                            android:id="@+id/inputPassword"
-                            style="@style/Widget.Iptv.Input"
-                            android:background="@drawable/bg_input_modern"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:hint="@string/hint_password"
-                            android:inputType="textPassword"
-                            android:importantForAutofill="no" />
-                    </LinearLayout>
-
-                    <!-- M3U input group -->
-                    <LinearLayout
-                        android:id="@+id/groupM3u"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:visibility="gone">
-
-                        <EditText
-                            android:id="@+id/inputM3u"
-                            style="@style/Widget.Iptv.Input"
-                            android:background="@drawable/bg_input_modern"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:hint="@string/hint_m3u"
-                            android:inputType="textUri"
-                            android:importantForAutofill="no" />
-                    </LinearLayout>
+                        android:hint="@string/hint_password"
+                        android:inputType="textPassword"
+                        android:importantForAutofill="no" />
 
                     <Button
                         android:id="@+id/btnConnect"
