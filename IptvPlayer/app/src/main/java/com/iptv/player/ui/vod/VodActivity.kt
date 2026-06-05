@@ -18,6 +18,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.databinding.ActivityVodBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.PinLockHelper
+import com.iptv.player.ui.common.autoFitColumns
 import com.iptv.player.ui.common.isAdult
 import com.iptv.player.ui.home.CategoryAdapter
 import kotlinx.coroutines.flow.collectLatest
@@ -68,6 +69,7 @@ class VodActivity : BaseActivity() {
             }
         )
         binding.posterGrid.layoutManager = GridLayoutManager(this, 4)
+        binding.posterGrid.autoFitColumns(min = 3)
         binding.posterGrid.adapter = vodAdapter
     }
 
