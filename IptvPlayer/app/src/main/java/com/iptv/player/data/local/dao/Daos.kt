@@ -26,11 +26,12 @@ interface ChannelDao {
     suspend fun clearType(type: String)
 
     // Visible list: hides channels flagged hidden and applies any custom order.
+    // Without a manual override, channels keep the server's delivery order.
     @Query("""
         SELECT c.* FROM channels c
         LEFT JOIN channel_overrides o ON o.channelId = c.id
         WHERE c.type = :type AND COALESCE(o.hidden, 0) = 0
-        ORDER BY COALESCE(o.sortOrder, 2147483647), c.number IS NULL, c.number, c.name
+        ORDER BY COALESCE(o.sortOrder, 2147483647), c.position
     """)
     fun observeByType(type: String): Flow<List<ChannelEntity>>
 
@@ -38,7 +39,7 @@ interface ChannelDao {
         SELECT c.* FROM channels c
         LEFT JOIN channel_overrides o ON o.channelId = c.id
         WHERE c.type = :type AND c.categoryId = :categoryId AND COALESCE(o.hidden, 0) = 0
-        ORDER BY COALESCE(o.sortOrder, 2147483647), c.number IS NULL, c.number, c.name
+        ORDER BY COALESCE(o.sortOrder, 2147483647), c.position
     """)
     fun observeByCategory(type: String, categoryId: String): Flow<List<ChannelEntity>>
 
@@ -48,11 +49,17 @@ interface ChannelDao {
         FROM channels c
         LEFT JOIN channel_overrides o ON o.channelId = c.id
         WHERE c.type = :type
-        ORDER BY COALESCE(o.sortOrder, 2147483647), c.number IS NULL, c.number, c.name
+        ORDER BY COALESCE(o.sortOrder, 2147483647), c.position
     """)
     fun observeForManagement(type: String): Flow<List<ManagedChannelRow>>
 
-    @Query("SELECT DISTINCT categoryId, categoryName FROM channels WHERE type = :type AND categoryId IS NOT NULL ORDER BY categoryName")
+    // Categories in the server's original order (first appearance in the list).
+    @Query("""
+        SELECT categoryId, categoryName FROM channels
+        WHERE type = :type AND categoryId IS NOT NULL
+        GROUP BY categoryId, categoryName
+        ORDER BY MIN(categoryPosition)
+    """)
     fun observeCategories(type: String): Flow<List<CategoryRow>>
 
     @Query("SELECT * FROM channels WHERE name LIKE '%' || :query || '%' AND type = :type ORDER BY name LIMIT 200")

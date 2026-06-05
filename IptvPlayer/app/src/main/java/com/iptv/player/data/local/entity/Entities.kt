@@ -24,7 +24,11 @@ data class ChannelEntity(
     val number: Int?,
     val type: String,
     /** Catch-up archive window in days (0 = none). */
-    val catchupDays: Int = 0
+    val catchupDays: Int = 0,
+    /** Index in the source's stream list, so lists keep the server's order. */
+    val position: Int = 0,
+    /** Index of this channel's category in the source's category list. */
+    val categoryPosition: Int = Int.MAX_VALUE
 )
 
 /**

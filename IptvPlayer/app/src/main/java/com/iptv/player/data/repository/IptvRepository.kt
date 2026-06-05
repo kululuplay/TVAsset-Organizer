@@ -196,13 +196,16 @@ class IptvRepository(
             }
             if (channels.isEmpty()) return@withContext Outcome.Failure(AppError.EMPTY_PLAYLIST)
             channelDao.clearType(ContentType.LIVE.name)
+            // Stamp each channel with its index in the source list so the visible
+            // order matches what the server delivered.
+            val ordered = channels.mapIndexed { index, ch -> ch.copy(position = index) }
             // Insert in chunks: large Xtream accounts / M3U lists can hold tens of
             // thousands of channels. Mapping + inserting all at once spikes memory and
             // can OOM on low-RAM TV boxes, so bound the peak by batching.
-            channels.chunked(1000).forEach { batch ->
+            ordered.chunked(1000).forEach { batch ->
                 channelDao.upsertAll(batch.map { it.toEntity() })
             }
-            Outcome.Success(channels.size)
+            Outcome.Success(ordered.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
             Outcome.Failure(e.toAppError())
@@ -211,8 +214,14 @@ class IptvRepository(
 
     private suspend fun loadXtreamLive(config: SourceConfig): List<Channel> {
         val api = buildXtreamApi(config.serverUrl)
-        val categories = api.getLiveCategories(config.username, config.password)
+        val categoryList = api.getLiveCategories(config.username, config.password)
+        val categories = categoryList
             .associate { (it.categoryId ?: "") to (it.categoryName ?: "Uncategorized") }
+        // Index each category by its position in the server's category list so the
+        // UI can present categories in the same order the provider returned them.
+        val categoryOrder = categoryList
+            .mapIndexedNotNull { index, c -> c.categoryId?.let { it to index } }
+            .toMap()
         return api.getLiveStreams(config.username, config.password).mapNotNull { s ->
             val id = s.streamId ?: return@mapNotNull null
             Channel(
@@ -225,7 +234,8 @@ class IptvRepository(
                 epgChannelId = s.epgChannelId?.takeIf { it.isNotBlank() },
                 number = s.num,
                 type = ContentType.LIVE,
-                catchupDays = if (s.tvArchive == 1) (s.tvArchiveDuration ?: 7).coerceAtLeast(1) else 0
+                catchupDays = if (s.tvArchive == 1) (s.tvArchiveDuration ?: 7).coerceAtLeast(1) else 0,
+                categoryPosition = categoryOrder[s.categoryId] ?: Int.MAX_VALUE
             )
         }
     }
@@ -235,7 +245,14 @@ class IptvRepository(
         httpClient.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}")
             val body = resp.body ?: throw IOException("Empty body")
-            return body.charStream().buffered().use { M3uParser.parse(it) }
+            val parsed = body.charStream().buffered().use { M3uParser.parse(it) }
+            // M3U has no separate category list, so category order is the order in
+            // which each group first appears in the playlist.
+            val categoryOrder = LinkedHashMap<String?, Int>()
+            parsed.forEach { c -> categoryOrder.getOrPut(c.categoryId) { categoryOrder.size } }
+            return parsed.map { c ->
+                c.copy(categoryPosition = categoryOrder[c.categoryId] ?: Int.MAX_VALUE)
+            }
         }
     }
 
@@ -258,8 +275,12 @@ class IptvRepository(
         if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
         try {
             val api = buildXtreamApi(config.serverUrl)
-            val cats = api.getVodCategories(config.username, config.password)
+            val catList = api.getVodCategories(config.username, config.password)
+            val cats = catList
                 .associate { (it.categoryId ?: "") to (it.categoryName ?: "Uncategorized") }
+            val catOrder = catList
+                .mapIndexedNotNull { index, c -> c.categoryId?.let { it to index } }
+                .toMap()
             val items = api.getVodStreams(config.username, config.password).mapNotNull { s ->
                 val id = s.streamId ?: return@mapNotNull null
                 VodEntity(
@@ -275,9 +296,10 @@ class IptvRepository(
                     rating = s.rating?.toDoubleOrNull(),
                     plot = null, cast = null, director = null, genre = null,
                     releaseDate = null, durationSecs = null, trailerUrl = null, tmdbId = null,
-                    addedAt = s.added?.trim()?.toLongOrNull() ?: 0L
+                    addedAt = s.added?.trim()?.toLongOrNull() ?: 0L,
+                    categoryPosition = catOrder[s.categoryId] ?: Int.MAX_VALUE
                 )
-            }
+            }.mapIndexed { index, e -> e.copy(position = index) }
             vodDao.clearAll()
             vodDao.upsertAll(items)
             Outcome.Success(items.size)
@@ -328,8 +350,12 @@ class IptvRepository(
         if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
         try {
             val api = buildXtreamApi(config.serverUrl)
-            val cats = api.getSeriesCategories(config.username, config.password)
+            val catList = api.getSeriesCategories(config.username, config.password)
+            val cats = catList
                 .associate { (it.categoryId ?: "") to (it.categoryName ?: "Uncategorized") }
+            val catOrder = catList
+                .mapIndexedNotNull { index, c -> c.categoryId?.let { it to index } }
+                .toMap()
             val items = api.getSeries(config.username, config.password).mapNotNull { s ->
                 val id = s.seriesId ?: return@mapNotNull null
                 SeriesEntity(
@@ -341,9 +367,10 @@ class IptvRepository(
                     rating = s.rating?.toDoubleOrNull(),
                     plot = s.plot, cast = s.cast, director = s.director, genre = s.genre,
                     releaseDate = s.releaseDate, trailerUrl = youtube(s.youtubeTrailer), tmdbId = null,
-                    addedAt = s.lastModified?.trim()?.toLongOrNull() ?: 0L
+                    addedAt = s.lastModified?.trim()?.toLongOrNull() ?: 0L,
+                    categoryPosition = catOrder[s.categoryId] ?: Int.MAX_VALUE
                 )
-            }
+            }.mapIndexed { index, e -> e.copy(position = index) }
             seriesDao.clearSeries()
             seriesDao.upsertSeries(items)
             Outcome.Success(items.size)
@@ -727,14 +754,15 @@ class IptvRepository(
         id = id, name = name, streamUrl = streamUrl, logoUrl = logoUrl,
         categoryId = categoryId, categoryName = categoryName,
         epgChannelId = epgChannelId, number = number,
-        type = ContentType.valueOf(type), isFavorite = isFav, catchupDays = catchupDays
+        type = ContentType.valueOf(type), isFavorite = isFav, catchupDays = catchupDays,
+        position = position, categoryPosition = categoryPosition
     )
 
     private fun Channel.toEntity() = ChannelEntity(
         id = id, name = name, streamUrl = streamUrl, logoUrl = logoUrl,
         categoryId = categoryId, categoryName = categoryName,
         epgChannelId = epgChannelId, number = number, type = type.name,
-        catchupDays = catchupDays
+        catchupDays = catchupDays, position = position, categoryPosition = categoryPosition
     )
 
     private fun VodEntity.toModel() = VodItem(

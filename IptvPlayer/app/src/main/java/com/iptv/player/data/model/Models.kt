@@ -26,7 +26,11 @@ data class Channel(
     val type: ContentType = ContentType.LIVE,
     var isFavorite: Boolean = false,
     /** Catch-up / archive window in days (0 = no timeshift available). */
-    val catchupDays: Int = 0
+    val catchupDays: Int = 0,
+    /** 0-based index in the source's stream list, preserving server order. */
+    val position: Int = 0,
+    /** 0-based index of this channel's category in the source's category list. */
+    val categoryPosition: Int = Int.MAX_VALUE
 )
 
 /** A channel paired with its manager state (hidden flag) for the channel editor. */

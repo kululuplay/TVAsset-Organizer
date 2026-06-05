@@ -45,7 +45,7 @@ import com.iptv.player.data.local.entity.VodEntity
         ResumeEntity::class,
         EpgMappingEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

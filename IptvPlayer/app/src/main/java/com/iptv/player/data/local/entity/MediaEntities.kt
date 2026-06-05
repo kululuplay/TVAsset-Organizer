@@ -42,8 +42,12 @@ data class VodEntity(
     val durationSecs: Int?,
     val trailerUrl: String?,
     val tmdbId: String?,
-    /** Unix seconds the movie was added to the catalog; newest sorts first. */
-    val addedAt: Long = 0
+    /** Unix seconds the movie was added to the catalog. */
+    val addedAt: Long = 0,
+    /** Index in the source's stream list, so lists keep the server's order. */
+    val position: Int = 0,
+    /** Index of this item's category in the source's category list. */
+    val categoryPosition: Int = Int.MAX_VALUE
 )
 
 @Entity(
@@ -64,8 +68,12 @@ data class SeriesEntity(
     val releaseDate: String?,
     val trailerUrl: String?,
     val tmdbId: String?,
-    /** Unix seconds the series was last updated; newest sorts first. */
-    val addedAt: Long = 0
+    /** Unix seconds the series was last updated. */
+    val addedAt: Long = 0,
+    /** Index in the source's stream list, so lists keep the server's order. */
+    val position: Int = 0,
+    /** Index of this item's category in the source's category list. */
+    val categoryPosition: Int = Int.MAX_VALUE
 )
 
 @Entity(
