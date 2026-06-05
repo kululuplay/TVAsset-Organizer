@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="categories_title">Kategoriler</string>
+    <string name="channels_title">Kanallar</string>
+    <string name="live_label">CANLI</string>
+    <string name="next_label">Sıradaki</string>
+</resources>

@@ -1,15 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Category row. Focusable for D-pad; focus background from selector. -->
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/categoryTitle"
+<!-- Category row: name + optional count badge. Focusable for D-pad; purple
+     highlight on focus. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_card_selectable"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_row"
     android:focusable="true"
     android:focusableInTouchMode="false"
-    android:padding="@dimen/space_m"
-    android:textColor="@color/text_primary"
-    android:textSize="@dimen/text_body"
-    android:maxLines="1"
-    android:ellipsize="end"
-    android:layout_marginBottom="@dimen/space_xs" />
+    android:paddingHorizontal="@dimen/space_m"
+    android:paddingVertical="@dimen/space_m"
+    android:layout_marginBottom="@dimen/space_xs">
+
+    <TextView
+        android:id="@+id/categoryTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_body"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/categoryCount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_caption"
+        android:layout_marginStart="@dimen/space_s"
+        android:visibility="gone" />
+</LinearLayout>

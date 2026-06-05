@@ -1,24 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Channel row: logo + name (+ current/next program placeholders for EPG later)
-     + number + favorite star. Focusable for D-pad navigation. -->
+<!-- Channel row: number + logo + name (+ EPG program line) + favorite star.
+     Focusable for D-pad; purple highlight on focus. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:background="@drawable/bg_card_selectable"
+    android:background="@drawable/bg_row"
     android:focusable="true"
     android:focusableInTouchMode="false"
-    android:padding="@dimen/space_s"
+    android:paddingHorizontal="@dimen/space_s"
+    android:paddingVertical="@dimen/space_s"
     android:layout_marginBottom="@dimen/space_xs">
 
     <TextView
         android:id="@+id/channelNumber"
-        android:layout_width="48dp"
+        android:layout_width="44dp"
         android:layout_height="wrap_content"
         android:gravity="center"
-        android:textColor="@color/text_muted"
-        android:textSize="@dimen/text_caption" />
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_caption"
+        android:textStyle="bold" />
 
     <ImageView
         android:id="@+id/channelLogo"

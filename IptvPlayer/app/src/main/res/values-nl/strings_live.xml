@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="categories_title">Categorieën</string>
+    <string name="channels_title">Kanalen</string>
+    <string name="live_label">LIVE</string>
+    <string name="next_label">Volgende</string>
+</resources>

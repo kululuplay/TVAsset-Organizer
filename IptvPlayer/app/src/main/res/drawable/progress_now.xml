@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Thin purple progress bar showing how far the current programme has aired. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape android:shape="rectangle">
+            <corners android:radius="3dp" />
+            <solid android:color="@color/glass_track" />
+        </shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <clip>
+            <shape android:shape="rectangle">
+                <corners android:radius="3dp" />
+                <gradient
+                    android:angle="0"
+                    android:startColor="#7B2FF7"
+                    android:endColor="#FF2E9A"
+                    android:type="linear" />
+            </shape>
+        </clip>
+    </item>
+</layer-list>

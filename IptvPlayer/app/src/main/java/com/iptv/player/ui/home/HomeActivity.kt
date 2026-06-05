@@ -22,15 +22,14 @@ import com.iptv.player.data.model.Channel
 import com.iptv.player.databinding.ActivityHomeBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
-import com.iptv.player.ui.catchup.CatchupActivity
 import com.iptv.player.ui.common.NumberZapInputHelper
-import com.iptv.player.ui.guide.GuideActivity
 import com.iptv.player.ui.player.PlayerActivity
-import com.iptv.player.ui.series.SeriesActivity
-import com.iptv.player.ui.settings.SettingsActivity
-import com.iptv.player.ui.vod.VodActivity
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.text.DateFormat
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class HomeActivity : BaseActivity() {
 
@@ -61,18 +60,16 @@ class HomeActivity : BaseActivity() {
         binding = ActivityHomeBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setupNav()
         setupLists()
         observe()
     }
 
-    private fun setupNav() {
-        binding.navLive.setOnClickListener { binding.channelList.requestFocus() }
-        binding.navGuide.setOnClickListener { startActivity(Intent(this, GuideActivity::class.java)) }
-        binding.navCatchup.setOnClickListener { startActivity(Intent(this, CatchupActivity::class.java)) }
-        binding.navMovies.setOnClickListener { startActivity(Intent(this, VodActivity::class.java)) }
-        binding.navSeries.setOnClickListener { startActivity(Intent(this, SeriesActivity::class.java)) }
-        binding.navSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
+    override fun onResume() {
+        super.onResume()
+        // Navigation now lives on the Dashboard; this screen just shows the date.
+        binding.dateText.text = DateFormat
+            .getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
+            .format(Date())
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
@@ -98,6 +95,11 @@ class HomeActivity : BaseActivity() {
         )
         binding.channelList.layoutManager = LinearLayoutManager(this)
         binding.channelList.adapter = channelAdapter
+
+        // The preview surface opens the currently focused channel.
+        binding.previewCard.setOnClickListener {
+            currentInfoChannel?.let { openPlayer(it) }
+        }
     }
 
     private fun observe() {
@@ -123,8 +125,15 @@ class HomeActivity : BaseActivity() {
 
     private var nowNextJob: kotlinx.coroutines.Job? = null
 
+    /** The channel currently shown in the preview/info panel. */
+    private var currentInfoChannel: Channel? = null
+
+    private val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
+
     private fun showInfo(channel: Channel) {
-        binding.infoName.text = channel.name
+        currentInfoChannel = channel
+        val number = channel.number?.let { "$it | " } ?: ""
+        binding.infoName.text = number + channel.name
         binding.infoCategory.text = channel.categoryName ?: ""
         val placeholder = LogoPlaceholder.forName(this, channel.name)
         if (channel.logoUrl.isNullOrBlank()) {
@@ -135,14 +144,34 @@ class HomeActivity : BaseActivity() {
                 error(placeholder)
             }
         }
-        // Now / Next for the focused channel (cancel any pending lookup first).
+        // Reset before the async EPG lookup resolves.
         binding.infoNow.text = ""
+        binding.infoNowTime.text = ""
+        binding.infoNowDesc.text = ""
         binding.infoNext.text = ""
+        binding.infoNextTime.text = ""
+        binding.liveBadge.visibility = View.GONE
+        binding.nowProgress.visibility = View.GONE
         nowNextJob?.cancel()
         nowNextJob = lifecycleScope.launch {
             val nn = viewModel.nowNext(channel)
-            binding.infoNow.text = nn.now?.let { getString(R.string.now_playing) + ": " + it.title } ?: ""
-            binding.infoNext.text = nn.next?.let { getString(R.string.up_next) + ": " + it.title } ?: ""
+            nn.now?.let { now ->
+                binding.infoNow.text = now.title
+                binding.infoNowTime.text = "${timeFmt.format(Date(now.startMs))} - ${timeFmt.format(Date(now.stopMs))}"
+                binding.infoNowDesc.text = now.description ?: ""
+                binding.liveBadge.visibility = View.VISIBLE
+                val span = (now.stopMs - now.startMs).toFloat()
+                if (span > 0f) {
+                    val pct = ((System.currentTimeMillis() - now.startMs) / span * 100f)
+                        .toInt().coerceIn(0, 100)
+                    binding.nowProgress.progress = pct
+                    binding.nowProgress.visibility = View.VISIBLE
+                }
+            }
+            nn.next?.let { next ->
+                binding.infoNext.text = next.title
+                binding.infoNextTime.text = "${timeFmt.format(Date(next.startMs))} - ${timeFmt.format(Date(next.stopMs))}"
+            }
         }
     }
 

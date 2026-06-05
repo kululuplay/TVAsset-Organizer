@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="categories_title">الفئات</string>
+    <string name="channels_title">القنوات</string>
+    <string name="live_label">مباشر</string>
+    <string name="next_label">التالي</string>
+</resources>

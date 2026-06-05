@@ -1,17 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- TV home: a top navigation bar (Live / Guide / Movies / Series / Settings)
-     with a live clock, above the 3-pane Live browser (categories | channels |
-     info). Safe-area padding keeps content inside the visible TV area. -->
+<!-- Live TV browser. Top bar: title + live clock/date. Body: 3 columns —
+     Categories (left), Channels (center), and a rich preview/info panel (right)
+     with a live preview surface, a Now card (LIVE badge + time + progress +
+     description) and a Next card. Fully D-pad driven. View IDs are preserved so
+     HomeActivity binding stays compatible. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_root"
+    android:background="@drawable/bg_login_aurora"
     android:paddingHorizontal="@dimen/safe_area_h"
     android:paddingVertical="@dimen/safe_area_v">
 
-    <!-- Top navigation bar -->
+    <!-- Top bar -->
     <LinearLayout
         android:id="@+id/navBar"
         android:layout_width="0dp"
@@ -26,58 +28,11 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/app_name"
-            android:textColor="@color/accent"
+            android:text="@string/nav_live"
+            android:textColor="@color/text_primary"
             android:textSize="@dimen/text_title"
             android:textStyle="bold"
-            android:layout_marginEnd="@dimen/space_l" />
-
-        <TextView
-            android:id="@+id/navLive"
-            style="@style/Widget.Iptv.Button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/nav_live"
-            android:layout_marginEnd="@dimen/space_s" />
-
-        <TextView
-            android:id="@+id/navGuide"
-            style="@style/Widget.Iptv.Button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/nav_guide"
-            android:layout_marginEnd="@dimen/space_s" />
-
-        <TextView
-            android:id="@+id/navCatchup"
-            style="@style/Widget.Iptv.Button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/nav_catchup"
-            android:layout_marginEnd="@dimen/space_s" />
-
-        <TextView
-            android:id="@+id/navMovies"
-            style="@style/Widget.Iptv.Button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/nav_movies"
-            android:layout_marginEnd="@dimen/space_s" />
-
-        <TextView
-            android:id="@+id/navSeries"
-            style="@style/Widget.Iptv.Button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/nav_series"
-            android:layout_marginEnd="@dimen/space_s" />
-
-        <TextView
-            android:id="@+id/navSettings"
-            style="@style/Widget.Iptv.Button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/nav_settings" />
+            android:letterSpacing="0.02" />
 
         <Space
             android:layout_width="0dp"
@@ -91,6 +46,14 @@
             android:textColor="@color/text_primary"
             android:textSize="@dimen/text_title"
             android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/dateText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_body"
+            android:layout_marginStart="@dimen/space_m" />
     </LinearLayout>
 
     <!-- Left: categories -->
@@ -99,8 +62,8 @@
         android:layout_width="@dimen/category_width"
         android:layout_height="0dp"
         android:orientation="vertical"
-        android:background="@drawable/bg_panel"
-        android:padding="@dimen/space_s"
+        android:background="@drawable/bg_glass_card"
+        android:padding="@dimen/space_m"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/navBar"
         app:layout_constraintBottom_toBottomOf="parent">
@@ -108,11 +71,13 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/nav_live"
+            android:text="@string/categories_title"
             android:textColor="@color/text_secondary"
             android:textSize="@dimen/text_caption"
-            android:padding="@dimen/space_s"
-            android:layout_marginBottom="@dimen/space_xs" />
+            android:textStyle="bold"
+            android:letterSpacing="0.05"
+            android:paddingHorizontal="@dimen/space_s"
+            android:layout_marginBottom="@dimen/space_s" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/categoryList"
@@ -124,110 +89,261 @@
     </LinearLayout>
 
     <!-- Center: channels -->
-    <FrameLayout
+    <LinearLayout
         android:id="@+id/channelPanel"
         android:layout_width="0dp"
         android:layout_height="0dp"
+        android:orientation="vertical"
         android:layout_marginHorizontal="@dimen/space_m"
+        android:background="@drawable/bg_glass_card"
+        android:padding="@dimen/space_m"
         app:layout_constraintStart_toEndOf="@id/categoryPanel"
         app:layout_constraintEnd_toStartOf="@id/infoPanel"
         app:layout_constraintTop_toBottomOf="@id/navBar"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/channelList"
+        <TextView
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false" />
-
-        <TextView
-            android:id="@+id/emptyState"
-            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:text="@string/empty_channels"
+            android:text="@string/channels_title"
             android:textColor="@color/text_secondary"
-            android:textSize="@dimen/text_body"
-            android:visibility="gone" />
-
-        <!-- Number-key zap overlay (TV remote channel entry). -->
-        <TextView
-            android:id="@+id/zapOverlay"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="top|end"
-            android:background="@drawable/bg_overlay"
-            android:paddingHorizontal="@dimen/space_l"
-            android:paddingVertical="@dimen/space_s"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_big_title"
+            android:textSize="@dimen/text_caption"
             android:textStyle="bold"
-            android:visibility="gone" />
-    </FrameLayout>
+            android:letterSpacing="0.05"
+            android:paddingHorizontal="@dimen/space_s"
+            android:layout_marginBottom="@dimen/space_s" />
 
-    <!-- Right: info panel -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/channelList"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false" />
+
+            <TextView
+                android:id="@+id/emptyState"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="@string/empty_channels"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_body"
+                android:visibility="gone" />
+
+            <!-- Number-key zap overlay (TV remote channel entry). -->
+            <TextView
+                android:id="@+id/zapOverlay"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|end"
+                android:background="@drawable/bg_overlay"
+                android:paddingHorizontal="@dimen/space_l"
+                android:paddingVertical="@dimen/space_s"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_big_title"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- Right: preview + info -->
     <LinearLayout
         android:id="@+id/infoPanel"
         android:layout_width="@dimen/info_width"
         android:layout_height="0dp"
         android:orientation="vertical"
-        android:gravity="center_horizontal"
-        android:background="@drawable/bg_panel"
-        android:padding="@dimen/space_m"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/navBar"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <ImageView
-            android:id="@+id/infoLogo"
-            android:layout_width="160dp"
-            android:layout_height="160dp"
-            android:scaleType="fitCenter"
-            android:layout_marginTop="@dimen/space_l"
-            android:layout_marginBottom="@dimen/space_m"
-            android:contentDescription="@string/now_playing" />
+        <!-- Live preview surface -->
+        <FrameLayout
+            android:id="@+id/previewCard"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_preview"
+            android:foreground="@drawable/bg_tile_focus"
+            android:focusable="true"
+            android:clickable="true">
 
-        <TextView
-            android:id="@+id/infoName"
+            <ImageView
+                android:id="@+id/infoLogo"
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:layout_gravity="center"
+                android:scaleType="fitCenter"
+                android:contentDescription="@string/now_playing" />
+
+            <!-- Bottom overlay: play affordance + live label -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:padding="@dimen/space_m">
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_tv"
+                    android:tint="@color/text_primary"
+                    android:contentDescription="@string/nav_live" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/live_label"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_caption"
+                    android:textStyle="bold"
+                    android:layout_marginStart="@dimen/space_s" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- Now card -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_title"
-            android:textStyle="bold"
-            android:maxLines="2"
-            android:ellipsize="end" />
+            android:orientation="vertical"
+            android:background="@drawable/bg_glass_card"
+            android:padding="@dimen/space_m"
+            android:layout_marginTop="@dimen/space_m">
 
-        <TextView
-            android:id="@+id/infoCategory"
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/infoName"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body"
+                    android:textStyle="bold"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+                <TextView
+                    android:id="@+id/liveBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_live_badge"
+                    android:text="@string/live_label"
+                    android:textColor="@color/text_primary"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:paddingHorizontal="@dimen/space_s"
+                    android:paddingVertical="2dp"
+                    android:layout_marginStart="@dimen/space_s"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/infoCategory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_muted"
+                android:textSize="@dimen/text_caption"
+                android:layout_marginTop="2dp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/infoNow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
+                android:textStyle="bold"
+                android:layout_marginTop="@dimen/space_s"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/infoNowTime"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_caption"
+                android:layout_marginTop="2dp" />
+
+            <ProgressBar
+                android:id="@+id/nowProgress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="6dp"
+                android:progressDrawable="@drawable/progress_now"
+                android:max="100"
+                android:layout_marginTop="@dimen/space_s"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/infoNowDesc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_muted"
+                android:textSize="@dimen/text_caption"
+                android:layout_marginTop="@dimen/space_s"
+                android:maxLines="3"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <!-- Next card -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:textColor="@color/text_secondary"
-            android:textSize="@dimen/text_caption"
-            android:layout_marginTop="@dimen/space_s" />
+            android:orientation="vertical"
+            android:background="@drawable/bg_glass_card"
+            android:padding="@dimen/space_m"
+            android:layout_marginTop="@dimen/space_m">
 
-        <!-- Now / Next EPG for the focused channel. -->
-        <TextView
-            android:id="@+id/infoNow"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_caption"
-            android:layout_marginTop="@dimen/space_m"
-            android:maxLines="2"
-            android:ellipsize="end" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
 
-        <TextView
-            android:id="@+id/infoNext"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:textColor="@color/text_muted"
-            android:textSize="@dimen/text_caption"
-            android:layout_marginTop="@dimen/space_xs"
-            android:maxLines="2"
-            android:ellipsize="end" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_next_pill"
+                    android:text="@string/next_label"
+                    android:textColor="@color/text_primary"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:paddingHorizontal="@dimen/space_s"
+                    android:paddingVertical="2dp" />
+
+                <TextView
+                    android:id="@+id/infoNext"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_caption"
+                    android:textStyle="bold"
+                    android:layout_marginStart="@dimen/space_s"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+                <TextView
+                    android:id="@+id/infoNextTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="@dimen/text_caption"
+                    android:layout_marginStart="@dimen/space_s" />
+            </LinearLayout>
+        </LinearLayout>
     </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>
