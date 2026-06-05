@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import coil.load
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
+import com.iptv.player.data.model.ContinueItem
 import com.iptv.player.data.model.Episode
 import com.iptv.player.data.model.ResumeKind
 import com.iptv.player.data.model.Season
@@ -22,6 +23,7 @@ import com.iptv.player.databinding.ActivitySeriesDetailBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.player.VodPlayerActivity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -75,8 +77,19 @@ class SeriesDetailActivity : BaseActivity() {
     private fun loadResumeState(id: String) {
         binding.continueButton.visibility = View.GONE
         lifecycleScope.launch {
-            episodeAdapter.setProgress(repo.episodeProgress(id))
-            val latest = repo.latestSeriesResume(id)
+            // Resume metadata is a non-essential overlay; a lookup failure (e.g. a
+            // stale local cache) must never stop the series page from opening.
+            val progress: Map<String, Long>
+            val latest: ContinueItem?
+            try {
+                progress = repo.episodeProgress(id)
+                latest = repo.latestSeriesResume(id)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                return@launch
+            }
+            episodeAdapter.setProgress(progress)
             if (latest != null) {
                 binding.continueButton.text = getString(R.string.resume_continue) + "  " +
                     getString(R.string.episode_se_format, latest.seasonNumber, latest.episodeNumber)
@@ -86,7 +99,7 @@ class SeriesDetailActivity : BaseActivity() {
         }
     }
 
-    private fun resumeLatest(item: com.iptv.player.data.model.ContinueItem) {
+    private fun resumeLatest(item: ContinueItem) {
         val intent = Intent(this, VodPlayerActivity::class.java).apply {
             putExtra(VodPlayerActivity.EXTRA_STREAM_URL, item.streamUrl)
             putExtra(VodPlayerActivity.EXTRA_TITLE, item.title)
@@ -104,7 +117,13 @@ class SeriesDetailActivity : BaseActivity() {
 
     private fun loadHeader(id: String) {
         lifecycleScope.launch {
-            val series = repo.observeSeries().first().firstOrNull { it.id == id }
+            val series = try {
+                repo.observeSeries().first().firstOrNull { it.id == id }
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                null
+            }
             if (series != null) {
                 seriesName = series.name
                 seriesPoster = series.posterUrl
@@ -136,8 +155,14 @@ class SeriesDetailActivity : BaseActivity() {
         binding.loading.visibility = View.VISIBLE
         binding.emptyState.visibility = View.GONE
         lifecycleScope.launch {
-            val config = settings.getSourceConfig()
-            val seasons = if (config != null) repo.getSeasons(config, id) else emptyList()
+            val seasons = try {
+                val config = settings.getSourceConfig()
+                if (config != null) repo.getSeasons(config, id) else emptyList()
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                emptyList<Season>()
+            }
             binding.loading.visibility = View.GONE
             if (seasons.isEmpty()) {
                 binding.emptyState.visibility = View.VISIBLE

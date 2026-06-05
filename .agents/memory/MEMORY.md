@@ -1,2 +1,3 @@
 - [IPTV Android build constraints](iptv-android-build.md) — source-only/CI-built; R8 strips manifest-name-only classes (need -keep); split per-locale strings need parity + no cross-file dup keys.
 - [Continue Watching rail type filtering](resume-rail-type-filtering.md) — shared resume table; player defaults missing type to MOVIE, so every player launch must pass explicit EXTRA_RESUME_TYPE or it pollutes the rail.
+- [Resume lookups must not crash detail screens](resume-detail-crash-resilience.md) — guard resume DB loads in onCreate (rethrow CancellationException); bump Room version on any column/index change or stale schema crashes detail screens to home.
