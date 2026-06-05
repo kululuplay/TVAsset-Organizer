@@ -43,6 +43,8 @@
     <string name="section_continue_watching">Verder kijken</string>
     <string name="now_playing">Nu bezig</string>
     <string name="up_next">Hierna</string>
+    <string name="epg_min_left">Nog %1$d min</string>
+    <string name="epg_ending">Eindigt nu</string>
     <string name="empty_channels">Hier is nog niets.</string>
     <string name="empty_favorites">Je hebt nog geen favorieten.</string>
     <string name="empty_search">Geen resultaten gevonden.</string>

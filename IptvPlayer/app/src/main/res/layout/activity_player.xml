@@ -103,6 +103,52 @@
                 android:layout_marginTop="@dimen/space_s"
                 android:visibility="gone" />
 
+            <!-- How far we are into the current programme. -->
+            <ProgressBar
+                android:id="@+id/epgProgress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="6dp"
+                android:max="100"
+                android:progressDrawable="@drawable/progress_now"
+                android:layout_marginTop="@dimen/space_s"
+                android:visibility="gone" />
+
+            <!-- Start time · time left · end time. -->
+            <LinearLayout
+                android:id="@+id/epgTimes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:baselineAligned="false"
+                android:layout_marginTop="@dimen/space_xs"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/overlayStart"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="@dimen/text_caption" />
+
+                <TextView
+                    android:id="@+id/overlayRemain"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:textColor="@color/brand_pink"
+                    android:textStyle="bold"
+                    android:textSize="@dimen/text_caption" />
+
+                <TextView
+                    android:id="@+id/overlayEnd"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="@dimen/text_caption" />
+            </LinearLayout>
+
             <TextView
                 android:id="@+id/overlayNext"
                 android:layout_width="match_parent"
@@ -111,7 +157,7 @@
                 android:textSize="@dimen/text_caption"
                 android:maxLines="1"
                 android:ellipsize="end"
-                android:layout_marginTop="@dimen/space_xs"
+                android:layout_marginTop="@dimen/space_s"
                 android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>

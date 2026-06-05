@@ -43,6 +43,8 @@
     <string name="section_continue_watching">İzlemeye Devam Et</string>
     <string name="now_playing">Şimdi oynuyor</string>
     <string name="up_next">Sırada</string>
+    <string name="epg_min_left">%1$d dk kaldı</string>
+    <string name="epg_ending">Bitiyor</string>
     <string name="empty_channels">Burada henüz bir şey yok.</string>
     <string name="empty_favorites">Henüz favori eklemediniz.</string>
     <string name="empty_search">Sonuç bulunamadı.</string>

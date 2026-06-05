@@ -43,6 +43,8 @@
     <string name="section_continue_watching">Weiterschauen</string>
     <string name="now_playing">Jetzt läuft</string>
     <string name="up_next">Als Nächstes</string>
+    <string name="epg_min_left">Noch %1$d Min.</string>
+    <string name="epg_ending">Endet jetzt</string>
     <string name="empty_channels">Hier ist noch nichts.</string>
     <string name="empty_favorites">Sie haben noch keine Favoriten.</string>
     <string name="empty_search">Keine Ergebnisse gefunden.</string>

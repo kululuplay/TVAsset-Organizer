@@ -21,14 +21,15 @@ import androidx.lifecycle.lifecycleScope
 import coil.load
 import com.iptv.player.R
 import com.iptv.player.cast.CastController
+import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Channel
+import com.iptv.player.data.model.NowNext
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.databinding.ActivityPlayerBinding
 import com.iptv.player.player.PlayerController
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.SleepTimer
-import com.iptv.player.ui.guide.NowNextBinder
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -240,36 +241,67 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     }
 
     /**
-     * Fills the now/next rows for the current channel. Cancels any in-flight load
-     * first so rapid zapping can't leave a previous channel's EPG on screen.
+     * Loads and renders a professional EPG block for the current channel: the now
+     * playing title with a progress bar (how far the programme has aired), its
+     * start / end times and minutes left, plus the up-next title with its start
+     * time. Cancels any in-flight load first so rapid zapping can't leave a
+     * previous channel's EPG on screen.
      */
     private fun loadEpg(channel: Channel) {
         epgJob?.cancel()
-        // Clear + hide immediately so a late callback from the previous channel
-        // can never flash stale program text while the new load is in flight.
+        // Clear + hide immediately so a late callback can never flash stale text.
+        clearEpg()
+        epgJob = lifecycleScope.launch {
+            val nn = ServiceLocator.repository.getNowNext(channel)
+            // Ignore a result that arrived after the user already zapped away.
+            if (currentChannel?.id != channel.id) return@launch
+            bindEpg(nn)
+        }
+    }
+
+    /** Renders the now/next pair into the overlay. Runs on the main thread. */
+    private fun bindEpg(nn: NowNext) {
+        val now = nn.now
+        if (now != null) {
+            val clock = now.startMs..now.stopMs
+            val current = System.currentTimeMillis().coerceIn(clock)
+            binding.overlayNow.text =
+                getString(R.string.now_playing) + ": " + now.title
+            binding.overlayStart.text = formatClock(now.startMs)
+            binding.overlayEnd.text = formatClock(now.stopMs)
+            binding.epgProgress.progress = (now.progressAt(current) * 100).toInt()
+
+            val minsLeft = ((now.stopMs - current) / 60_000L).toInt()
+            binding.overlayRemain.text =
+                if (minsLeft <= 0) getString(R.string.epg_ending)
+                else getString(R.string.epg_min_left, minsLeft)
+
+            binding.overlayNow.visibility = View.VISIBLE
+            binding.epgProgress.visibility = View.VISIBLE
+            binding.epgTimes.visibility = View.VISIBLE
+        }
+
+        val next = nn.next
+        if (next != null) {
+            binding.overlayNext.text = getString(R.string.up_next) +
+                ": " + next.title + "  (" + formatClock(next.startMs) + ")"
+            binding.overlayNext.visibility = View.VISIBLE
+        }
+    }
+
+    /** Hides + clears every EPG view so no stale program text can show. */
+    private fun clearEpg() {
         binding.overlayNow.text = ""
         binding.overlayNext.text = ""
         binding.overlayNow.visibility = View.GONE
         binding.overlayNext.visibility = View.GONE
-        val job = NowNextBinder.bind(
-            scope = lifecycleScope,
-            channel = channel,
-            nowView = binding.overlayNow,
-            nextView = binding.overlayNext
-        )
-        epgJob = job
-        // Reveal each row only once it actually has text (binder fills async).
-        // Gate on job identity + channel so a stale completion can't re-show.
-        job.invokeOnCompletion {
-            binding.overlayNow.post {
-                if (epgJob !== job || currentChannel?.id != channel.id) return@post
-                binding.overlayNow.visibility =
-                    if (binding.overlayNow.text.isNullOrBlank()) View.GONE else View.VISIBLE
-                binding.overlayNext.visibility =
-                    if (binding.overlayNext.text.isNullOrBlank()) View.GONE else View.VISIBLE
-            }
-        }
+        binding.epgProgress.visibility = View.GONE
+        binding.epgTimes.visibility = View.GONE
     }
+
+    /** Locale-aware, 12/24h-respecting clock time (e.g. 20:00 / 8:00 PM). */
+    private fun formatClock(ms: Long): String =
+        android.text.format.DateFormat.getTimeFormat(this).format(java.util.Date(ms))
 
     private fun hideOverlay() {
         binding.infoOverlay.visibility = View.GONE

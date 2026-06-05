@@ -52,6 +52,8 @@
     <string name="section_continue_watching">Continue Watching</string>
     <string name="now_playing">Now playing</string>
     <string name="up_next">Up next</string>
+    <string name="epg_min_left">%1$d min left</string>
+    <string name="epg_ending">Ending now</string>
     <string name="empty_channels">Nothing here yet.</string>
     <string name="empty_favorites">You haven\'t added any favorites yet.</string>
     <string name="empty_search">No results found.</string>

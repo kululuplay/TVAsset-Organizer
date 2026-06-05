@@ -43,6 +43,8 @@
     <string name="section_continue_watching">متابعة المشاهدة</string>
     <string name="now_playing">يُعرض الآن</string>
     <string name="up_next">التالي</string>
+    <string name="epg_min_left">يتبقى %1$d د</string>
+    <string name="epg_ending">ينتهي الآن</string>
     <string name="empty_channels">لا يوجد شيء هنا بعد.</string>
     <string name="empty_favorites">لم تُضف أي مفضلات بعد.</string>
     <string name="empty_search">لا توجد نتائج.</string>

@@ -43,6 +43,8 @@
     <string name="section_continue_watching">Reprendre</string>
     <string name="now_playing">En cours</string>
     <string name="up_next">À suivre</string>
+    <string name="epg_min_left">%1$d min restantes</string>
+    <string name="epg_ending">Se termine</string>
     <string name="empty_channels">Rien ici pour l\'instant.</string>
     <string name="empty_favorites">Vous n\'avez pas encore de favoris.</string>
     <string name="empty_search">Aucun résultat trouvé.</string>
