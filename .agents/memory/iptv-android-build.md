@@ -44,3 +44,15 @@ Widget.Iptv.IconButton implying a non-existent Widget.Iptv.
 **How to apply:** any dotted-name style without an explicit parent must either have a real base
 style of that name, or set `parent=""` to opt out. Scan:
 `rg '<style name="[^"]*\.' values*/*.xml | rg -v 'parent='` should return nothing.
+
+## libVLC tuning for smooth IPTV (anti-stutter/freeze)
+VlcPlayerEngine options chosen for stability over startup latency on weak Android TV boxes:
+network-caching+live-caching=3000ms (bigger jitter buffer), clock-jitter=0 + clock-synchro=0
+(IPTV TS streams have irregular PCR; stops "stall to resync"), avcodec-skiploopfilter=all +
+avcodec-fast (cut decode load), http-reconnect (recover dropped HTTP). Mirror the same as
+per-Media `:opts` so they apply per stream.
+**Why:** --no-drop-late-frames/--no-skip-frames (old config) FORCE rendering every late frame
+→ delay accumulates → stutter; removing them restores VLC's real-time defaults.
+**Tradeoff:** clock-* can drift/desync on long sessions; avcodec-fast/skiploopfilter lose a bit
+of quality at low bitrate. Acceptable when user prioritizes no-freeze. Make runtime-toggleable
+only if desync/artifacts are reported.

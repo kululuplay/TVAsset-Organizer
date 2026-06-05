@@ -30,13 +30,26 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
     private var subtitleDelayMs = 0L
 
     override fun bind(container: ViewGroup) {
-        // Low network-caching for fast live startup; enable HW decode.
+        // Tuned for smooth IPTV on Android TV: a generous network buffer to
+        // absorb jitter, plus options that keep playback real-time on weak
+        // hardware instead of accumulating delay (the main cause of stutter).
         val options = arrayListOf(
-            "--network-caching=1500",
-            "--live-caching=1500",
-            "--no-drop-late-frames",
-            "--no-skip-frames",
+            // Bigger live buffer soaks up network hiccups before they freeze.
+            "--network-caching=$NETWORK_CACHING_MS",
+            "--live-caching=$NETWORK_CACHING_MS",
+            // Many IPTV TS streams carry irregular PCR/timestamps; disabling the
+            // jitter/synchro guards stops VLC from stalling to "catch up".
+            "--clock-jitter=0",
+            "--clock-synchro=0",
+            // Keep playback real-time: let VLC drop late frames (the defaults)
+            // rather than rendering every frame and lagging further behind.
             "--avcodec-hw=any",
+            // Cut decode load so cheap TV boxes keep up: skip the deblocking
+            // loop filter and allow fast (slightly looser) decoding.
+            "--avcodec-skiploopfilter=all",
+            "--avcodec-fast",
+            // Auto-reconnect when an HTTP segment/stream connection drops.
+            "--http-reconnect",
             // Report KULULUPLAY instead of the default "VLC/3.0.x LibVLC/3.0.x".
             "--http-user-agent=${AppInfo.USER_AGENT}"
         )
@@ -86,7 +99,13 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
         val media = Media(vlc, android.net.Uri.parse(url)).apply {
             // Prefer hardware decoding; libVLC degrades to software on failure.
             setHWDecoderEnabled(true, true)
-            addOption(":network-caching=1500")
+            // Mirror the instance buffer/jitter tuning at the stream level.
+            addOption(":network-caching=$NETWORK_CACHING_MS")
+            addOption(":live-caching=$NETWORK_CACHING_MS")
+            addOption(":clock-jitter=0")
+            addOption(":clock-synchro=0")
+            // Auto-reconnect dropped HTTP connections instead of erroring out.
+            addOption(":http-reconnect")
             // Per-stream User-Agent override (covers HTTP(S) playlist + segments).
             addOption(":http-user-agent=${AppInfo.USER_AGENT}")
         }
@@ -131,5 +150,14 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
             it.audioDelay = audioDelayMs * 1000
             it.spuDelay = subtitleDelayMs * 1000
         }
+    }
+
+    companion object {
+        /**
+         * Live/network buffer in ms. A larger buffer trades a little extra
+         * zap/startup latency for far fewer stalls and freezes on jittery IPTV
+         * connections — the priority for smooth Android TV playback.
+         */
+        private const val NETWORK_CACHING_MS = 3000
     }
 }
