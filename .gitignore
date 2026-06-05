@@ -1,0 +1,5 @@
+# Signing keystores and their base64 exports must NEVER be committed.
+*.jks
+*.keystore
+*.b64
+keystore.properties

@@ -55,6 +55,9 @@ class HomeActivity : BaseActivity() {
     /** Last category actually selected; used to detect real category changes. */
     private var lastSelectedCategoryId: String? = null
 
+    /** Adult categories the user has already unlocked this session (avoid re-prompting). */
+    private val unlockedCategories = mutableSetOf<String>()
+
     companion object {
         /** Optional category id to open on (e.g. Favorites from the dashboard). */
         const val EXTRA_INITIAL_CATEGORY = "extra_initial_category"
@@ -103,7 +106,18 @@ class HomeActivity : BaseActivity() {
                     viewModel.selectCategory(it.id)
                 }
             },
-            onClicked = { focusFirstChannel() }
+            onClicked = { category ->
+                // Locked (adult) categories require the PIN before you can enter
+                // them. Once unlocked, remember it for the rest of the session.
+                if (category.isAdult() && category.id !in unlockedCategories) {
+                    PinLockHelper.guard(this, isAdult = true) {
+                        unlockedCategories.add(category.id)
+                        focusFirstChannel()
+                    }
+                } else {
+                    focusFirstChannel()
+                }
+            }
         )
         binding.categoryList.layoutManager = LinearLayoutManager(this)
         binding.categoryList.adapter = categoryAdapter

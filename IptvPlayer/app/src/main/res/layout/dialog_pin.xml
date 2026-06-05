@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Modern parental-gate PIN dialog: title, 4 display boxes, an inline error
+     hint and an on-screen keypad. The keypad is built in code (PinPromptDialog)
+     to reuse item_pin_box / item_pin_key. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:background="@drawable/bg_pin_dialog"
+    android:paddingStart="@dimen/space_xl"
+    android:paddingEnd="@dimen/space_xl"
+    android:paddingTop="@dimen/space_l"
+    android:paddingBottom="@dimen/space_l">
+
+    <TextView
+        android:id="@+id/pinTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_title"
+        android:textStyle="bold"
+        android:text="@string/pin_enter" />
+
+    <LinearLayout
+        android:id="@+id/pinBoxes"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_l"
+        android:orientation="horizontal" />
+
+    <TextView
+        android:id="@+id/pinError"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_s"
+        android:textColor="@color/danger"
+        android:textSize="@dimen/text_caption"
+        android:visibility="invisible"
+        android:text="@string/pin_wrong" />
+
+    <LinearLayout
+        android:id="@+id/pinKeys"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_m"
+        android:orientation="vertical" />
+</LinearLayout>
