@@ -23,6 +23,7 @@ import com.iptv.player.databinding.ActivityDashboardBinding
 import com.iptv.player.ui.account.AccountActivity
 import com.iptv.player.ui.catchup.CatchupActivity
 import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.ui.common.PinLockHelper
 import com.iptv.player.ui.home.HomeActivity
 import com.iptv.player.ui.home.HomeViewModel
 import com.iptv.player.ui.player.VodPlayerActivity
@@ -72,20 +73,22 @@ class DashboardActivity : BaseActivity() {
     }
 
     private fun resume(item: ContinueItem) {
-        val intent = Intent(this, VodPlayerActivity::class.java).apply {
-            putExtra(VodPlayerActivity.EXTRA_STREAM_URL, item.streamUrl)
-            putExtra(VodPlayerActivity.EXTRA_TITLE, item.title)
-            putExtra(VodPlayerActivity.EXTRA_RESUME_ID, item.contentId)
-            putExtra(VodPlayerActivity.EXTRA_RESUME_TYPE, item.kind.raw)
-            putExtra(VodPlayerActivity.EXTRA_RESUME_TITLE, item.title)
-            putExtra(VodPlayerActivity.EXTRA_POSTER_URL, item.posterUrl)
-            putExtra(VodPlayerActivity.EXTRA_VOD_ID, item.vodId)
-            putExtra(VodPlayerActivity.EXTRA_SERIES_ID, item.seriesId)
-            putExtra(VodPlayerActivity.EXTRA_SEASON, item.seasonNumber)
-            putExtra(VodPlayerActivity.EXTRA_EPISODE, item.episodeNumber)
-            putExtra(VodPlayerActivity.EXTRA_AUTO_RESUME, true)
+        PinLockHelper.guard(this, isAdult = PinLockHelper.looksAdult(item.title)) {
+            val intent = Intent(this, VodPlayerActivity::class.java).apply {
+                putExtra(VodPlayerActivity.EXTRA_STREAM_URL, item.streamUrl)
+                putExtra(VodPlayerActivity.EXTRA_TITLE, item.title)
+                putExtra(VodPlayerActivity.EXTRA_RESUME_ID, item.contentId)
+                putExtra(VodPlayerActivity.EXTRA_RESUME_TYPE, item.kind.raw)
+                putExtra(VodPlayerActivity.EXTRA_RESUME_TITLE, item.title)
+                putExtra(VodPlayerActivity.EXTRA_POSTER_URL, item.posterUrl)
+                putExtra(VodPlayerActivity.EXTRA_VOD_ID, item.vodId)
+                putExtra(VodPlayerActivity.EXTRA_SERIES_ID, item.seriesId)
+                putExtra(VodPlayerActivity.EXTRA_SEASON, item.seasonNumber)
+                putExtra(VodPlayerActivity.EXTRA_EPISODE, item.episodeNumber)
+                putExtra(VodPlayerActivity.EXTRA_AUTO_RESUME, true)
+            }
+            startActivity(intent)
         }
-        startActivity(intent)
     }
 
     override fun onResume() {

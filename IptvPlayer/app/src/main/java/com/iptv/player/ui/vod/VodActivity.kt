@@ -17,6 +17,8 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.databinding.ActivityVodBinding
 import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.ui.common.PinLockHelper
+import com.iptv.player.ui.common.isAdult
 import com.iptv.player.ui.home.CategoryAdapter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -61,7 +63,9 @@ class VodActivity : BaseActivity() {
 
         vodAdapter = VodAdapter(
             onFocused = { },
-            onClicked = { openDetail(it.id) }
+            onClicked = { item ->
+                PinLockHelper.guard(this, isAdult = item.isAdult()) { openDetail(item.id) }
+            }
         )
         binding.posterGrid.layoutManager = GridLayoutManager(this, 4)
         binding.posterGrid.adapter = vodAdapter

@@ -17,6 +17,8 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.databinding.ActivitySearchBinding
 import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.ui.common.PinLockHelper
+import com.iptv.player.ui.common.isAdult
 import com.iptv.player.ui.home.ChannelAdapter
 import com.iptv.player.ui.player.PlayerActivity
 import com.iptv.player.ui.series.SeriesAdapter
@@ -65,7 +67,9 @@ class SearchActivity : BaseActivity() {
     private fun setupLists() {
         liveAdapter = ChannelAdapter(
             onFocused = { },
-            onClicked = { openLive(it.id) },
+            onClicked = { ch ->
+                PinLockHelper.guard(this, isAdult = ch.isAdult()) { openLive(ch.id) }
+            },
             onToggleFavorite = { /* favorite toggling isn't offered from search */ }
         )
         binding.liveList.layoutManager = LinearLayoutManager(this)
@@ -73,14 +77,18 @@ class SearchActivity : BaseActivity() {
 
         movieAdapter = VodAdapter(
             onFocused = { },
-            onClicked = { openMovie(it.id) }
+            onClicked = { item ->
+                PinLockHelper.guard(this, isAdult = item.isAdult()) { openMovie(item.id) }
+            }
         )
         binding.movieGrid.layoutManager = GridLayoutManager(this, 2)
         binding.movieGrid.adapter = movieAdapter
 
         seriesAdapter = SeriesAdapter(
             onFocused = { },
-            onClicked = { openSeries(it.id) }
+            onClicked = { item ->
+                PinLockHelper.guard(this, isAdult = item.isAdult()) { openSeries(item.id) }
+            }
         )
         binding.seriesGrid.layoutManager = GridLayoutManager(this, 2)
         binding.seriesGrid.adapter = seriesAdapter

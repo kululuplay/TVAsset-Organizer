@@ -120,12 +120,14 @@ class SettingsStore(private val context: Context) {
 
     // ---- Parental control ----------------------------------------------
 
-    val lockAdult: Flow<Boolean> = context.dataStore.data.map { it[Keys.LOCK_ADULT] ?: false }
+    /** Adult content is PIN-locked by default. */
+    val lockAdult: Flow<Boolean> = context.dataStore.data.map { it[Keys.LOCK_ADULT] ?: true }
 
     suspend fun setLockAdult(enabled: Boolean) =
         context.dataStore.edit { it[Keys.LOCK_ADULT] = enabled }
 
-    suspend fun getPin(): String? = context.dataStore.data.first()[Keys.PIN]
+    /** Defaults to [DEFAULT_PIN] until the user sets their own. */
+    suspend fun getPin(): String? = context.dataStore.data.first()[Keys.PIN] ?: DEFAULT_PIN
 
     suspend fun setPin(pin: String) =
         context.dataStore.edit { it[Keys.PIN] = pin }
@@ -221,5 +223,10 @@ class SettingsStore(private val context: Context) {
             prefs.remove(Keys.PASSWORD)
             prefs.remove(Keys.M3U_URL)
         }
+    }
+
+    companion object {
+        /** Default parental PIN used until the user sets their own. */
+        const val DEFAULT_PIN = "0000"
     }
 }

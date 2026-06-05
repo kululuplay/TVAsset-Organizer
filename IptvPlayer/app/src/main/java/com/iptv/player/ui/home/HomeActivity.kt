@@ -23,6 +23,8 @@ import com.iptv.player.databinding.ActivityHomeBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.NumberZapInputHelper
+import com.iptv.player.ui.common.PinLockHelper
+import com.iptv.player.ui.common.isAdult
 import com.iptv.player.ui.player.PlayerActivity
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -221,9 +223,11 @@ class HomeActivity : BaseActivity() {
     }
 
     private fun openPlayer(channel: Channel) {
-        val intent = Intent(this, PlayerActivity::class.java).apply {
-            putExtra(PlayerActivity.EXTRA_CHANNEL_ID, channel.id)
+        PinLockHelper.guard(this, isAdult = channel.isAdult()) {
+            val intent = Intent(this, PlayerActivity::class.java).apply {
+                putExtra(PlayerActivity.EXTRA_CHANNEL_ID, channel.id)
+            }
+            startActivity(intent)
         }
-        startActivity(intent)
     }
 }
