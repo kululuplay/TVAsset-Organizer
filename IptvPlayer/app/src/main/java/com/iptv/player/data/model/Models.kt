@@ -50,7 +50,7 @@ enum class PlayerMode {
 
     companion object {
         fun fromName(value: String?): PlayerMode =
-            entries.firstOrNull { it.name == value } ?: AUTO
+            entries.firstOrNull { it.name == value } ?: VLC
     }
 }
 
