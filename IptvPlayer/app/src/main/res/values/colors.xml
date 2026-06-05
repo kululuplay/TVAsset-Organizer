@@ -22,4 +22,18 @@
     <color name="success">#4CAF50</color>
     <color name="warning">#FFB300</color>
     <color name="danger">#E0533D</color>
+
+    <!-- Premium brand palette for the cinematic login (Magenta / Sky / Netflix). -->
+    <color name="brand_cinematic">#07090F</color>
+    <color name="brand_magenta">#FF2E9A</color>
+    <color name="brand_pink">#FF5FB0</color>
+    <color name="brand_purple">#7B2FF7</color>
+    <color name="brand_blue">#3A6BFF</color>
+
+    <!-- Translucent surfaces for the glass login card + inputs. -->
+    <color name="glass_card">#CC121723</color>
+    <color name="glass_stroke">#26FFFFFF</color>
+    <color name="glass_input">#14FFFFFF</color>
+    <color name="glass_input_focused">#24FFFFFF</color>
+    <color name="glass_track">#14FFFFFF</color>
 </resources>

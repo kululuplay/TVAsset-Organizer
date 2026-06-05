@@ -29,4 +29,15 @@
         <item name="android:textSize">@dimen/text_body</item>
         <item name="android:padding">@dimen/space_m</item>
     </style>
+
+    <!-- Login hero feature row: magenta bullet + label. -->
+    <style name="Widget.Iptv.Feature">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">@dimen/text_body</item>
+        <item name="android:drawableStart">@drawable/ic_dot</item>
+        <item name="android:drawablePadding">@dimen/space_m</item>
+    </style>
 </resources>

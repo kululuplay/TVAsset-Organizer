@@ -24,6 +24,11 @@
 
     <!-- Login -->
     <string name="login_title">Connect your service</string>
+    <string name="login_subtitle">Sign in to start streaming</string>
+    <string name="app_tagline">Premium streaming, reimagined.</string>
+    <string name="feature_live">Live TV &amp; sports in crisp HD</string>
+    <string name="feature_vod">Thousands of movies &amp; series</string>
+    <string name="feature_multi">Watch on every screen</string>
     <string name="tab_xtream">Xtream Codes</string>
     <string name="tab_m3u">M3U Playlist</string>
     <string name="hint_server">Server URL (http://host:port)</string>

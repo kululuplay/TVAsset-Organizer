@@ -1,138 +1,232 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Login screen. Centered card with two tabs (Xtream / M3U). Safe-area padding
-     keeps content off the screen edges for old TVs. D-pad friendly. -->
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Cinematic split login. Left: brand hero (logo, tagline, feature highlights).
+     Right: frosted glass sign-in card with Xtream / M3U pill tabs. All controls
+     are focusable and D-pad friendly; view IDs are unchanged for LoginActivity. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_root"
-    android:fillViewport="true">
+    android:background="@drawable/bg_login_aurora">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="center"
+        android:layout_height="match_parent"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
         android:paddingHorizontal="@dimen/safe_area_h"
         android:paddingVertical="@dimen/safe_area_v">
 
-        <ImageView
-            android:layout_width="72dp"
-            android:layout_height="72dp"
-            android:src="@drawable/ic_tv"
-            android:layout_marginBottom="@dimen/space_m"
-            android:contentDescription="@string/app_name" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/login_title"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_big_title"
-            android:textStyle="bold"
-            android:layout_marginBottom="@dimen/space_l" />
-
+        <!-- ===== Brand hero ===== -->
         <LinearLayout
-            android:layout_width="560dp"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="@dimen/space_m">
-
-            <TextView
-                android:id="@+id/tabXtream"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="@string/tab_xtream"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_body"
-                android:padding="@dimen/space_m"
-                android:background="@drawable/bg_card_selectable"
-                android:focusable="true"
-                android:layout_marginEnd="@dimen/space_s" />
-
-            <TextView
-                android:id="@+id/tabM3u"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="@string/tab_m3u"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_body"
-                android:padding="@dimen/space_m"
-                android:background="@drawable/bg_card_selectable"
-                android:focusable="true" />
-        </LinearLayout>
-
-        <!-- Xtream input group -->
-        <LinearLayout
-            android:id="@+id/groupXtream"
-            android:layout_width="560dp"
-            android:layout_height="wrap_content"
-            android:orientation="vertical">
-
-            <EditText
-                android:id="@+id/inputServer"
-                style="@style/Widget.Iptv.Input"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="@string/hint_server"
-                android:inputType="textUri"
-                android:layout_marginBottom="@dimen/space_s"
-                android:importantForAutofill="no" />
-
-            <EditText
-                android:id="@+id/inputUsername"
-                style="@style/Widget.Iptv.Input"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="@string/hint_username"
-                android:inputType="text"
-                android:layout_marginBottom="@dimen/space_s"
-                android:importantForAutofill="no" />
-
-            <EditText
-                android:id="@+id/inputPassword"
-                style="@style/Widget.Iptv.Input"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="@string/hint_password"
-                android:inputType="textPassword"
-                android:importantForAutofill="no" />
-        </LinearLayout>
-
-        <!-- M3U input group -->
-        <LinearLayout
-            android:id="@+id/groupM3u"
-            android:layout_width="560dp"
-            android:layout_height="wrap_content"
+            android:layout_weight="1.05"
             android:orientation="vertical"
-            android:visibility="gone">
+            android:layout_marginEnd="@dimen/space_xl">
 
-            <EditText
-                android:id="@+id/inputM3u"
-                style="@style/Widget.Iptv.Input"
-                android:layout_width="match_parent"
+            <ImageView
+                android:layout_width="80dp"
+                android:layout_height="80dp"
+                android:background="@drawable/bg_logo_badge"
+                android:padding="18dp"
+                android:src="@drawable/ic_tv"
+                android:tint="@color/text_primary"
+                android:contentDescription="@string/app_name" />
+
+            <TextView
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:hint="@string/hint_m3u"
-                android:inputType="textUri"
-                android:importantForAutofill="no" />
+                android:text="@string/app_name"
+                android:textColor="@color/text_primary"
+                android:textSize="48sp"
+                android:textStyle="bold"
+                android:letterSpacing="-0.02"
+                android:layout_marginTop="@dimen/space_l" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/app_tagline"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_body"
+                android:layout_marginTop="@dimen/space_s" />
+
+            <!-- Feature highlights -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="@dimen/space_xl">
+
+                <TextView
+                    style="@style/Widget.Iptv.Feature"
+                    android:text="@string/feature_live" />
+
+                <TextView
+                    style="@style/Widget.Iptv.Feature"
+                    android:layout_marginTop="@dimen/space_m"
+                    android:text="@string/feature_vod" />
+
+                <TextView
+                    style="@style/Widget.Iptv.Feature"
+                    android:layout_marginTop="@dimen/space_m"
+                    android:text="@string/feature_multi" />
+            </LinearLayout>
         </LinearLayout>
 
-        <Button
-            android:id="@+id/btnConnect"
-            style="@style/Widget.Iptv.Button"
-            android:layout_width="560dp"
-            android:layout_height="wrap_content"
-            android:text="@string/action_connect"
-            android:layout_marginTop="@dimen/space_l" />
+        <!-- ===== Sign-in card ===== -->
+        <ScrollView
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:fillViewport="true">
 
-        <ProgressBar
-            android:id="@+id/progress"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_m"
-            android:visibility="gone" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="0dp"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="540dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="@drawable/bg_glass_card"
+                    android:padding="@dimen/space_xl">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/login_title"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_title"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/login_subtitle"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="@dimen/text_caption"
+                        android:layout_marginTop="@dimen/space_xs"
+                        android:layout_marginBottom="@dimen/space_l" />
+
+                    <!-- Pill segmented tabs -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:background="@drawable/bg_pill_track"
+                        android:padding="@dimen/space_xs"
+                        android:layout_marginBottom="@dimen/space_l">
+
+                        <TextView
+                            android:id="@+id/tabXtream"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:text="@string/tab_xtream"
+                            android:textColor="@color/text_primary"
+                            android:textSize="@dimen/text_caption"
+                            android:padding="@dimen/space_m"
+                            android:background="@drawable/bg_tab_pill"
+                            android:focusable="true"
+                            android:layout_marginEnd="@dimen/space_xs" />
+
+                        <TextView
+                            android:id="@+id/tabM3u"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:text="@string/tab_m3u"
+                            android:textColor="@color/text_primary"
+                            android:textSize="@dimen/text_caption"
+                            android:padding="@dimen/space_m"
+                            android:background="@drawable/bg_tab_pill"
+                            android:focusable="true" />
+                    </LinearLayout>
+
+                    <!-- Xtream input group -->
+                    <LinearLayout
+                        android:id="@+id/groupXtream"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <EditText
+                            android:id="@+id/inputServer"
+                            style="@style/Widget.Iptv.Input"
+                            android:background="@drawable/bg_input_modern"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="@string/hint_server"
+                            android:inputType="textUri"
+                            android:layout_marginBottom="@dimen/space_s"
+                            android:importantForAutofill="no" />
+
+                        <EditText
+                            android:id="@+id/inputUsername"
+                            style="@style/Widget.Iptv.Input"
+                            android:background="@drawable/bg_input_modern"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="@string/hint_username"
+                            android:inputType="text"
+                            android:layout_marginBottom="@dimen/space_s"
+                            android:importantForAutofill="no" />
+
+                        <EditText
+                            android:id="@+id/inputPassword"
+                            style="@style/Widget.Iptv.Input"
+                            android:background="@drawable/bg_input_modern"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="@string/hint_password"
+                            android:inputType="textPassword"
+                            android:importantForAutofill="no" />
+                    </LinearLayout>
+
+                    <!-- M3U input group -->
+                    <LinearLayout
+                        android:id="@+id/groupM3u"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <EditText
+                            android:id="@+id/inputM3u"
+                            style="@style/Widget.Iptv.Input"
+                            android:background="@drawable/bg_input_modern"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="@string/hint_m3u"
+                            android:inputType="textUri"
+                            android:importantForAutofill="no" />
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/btnConnect"
+                        style="@style/Widget.Iptv.Button"
+                        android:background="@drawable/bg_button_primary"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/action_connect"
+                        android:layout_marginTop="@dimen/space_l" />
+
+                    <ProgressBar
+                        android:id="@+id/progress"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginTop="@dimen/space_m"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
     </LinearLayout>
-</ScrollView>
+</FrameLayout>

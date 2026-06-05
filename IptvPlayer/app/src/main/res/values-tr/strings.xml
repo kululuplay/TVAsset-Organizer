@@ -176,4 +176,9 @@
     <string name="wizard_connect_title">Bağlanmaya hazır</string>
     <string name="wizard_next">İleri</string>
     <string name="wizard_step_indicator">Adım %1$d / %2$d</string>
+    <string name="login_subtitle">Yayına başlamak için giriş yapın</string>
+    <string name="app_tagline">Premium yayıncılık, yeniden tasarlandı.</string>
+    <string name="feature_live">Canlı TV ve spor, net HD kalitesinde</string>
+    <string name="feature_vod">Binlerce film ve dizi</string>
+    <string name="feature_multi">Her ekranda izleyin</string>
 </resources>

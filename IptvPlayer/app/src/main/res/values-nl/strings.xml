@@ -176,4 +176,9 @@
     <string name="wizard_connect_title">Klaar om te verbinden</string>
     <string name="wizard_next">Volgende</string>
     <string name="wizard_step_indicator">Stap %1$d van %2$d</string>
+    <string name="login_subtitle">Log in om te beginnen met streamen</string>
+    <string name="app_tagline">Premium streamen, opnieuw uitgevonden.</string>
+    <string name="feature_live">Live-tv &amp; sport in scherp HD</string>
+    <string name="feature_vod">Duizenden films &amp; series</string>
+    <string name="feature_multi">Kijk op elk scherm</string>
 </resources>

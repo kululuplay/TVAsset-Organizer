@@ -176,4 +176,9 @@
     <string name="wizard_connect_title">Bereit zum Verbinden</string>
     <string name="wizard_next">Weiter</string>
     <string name="wizard_step_indicator">Schritt %1$d von %2$d</string>
+    <string name="login_subtitle">Melde dich an, um zu streamen</string>
+    <string name="app_tagline">Premium-Streaming, neu gedacht.</string>
+    <string name="feature_live">Live-TV &amp; Sport in gestochen scharfem HD</string>
+    <string name="feature_vod">Tausende Filme &amp; Serien</string>
+    <string name="feature_multi">Auf jedem Bildschirm ansehen</string>
 </resources>
