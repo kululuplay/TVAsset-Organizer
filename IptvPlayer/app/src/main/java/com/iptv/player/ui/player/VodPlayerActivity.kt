@@ -59,6 +59,11 @@ class VodPlayerActivity : BaseActivity() {
         private const val SAVE_INTERVAL_MS = 10_000L
         // Buffer (ms) for smooth start-up and seeking on jittery connections.
         private const val CACHING_MS = 1500
+        // How long the "languages / subtitles available" banner stays visible.
+        private const val TRACK_HINT_MS = 4500L
+        // Debounce after track-detection events before evaluating the hint, so we
+        // wait for the full set of audio/subtitle tracks to be parsed by VLC.
+        private const val TRACK_HINT_DEBOUNCE_MS = 1200L
     }
 
     private lateinit var binding: ActivityVodPlayerBinding
@@ -80,6 +85,10 @@ class VodPlayerActivity : BaseActivity() {
     // Position to jump to once playback actually starts (resume support). VLC only
     // accepts a seek after the first Playing event, so we defer it until then.
     private var pendingSeekMs = 0L
+
+    // Show the multi-language / subtitle hint at most once per playback session.
+    private var trackHintShown = false
+    private val trackHintRunnable = Runnable { showTrackHintIfAvailable() }
 
     private val sleepTimer = SleepTimer { finish() }
     private val castController by lazy {
@@ -210,6 +219,20 @@ class VodPlayerActivity : BaseActivity() {
                     }
                     applyAspect()
                     updateDuration()
+                    // VLC parses audio/subtitle tracks shortly after playback
+                    // begins; schedule a debounced check to surface the hint.
+                    if (!trackHintShown) {
+                        handler.removeCallbacks(trackHintRunnable)
+                        handler.postDelayed(trackHintRunnable, TRACK_HINT_DEBOUNCE_MS)
+                    }
+                }
+                MediaPlayer.Event.ESAdded -> {
+                    // Each elementary stream (audio/subtitle) detected resets the
+                    // debounce so we evaluate once the full set is known.
+                    if (!trackHintShown) {
+                        handler.removeCallbacks(trackHintRunnable)
+                        handler.postDelayed(trackHintRunnable, TRACK_HINT_DEBOUNCE_MS)
+                    }
                 }
                 MediaPlayer.Event.Paused -> {
                     binding.playPauseButton.setImageResource(R.drawable.ic_play)
@@ -381,6 +404,48 @@ class VodPlayerActivity : BaseActivity() {
             val id = ids[which]
             if (isAudio) mp.setAudioTrack(id) else mp.setSpuTrack(id)
         }
+    }
+
+    // ---- Track hint banner ---------------------------------------------
+
+    /**
+     * If the content offers more than one audio language and/or any subtitle
+     * track, surface a short informational banner so the viewer knows they can
+     * switch languages or enable subtitles from the player controls.
+     */
+    private fun showTrackHintIfAvailable() {
+        if (trackHintShown) return
+        val mp = mediaPlayer ?: return
+        // Count selectable tracks, ignoring VLC's own "Disable" entry (id -1).
+        val audioCount = mp.audioTracks?.count { it.id != -1 } ?: 0
+        val subtitleCount = mp.spuTracks?.count { it.id != -1 } ?: 0
+        val multiAudio = audioCount >= 2
+        val hasSubtitles = subtitleCount >= 1
+        if (!multiAudio && !hasSubtitles) return
+
+        trackHintShown = true
+        val (iconRes, messageRes) = when {
+            multiAudio && hasSubtitles ->
+                R.drawable.ic_subtitles to R.string.track_hint_audio_subtitle
+            multiAudio -> R.drawable.ic_audiotrack to R.string.track_hint_audio
+            else -> R.drawable.ic_subtitles to R.string.track_hint_subtitle
+        }
+        binding.trackHintIcon.setImageResource(iconRes)
+        binding.trackHintMessage.setText(messageRes)
+        showTrackHintBanner()
+    }
+
+    private fun showTrackHintBanner() {
+        val banner = binding.trackHintBanner
+        banner.animate().cancel()
+        banner.alpha = 0f
+        banner.visibility = View.VISIBLE
+        banner.animate().alpha(1f).setDuration(250L).start()
+        handler.postDelayed({
+            banner.animate().alpha(0f).setDuration(250L)
+                .withEndAction { banner.visibility = View.GONE }
+                .start()
+        }, TRACK_HINT_MS)
     }
 
     // ---- Sleep timer ----------------------------------------------------

@@ -73,6 +73,10 @@
     <string name="resume_from_start">Start over</string>
     <string name="resume_continue">Resume</string>
     <string name="resume_prompt_position_label">You stopped at</string>
+    <string name="track_hint_title">More viewing options</string>
+    <string name="track_hint_audio_subtitle">This title offers multiple audio languages and subtitles</string>
+    <string name="track_hint_audio">This title offers multiple audio languages</string>
+    <string name="track_hint_subtitle">This title offers subtitle options</string>
     <string name="episode_se_format">S%1$d · E%2$d</string>
     <string name="skip_forward">+10s</string>
     <string name="skip_back">-10s</string>

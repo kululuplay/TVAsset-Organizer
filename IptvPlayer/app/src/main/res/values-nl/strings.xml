@@ -63,6 +63,10 @@
     <string name="resume_from_start">Opnieuw beginnen</string>
     <string name="resume_continue">Hervatten</string>
     <string name="resume_prompt_position_label">Je stopte bij</string>
+    <string name="track_hint_title">Meer opties</string>
+    <string name="track_hint_audio_subtitle">Deze titel biedt meerdere audiotalen en ondertitels</string>
+    <string name="track_hint_audio">Deze titel biedt meerdere audiotalen</string>
+    <string name="track_hint_subtitle">Deze titel biedt ondertitels</string>
     <string name="episode_se_format">S%1$d · A%2$d</string>
     <string name="skip_forward">+10s</string>
     <string name="skip_back">-10s</string>

@@ -21,6 +21,56 @@
         android:indeterminateTint="@color/accent"
         android:visibility="gone" />
 
+    <!-- ===== Transient hint: multiple audio languages / subtitles ===== -->
+    <LinearLayout
+        android:id="@+id/trackHintBanner"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="120dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_track_hint"
+        android:paddingStart="@dimen/space_l"
+        android:paddingEnd="@dimen/space_l"
+        android:paddingTop="@dimen/space_m"
+        android:paddingBottom="@dimen/space_m"
+        android:elevation="8dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/trackHintIcon"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:src="@drawable/ic_subtitles"
+            android:contentDescription="@null"
+            android:tint="@color/accent" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_m"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/trackHintTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/track_hint_title"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/trackHintMessage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_caption" />
+        </LinearLayout>
+    </LinearLayout>
+
     <!-- ===== Top scrim: back, title, secondary actions ===== -->
     <LinearLayout
         android:id="@+id/topBar"

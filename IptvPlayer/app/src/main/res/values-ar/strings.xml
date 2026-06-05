@@ -63,6 +63,10 @@
     <string name="resume_from_start">من البداية</string>
     <string name="resume_continue">استئناف</string>
     <string name="resume_prompt_position_label">توقفت عند</string>
+    <string name="track_hint_title">خيارات إضافية</string>
+    <string name="track_hint_audio_subtitle">يوفّر هذا المحتوى عدة لغات صوتية وترجمات</string>
+    <string name="track_hint_audio">يوفّر هذا المحتوى عدة لغات صوتية</string>
+    <string name="track_hint_subtitle">يوفّر هذا المحتوى ترجمات</string>
     <string name="episode_se_format">الموسم %1$d · الحلقة %2$d</string>
     <string name="skip_forward">+10ث</string>
     <string name="skip_back">-10ث</string>
