@@ -8,6 +8,7 @@ package com.iptv.player.player
 
 import android.content.Context
 import android.view.ViewGroup
+import com.iptv.player.util.AppInfo
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
@@ -35,9 +36,13 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
             "--live-caching=1500",
             "--no-drop-late-frames",
             "--no-skip-frames",
-            "--avcodec-hw=any"
+            "--avcodec-hw=any",
+            // Report KULULUPLAY instead of the default "VLC/3.0.x LibVLC/3.0.x".
+            "--http-user-agent=${AppInfo.USER_AGENT}"
         )
         val vlc = LibVLC(context, options)
+        // Belt-and-braces: also set it on the instance (name + http UA).
+        vlc.setUserAgent(AppInfo.USER_AGENT, AppInfo.USER_AGENT)
         val mp = MediaPlayer(vlc)
 
         val layout = VLCVideoLayout(context).apply {
@@ -82,6 +87,8 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
             // Prefer hardware decoding; libVLC degrades to software on failure.
             setHWDecoderEnabled(true, true)
             addOption(":network-caching=1500")
+            // Per-stream User-Agent override (covers HTTP(S) playlist + segments).
+            addOption(":http-user-agent=${AppInfo.USER_AGENT}")
         }
         mp.media = media
         media.release()

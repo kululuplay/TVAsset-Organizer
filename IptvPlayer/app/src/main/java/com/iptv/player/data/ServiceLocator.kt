@@ -9,6 +9,7 @@ import android.content.Context
 import com.iptv.player.data.local.AppDatabase
 import com.iptv.player.data.prefs.SettingsStore
 import com.iptv.player.data.repository.IptvRepository
+import com.iptv.player.util.AppInfo
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -38,6 +39,13 @@ object ServiceLocator {
             httpClient = OkHttpClient.Builder()
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(20, TimeUnit.SECONDS)
+                // Force a single app identity on every REST / update request.
+                .addInterceptor { chain ->
+                    val request = chain.request().newBuilder()
+                        .header("User-Agent", AppInfo.USER_AGENT)
+                        .build()
+                    chain.proceed(request)
+                }
                 .addInterceptor(logging)
                 .build()
 

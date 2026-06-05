@@ -10,13 +10,16 @@ import android.view.ViewGroup
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
+import com.iptv.player.util.AppInfo
 
 class ExoPlayerEngine(private val context: Context) : PlayerEngine {
 
@@ -37,7 +40,15 @@ class ExoPlayerEngine(private val context: Context) : PlayerEngine {
             )
             .build()
 
+        // Identify every HTTP(S) stream pull as KULULUPLAY (some providers gate
+        // playback on the User-Agent).
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent(AppInfo.USER_AGENT)
+            .setAllowCrossProtocolRedirects(true)
+        val mediaSourceFactory = DefaultMediaSourceFactory(httpDataSourceFactory)
+
         val exo = ExoPlayer.Builder(context, buildRenderersFactory())
+            .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
             .build()
 
