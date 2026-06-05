@@ -43,6 +43,7 @@ import com.iptv.player.data.remote.XtreamApi
 import com.iptv.player.data.remote.XtreamUrlBuilder
 import com.iptv.player.util.AppError
 import com.iptv.player.util.Outcome
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -178,7 +179,8 @@ class IptvRepository(
                     }
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e // never swallow coroutine cancellation
             Outcome.Failure(e.toAppError())
         }
     }
@@ -191,9 +193,15 @@ class IptvRepository(
             }
             if (channels.isEmpty()) return@withContext Outcome.Failure(AppError.EMPTY_PLAYLIST)
             channelDao.clearType(ContentType.LIVE.name)
-            channelDao.upsertAll(channels.map { it.toEntity() })
+            // Insert in chunks: large Xtream accounts / M3U lists can hold tens of
+            // thousands of channels. Mapping + inserting all at once spikes memory and
+            // can OOM on low-RAM TV boxes, so bound the peak by batching.
+            channels.chunked(1000).forEach { batch ->
+                channelDao.upsertAll(batch.map { it.toEntity() })
+            }
             Outcome.Success(channels.size)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e // never swallow coroutine cancellation
             Outcome.Failure(e.toAppError())
         }
     }
@@ -270,7 +278,8 @@ class IptvRepository(
             vodDao.clearAll()
             vodDao.upsertAll(items)
             Outcome.Success(items.size)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e // never swallow coroutine cancellation
             Outcome.Failure(e.toAppError())
         }
     }
@@ -335,7 +344,8 @@ class IptvRepository(
             seriesDao.clearSeries()
             seriesDao.upsertSeries(items)
             Outcome.Success(items.size)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e // never swallow coroutine cancellation
             Outcome.Failure(e.toAppError())
         }
     }
@@ -418,7 +428,8 @@ class IptvRepository(
                 settings.setEpgUpdatedAt(System.currentTimeMillis())
                 Outcome.Success(total)
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e // never swallow coroutine cancellation
             Outcome.Failure(e.toAppError())
         }
     }
@@ -685,12 +696,15 @@ class IptvRepository(
         return retrofitBuilder.baseUrl(base).build().create(XtreamApi::class.java)
     }
 
-    private fun Exception.toAppError(): AppError = when (this) {
+    private fun Throwable.toAppError(): AppError = when (this) {
         is HttpException -> when (code()) {
             401, 403 -> AppError.BAD_CREDENTIALS
             else -> AppError.CANNOT_CONNECT
         }
         is IOException -> AppError.CANNOT_CONNECT
+        // OutOfMemoryError (huge playlists/accounts on low-RAM TV boxes) and other
+        // non-Exception Throwables must surface as a friendly error, not crash the app.
+        is OutOfMemoryError -> AppError.EMPTY_PLAYLIST
         else -> AppError.UNKNOWN
     }
 }

@@ -12,6 +12,7 @@ import com.iptv.player.data.model.SourceConfig
 import com.iptv.player.data.model.SourceType
 import com.iptv.player.util.AppError
 import com.iptv.player.util.Outcome
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -60,15 +61,24 @@ class LoginViewModel : ViewModel() {
     private fun submit(config: SourceConfig) {
         _state.value = State.Loading
         viewModelScope.launch {
-            when (val test = repo.testSource(config)) {
-                is Outcome.Failure -> _state.value = State.Error(test.error)
-                is Outcome.Success -> {
-                    settings.saveSource(config)
-                    when (val refresh = repo.refreshLive(config)) {
-                        is Outcome.Failure -> _state.value = State.Error(refresh.error)
-                        is Outcome.Success -> _state.value = State.Success
+            // Final safety net: nothing here may escape and crash the app. The repo
+            // already maps known failures to AppError, but saveSource and any other
+            // unexpected Throwable (e.g. OutOfMemoryError on huge accounts) are caught
+            // here so the user always sees an error instead of the app closing.
+            try {
+                when (val test = repo.testSource(config)) {
+                    is Outcome.Failure -> _state.value = State.Error(test.error)
+                    is Outcome.Success -> {
+                        settings.saveSource(config)
+                        when (val refresh = repo.refreshLive(config)) {
+                            is Outcome.Failure -> _state.value = State.Error(refresh.error)
+                            is Outcome.Success -> _state.value = State.Success
+                        }
                     }
                 }
+            } catch (e: Throwable) {
+                if (e is CancellationException) throw e // never swallow coroutine cancellation
+                _state.value = State.Error(AppError.UNKNOWN)
             }
         }
     }

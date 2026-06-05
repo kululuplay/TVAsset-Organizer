@@ -67,3 +67,24 @@ underline. Focus = 3dp brand_pink ring (bg_tile_focus) + scale animator (tile_fo
 (Apple TV/Plex), still high-contrast D-pad focus on dark tiles.
 **How to apply:** keep this language for any new dashboard/home cards; don't reintroduce
 full-tile gradients. Reuse badge_hero/medium/small dimens + badge_radius.
+
+## Connect/refresh crash hardening (catch Throwable, not Exception)
+App closed instantly on login "Connect". Connect path looked fully guarded but
+`catch (e: Exception)` does NOT catch `java.lang.Error` subclasses — esp.
+`OutOfMemoryError`, which is the realistic cause on low-RAM TV boxes when a big
+Xtream account / M3U returns tens of thousands of channels (Gson list + mapNotNull
++ entity list + Room txn all in memory at once). Also `LoginViewModel.submit` had
+an unguarded `settings.saveSource` and no final safety net in the viewModelScope
+coroutine, so any escaping Throwable killed the process.
+Fix: repo testSource/refreshLive/refreshVod/refreshSeries/refreshEpg catch
+`Throwable`; `toAppError` extends Throwable (OOM -> EMPTY_PLAYLIST); refreshLive
+inserts channels in chunks of 1000; submit wraps body in try/catch(Throwable).
+**CRITICAL:** when catching Throwable in a coroutine you MUST rethrow
+`CancellationException` (`if (e is CancellationException) throw e`) or you break
+cancellation (stale state, leaks). Architect flagged this.
+**Why:** an un-reproducible "app closes on action X" with already-try/catch'd code
+is almost always an Error (OOM/Linkage) escaping `catch(Exception)`, or an
+unguarded line in the launching coroutine.
+**How to apply:** for any heavy network+parse+DB op behind a button, catch
+Throwable + rethrow CancellationException + map the rest to a friendly AppError;
+batch large DB inserts to bound peak memory.
