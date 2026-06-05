@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Post-login launcher dashboard. Top bar: brand + live clock/date + circular
-     action buttons. Body: large gradient tiles (Live hero, Movies, Series) and a
-     row of secondary tiles (Playlists, Catch Up, Favorites). Footer: current
-     source + expiry. Fully D-pad driven; tiles scale + ring on focus. -->
+     action buttons. Body: cohesive dark glass tiles with colored icon badges -
+     a Live TV hero (subtle brand glow) plus Movies/Series, then a row of
+     secondary tiles (Playlists, Catch Up, Favorites). Footer: current source +
+     expiry. Fully D-pad driven; tiles scale + brand-pink ring on focus. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -138,7 +139,7 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:layout_marginEnd="@dimen/space_m"
-                android:background="@drawable/bg_tile_live"
+                android:background="@drawable/bg_tile_hero"
                 android:foreground="@drawable/bg_tile_focus"
                 android:stateListAnimator="@animator/tile_focus"
                 android:focusable="true"
@@ -147,13 +148,16 @@
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="center"
+                    android:layout_gravity="center_vertical|start"
+                    android:layout_marginStart="@dimen/space_xl"
                     android:orientation="vertical"
-                    android:gravity="center">
+                    android:gravity="start">
 
                     <ImageView
-                        android:layout_width="72dp"
-                        android:layout_height="72dp"
+                        android:layout_width="@dimen/badge_hero"
+                        android:layout_height="@dimen/badge_hero"
+                        android:background="@drawable/bg_badge_live"
+                        android:padding="@dimen/space_l"
                         android:src="@drawable/ic_tv"
                         android:tint="@color/text_primary"
                         android:contentDescription="@string/nav_live" />
@@ -165,7 +169,13 @@
                         android:textColor="@color/text_primary"
                         android:textSize="@dimen/text_big_title"
                         android:textStyle="bold"
-                        android:layout_marginTop="@dimen/space_m" />
+                        android:layout_marginTop="@dimen/space_l" />
+
+                    <View
+                        android:layout_width="56dp"
+                        android:layout_height="4dp"
+                        android:layout_marginTop="@dimen/space_m"
+                        android:background="@drawable/bg_accent_underline" />
                 </LinearLayout>
             </FrameLayout>
 
@@ -182,7 +192,7 @@
                     android:layout_height="0dp"
                     android:layout_weight="1"
                     android:layout_marginBottom="@dimen/space_m"
-                    android:background="@drawable/bg_tile_movies"
+                    android:background="@drawable/bg_tile_surface"
                     android:foreground="@drawable/bg_tile_focus"
                     android:stateListAnimator="@animator/tile_focus"
                     android:focusable="true"
@@ -197,8 +207,10 @@
                         android:gravity="center_vertical">
 
                         <ImageView
-                            android:layout_width="44dp"
-                            android:layout_height="44dp"
+                            android:layout_width="@dimen/badge_medium"
+                            android:layout_height="@dimen/badge_medium"
+                            android:background="@drawable/bg_badge_movies"
+                            android:padding="@dimen/space_m"
                             android:src="@drawable/ic_movie"
                             android:tint="@color/text_primary"
                             android:contentDescription="@string/nav_movies" />
@@ -219,7 +231,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
                     android:layout_weight="1"
-                    android:background="@drawable/bg_tile_series"
+                    android:background="@drawable/bg_tile_surface"
                     android:foreground="@drawable/bg_tile_focus"
                     android:stateListAnimator="@animator/tile_focus"
                     android:focusable="true"
@@ -234,8 +246,10 @@
                         android:gravity="center_vertical">
 
                         <ImageView
-                            android:layout_width="44dp"
-                            android:layout_height="44dp"
+                            android:layout_width="@dimen/badge_medium"
+                            android:layout_height="@dimen/badge_medium"
+                            android:background="@drawable/bg_badge_series"
+                            android:padding="@dimen/space_m"
                             android:src="@drawable/ic_series"
                             android:tint="@color/text_primary"
                             android:contentDescription="@string/nav_series" />
@@ -267,7 +281,7 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:layout_marginEnd="@dimen/space_m"
-                android:background="@drawable/bg_tile_playlists"
+                android:background="@drawable/bg_tile_surface"
                 android:foreground="@drawable/bg_tile_focus"
                 android:stateListAnimator="@animator/tile_focus"
                 android:focusable="true"
@@ -282,8 +296,10 @@
                     android:gravity="center_vertical">
 
                     <ImageView
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
+                        android:layout_width="@dimen/badge_small"
+                        android:layout_height="@dimen/badge_small"
+                        android:background="@drawable/bg_badge_playlists"
+                        android:padding="@dimen/space_s"
                         android:src="@drawable/ic_playlist"
                         android:tint="@color/text_primary"
                         android:contentDescription="@string/nav_playlists" />
@@ -295,7 +311,7 @@
                         android:textColor="@color/text_primary"
                         android:textSize="@dimen/text_body"
                         android:textStyle="bold"
-                        android:layout_marginStart="@dimen/space_s" />
+                        android:layout_marginStart="@dimen/space_m" />
                 </LinearLayout>
             </FrameLayout>
 
@@ -305,7 +321,7 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:layout_marginEnd="@dimen/space_m"
-                android:background="@drawable/bg_tile_catchup"
+                android:background="@drawable/bg_tile_surface"
                 android:foreground="@drawable/bg_tile_focus"
                 android:stateListAnimator="@animator/tile_focus"
                 android:focusable="true"
@@ -320,8 +336,10 @@
                     android:gravity="center_vertical">
 
                     <ImageView
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
+                        android:layout_width="@dimen/badge_small"
+                        android:layout_height="@dimen/badge_small"
+                        android:background="@drawable/bg_badge_catchup"
+                        android:padding="@dimen/space_s"
                         android:src="@drawable/ic_catchup"
                         android:tint="@color/text_primary"
                         android:contentDescription="@string/nav_catchup" />
@@ -333,7 +351,7 @@
                         android:textColor="@color/text_primary"
                         android:textSize="@dimen/text_body"
                         android:textStyle="bold"
-                        android:layout_marginStart="@dimen/space_s" />
+                        android:layout_marginStart="@dimen/space_m" />
                 </LinearLayout>
             </FrameLayout>
 
@@ -342,7 +360,7 @@
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:background="@drawable/bg_tile_favorites"
+                android:background="@drawable/bg_tile_surface"
                 android:foreground="@drawable/bg_tile_focus"
                 android:stateListAnimator="@animator/tile_focus"
                 android:focusable="true"
@@ -357,8 +375,10 @@
                     android:gravity="center_vertical">
 
                     <ImageView
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
+                        android:layout_width="@dimen/badge_small"
+                        android:layout_height="@dimen/badge_small"
+                        android:background="@drawable/bg_badge_favorites"
+                        android:padding="@dimen/space_s"
                         android:src="@drawable/ic_star"
                         android:tint="@color/text_primary"
                         android:contentDescription="@string/nav_favorites" />
@@ -370,7 +390,7 @@
                         android:textColor="@color/text_primary"
                         android:textSize="@dimen/text_body"
                         android:textStyle="bold"
-                        android:layout_marginStart="@dimen/space_s" />
+                        android:layout_marginStart="@dimen/space_m" />
                 </LinearLayout>
             </FrameLayout>
         </LinearLayout>

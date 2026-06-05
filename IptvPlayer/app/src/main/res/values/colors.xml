@@ -30,6 +30,18 @@
     <color name="brand_purple">#7B2FF7</color>
     <color name="brand_blue">#3A6BFF</color>
 
+    <!-- Accent palette for category icon badges on the dashboard. -->
+    <color name="accent_cyan">#22D3EE</color>
+    <color name="accent_emerald">#10B981</color>
+    <color name="accent_amber">#F59E0B</color>
+    <color name="accent_orange">#FB7A45</color>
+    <color name="accent_gold">#FBBF24</color>
+
+    <!-- Dark glass tile surfaces for the dashboard cards. -->
+    <color name="tile_surface_top">#212A36</color>
+    <color name="tile_surface_bottom">#151A22</color>
+    <color name="tile_stroke">#1AFFFFFF</color>
+
     <!-- Translucent surfaces for the glass login card + inputs. -->
     <color name="glass_card">#CC121723</color>
     <color name="glass_stroke">#26FFFFFF</color>

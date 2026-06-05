@@ -56,3 +56,14 @@ per-Media `:opts` so they apply per stream.
 **Tradeoff:** clock-* can drift/desync on long sessions; avcodec-fast/skiploopfilter lose a bit
 of quality at low bitrate. Acceptable when user prioritizes no-freeze. Make runtime-toggleable
 only if desync/artifacts are reported.
+
+## Dashboard design language (professional/modern)
+Old dashboard used six clashing full-tile rainbow gradients = amateur. New language:
+cohesive dark frosted-glass tiles (bg_tile_surface: top->bottom dark gradient + hairline
+stroke), color lives ONLY in rounded per-category icon badges (bg_badge_*), Live tile is a
+hero variant (bg_tile_hero: same glass + soft purple/magenta radial glows) with an accent
+underline. Focus = 3dp brand_pink ring (bg_tile_focus) + scale animator (tile_focus).
+**Why:** localize color to small badges over a unified dark surface = streaming-app polish
+(Apple TV/Plex), still high-contrast D-pad focus on dark tiles.
+**How to apply:** keep this language for any new dashboard/home cards; don't reintroduce
+full-tile gradients. Reuse badge_hero/medium/small dimens + badge_radius.

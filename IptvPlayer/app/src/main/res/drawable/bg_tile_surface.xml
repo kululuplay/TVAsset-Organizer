@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Standard dashboard card: dark frosted-glass surface with a faint top sheen
+     and a hairline stroke. Cohesive across all category tiles; colour comes
+     from the icon badge, not the whole tile. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="@dimen/tile_radius" />
+    <gradient
+        android:angle="110"
+        android:startColor="@color/tile_surface_top"
+        android:endColor="@color/tile_surface_bottom"
+        android:type="linear" />
+    <stroke android:width="1dp" android:color="@color/tile_stroke" />
+</shape>

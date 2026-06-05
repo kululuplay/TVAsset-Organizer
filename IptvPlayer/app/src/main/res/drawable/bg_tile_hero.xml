@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Live TV hero card: the same dark glass surface as the other tiles, lifted
+     with two soft brand glows (purple top-start, magenta bottom-end) so it reads
+     as the primary, premium destination without a clashing full-tile gradient. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/tile_radius" />
+            <gradient
+                android:angle="110"
+                android:startColor="@color/tile_surface_top"
+                android:endColor="@color/tile_surface_bottom"
+                android:type="linear" />
+            <stroke android:width="1dp" android:color="@color/tile_stroke" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/tile_radius" />
+            <gradient
+                android:type="radial"
+                android:centerX="0.24"
+                android:centerY="0.28"
+                android:gradientRadius="420dp"
+                android:startColor="#557B2FF7"
+                android:endColor="#007B2FF7" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/tile_radius" />
+            <gradient
+                android:type="radial"
+                android:centerX="0.84"
+                android:centerY="0.86"
+                android:gradientRadius="440dp"
+                android:startColor="#44FF2E9A"
+                android:endColor="#00FF2E9A" />
+        </shape>
+    </item>
+</layer-list>

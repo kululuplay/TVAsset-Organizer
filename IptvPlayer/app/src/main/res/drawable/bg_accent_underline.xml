@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Movies tile: green to blue gradient. -->
+<!-- Short brand accent bar under the hero title (editorial detail). -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <corners android:radius="@dimen/tile_radius" />
+    <corners android:radius="2dp" />
     <gradient
         android:angle="0"
-        android:startColor="#1FA463"
-        android:endColor="#2D6BE0"
+        android:startColor="@color/brand_purple"
+        android:endColor="@color/brand_pink"
         android:type="linear" />
 </shape>
