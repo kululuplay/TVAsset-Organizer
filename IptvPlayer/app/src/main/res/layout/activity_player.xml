@@ -36,19 +36,6 @@
             android:layout_marginTop="@dimen/space_s" />
     </LinearLayout>
 
-    <!-- Engine badge (which backend is playing) -->
-    <TextView
-        android:id="@+id/engineBadge"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|end"
-        android:layout_margin="@dimen/safe_area_v"
-        android:background="@drawable/bg_overlay"
-        android:paddingHorizontal="@dimen/space_s"
-        android:paddingVertical="@dimen/space_xs"
-        android:textColor="@color/text_secondary"
-        android:textSize="@dimen/text_caption" />
-
     <!-- Zapping / info overlay -->
     <LinearLayout
         android:id="@+id/infoOverlay"

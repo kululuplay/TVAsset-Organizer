@@ -284,7 +284,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     override fun onPlaying(engineName: String) {
         binding.bufferingIndicator.visibility = View.GONE
-        binding.engineBadge.text = engineName
     }
 
     override fun onRetrying(attempt: Int) {
