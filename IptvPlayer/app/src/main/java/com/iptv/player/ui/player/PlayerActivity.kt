@@ -28,6 +28,8 @@ import com.iptv.player.player.PlayerController
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.SleepTimer
+import com.iptv.player.ui.guide.NowNextBinder
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class PlayerActivity : BaseActivity(), PlayerController.Callback {
@@ -47,6 +49,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     private var currentChannel: Channel? = null
     private val overlayHandler = Handler(Looper.getMainLooper())
     private var okDownTime = 0L
+    private var epgJob: Job? = null
 
     private val sleepTimer = SleepTimer { finish() }
     private val castController by lazy {
@@ -220,6 +223,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         binding.overlayName.text = channel.name
         binding.overlayNumber.text = channel.number?.toString() ?: ""
         binding.overlayCategory.text = channel.categoryName ?: ""
+        loadEpg(channel)
         val placeholder = LogoPlaceholder.forName(this, channel.name)
         if (channel.logoUrl.isNullOrBlank()) {
             binding.overlayLogo.setImageDrawable(placeholder)
@@ -231,6 +235,38 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         binding.infoOverlay.visibility = View.VISIBLE
         overlayHandler.removeCallbacksAndMessages(null)
         overlayHandler.postDelayed({ hideOverlay() }, OVERLAY_TIMEOUT)
+    }
+
+    /**
+     * Fills the now/next rows for the current channel. Cancels any in-flight load
+     * first so rapid zapping can't leave a previous channel's EPG on screen.
+     */
+    private fun loadEpg(channel: Channel) {
+        epgJob?.cancel()
+        // Clear + hide immediately so a late callback from the previous channel
+        // can never flash stale program text while the new load is in flight.
+        binding.overlayNow.text = ""
+        binding.overlayNext.text = ""
+        binding.overlayNow.visibility = View.GONE
+        binding.overlayNext.visibility = View.GONE
+        val job = NowNextBinder.bind(
+            scope = lifecycleScope,
+            channel = channel,
+            nowView = binding.overlayNow,
+            nextView = binding.overlayNext
+        )
+        epgJob = job
+        // Reveal each row only once it actually has text (binder fills async).
+        // Gate on job identity + channel so a stale completion can't re-show.
+        job.invokeOnCompletion {
+            binding.overlayNow.post {
+                if (epgJob !== job || currentChannel?.id != channel.id) return@post
+                binding.overlayNow.visibility =
+                    if (binding.overlayNow.text.isNullOrBlank()) View.GONE else View.VISIBLE
+                binding.overlayNext.visibility =
+                    if (binding.overlayNext.text.isNullOrBlank()) View.GONE else View.VISIBLE
+            }
+        }
     }
 
     private fun hideOverlay() {
@@ -273,6 +309,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     override fun onDestroy() {
         super.onDestroy()
+        epgJob?.cancel()
         sleepTimer.release()
         castController.detach()
         overlayHandler.removeCallbacksAndMessages(null)
