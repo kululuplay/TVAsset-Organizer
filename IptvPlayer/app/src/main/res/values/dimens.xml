@@ -22,4 +22,17 @@
     <dimen name="channel_logo">56dp</dimen>
     <dimen name="card_radius">10dp</dimen>
     <dimen name="focus_stroke">2dp</dimen>
+
+    <!-- Posters (VOD / series grid). -->
+    <dimen name="poster_width">150dp</dimen>
+    <dimen name="poster_height">225dp</dimen>
+
+    <!-- Left navigation rail (home dashboard). -->
+    <dimen name="nav_rail_width">220dp</dimen>
+    <dimen name="nav_item_height">52dp</dimen>
+
+    <!-- EPG guide timeline. -->
+    <dimen name="epg_row_height">64dp</dimen>
+    <dimen name="epg_channel_col">220dp</dimen>
+    <dimen name="epg_minute_width">6dp</dimen>
 </resources>

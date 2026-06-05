@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Feature-scoped strings for the EPG / TV guide. English defaults only. -->
+<resources>
+    <string name="guide_updated">Guide updated</string>
+    <string name="guide_update_failed">Could not update guide</string>
+    <string name="guide_no_source">No source configured</string>
+    <string name="guide_match_epg">Match EPG id</string>
+    <string name="epg_mapping_input_hint">EPG channel id (tvg-id)</string>
+    <string name="epg_mapping_saved">Saved</string>
+</resources>

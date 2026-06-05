@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Türkçe -->
+<resources>
+    <string name="app_name">IPTV Oynatıcı</string>
+
+    <string name="action_ok">Tamam</string>
+    <string name="action_cancel">İptal</string>
+    <string name="action_save">Kaydet</string>
+    <string name="action_delete">Sil</string>
+    <string name="action_retry">Tekrar dene</string>
+    <string name="action_back">Geri</string>
+    <string name="action_continue">Devam et</string>
+    <string name="action_close">Kapat</string>
+    <string name="loading">Yükleniyor…</string>
+    <string name="search_hint">Ara…</string>
+
+    <string name="wizard_welcome_title">Hoş geldiniz</string>
+    <string name="wizard_welcome_subtitle">Servisinizi birkaç adımda kuralım.</string>
+    <string name="wizard_step_source">Bağlantı yöntemini seçin</string>
+    <string name="wizard_step_language">Dilinizi seçin</string>
+    <string name="wizard_finish">Bitir</string>
+
+    <string name="login_title">Servisinize bağlanın</string>
+    <string name="tab_xtream">Xtream Codes</string>
+    <string name="tab_m3u">M3U Listesi</string>
+    <string name="hint_server">Sunucu adresi (http://host:port)</string>
+    <string name="hint_username">Kullanıcı adı</string>
+    <string name="hint_password">Şifre</string>
+    <string name="hint_m3u">M3U liste adresi</string>
+    <string name="hint_profile_name">Profil adı</string>
+    <string name="action_connect">Bağlan</string>
+    <string name="connecting">Bağlanıyor…</string>
+
+    <string name="nav_live">Canlı TV</string>
+    <string name="nav_movies">Filmler</string>
+    <string name="nav_series">Diziler</string>
+    <string name="nav_guide">TV Rehberi</string>
+    <string name="nav_search">Ara</string>
+    <string name="nav_settings">Ayarlar</string>
+    <string name="section_favorites">Favoriler</string>
+    <string name="section_recent">Son İzlenenler</string>
+    <string name="section_all">Tümü</string>
+    <string name="section_continue_watching">İzlemeye Devam Et</string>
+    <string name="now_playing">Şimdi oynuyor</string>
+    <string name="up_next">Sırada</string>
+    <string name="empty_channels">Burada henüz bir şey yok.</string>
+    <string name="empty_favorites">Henüz favori eklemediniz.</string>
+    <string name="empty_search">Sonuç bulunamadı.</string>
+    <string name="added_to_favorites">Favorilere eklendi</string>
+    <string name="removed_from_favorites">Favorilerden çıkarıldı</string>
+    <string name="channel_count">%1$d kanal</string>
+
+    <string name="buffering">Yükleniyor…</string>
+    <string name="player_mode_label">Oynatıcı</string>
+    <string name="audio_track">Ses</string>
+    <string name="subtitle_track">Altyazı</string>
+    <string name="subtitles_off">Kapalı</string>
+    <string name="aspect_ratio">En boy oranı</string>
+    <string name="resume_prompt_title">Oynatmaya devam edilsin mi?</string>
+    <string name="resume_prompt_message">Kaldığınız yerden devam edilsin mi?</string>
+    <string name="resume_from_start">Baştan başlat</string>
+    <string name="resume_continue">Devam et</string>
+    <string name="skip_forward">+10sn</string>
+    <string name="skip_back">-10sn</string>
+
+    <string name="guide_title">TV Rehberi</string>
+    <string name="guide_now">Şimdi</string>
+    <string name="guide_no_data">Bu kanal için rehber verisi yok.</string>
+    <string name="guide_refresh">Rehberi yenile</string>
+    <string name="epg_mapping_title">EPG Eşleştir</string>
+    <string name="epg_mapping_hint">Bu kanala uyan rehber kimliğini seçin.</string>
+
+    <string name="detail_play">Oynat</string>
+    <string name="detail_trailer">Fragman</string>
+    <string name="detail_cast">Oyuncular</string>
+    <string name="detail_director">Yönetmen</string>
+    <string name="detail_genre">Tür</string>
+    <string name="detail_year">Yıl</string>
+    <string name="detail_rating">Puan</string>
+    <string name="detail_plot">Konu</string>
+    <string name="series_season">%1$d. Sezon</string>
+    <string name="series_episode">%1$d. Bölüm</string>
+
+    <string name="settings_title">Ayarlar</string>
+    <string name="settings_playback">Oynatma</string>
+    <string name="settings_player_mode">Oynatıcı motoru</string>
+    <string name="settings_player_auto">Otomatik (önerilen)</string>
+    <string name="settings_player_exo">ExoPlayer</string>
+    <string name="settings_player_vlc">VLC</string>
+    <string name="settings_language">Dil</string>
+    <string name="settings_general">Genel</string>
+    <string name="settings_account">Hesap</string>
+    <string name="settings_profiles">Profiller</string>
+    <string name="settings_add_profile">Profil ekle</string>
+    <string name="settings_parental">Ebeveyn denetimi</string>
+    <string name="settings_parental_pin">PIN ayarla / değiştir</string>
+    <string name="settings_lock_adult">Yetişkin kategorilerini kilitle</string>
+    <string name="settings_tmdb">TMDB API anahtarı</string>
+    <string name="settings_tmdb_hint">İsteğe bağlı: film afişlerini ve detaylarını açar.</string>
+    <string name="settings_screensaver">Boştayken ekran koruyucu</string>
+    <string name="settings_clock">Saati göster</string>
+    <string name="settings_diagnostics">Tanılama</string>
+    <string name="settings_about">Hakkında</string>
+    <string name="settings_logout">Çıkış yap</string>
+    <string name="settings_logout_confirm">Çıkış yapılsın ve bu profil kaldırılsın mı?</string>
+
+    <string name="pin_enter">PIN girin</string>
+    <string name="pin_set">4 haneli bir PIN belirleyin</string>
+    <string name="pin_confirm">PIN\'i onaylayın</string>
+    <string name="pin_wrong">Yanlış PIN.</string>
+    <string name="pin_mismatch">PIN\'ler eşleşmiyor.</string>
+    <string name="pin_locked_content">Bu içerik kilitli.</string>
+
+    <string name="diag_title">Tanılama</string>
+    <string name="diag_run">Testleri çalıştır</string>
+    <string name="diag_internet">İnternet bağlantısı</string>
+    <string name="diag_server">Sunucuya erişim</string>
+    <string name="diag_ping">Sunucu yanıt süresi</string>
+    <string name="diag_speed">İndirme hızı</string>
+    <string name="diag_dns">DNS / İSS</string>
+    <string name="diag_dns_warning">Sağlayıcınız bu sunucuyu engelliyor olabilir. Farklı bir DNS deneyin.</string>
+    <string name="diag_device">Cihaz bilgisi</string>
+    <string name="diag_send_logs">Günlükleri gönder</string>
+    <string name="diag_passed">Başarılı</string>
+    <string name="diag_failed">Başarısız</string>
+
+    <string name="account_status">Durum</string>
+    <string name="account_active">Aktif</string>
+    <string name="account_inactive">Pasif</string>
+    <string name="account_expiry">Bitiş</string>
+    <string name="account_days_left">%1$d gün kaldı</string>
+    <string name="account_connections">Bağlantılar</string>
+    <string name="account_unlimited">Sınırsız</string>
+
+    <string name="about_title">Hakkında</string>
+    <string name="about_version">Sürüm %1$s</string>
+    <string name="about_update_available">Bir güncelleme mevcut.</string>
+    <string name="about_update_required">Zorunlu bir güncelleme var. Devam etmek için lütfen güncelleyin.</string>
+    <string name="about_update_now">Şimdi güncelle</string>
+
+    <string name="error_no_internet">İnternet bağlantınızı kontrol edin.</string>
+    <string name="error_cannot_connect">Sunucuya bağlanılamadı.</string>
+    <string name="error_bad_credentials">Kullanıcı adı veya şifre hatalı.</string>
+    <string name="error_subscription_expired">Aboneliğinizin süresi doldu.</string>
+    <string name="error_account_in_use">Bu hesap başka bir cihazda kullanımda olabilir.</string>
+    <string name="error_stream_not_responding">Yayın şu anda yanıt vermiyor, tekrar deneniyor.</string>
+    <string name="error_empty_playlist">Bu listede kanal bulunamadı.</string>
+    <string name="error_unknown">Bir şeyler ters gitti. Lütfen tekrar deneyin.</string>
+</resources>

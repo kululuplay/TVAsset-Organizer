@@ -16,4 +16,10 @@
     <color name="focus_border">#3DA9FC</color>
     <color name="overlay_scrim">#CC000000</color>
     <color name="star">#FFC857</color>
+
+    <color name="progress_track">#33FFFFFF</color>
+    <color name="live_badge">#E0533D</color>
+    <color name="success">#4CAF50</color>
+    <color name="warning">#FFB300</color>
+    <color name="danger">#E0533D</color>
 </resources>

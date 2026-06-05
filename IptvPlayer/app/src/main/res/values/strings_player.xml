@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Feature-scoped strings for the on-demand (VOD) player controls. -->
+<resources>
+    <string name="player_pause">Pause</string>
+</resources>

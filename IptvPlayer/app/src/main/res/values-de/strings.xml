@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Deutsch -->
+<resources>
+    <string name="app_name">IPTV Player</string>
+
+    <string name="action_ok">OK</string>
+    <string name="action_cancel">Abbrechen</string>
+    <string name="action_save">Speichern</string>
+    <string name="action_delete">Löschen</string>
+    <string name="action_retry">Erneut versuchen</string>
+    <string name="action_back">Zurück</string>
+    <string name="action_continue">Weiter</string>
+    <string name="action_close">Schließen</string>
+    <string name="loading">Wird geladen…</string>
+    <string name="search_hint">Suchen…</string>
+
+    <string name="wizard_welcome_title">Willkommen</string>
+    <string name="wizard_welcome_subtitle">Richten wir Ihren Dienst in wenigen Schritten ein.</string>
+    <string name="wizard_step_source">Verbindungsart wählen</string>
+    <string name="wizard_step_language">Sprache wählen</string>
+    <string name="wizard_finish">Fertig</string>
+
+    <string name="login_title">Mit Ihrem Dienst verbinden</string>
+    <string name="tab_xtream">Xtream Codes</string>
+    <string name="tab_m3u">M3U-Playlist</string>
+    <string name="hint_server">Server-URL (http://host:port)</string>
+    <string name="hint_username">Benutzername</string>
+    <string name="hint_password">Passwort</string>
+    <string name="hint_m3u">M3U-Playlist-URL</string>
+    <string name="hint_profile_name">Profilname</string>
+    <string name="action_connect">Verbinden</string>
+    <string name="connecting">Verbindung…</string>
+
+    <string name="nav_live">Live-TV</string>
+    <string name="nav_movies">Filme</string>
+    <string name="nav_series">Serien</string>
+    <string name="nav_guide">TV-Programm</string>
+    <string name="nav_search">Suche</string>
+    <string name="nav_settings">Einstellungen</string>
+    <string name="section_favorites">Favoriten</string>
+    <string name="section_recent">Zuletzt gesehen</string>
+    <string name="section_all">Alle</string>
+    <string name="section_continue_watching">Weiterschauen</string>
+    <string name="now_playing">Jetzt läuft</string>
+    <string name="up_next">Als Nächstes</string>
+    <string name="empty_channels">Hier ist noch nichts.</string>
+    <string name="empty_favorites">Sie haben noch keine Favoriten.</string>
+    <string name="empty_search">Keine Ergebnisse gefunden.</string>
+    <string name="added_to_favorites">Zu Favoriten hinzugefügt</string>
+    <string name="removed_from_favorites">Aus Favoriten entfernt</string>
+    <string name="channel_count">%1$d Kanäle</string>
+
+    <string name="buffering">Wird geladen…</string>
+    <string name="player_mode_label">Player</string>
+    <string name="audio_track">Audio</string>
+    <string name="subtitle_track">Untertitel</string>
+    <string name="subtitles_off">Aus</string>
+    <string name="aspect_ratio">Seitenverhältnis</string>
+    <string name="resume_prompt_title">Wiedergabe fortsetzen?</string>
+    <string name="resume_prompt_message">Dort fortfahren, wo Sie aufgehört haben?</string>
+    <string name="resume_from_start">Von vorn</string>
+    <string name="resume_continue">Fortsetzen</string>
+    <string name="skip_forward">+10s</string>
+    <string name="skip_back">-10s</string>
+
+    <string name="guide_title">TV-Programm</string>
+    <string name="guide_now">Jetzt</string>
+    <string name="guide_no_data">Keine Programmdaten für diesen Sender.</string>
+    <string name="guide_refresh">Programm aktualisieren</string>
+    <string name="epg_mapping_title">EPG zuordnen</string>
+    <string name="epg_mapping_hint">Wählen Sie die passende Programm-ID für diesen Sender.</string>
+
+    <string name="detail_play">Abspielen</string>
+    <string name="detail_trailer">Trailer</string>
+    <string name="detail_cast">Besetzung</string>
+    <string name="detail_director">Regie</string>
+    <string name="detail_genre">Genre</string>
+    <string name="detail_year">Jahr</string>
+    <string name="detail_rating">Bewertung</string>
+    <string name="detail_plot">Handlung</string>
+    <string name="series_season">Staffel %1$d</string>
+    <string name="series_episode">Folge %1$d</string>
+
+    <string name="settings_title">Einstellungen</string>
+    <string name="settings_playback">Wiedergabe</string>
+    <string name="settings_player_mode">Player-Engine</string>
+    <string name="settings_player_auto">Automatisch (empfohlen)</string>
+    <string name="settings_player_exo">ExoPlayer</string>
+    <string name="settings_player_vlc">VLC</string>
+    <string name="settings_language">Sprache</string>
+    <string name="settings_general">Allgemein</string>
+    <string name="settings_account">Konto</string>
+    <string name="settings_profiles">Profile</string>
+    <string name="settings_add_profile">Profil hinzufügen</string>
+    <string name="settings_parental">Kindersicherung</string>
+    <string name="settings_parental_pin">PIN festlegen / ändern</string>
+    <string name="settings_lock_adult">Erwachsenenkategorien sperren</string>
+    <string name="settings_tmdb">TMDB-API-Schlüssel</string>
+    <string name="settings_tmdb_hint">Optional: aktiviert Filmplakate und Details.</string>
+    <string name="settings_screensaver">Bildschirmschoner bei Inaktivität</string>
+    <string name="settings_clock">Uhr anzeigen</string>
+    <string name="settings_diagnostics">Diagnose</string>
+    <string name="settings_about">Über</string>
+    <string name="settings_logout">Abmelden</string>
+    <string name="settings_logout_confirm">Abmelden und dieses Profil entfernen?</string>
+
+    <string name="pin_enter">PIN eingeben</string>
+    <string name="pin_set">4-stellige PIN festlegen</string>
+    <string name="pin_confirm">PIN bestätigen</string>
+    <string name="pin_wrong">Falsche PIN.</string>
+    <string name="pin_mismatch">PINs stimmen nicht überein.</string>
+    <string name="pin_locked_content">Dieser Inhalt ist gesperrt.</string>
+
+    <string name="diag_title">Diagnose</string>
+    <string name="diag_run">Tests ausführen</string>
+    <string name="diag_internet">Internetverbindung</string>
+    <string name="diag_server">Server erreichbar</string>
+    <string name="diag_ping">Server-Antwortzeit</string>
+    <string name="diag_speed">Downloadgeschwindigkeit</string>
+    <string name="diag_dns">DNS / ISP</string>
+    <string name="diag_dns_warning">Ihr Anbieter blockiert diesen Server möglicherweise. Versuchen Sie ein anderes DNS.</string>
+    <string name="diag_device">Geräteinfo</string>
+    <string name="diag_send_logs">Protokolle senden</string>
+    <string name="diag_passed">Bestanden</string>
+    <string name="diag_failed">Fehlgeschlagen</string>
+
+    <string name="account_status">Status</string>
+    <string name="account_active">Aktiv</string>
+    <string name="account_inactive">Inaktiv</string>
+    <string name="account_expiry">Läuft ab</string>
+    <string name="account_days_left">Noch %1$d Tage</string>
+    <string name="account_connections">Verbindungen</string>
+    <string name="account_unlimited">Unbegrenzt</string>
+
+    <string name="about_title">Über</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="about_update_available">Ein Update ist verfügbar.</string>
+    <string name="about_update_required">Ein erforderliches Update ist verfügbar. Bitte aktualisieren Sie.</string>
+    <string name="about_update_now">Jetzt aktualisieren</string>
+
+    <string name="error_no_internet">Überprüfen Sie Ihre Internetverbindung.</string>
+    <string name="error_cannot_connect">Verbindung zum Server fehlgeschlagen.</string>
+    <string name="error_bad_credentials">Benutzername oder Passwort falsch.</string>
+    <string name="error_subscription_expired">Ihr Abonnement ist abgelaufen.</string>
+    <string name="error_account_in_use">Dieses Konto wird möglicherweise auf einem anderen Gerät verwendet.</string>
+    <string name="error_stream_not_responding">Der Stream antwortet gerade nicht, erneuter Versuch.</string>
+    <string name="error_empty_playlist">In dieser Playlist wurden keine Kanäle gefunden.</string>
+    <string name="error_unknown">Etwas ist schiefgelaufen. Bitte erneut versuchen.</string>
+</resources>

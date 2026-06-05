@@ -1,0 +1,92 @@
+/*
+ * SeriesActivity.kt
+ * Series screen: categories on the left, a focusable poster grid in the center,
+ * and a search field. Clicking a poster opens the series detail screen.
+ * Mirrors VodActivity; fully D-pad driven for TV.
+ */
+package com.iptv.player.ui.series
+
+import android.content.Intent
+import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.View
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.iptv.player.databinding.ActivitySeriesBinding
+import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.ui.home.CategoryAdapter
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+
+class SeriesActivity : BaseActivity() {
+
+    private lateinit var binding: ActivitySeriesBinding
+    private val viewModel: SeriesViewModel by lazy {
+        ViewModelProvider(this)[SeriesViewModel::class.java]
+    }
+
+    private lateinit var categoryAdapter: CategoryAdapter
+    private lateinit var seriesAdapter: SeriesAdapter
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivitySeriesBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        setupLists()
+        setupSearch()
+        observe()
+    }
+
+    private fun setupLists() {
+        categoryAdapter = CategoryAdapter(
+            onFocused = { viewModel.selectCategory(it.id) },
+            onClicked = { binding.posterGrid.requestFocus() }
+        )
+        binding.categoryList.layoutManager = LinearLayoutManager(this)
+        binding.categoryList.adapter = categoryAdapter
+
+        seriesAdapter = SeriesAdapter(
+            onFocused = { },
+            onClicked = { openDetail(it.id) }
+        )
+        binding.posterGrid.layoutManager = GridLayoutManager(this, 4)
+        binding.posterGrid.adapter = seriesAdapter
+    }
+
+    private fun setupSearch() {
+        binding.searchInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                viewModel.setQuery(s?.toString() ?: "")
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+    }
+
+    private fun observe() {
+        lifecycleScope.launch {
+            viewModel.categories.collectLatest { cats ->
+                categoryAdapter.submitList(cats)
+                if (cats.isNotEmpty()) viewModel.selectCategory(cats.first().id)
+            }
+        }
+        lifecycleScope.launch {
+            viewModel.items.collectLatest { items ->
+                seriesAdapter.submitList(items)
+                binding.emptyState.visibility =
+                    if (items.isEmpty()) View.VISIBLE else View.GONE
+            }
+        }
+    }
+
+    private fun openDetail(id: String) {
+        val intent = Intent(this, SeriesDetailActivity::class.java).apply {
+            putExtra(SeriesDetailActivity.EXTRA_SERIES_ID, id)
+        }
+        startActivity(intent)
+    }
+}

@@ -15,7 +15,6 @@ import android.os.Looper
 import android.view.KeyEvent
 import android.view.View
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import coil.load
@@ -24,10 +23,11 @@ import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.databinding.ActivityPlayerBinding
 import com.iptv.player.player.PlayerController
+import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
 import kotlinx.coroutines.launch
 
-class PlayerActivity : AppCompatActivity(), PlayerController.Callback {
+class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     companion object {
         const val EXTRA_CHANNEL_ID = "extra_channel_id"

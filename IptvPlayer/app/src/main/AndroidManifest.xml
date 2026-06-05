@@ -4,6 +4,7 @@
   - Declares it as a Leanback (TV) app but keeps leanback NOT required so it
     also installs on cheap sticks / phones.
   - Touchscreen not required (D-pad only devices).
+  - SplashActivity is the launcher; it routes to Wizard / Login / Home.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -31,9 +32,9 @@
         android:theme="@style/Theme.IptvPlayer"
         android:usesCleartextTraffic="true">
 
-        <!-- Launcher: opens login on first run, otherwise routes to home. -->
+        <!-- Launcher: branded splash, routes onward. -->
         <activity
-            android:name=".ui.login.LoginActivity"
+            android:name=".ui.splash.SplashActivity"
             android:exported="true"
             android:screenOrientation="landscape">
             <intent-filter>
@@ -45,15 +46,92 @@
             </intent-filter>
         </activity>
 
+        <!-- First-run setup wizard. -->
+        <activity
+            android:name=".ui.wizard.WizardActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <activity
+            android:name=".ui.login.LoginActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
         <activity
             android:name=".ui.home.HomeActivity"
             android:exported="false"
             android:screenOrientation="landscape" />
 
+        <!-- Live player (ExoPlayer primary, libVLC fallback). -->
         <activity
             android:name=".ui.player.PlayerActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
+            android:screenOrientation="landscape" />
+
+        <!-- On-demand player (VOD / series episodes) with resume + tracks. -->
+        <activity
+            android:name=".ui.player.VodPlayerActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
+            android:screenOrientation="landscape" />
+
+        <!-- EPG / TV guide. -->
+        <activity
+            android:name=".ui.guide.GuideActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+        <activity
+            android:name=".ui.guide.EpgMappingActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <!-- Movies (VOD). -->
+        <activity
+            android:name=".ui.vod.VodActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+        <activity
+            android:name=".ui.vod.VodDetailActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <!-- Series. -->
+        <activity
+            android:name=".ui.series.SeriesActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+        <activity
+            android:name=".ui.series.SeriesDetailActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <!-- Settings + sub-screens. -->
+        <activity
+            android:name=".ui.settings.SettingsActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+        <activity
+            android:name=".ui.settings.AboutActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+        <activity
+            android:name=".ui.profiles.ProfilesActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+        <activity
+            android:name=".ui.account.AccountActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+        <activity
+            android:name=".ui.diagnostics.DiagnosticsActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <!-- Idle screensaver (burn-in protection). -->
+        <activity
+            android:name=".ui.screensaver.ScreensaverActivity"
+            android:exported="false"
             android:screenOrientation="landscape" />
 
     </application>

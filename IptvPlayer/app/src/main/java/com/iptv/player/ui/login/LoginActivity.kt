@@ -10,16 +10,16 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.databinding.ActivityLoginBinding
+import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.home.HomeActivity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-class LoginActivity : AppCompatActivity() {
+class LoginActivity : BaseActivity() {
 
     private lateinit var binding: ActivityLoginBinding
     private val viewModel: LoginViewModel by lazy {

@@ -41,3 +41,100 @@ data class XtreamLiveStream(
     @SerializedName("category_id") val categoryId: String?,
     @SerializedName("num") val num: Int?
 )
+
+// ---- VOD ----------------------------------------------------------------
+
+data class XtreamVodStream(
+    @SerializedName("stream_id") val streamId: String?,
+    @SerializedName("name") val name: String?,
+    @SerializedName("stream_icon") val streamIcon: String?,
+    @SerializedName("category_id") val categoryId: String?,
+    @SerializedName("rating") val rating: String?,
+    @SerializedName("container_extension") val containerExtension: String?
+)
+
+data class XtreamVodInfo(
+    @SerializedName("info") val info: XtreamVodDetail?,
+    @SerializedName("movie_data") val movieData: XtreamMovieData?
+)
+
+data class XtreamVodDetail(
+    @SerializedName("plot") val plot: String?,
+    @SerializedName("cast") val cast: String?,
+    @SerializedName("director") val director: String?,
+    @SerializedName("genre") val genre: String?,
+    @SerializedName("releasedate") val releaseDate: String?,
+    @SerializedName("rating") val rating: String?,
+    @SerializedName("duration_secs") val durationSecs: Int?,
+    @SerializedName("youtube_trailer") val youtubeTrailer: String?,
+    @SerializedName("tmdb_id") val tmdbId: String?,
+    @SerializedName("movie_image") val movieImage: String?
+)
+
+data class XtreamMovieData(
+    @SerializedName("stream_id") val streamId: String?,
+    @SerializedName("container_extension") val containerExtension: String?
+)
+
+// ---- Series -------------------------------------------------------------
+
+data class XtreamSeriesItem(
+    @SerializedName("series_id") val seriesId: String?,
+    @SerializedName("name") val name: String?,
+    @SerializedName("cover") val cover: String?,
+    @SerializedName("category_id") val categoryId: String?,
+    @SerializedName("plot") val plot: String?,
+    @SerializedName("cast") val cast: String?,
+    @SerializedName("director") val director: String?,
+    @SerializedName("genre") val genre: String?,
+    @SerializedName("releaseDate") val releaseDate: String?,
+    @SerializedName("rating") val rating: String?,
+    @SerializedName("youtube_trailer") val youtubeTrailer: String?
+)
+
+data class XtreamSeriesInfo(
+    @SerializedName("info") val info: XtreamSeriesDetail?,
+    // Episodes keyed by season number string -> list of episodes.
+    @SerializedName("episodes") val episodes: Map<String, List<XtreamEpisode>>?
+)
+
+data class XtreamSeriesDetail(
+    @SerializedName("plot") val plot: String?,
+    @SerializedName("cast") val cast: String?,
+    @SerializedName("director") val director: String?,
+    @SerializedName("genre") val genre: String?,
+    @SerializedName("releaseDate") val releaseDate: String?,
+    @SerializedName("rating") val rating: String?,
+    @SerializedName("cover") val cover: String?,
+    @SerializedName("youtube_trailer") val youtubeTrailer: String?,
+    @SerializedName("tmdb_id") val tmdbId: String?
+)
+
+data class XtreamEpisode(
+    @SerializedName("id") val id: String?,
+    @SerializedName("episode_num") val episodeNum: Int?,
+    @SerializedName("season") val season: Int?,
+    @SerializedName("title") val title: String?,
+    @SerializedName("container_extension") val containerExtension: String?,
+    @SerializedName("info") val info: XtreamEpisodeInfo?
+)
+
+data class XtreamEpisodeInfo(
+    @SerializedName("plot") val plot: String?,
+    @SerializedName("duration_secs") val durationSecs: Int?,
+    @SerializedName("movie_image") val movieImage: String?
+)
+
+// ---- EPG ----------------------------------------------------------------
+
+data class XtreamEpgListing(
+    @SerializedName("epg_listings") val listings: List<XtreamEpgEntry>?
+)
+
+data class XtreamEpgEntry(
+    // Xtream base64-encodes these two fields.
+    @SerializedName("title") val titleB64: String?,
+    @SerializedName("description") val descriptionB64: String?,
+    @SerializedName("start_timestamp") val startTimestamp: String?,
+    @SerializedName("stop_timestamp") val stopTimestamp: String?
+)

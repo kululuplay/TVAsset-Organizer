@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Persistent mini-player surface for a corner of the screen. The videoContainer
+     hosts the engine's surface (ExoPlayer/VLC) via PlayerController; the caption
+     row shows the current channel name and a close button. -->
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <FrameLayout
+        android:id="@+id/miniVideoContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#000000" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/bg_panel"
+        android:padding="@dimen/space_s">
+
+        <TextView
+            android:id="@+id/miniChannelName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_caption"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <ImageView
+            android:id="@+id/miniClose"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:src="@drawable/ic_tv"
+            android:focusable="true"
+            android:background="@drawable/bg_card_selectable"
+            android:contentDescription="@string/mini_player_close" />
+    </LinearLayout>
+</merge>

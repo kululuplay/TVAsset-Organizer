@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Feature-scoped strings for the "premium polish" components
+     (splash, wizard, screensaver, mini-player, number zap). English only;
+     translators can mirror these into values-<lang>/ later. -->
+<resources>
+    <!-- Wizard -->
+    <string name="wizard_next">Next</string>
+    <string name="wizard_connect_title">Ready to connect</string>
+    <string name="wizard_connect_message">Next, connect your IPTV service to start watching.</string>
+    <string name="wizard_step_indicator">Step %1$d of %2$d</string>
+
+    <!-- Screensaver -->
+    <string name="screensaver_hint">Press any key to resume</string>
+
+    <!-- Mini player -->
+    <string name="mini_player_close">Close mini player</string>
+
+    <!-- Number zap -->
+    <string name="number_zap_no_channel">No channel %1$s</string>
+</resources>

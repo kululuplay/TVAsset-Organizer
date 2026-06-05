@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- First-run setup wizard. A single screen whose content swaps per step
+     (welcome -> language -> connect prompt). D-pad friendly, safe-area padded. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_root"
+    android:gravity="center"
+    android:paddingHorizontal="@dimen/safe_area_h"
+    android:paddingVertical="@dimen/safe_area_v">
+
+    <ImageView
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:src="@drawable/ic_tv"
+        android:layout_marginBottom="@dimen/space_m"
+        android:contentDescription="@string/app_name" />
+
+    <TextView
+        android:id="@+id/stepIndicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/text_muted"
+        android:textSize="@dimen/text_caption"
+        android:layout_marginBottom="@dimen/space_s" />
+
+    <TextView
+        android:id="@+id/stepTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_big_title"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:layout_marginBottom="@dimen/space_s" />
+
+    <TextView
+        android:id="@+id/stepSubtitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_body"
+        android:gravity="center"
+        android:layout_marginBottom="@dimen/space_l" />
+
+    <!-- Language picker (only visible on the language step). -->
+    <LinearLayout
+        android:id="@+id/languageGroup"
+        android:layout_width="480dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:layout_marginBottom="@dimen/space_l" />
+
+    <LinearLayout
+        android:layout_width="480dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnBack"
+            style="@style/Widget.Iptv.Button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/action_back"
+            android:layout_marginEnd="@dimen/space_s"
+            android:visibility="invisible" />
+
+        <Button
+            android:id="@+id/btnNext"
+            style="@style/Widget.Iptv.Button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/wizard_next" />
+    </LinearLayout>
+</LinearLayout>

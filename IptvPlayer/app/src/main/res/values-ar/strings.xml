@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- العربية (RTL) -->
+<resources>
+    <string name="app_name">مشغل IPTV</string>
+
+    <string name="action_ok">حسناً</string>
+    <string name="action_cancel">إلغاء</string>
+    <string name="action_save">حفظ</string>
+    <string name="action_delete">حذف</string>
+    <string name="action_retry">إعادة المحاولة</string>
+    <string name="action_back">رجوع</string>
+    <string name="action_continue">متابعة</string>
+    <string name="action_close">إغلاق</string>
+    <string name="loading">جارٍ التحميل…</string>
+    <string name="search_hint">بحث…</string>
+
+    <string name="wizard_welcome_title">مرحباً</string>
+    <string name="wizard_welcome_subtitle">لنُعدّ خدمتك في خطوات قليلة.</string>
+    <string name="wizard_step_source">اختر طريقة الاتصال</string>
+    <string name="wizard_step_language">اختر لغتك</string>
+    <string name="wizard_finish">إنهاء</string>
+
+    <string name="login_title">اتصل بخدمتك</string>
+    <string name="tab_xtream">Xtream Codes</string>
+    <string name="tab_m3u">قائمة M3U</string>
+    <string name="hint_server">عنوان الخادم (http://host:port)</string>
+    <string name="hint_username">اسم المستخدم</string>
+    <string name="hint_password">كلمة المرور</string>
+    <string name="hint_m3u">عنوان قائمة M3U</string>
+    <string name="hint_profile_name">اسم الملف الشخصي</string>
+    <string name="action_connect">اتصال</string>
+    <string name="connecting">جارٍ الاتصال…</string>
+
+    <string name="nav_live">البث المباشر</string>
+    <string name="nav_movies">أفلام</string>
+    <string name="nav_series">مسلسلات</string>
+    <string name="nav_guide">دليل القنوات</string>
+    <string name="nav_search">بحث</string>
+    <string name="nav_settings">الإعدادات</string>
+    <string name="section_favorites">المفضلة</string>
+    <string name="section_recent">شوهد مؤخراً</string>
+    <string name="section_all">الكل</string>
+    <string name="section_continue_watching">متابعة المشاهدة</string>
+    <string name="now_playing">يُعرض الآن</string>
+    <string name="up_next">التالي</string>
+    <string name="empty_channels">لا يوجد شيء هنا بعد.</string>
+    <string name="empty_favorites">لم تُضف أي مفضلات بعد.</string>
+    <string name="empty_search">لا توجد نتائج.</string>
+    <string name="added_to_favorites">أُضيف إلى المفضلة</string>
+    <string name="removed_from_favorites">أُزيل من المفضلة</string>
+    <string name="channel_count">%1$d قناة</string>
+
+    <string name="buffering">جارٍ التحميل…</string>
+    <string name="player_mode_label">المشغل</string>
+    <string name="audio_track">الصوت</string>
+    <string name="subtitle_track">الترجمة</string>
+    <string name="subtitles_off">إيقاف</string>
+    <string name="aspect_ratio">نسبة العرض</string>
+    <string name="resume_prompt_title">استئناف التشغيل؟</string>
+    <string name="resume_prompt_message">المتابعة من حيث توقفت؟</string>
+    <string name="resume_from_start">من البداية</string>
+    <string name="resume_continue">استئناف</string>
+    <string name="skip_forward">+10ث</string>
+    <string name="skip_back">-10ث</string>
+
+    <string name="guide_title">دليل القنوات</string>
+    <string name="guide_now">الآن</string>
+    <string name="guide_no_data">لا توجد بيانات دليل لهذه القناة.</string>
+    <string name="guide_refresh">تحديث الدليل</string>
+    <string name="epg_mapping_title">مطابقة الدليل</string>
+    <string name="epg_mapping_hint">اختر معرّف الدليل المطابق لهذه القناة.</string>
+
+    <string name="detail_play">تشغيل</string>
+    <string name="detail_trailer">إعلان</string>
+    <string name="detail_cast">طاقم العمل</string>
+    <string name="detail_director">المخرج</string>
+    <string name="detail_genre">النوع</string>
+    <string name="detail_year">السنة</string>
+    <string name="detail_rating">التقييم</string>
+    <string name="detail_plot">القصة</string>
+    <string name="series_season">الموسم %1$d</string>
+    <string name="series_episode">الحلقة %1$d</string>
+
+    <string name="settings_title">الإعدادات</string>
+    <string name="settings_playback">التشغيل</string>
+    <string name="settings_player_mode">محرك التشغيل</string>
+    <string name="settings_player_auto">تلقائي (موصى به)</string>
+    <string name="settings_player_exo">ExoPlayer</string>
+    <string name="settings_player_vlc">VLC</string>
+    <string name="settings_language">اللغة</string>
+    <string name="settings_general">عام</string>
+    <string name="settings_account">الحساب</string>
+    <string name="settings_profiles">الملفات الشخصية</string>
+    <string name="settings_add_profile">إضافة ملف شخصي</string>
+    <string name="settings_parental">الرقابة الأبوية</string>
+    <string name="settings_parental_pin">تعيين / تغيير الرمز</string>
+    <string name="settings_lock_adult">قفل فئات الكبار</string>
+    <string name="settings_tmdb">مفتاح TMDB API</string>
+    <string name="settings_tmdb_hint">اختياري: يُفعّل ملصقات الأفلام والتفاصيل.</string>
+    <string name="settings_screensaver">شاشة التوقف عند الخمول</string>
+    <string name="settings_clock">إظهار الساعة</string>
+    <string name="settings_diagnostics">التشخيص</string>
+    <string name="settings_about">حول</string>
+    <string name="settings_logout">تسجيل الخروج</string>
+    <string name="settings_logout_confirm">تسجيل الخروج وإزالة هذا الملف الشخصي؟</string>
+
+    <string name="pin_enter">أدخل الرمز</string>
+    <string name="pin_set">عيّن رمزاً من 4 أرقام</string>
+    <string name="pin_confirm">أكّد الرمز</string>
+    <string name="pin_wrong">رمز خاطئ.</string>
+    <string name="pin_mismatch">الرمزان غير متطابقين.</string>
+    <string name="pin_locked_content">هذا المحتوى مقفل.</string>
+
+    <string name="diag_title">التشخيص</string>
+    <string name="diag_run">تشغيل الاختبارات</string>
+    <string name="diag_internet">اتصال الإنترنت</string>
+    <string name="diag_server">إمكانية الوصول للخادم</string>
+    <string name="diag_ping">زمن استجابة الخادم</string>
+    <string name="diag_speed">سرعة التنزيل</string>
+    <string name="diag_dns">DNS / مزوّد الخدمة</string>
+    <string name="diag_dns_warning">قد يحجب مزوّد خدمتك هذا الخادم. جرّب DNS مختلفاً.</string>
+    <string name="diag_device">معلومات الجهاز</string>
+    <string name="diag_send_logs">إرسال السجلات</string>
+    <string name="diag_passed">نجح</string>
+    <string name="diag_failed">فشل</string>
+
+    <string name="account_status">الحالة</string>
+    <string name="account_active">نشط</string>
+    <string name="account_inactive">غير نشط</string>
+    <string name="account_expiry">ينتهي</string>
+    <string name="account_days_left">باقٍ %1$d يوم</string>
+    <string name="account_connections">الاتصالات</string>
+    <string name="account_unlimited">غير محدود</string>
+
+    <string name="about_title">حول</string>
+    <string name="about_version">الإصدار %1$s</string>
+    <string name="about_update_available">يتوفر تحديث.</string>
+    <string name="about_update_required">يتوفر تحديث مطلوب. يرجى التحديث للمتابعة.</string>
+    <string name="about_update_now">حدّث الآن</string>
+
+    <string name="error_no_internet">تحقق من اتصالك بالإنترنت.</string>
+    <string name="error_cannot_connect">تعذّر الاتصال بالخادم.</string>
+    <string name="error_bad_credentials">اسم المستخدم أو كلمة المرور غير صحيحة.</string>
+    <string name="error_subscription_expired">انتهى اشتراكك.</string>
+    <string name="error_account_in_use">قد يكون هذا الحساب مستخدماً على جهاز آخر.</string>
+    <string name="error_stream_not_responding">البث لا يستجيب حالياً، تتم إعادة المحاولة.</string>
+    <string name="error_empty_playlist">لم يتم العثور على قنوات في هذه القائمة.</string>
+    <string name="error_unknown">حدث خطأ ما. يرجى المحاولة مرة أخرى.</string>
+</resources>

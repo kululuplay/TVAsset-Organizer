@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Section header in the settings list. Not focusable. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/headerTitle"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:textColor="@color/text_secondary"
+    android:textSize="@dimen/text_caption"
+    android:textStyle="bold"
+    android:textAllCaps="true"
+    android:paddingHorizontal="@dimen/space_s"
+    android:layout_marginTop="@dimen/space_l"
+    android:layout_marginBottom="@dimen/space_s" />

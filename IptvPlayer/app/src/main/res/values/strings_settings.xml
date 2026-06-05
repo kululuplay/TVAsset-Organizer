@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Feature-scoped strings for Settings / Profiles / Account / Diagnostics / About.
+     Kept separate from the shared strings.xml per the contracts. -->
+<resources>
+    <!-- Generic toggle / value labels -->
+    <string name="settings_on">On</string>
+    <string name="settings_off">Off</string>
+    <string name="settings_minutes">%1$d min</string>
+    <string name="settings_screensaver_off">Off</string>
+
+    <!-- Profiles -->
+    <string name="profiles_empty">No profiles yet.</string>
+    <string name="profile_active">Active</string>
+    <string name="profile_delete_confirm">Delete this profile?</string>
+
+    <!-- Account -->
+    <string name="account_none">No account information available.</string>
+    <string name="account_loading">Loading account…</string>
+    <string name="account_connections_value">%1$d / %2$s</string>
+
+    <!-- Diagnostics -->
+    <string name="diag_running">Running…</string>
+    <string name="diag_device_format">Device: %1$s %2$s\nAndroid: %3$s\nApp version: %4$s</string>
+    <string name="diag_logs_subject">IPTV Player diagnostics</string>
+
+    <!-- About -->
+    <string name="about_check_update">Check for updates</string>
+    <string name="about_up_to_date">You\'re on the latest version.</string>
+</resources>

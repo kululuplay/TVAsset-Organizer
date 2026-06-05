@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nederlands -->
+<resources>
+    <string name="app_name">IPTV-speler</string>
+
+    <string name="action_ok">OK</string>
+    <string name="action_cancel">Annuleren</string>
+    <string name="action_save">Opslaan</string>
+    <string name="action_delete">Verwijderen</string>
+    <string name="action_retry">Opnieuw</string>
+    <string name="action_back">Terug</string>
+    <string name="action_continue">Doorgaan</string>
+    <string name="action_close">Sluiten</string>
+    <string name="loading">Laden…</string>
+    <string name="search_hint">Zoeken…</string>
+
+    <string name="wizard_welcome_title">Welkom</string>
+    <string name="wizard_welcome_subtitle">Laten we je dienst in een paar stappen instellen.</string>
+    <string name="wizard_step_source">Kies verbindingsmethode</string>
+    <string name="wizard_step_language">Kies je taal</string>
+    <string name="wizard_finish">Voltooien</string>
+
+    <string name="login_title">Verbind je dienst</string>
+    <string name="tab_xtream">Xtream Codes</string>
+    <string name="tab_m3u">M3U-afspeellijst</string>
+    <string name="hint_server">Server-URL (http://host:port)</string>
+    <string name="hint_username">Gebruikersnaam</string>
+    <string name="hint_password">Wachtwoord</string>
+    <string name="hint_m3u">M3U-afspeellijst-URL</string>
+    <string name="hint_profile_name">Profielnaam</string>
+    <string name="action_connect">Verbinden</string>
+    <string name="connecting">Verbinden…</string>
+
+    <string name="nav_live">Live-tv</string>
+    <string name="nav_movies">Films</string>
+    <string name="nav_series">Series</string>
+    <string name="nav_guide">Tv-gids</string>
+    <string name="nav_search">Zoeken</string>
+    <string name="nav_settings">Instellingen</string>
+    <string name="section_favorites">Favorieten</string>
+    <string name="section_recent">Onlangs bekeken</string>
+    <string name="section_all">Alles</string>
+    <string name="section_continue_watching">Verder kijken</string>
+    <string name="now_playing">Nu bezig</string>
+    <string name="up_next">Hierna</string>
+    <string name="empty_channels">Hier is nog niets.</string>
+    <string name="empty_favorites">Je hebt nog geen favorieten.</string>
+    <string name="empty_search">Geen resultaten gevonden.</string>
+    <string name="added_to_favorites">Toegevoegd aan favorieten</string>
+    <string name="removed_from_favorites">Verwijderd uit favorieten</string>
+    <string name="channel_count">%1$d kanalen</string>
+
+    <string name="buffering">Laden…</string>
+    <string name="player_mode_label">Speler</string>
+    <string name="audio_track">Audio</string>
+    <string name="subtitle_track">Ondertiteling</string>
+    <string name="subtitles_off">Uit</string>
+    <string name="aspect_ratio">Beeldverhouding</string>
+    <string name="resume_prompt_title">Afspelen hervatten?</string>
+    <string name="resume_prompt_message">Verdergaan waar je was gebleven?</string>
+    <string name="resume_from_start">Opnieuw beginnen</string>
+    <string name="resume_continue">Hervatten</string>
+    <string name="skip_forward">+10s</string>
+    <string name="skip_back">-10s</string>
+
+    <string name="guide_title">Tv-gids</string>
+    <string name="guide_now">Nu</string>
+    <string name="guide_no_data">Geen gidsgegevens voor dit kanaal.</string>
+    <string name="guide_refresh">Gids vernieuwen</string>
+    <string name="epg_mapping_title">EPG koppelen</string>
+    <string name="epg_mapping_hint">Kies de gids-id die bij dit kanaal hoort.</string>
+
+    <string name="detail_play">Afspelen</string>
+    <string name="detail_trailer">Trailer</string>
+    <string name="detail_cast">Cast</string>
+    <string name="detail_director">Regisseur</string>
+    <string name="detail_genre">Genre</string>
+    <string name="detail_year">Jaar</string>
+    <string name="detail_rating">Beoordeling</string>
+    <string name="detail_plot">Verhaal</string>
+    <string name="series_season">Seizoen %1$d</string>
+    <string name="series_episode">Aflevering %1$d</string>
+
+    <string name="settings_title">Instellingen</string>
+    <string name="settings_playback">Afspelen</string>
+    <string name="settings_player_mode">Speler-engine</string>
+    <string name="settings_player_auto">Automatisch (aanbevolen)</string>
+    <string name="settings_player_exo">ExoPlayer</string>
+    <string name="settings_player_vlc">VLC</string>
+    <string name="settings_language">Taal</string>
+    <string name="settings_general">Algemeen</string>
+    <string name="settings_account">Account</string>
+    <string name="settings_profiles">Profielen</string>
+    <string name="settings_add_profile">Profiel toevoegen</string>
+    <string name="settings_parental">Ouderlijk toezicht</string>
+    <string name="settings_parental_pin">Pincode instellen / wijzigen</string>
+    <string name="settings_lock_adult">Volwassencategorieën vergrendelen</string>
+    <string name="settings_tmdb">TMDB API-sleutel</string>
+    <string name="settings_tmdb_hint">Optioneel: schakelt filmposters en details in.</string>
+    <string name="settings_screensaver">Schermbeveiliging bij inactiviteit</string>
+    <string name="settings_clock">Klok tonen</string>
+    <string name="settings_diagnostics">Diagnostiek</string>
+    <string name="settings_about">Over</string>
+    <string name="settings_logout">Uitloggen</string>
+    <string name="settings_logout_confirm">Uitloggen en dit profiel verwijderen?</string>
+
+    <string name="pin_enter">Pincode invoeren</string>
+    <string name="pin_set">Stel een 4-cijferige pincode in</string>
+    <string name="pin_confirm">Pincode bevestigen</string>
+    <string name="pin_wrong">Verkeerde pincode.</string>
+    <string name="pin_mismatch">Pincodes komen niet overeen.</string>
+    <string name="pin_locked_content">Deze inhoud is vergrendeld.</string>
+
+    <string name="diag_title">Diagnostiek</string>
+    <string name="diag_run">Tests uitvoeren</string>
+    <string name="diag_internet">Internetverbinding</string>
+    <string name="diag_server">Server bereikbaar</string>
+    <string name="diag_ping">Reactietijd server</string>
+    <string name="diag_speed">Downloadsnelheid</string>
+    <string name="diag_dns">DNS / ISP</string>
+    <string name="diag_dns_warning">Je provider blokkeert deze server mogelijk. Probeer een andere DNS.</string>
+    <string name="diag_device">Apparaatinfo</string>
+    <string name="diag_send_logs">Logs verzenden</string>
+    <string name="diag_passed">Geslaagd</string>
+    <string name="diag_failed">Mislukt</string>
+
+    <string name="account_status">Status</string>
+    <string name="account_active">Actief</string>
+    <string name="account_inactive">Inactief</string>
+    <string name="account_expiry">Verloopt</string>
+    <string name="account_days_left">Nog %1$d dagen</string>
+    <string name="account_connections">Verbindingen</string>
+    <string name="account_unlimited">Onbeperkt</string>
+
+    <string name="about_title">Over</string>
+    <string name="about_version">Versie %1$s</string>
+    <string name="about_update_available">Er is een update beschikbaar.</string>
+    <string name="about_update_required">Een vereiste update is beschikbaar. Werk bij om door te gaan.</string>
+    <string name="about_update_now">Nu bijwerken</string>
+
+    <string name="error_no_internet">Controleer je internetverbinding.</string>
+    <string name="error_cannot_connect">Kan geen verbinding maken met de server.</string>
+    <string name="error_bad_credentials">Onjuiste gebruikersnaam of wachtwoord.</string>
+    <string name="error_subscription_expired">Je abonnement is verlopen.</string>
+    <string name="error_account_in_use">Dit account wordt mogelijk op een ander apparaat gebruikt.</string>
+    <string name="error_stream_not_responding">De stream reageert nu niet, opnieuw proberen.</string>
+    <string name="error_empty_playlist">Geen kanalen gevonden in deze afspeellijst.</string>
+    <string name="error_unknown">Er ging iets mis. Probeer het opnieuw.</string>
+</resources>

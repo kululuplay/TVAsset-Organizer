@@ -12,6 +12,7 @@ import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Category
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.ContentType
+import com.iptv.player.data.model.NowNext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -73,4 +74,7 @@ class HomeViewModel : ViewModel() {
     fun toggleFavorite(channelId: String) {
         viewModelScope.launch { repo.toggleFavorite(channelId) }
     }
+
+    /** Now/next EPG for the focused channel (best-effort; empty if no guide). */
+    suspend fun nowNext(channel: Channel): NowNext = repo.getNowNext(channel)
 }

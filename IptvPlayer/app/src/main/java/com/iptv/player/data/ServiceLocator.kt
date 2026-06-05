@@ -47,7 +47,7 @@ object ServiceLocator {
 
             val db = AppDatabase.build(app)
             settings = SettingsStore(app)
-            repository = IptvRepository(db, httpClient, retrofitBuilder)
+            repository = IptvRepository(db, httpClient, retrofitBuilder, settings)
             initialized = true
         }
     }

@@ -48,6 +48,7 @@ android {
 
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 
     // libVLC ships large native libs; avoid recompressing them.
