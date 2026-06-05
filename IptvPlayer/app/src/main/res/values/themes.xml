@@ -41,6 +41,14 @@
         <item name="android:drawablePadding">@dimen/space_m</item>
     </style>
 
+    <!-- Modern player dialogs: transparent window so our rounded surface shows,
+         with a strong scrim behind for cinematic focus. -->
+    <style name="ThemeOverlay.Iptv.Dialog" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimAmount">0.72</item>
+        <item name="colorAccent">@color/accent</item>
+    </style>
+
     <!-- Circular top-bar action button for the dashboard. -->
     <style name="Widget.Iptv.IconButton" parent="">
         <item name="android:layout_width">48dp</item>

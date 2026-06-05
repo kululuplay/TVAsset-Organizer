@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Highlighted resume-position chip inside the resume dialog. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/glass_input" />
+    <corners android:radius="@dimen/badge_radius" />
+    <stroke android:width="1dp" android:color="@color/glass_stroke" />
+</shape>

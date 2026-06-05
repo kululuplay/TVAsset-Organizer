@@ -28,6 +28,9 @@
     <dimen name="card_radius">10dp</dimen>
     <dimen name="focus_stroke">2dp</dimen>
 
+    <!-- Player option-sheet row height (audio/subtitle/sleep/delay dialogs). -->
+    <dimen name="dialog_option_height">56dp</dimen>
+
     <!-- Posters (VOD / series grid). -->
     <dimen name="poster_width">150dp</dimen>
     <dimen name="poster_height">225dp</dimen>

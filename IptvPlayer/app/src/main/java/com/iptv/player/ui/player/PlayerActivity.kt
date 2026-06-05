@@ -15,7 +15,6 @@ import android.os.Looper
 import android.view.KeyEvent
 import android.view.View
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import coil.load
@@ -179,10 +178,11 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             actions.add { castController.onCastButtonClicked() }
         }
 
-        AlertDialog.Builder(this)
-            .setTitle(R.string.player_menu)
-            .setItems(labels.toTypedArray()) { _, which -> actions[which].invoke() }
-            .show()
+        PlayerDialogs.showOptions(
+            this,
+            getString(R.string.player_menu),
+            labels.map { PlayerDialogs.Option(it) },
+        ) { which -> actions[which].invoke() }
     }
 
     private fun showSleepDialog() {
@@ -190,34 +190,33 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         val labels = options.map { min ->
             if (min == 0) getString(R.string.sleep_timer_off)
             else getString(R.string.sleep_timer_minutes, min)
-        }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(R.string.sleep_timer)
-            .setItems(labels) { _, which ->
-                val min = options[which]
-                sleepTimer.set(min)
-                val msg = if (min == 0) getString(R.string.sleep_timer_off)
-                else getString(R.string.sleep_timer_set, min)
-                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-            }
-            .show()
+        }
+        PlayerDialogs.showOptions(
+            this,
+            getString(R.string.sleep_timer),
+            labels.map { PlayerDialogs.Option(it) },
+        ) { which ->
+            val min = options[which]
+            sleepTimer.set(min)
+            val msg = if (min == 0) getString(R.string.sleep_timer_off)
+            else getString(R.string.sleep_timer_set, min)
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showDelayDialog(audio: Boolean) {
         if (!::controller.isInitialized) return
         val steps = (-2000..2000 step 250).toList()
         val current = if (audio) controller.currentAudioDelayMs else controller.currentSubtitleDelayMs
-        val labels = steps.map { getString(R.string.delay_ms, it) }.toTypedArray()
         val checked = steps.indexOf(current.toInt()).coerceAtLeast(0)
-        AlertDialog.Builder(this)
-            .setTitle(if (audio) R.string.audio_delay else R.string.subtitle_delay)
-            .setSingleChoiceItems(labels, checked) { dialog, which ->
-                val ms = steps[which].toLong()
-                if (audio) controller.setAudioDelay(ms) else controller.setSubtitleDelay(ms)
-                dialog.dismiss()
-            }
-            .setNegativeButton(R.string.action_cancel, null)
-            .show()
+        val titleRes = if (audio) R.string.audio_delay else R.string.subtitle_delay
+        val options = steps.mapIndexed { i, step ->
+            PlayerDialogs.Option(getString(R.string.delay_ms, step), i == checked)
+        }
+        PlayerDialogs.showOptions(this, getString(titleRes), options) { which ->
+            val ms = steps[which].toLong()
+            if (audio) controller.setAudioDelay(ms) else controller.setSubtitleDelay(ms)
+        }
     }
 
     // ---- Overlay --------------------------------------------------------

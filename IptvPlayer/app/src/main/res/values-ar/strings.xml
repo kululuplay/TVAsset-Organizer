@@ -62,6 +62,7 @@
     <string name="resume_prompt_message">المتابعة من حيث توقفت؟</string>
     <string name="resume_from_start">من البداية</string>
     <string name="resume_continue">استئناف</string>
+    <string name="resume_prompt_position_label">توقفت عند</string>
     <string name="episode_se_format">الموسم %1$d · الحلقة %2$d</string>
     <string name="skip_forward">+10ث</string>
     <string name="skip_back">-10ث</string>

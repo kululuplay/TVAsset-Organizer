@@ -20,7 +20,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.SeekBar
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import com.iptv.player.R
 import com.iptv.player.cast.CastController
@@ -249,13 +248,12 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     private fun promptResume(positionMs: Long) {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.resume_prompt_title)
-            .setMessage(R.string.resume_prompt_message)
-            .setPositiveButton(R.string.resume_continue) { _, _ -> preparePlayback(positionMs) }
-            .setNegativeButton(R.string.resume_from_start) { _, _ -> preparePlayback(0L) }
-            .setCancelable(false)
-            .show()
+        PlayerDialogs.showResume(
+            activity = this,
+            positionText = formatTime(positionMs),
+            onResume = { preparePlayback(positionMs) },
+            onStartOver = { preparePlayback(0L) },
+        )
     }
 
     private fun preparePlayback(positionMs: Long) {
@@ -374,14 +372,15 @@ class VodPlayerActivity : BaseActivity() {
         }
         if (labels.isEmpty()) return
 
+        val current = if (isAudio) mp.audioTrack else mp.spuTrack
         val titleRes = if (isAudio) R.string.audio_track else R.string.subtitle_track
-        AlertDialog.Builder(this)
-            .setTitle(titleRes)
-            .setItems(labels.toTypedArray()) { _, which ->
-                val id = ids[which]
-                if (isAudio) mp.setAudioTrack(id) else mp.setSpuTrack(id)
-            }
-            .show()
+        val options = labels.indices.map { i ->
+            PlayerDialogs.Option(labels[i], ids[i] == current)
+        }
+        PlayerDialogs.showOptions(this, getString(titleRes), options) { which ->
+            val id = ids[which]
+            if (isAudio) mp.setAudioTrack(id) else mp.setSpuTrack(id)
+        }
     }
 
     // ---- Sleep timer ----------------------------------------------------
@@ -391,17 +390,18 @@ class VodPlayerActivity : BaseActivity() {
         val labels = options.map { min ->
             if (min == 0) getString(R.string.sleep_timer_off)
             else getString(R.string.sleep_timer_minutes, min)
-        }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(R.string.sleep_timer)
-            .setItems(labels) { _, which ->
-                val min = options[which]
-                sleepTimer.set(min)
-                val msg = if (min == 0) getString(R.string.sleep_timer_off)
-                else getString(R.string.sleep_timer_set, min)
-                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-            }
-            .show()
+        }
+        PlayerDialogs.showOptions(
+            this,
+            getString(R.string.sleep_timer),
+            labels.map { PlayerDialogs.Option(it) },
+        ) { which ->
+            val min = options[which]
+            sleepTimer.set(min)
+            val msg = if (min == 0) getString(R.string.sleep_timer_off)
+            else getString(R.string.sleep_timer_set, min)
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
     }
 
     // ---- Progress / resume ---------------------------------------------
