@@ -12,14 +12,17 @@ description: Non-obvious constraints for the com.iptv.player Android app (source
 - **Post-login landing is `DashboardActivity`** (gradient-tile launcher), NOT `HomeActivity`. SplashActivity + LoginActivity route to Dashboard; `HomeActivity` is the 3-pane *Live browser* reached via the Live tile.
   **Why:** user wanted a Smarters-style launcher home. No dedicated Favorites/Search screen exists yet — those tiles/buttons route to HomeActivity as a stopgap.
 
-## Locale parity: base values/ can drift BEHIND translations
-The base `values/strings.xml` (English, no values-en folder) is the runtime fallback.
-A real bug occurred where base had 137 keys while every translated locale (tr/de/fr/nl/ar)
-had 166 — 28 keys existed only in translations. In the default/English locale, any
-R.string ref to a missing key throws Resources.NotFoundException at runtime (crash),
-even though R.* compiles fine (R is the union of all locales).
-**Why:** new strings were added to translations but the base was forgotten.
-**How to apply:** parity check must be BIDIRECTIONAL and include base — compare base key
-set against EACH locale both ways (comm -13 and comm -23), not just locale-vs-base.
-When adding strings to base, copy the EXACT positional placeholders from a translation
-(e.g. %1$d / %2$s, \n in diag_device_format) so String.format won't crash.
+
+## Locale parity & the multi-file base gotcha (IMPORTANT)
+The base `values/` locale SPLITS strings across MANY files: `strings.xml` PLUS
+`strings_settings.xml`, `strings_guide.xml`, `strings_player.xml`, `strings_polish.xml`,
+`strings_live.xml`, `strings_dashboard.xml`, `strings_features.xml`. Translated locales
+(values-tr/de/fr/nl/ar) similarly use multiple `strings*.xml` files.
+**Mistake to never repeat:** counting only `values/strings.xml` made it look like the base
+was missing 28 keys vs translations; adding them caused `Duplicate resources` build failure
+because they already lived in `strings_settings.xml`/`strings_guide.xml`/`strings_polish.xml`/
+`strings_player.xml`.
+**How to apply:** ALWAYS glob `values/strings*.xml` (and `values-XX/strings*.xml`) when
+checking string parity or dup keys — never a single file. Android fails the build on
+duplicate `name=` across ANY two files in the same `values/` folder. Current state: all 6
+locales have 219 keys, full parity, no dups.

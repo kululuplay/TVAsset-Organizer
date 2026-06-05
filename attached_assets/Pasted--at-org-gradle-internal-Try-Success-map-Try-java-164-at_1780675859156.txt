@@ -1,0 +1,117 @@
+	at org.gradle.internal.Try$Success.map(Try.java:164)
+	at org.gradle.internal.execution.steps.BuildCacheStep.executeWithCache(BuildCacheStep.java:85)
+	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$execute$0(BuildCacheStep.java:74)
+	at org.gradle.internal.Either$Left.fold(Either.java:115)
+	at org.gradle.internal.execution.caching.CachingState.fold(CachingState.java:62)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:73)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:48)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:46)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:35)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.executeBecause(SkipUpToDateStep.java:76)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.lambda$execute$2(SkipUpToDateStep.java:54)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:54)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:36)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:37)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:27)
+	at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:49)
+	at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:27)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:71)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:39)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:65)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:36)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:106)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:55)
+	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:64)
+	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:43)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.executeWithNonEmptySources(AbstractSkipEmptyWorkStep.java:125)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:56)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:36)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep.execute(MarkSnapshottingInputsStartedStep.java:38)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:36)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:23)
+	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:75)
+	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:41)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.lambda$execute$0(AssignMutableWorkspaceStep.java:35)
+	at org.gradle.api.internal.tasks.execution.TaskExecution$4.withWorkspace(TaskExecution.java:289)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:31)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:22)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:40)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:23)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.lambda$execute$2(ExecuteWorkBuildOperationFiringStep.java:67)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:67)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:39)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:46)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:34)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:48)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:35)
+	at org.gradle.internal.execution.impl.DefaultExecutionEngine$1.execute(DefaultExecutionEngine.java:61)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:127)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:116)
+	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
+	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
+	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
+	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
+	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:200)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:195)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:66)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:157)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:53)
+	at org.gradle.internal.operations.DefaultBuildOperationExecutor.call(DefaultBuildOperationExecutor.java:73)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
+	at org.gradle.execution.plan.LocalTaskNodeExecutor.execute(LocalTaskNodeExecutor.java:42)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:331)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:318)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.lambda$execute$0(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:80)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:463)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:380)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:47)
+Caused by: [string/player_pause] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_player.xml	[string/player_pause] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/wizard_next] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_polish.xml	[string/wizard_next] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/wizard_connect_title] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_polish.xml	[string/wizard_connect_title] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/wizard_connect_message] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_polish.xml	[string/wizard_connect_message] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/wizard_step_indicator] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_polish.xml	[string/wizard_step_indicator] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/screensaver_hint] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_polish.xml	[string/screensaver_hint] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/mini_player_close] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_polish.xml	[string/mini_player_close] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/number_zap_no_channel] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_polish.xml	[string/number_zap_no_channel] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/guide_updated] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_guide.xml	[string/guide_updated] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/guide_update_failed] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_guide.xml	[string/guide_update_failed] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/guide_no_source] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_guide.xml	[string/guide_no_source] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/guide_match_epg] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_guide.xml	[string/guide_match_epg] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/epg_mapping_input_hint] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_guide.xml	[string/epg_mapping_input_hint] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/epg_mapping_saved] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_guide.xml	[string/epg_mapping_saved] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/settings_on] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_settings.xml	[string/settings_on] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/settings_off] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_settings.xml	[string/settings_off] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/settings_minutes] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_settings.xml	[string/settings_minutes] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/settings_screensaver_off] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_settings.xml	[string/settings_screensaver_off] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/profiles_empty] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_settings.xml	[string/profiles_empty] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/profile_active] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_settings.xml	[string/profile_active] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/profile_delete_confirm] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_settings.xml	[string/profile_delete_confirm] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/account_none] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_settings.xml	[string/account_none] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/account_loading] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_settings.xml	[string/account_loading] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/account_connections_value] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_settings.xml	[string/account_connections_value] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/diag_running] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_settings.xml	[string/diag_running] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/diag_device_format] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_settings.xml	[string/diag_device_format] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/diag_logs_subject] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_settings.xml	[string/diag_logs_subject] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/about_check_update] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_settings.xml	[string/about_check_update] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+[string/about_up_to_date] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings_settings.xml	[string/about_up_to_date] /home/runner/work/TVAsset-Organizer/TVAsset-Organizer/IptvPlayer/app/src/main/res/values/strings.xml: Error: Duplicate resources
+	at com.android.ide.common.resources.DataSet.checkItems(DataSet.java:512)
+	at com.android.ide.common.resources.DataSet.loadFromFiles(DataSet.java:273)
+	at com.android.ide.common.resources.DataSet.loadFromFiles(DataSet.java:243)
+	at com.android.build.gradle.tasks.MergeResources$doFullTaskAction$1$1$1.invoke(MergeResources.kt:241)
+	at com.android.build.gradle.internal.tasks.Blocks.recordSpan(Blocks.java:51)
+	at com.android.build.gradle.tasks.MergeResources.doFullTaskAction(MergeResources.kt:235)
+	... 133 more
+
+
+BUILD FAILED in 1m 41s
+Error: Process completed with exit code 1.
