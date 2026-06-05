@@ -88,3 +88,25 @@ unguarded line in the launching coroutine.
 **How to apply:** for any heavy network+parse+DB op behind a button, catch
 Throwable + rethrow CancellationException + map the rest to a friendly AppError;
 batch large DB inserts to bound peak memory.
+
+## VOD & live both play through libVLC (VLC is the only engine users want)
+Live TV uses PlayerController(PlayerMode); VOD (VodPlayerActivity) was built
+directly on Media3 ExoPlayer. User wanted VOD to also always use VLC like live.
+PlayerEngine interface has NO seek/duration/position/track APIs, so VOD can't
+reuse it as-is — VodPlayerActivity drives libVLC MediaPlayer directly (mirror
+VlcPlayerEngine's LibVLC options + VLCVideoLayout + attachViews).
+**CRITICAL Kotlin pitfall:** libVLC MediaPlayer setters return non-Unit
+(`setTime` long, `setAudioTrack`/`setSpuTrack` boolean), so Kotlin will NOT expose
+them as assignable properties — `mp.time = x` / `mp.audioTrack = id` fail to
+compile. Call the methods explicitly: `mp.setTime(x)`, `mp.setAudioTrack(id)`,
+`mp.setSpuTrack(id)`. Read-only getters (`mp.time`, `mp.length`, `mp.isPlaying`,
+`mp.currentVideoTrack`) work as properties. `mp.media = media` DOES work
+(setMedia returns void).
+**VOD-on-VLC specifics:** defer the resume seek to the first
+`MediaPlayer.Event.Playing` (VLC ignores setTime before playback starts) via a
+pendingSeekMs field; subtitle menu must add an explicit "Off" -> setSpuTrack(-1)
+(VLC may not always expose a disable track); aspect map = setAspectRatio/setScale
+(ORIGINAL/16:9/4:3 clean, FILL = setAspectRatio("${w}:${h}") of container, ZOOM =
+setScale(fill/fit) from currentVideoTrack dims); poll time/length on a Handler.
+**Why:** ExoPlayer-only VOD diverged from the VLC-everywhere product decision and
+ExoPlayer rejects some IPTV codecs (DTS/AC3/EAC3, AVI/MKV) VOD libraries contain.

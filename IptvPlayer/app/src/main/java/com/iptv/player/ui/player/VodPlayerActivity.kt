@@ -1,7 +1,8 @@
 /*
  * VodPlayerActivity.kt
- * On-demand player for movies and series episodes, built directly on Media3
- * ExoPlayer (matching the app's media3 1.4.1 deps). Provides:
+ * On-demand player for movies and series episodes. Built on libVLC so that, like
+ * live TV, VOD always plays through VLC (the app's default engine) for the widest
+ * codec/container support (DTS/AC3/EAC3, AVI, MKV, …). Provides:
  *   - play/pause, a seekbar with current/total time
  *   - +10s / -10s skipping
  *   - audio-track and subtitle-track selection menus
@@ -16,29 +17,25 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.view.ViewGroup
 import android.widget.SeekBar
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
-import androidx.media3.common.C
-import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.common.TrackGroup
-import androidx.media3.common.TrackSelectionOverride
-import androidx.media3.common.Tracks
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.AspectRatioFrameLayout
-import androidx.media3.ui.PlayerView
 import com.iptv.player.R
 import com.iptv.player.cast.CastController
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.AspectRatio
+import com.iptv.player.databinding.ActivityVodPlayerBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.SleepTimer
-import com.iptv.player.databinding.ActivityVodPlayerBinding
+import com.iptv.player.util.AppInfo
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import org.videolan.libvlc.LibVLC
+import org.videolan.libvlc.Media
+import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.util.VLCVideoLayout
 
 class VodPlayerActivity : BaseActivity() {
 
@@ -48,20 +45,27 @@ class VodPlayerActivity : BaseActivity() {
         const val EXTRA_RESUME_ID = "extra_resume_id"
         private const val SKIP_MS = 10_000L
         private const val SAVE_INTERVAL_MS = 10_000L
+        // Buffer (ms) for smooth start-up and seeking on jittery connections.
+        private const val CACHING_MS = 1500
     }
 
     private lateinit var binding: ActivityVodPlayerBinding
     private val repo = ServiceLocator.repository
     private val settings = ServiceLocator.settings
 
-    private var player: ExoPlayer? = null
-    private var playerView: PlayerView? = null
+    private var libVlc: LibVLC? = null
+    private var mediaPlayer: MediaPlayer? = null
+    private var videoLayout: VLCVideoLayout? = null
 
     private var streamUrl: String? = null
     private var resumeId: String? = null
 
     private var aspect: AspectRatio = AspectRatio.ORIGINAL
     private var userSeeking = false
+
+    // Position to jump to once playback actually starts (resume support). VLC only
+    // accepts a seek after the first Playing event, so we defer it until then.
+    private var pendingSeekMs = 0L
 
     private val sleepTimer = SleepTimer { finish() }
     private val castController by lazy {
@@ -107,8 +111,8 @@ class VodPlayerActivity : BaseActivity() {
         binding.playPauseButton.setOnClickListener { togglePlayPause() }
         binding.skipForwardButton.setOnClickListener { seekBy(SKIP_MS) }
         binding.skipBackButton.setOnClickListener { seekBy(-SKIP_MS) }
-        binding.audioButton.setOnClickListener { showTrackMenu(C.TRACK_TYPE_AUDIO) }
-        binding.subtitleButton.setOnClickListener { showTrackMenu(C.TRACK_TYPE_TEXT) }
+        binding.audioButton.setOnClickListener { showTrackMenu(isAudio = true) }
+        binding.subtitleButton.setOnClickListener { showTrackMenu(isAudio = false) }
         binding.aspectButton.setOnClickListener { cycleAspect() }
         binding.sleepButton.setOnClickListener { showSleepDialog() }
         binding.castButton.setOnClickListener { castController.onCastButtonClicked() }
@@ -127,46 +131,75 @@ class VodPlayerActivity : BaseActivity() {
 
             override fun onStopTrackingTouch(sb: SeekBar?) {
                 userSeeking = false
-                player?.seekTo(sb?.progress?.toLong() ?: 0L)
+                mediaPlayer?.setTime(sb?.progress?.toLong() ?: 0L)
             }
         })
     }
 
     private fun initPlayer() {
-        val exo = ExoPlayer.Builder(this).build()
-        val view = PlayerView(this).apply {
-            useController = false
-            layoutParams = android.view.ViewGroup.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+        // VOD tuning: a moderate buffer for smooth start-up and seeking, hardware
+        // decode where possible, auto-reconnect, and our branded User-Agent.
+        val options = arrayListOf(
+            "--network-caching=$CACHING_MS",
+            "--file-caching=$CACHING_MS",
+            "--avcodec-hw=any",
+            "--http-reconnect",
+            "--http-user-agent=${AppInfo.USER_AGENT}"
+        )
+        val vlc = LibVLC(this, options)
+        vlc.setUserAgent(AppInfo.USER_AGENT, AppInfo.USER_AGENT)
+        val mp = MediaPlayer(vlc)
+
+        val layout = VLCVideoLayout(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
             )
-            this.player = exo
         }
-        binding.videoContainer.addView(view)
-        player = exo
-        playerView = view
+        binding.videoContainer.addView(layout)
+        // true = render embedded subtitles onto the video surface.
+        mp.attachViews(layout, null, true, false)
 
-        exo.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(state: Int) {
-                binding.bufferingIndicator.visibility =
-                    if (state == Player.STATE_BUFFERING) View.VISIBLE else View.GONE
-                if (state == Player.STATE_READY) updateDuration()
+        mp.setEventListener { event ->
+            when (event.type) {
+                MediaPlayer.Event.Buffering -> {
+                    binding.bufferingIndicator.visibility =
+                        if (event.buffering < 100f) View.VISIBLE else View.GONE
+                }
+                MediaPlayer.Event.Playing -> {
+                    binding.bufferingIndicator.visibility = View.GONE
+                    binding.playPauseButton.setText(R.string.player_pause)
+                    // Apply the deferred resume seek once, now that VLC is ready.
+                    if (pendingSeekMs > 0L) {
+                        mp.setTime(pendingSeekMs)
+                        pendingSeekMs = 0L
+                    }
+                    applyAspect()
+                    updateDuration()
+                }
+                MediaPlayer.Event.Paused -> {
+                    binding.playPauseButton.setText(R.string.detail_play)
+                }
+                MediaPlayer.Event.Stopped -> {
+                    binding.playPauseButton.setText(R.string.detail_play)
+                }
+                MediaPlayer.Event.EndReached -> {
+                    binding.playPauseButton.setText(R.string.detail_play)
+                    persistResume()
+                }
+                MediaPlayer.Event.EncounteredError -> {
+                    binding.bufferingIndicator.visibility = View.GONE
+                }
+                MediaPlayer.Event.LengthChanged -> updateDuration()
             }
+        }
 
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                binding.playPauseButton.setText(
-                    if (isPlaying) R.string.player_pause else R.string.detail_play
-                )
-            }
-
-            override fun onPlayerError(error: PlaybackException) {
-                binding.bufferingIndicator.visibility = View.GONE
-            }
-        })
+        libVlc = vlc
+        mediaPlayer = mp
+        videoLayout = layout
 
         lifecycleScope.launch {
             aspect = settings.aspectRatio.first()
-            applyAspect()
             val saved = resumeId?.let { repo.getResume(it) } ?: 0L
             if (saved > 0L) promptResume(saved) else preparePlayback(0L)
         }
@@ -183,12 +216,20 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     private fun preparePlayback(positionMs: Long) {
-        val exo = player ?: return
+        val vlc = libVlc ?: return
+        val mp = mediaPlayer ?: return
         val url = streamUrl ?: return
-        exo.setMediaItem(MediaItem.fromUri(url))
-        exo.prepare()
-        if (positionMs > 0L) exo.seekTo(positionMs)
-        exo.playWhenReady = true
+        pendingSeekMs = positionMs
+        val media = Media(vlc, android.net.Uri.parse(url)).apply {
+            setHWDecoderEnabled(true, true)
+            addOption(":network-caching=$CACHING_MS")
+            addOption(":file-caching=$CACHING_MS")
+            addOption(":http-reconnect")
+            addOption(":http-user-agent=${AppInfo.USER_AGENT}")
+        }
+        mp.media = media
+        media.release()
+        mp.play()
         startTimers()
     }
 
@@ -202,14 +243,14 @@ class VodPlayerActivity : BaseActivity() {
     // ---- Controls -------------------------------------------------------
 
     private fun togglePlayPause() {
-        val exo = player ?: return
-        exo.playWhenReady = !exo.playWhenReady
+        val mp = mediaPlayer ?: return
+        if (mp.isPlaying) mp.pause() else mp.play()
     }
 
     private fun seekBy(deltaMs: Long) {
-        val exo = player ?: return
-        val target = (exo.currentPosition + deltaMs).coerceIn(0L, exo.duration.coerceAtLeast(0L))
-        exo.seekTo(target)
+        val mp = mediaPlayer ?: return
+        val length = mp.length.coerceAtLeast(0L)
+        mp.setTime((mp.time + deltaMs).coerceIn(0L, length))
     }
 
     private fun cycleAspect() {
@@ -218,59 +259,85 @@ class VodPlayerActivity : BaseActivity() {
         lifecycleScope.launch { settings.setAspectRatio(aspect) }
     }
 
+    /**
+     * Maps the app's [AspectRatio] onto libVLC's aspect-ratio / scale model.
+     * FILL stretches to the container by using its own w:h as the display ratio;
+     * ZOOM crops to fill by scaling up using the current video dimensions.
+     */
     private fun applyAspect() {
-        val view = playerView ?: return
-        view.resizeMode = when (aspect) {
-            AspectRatio.ORIGINAL -> AspectRatioFrameLayout.RESIZE_MODE_FIT
-            AspectRatio.RATIO_16_9 -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH
-            AspectRatio.RATIO_4_3 -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT
-            AspectRatio.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
-            AspectRatio.ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        val mp = mediaPlayer ?: return
+        when (aspect) {
+            AspectRatio.ORIGINAL -> {
+                mp.setAspectRatio(null)
+                mp.setScale(0f)
+            }
+            AspectRatio.RATIO_16_9 -> {
+                mp.setAspectRatio("16:9")
+                mp.setScale(0f)
+            }
+            AspectRatio.RATIO_4_3 -> {
+                mp.setAspectRatio("4:3")
+                mp.setScale(0f)
+            }
+            AspectRatio.FILL -> {
+                val w = binding.videoContainer.width
+                val h = binding.videoContainer.height
+                if (w > 0 && h > 0) mp.setAspectRatio("$w:$h") else mp.setAspectRatio(null)
+                mp.setScale(0f)
+            }
+            AspectRatio.ZOOM -> {
+                mp.setAspectRatio(null)
+                mp.setScale(zoomScale())
+            }
         }
+    }
+
+    /** Scale factor that crops the video to fill the container, keeping its AR. */
+    private fun zoomScale(): Float {
+        val mp = mediaPlayer ?: return 0f
+        val track = mp.currentVideoTrack ?: return 0f
+        val vw = track.width
+        val vh = track.height
+        val cw = binding.videoContainer.width
+        val ch = binding.videoContainer.height
+        if (vw <= 0 || vh <= 0 || cw <= 0 || ch <= 0) return 0f
+        // Best-fit scale that VLC would use, then take the larger axis to crop.
+        val fit = minOf(cw.toFloat() / vw, ch.toFloat() / vh)
+        val fill = maxOf(cw.toFloat() / vw, ch.toFloat() / vh)
+        if (fit <= 0f) return 0f
+        return fill / fit
     }
 
     // ---- Track selection ------------------------------------------------
 
-    private fun showTrackMenu(trackType: Int) {
-        val exo = player ?: return
-        val tracks = exo.currentTracks
-        val groups = tracks.groups.filter { it.type == trackType && it.isSupported }
+    private fun showTrackMenu(isAudio: Boolean) {
+        val mp = mediaPlayer ?: return
+        val tracks = if (isAudio) mp.audioTracks else mp.spuTracks
 
         val labels = mutableListOf<String>()
-        val actions = mutableListOf<() -> Unit>()
-
-        if (trackType == C.TRACK_TYPE_TEXT) {
+        val ids = mutableListOf<Int>()
+        // Always offer an explicit "Off" for subtitles so it can be disabled even
+        // when the media doesn't expose a disable track of its own.
+        if (!isAudio) {
             labels.add(getString(R.string.subtitles_off))
-            actions.add {
-                exo.trackSelectionParameters = exo.trackSelectionParameters
-                    .buildUpon()
-                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                    .build()
+            ids.add(-1)
+        }
+        tracks?.forEach { desc ->
+            // VLC's own "Disable" entry (id -1) is already covered by our Off item.
+            if (isAudio || desc.id != -1) {
+                labels.add(desc.name)
+                ids.add(desc.id)
             }
         }
-
-        groups.forEachIndexed { gIndex, group ->
-            val mediaGroup: TrackGroup = group.mediaTrackGroup
-            for (i in 0 until mediaGroup.length) {
-                val format = mediaGroup.getFormat(i)
-                val lang = format.language ?: format.label ?: "${gIndex + 1}.${i + 1}"
-                labels.add(lang)
-                actions.add {
-                    exo.trackSelectionParameters = exo.trackSelectionParameters
-                        .buildUpon()
-                        .setTrackTypeDisabled(trackType, false)
-                        .setOverrideForType(TrackSelectionOverride(mediaGroup, i))
-                        .build()
-                }
-            }
-        }
-
         if (labels.isEmpty()) return
 
-        val titleRes = if (trackType == C.TRACK_TYPE_AUDIO) R.string.audio_track else R.string.subtitle_track
+        val titleRes = if (isAudio) R.string.audio_track else R.string.subtitle_track
         AlertDialog.Builder(this)
             .setTitle(titleRes)
-            .setItems(labels.toTypedArray()) { _, which -> actions[which].invoke() }
+            .setItems(labels.toTypedArray()) { _, which ->
+                val id = ids[which]
+                if (isAudio) mp.setAudioTrack(id) else mp.setSpuTrack(id)
+            }
             .show()
     }
 
@@ -297,25 +364,27 @@ class VodPlayerActivity : BaseActivity() {
     // ---- Progress / resume ---------------------------------------------
 
     private fun updateDuration() {
-        val exo = player ?: return
-        val duration = exo.duration.coerceAtLeast(0L)
-        binding.seekBar.max = duration.toInt()
+        val mp = mediaPlayer ?: return
+        val duration = mp.length.coerceAtLeast(0L)
+        if (duration <= 0L) return
+        if (binding.seekBar.max != duration.toInt()) binding.seekBar.max = duration.toInt()
         binding.totalTime.text = formatTime(duration)
     }
 
     private fun updateProgress() {
-        val exo = player ?: return
+        val mp = mediaPlayer ?: return
         if (userSeeking) return
-        val position = exo.currentPosition.coerceAtLeast(0L)
+        if (binding.seekBar.max <= 0) updateDuration()
+        val position = mp.time.coerceAtLeast(0L)
         binding.seekBar.progress = position.toInt()
         binding.currentTime.text = formatTime(position)
     }
 
     private fun persistResume() {
-        val exo = player ?: return
+        val mp = mediaPlayer ?: return
         val id = resumeId ?: return
-        val position = exo.currentPosition
-        val duration = exo.duration.coerceAtLeast(0L)
+        val position = mp.time
+        val duration = mp.length.coerceAtLeast(0L)
         if (duration <= 0L) return
         lifecycleScope.launch { repo.saveResume(id, position, duration) }
     }
@@ -337,7 +406,7 @@ class VodPlayerActivity : BaseActivity() {
         persistResume()
         handler.removeCallbacks(progressRunnable)
         handler.removeCallbacks(saveRunnable)
-        player?.playWhenReady = false
+        mediaPlayer?.pause()
     }
 
     override fun onDestroy() {
@@ -345,9 +414,13 @@ class VodPlayerActivity : BaseActivity() {
         sleepTimer.release()
         castController.detach()
         handler.removeCallbacksAndMessages(null)
-        player?.release()
-        player = null
-        playerView?.player = null
-        playerView = null
+        mediaPlayer?.setEventListener(null)
+        mediaPlayer?.stop()
+        mediaPlayer?.detachViews()
+        mediaPlayer?.release()
+        libVlc?.release()
+        mediaPlayer = null
+        libVlc = null
+        videoLayout = null
     }
 }
