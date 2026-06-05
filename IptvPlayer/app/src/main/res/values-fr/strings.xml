@@ -146,4 +146,34 @@
     <string name="error_stream_not_responding">Le flux ne répond pas pour le moment, nouvelle tentative.</string>
     <string name="error_empty_playlist">Aucune chaîne trouvée dans cette playlist.</string>
     <string name="error_unknown">Une erreur s\'est produite. Veuillez réessayer.</string>
+    <!-- Added for feature wiring (translated) -->
+    <string name="about_check_update">Rechercher des mises à jour</string>
+    <string name="about_up_to_date">Vous utilisez la dernière version.</string>
+    <string name="account_connections_value">%1$d / %2$s</string>
+    <string name="account_loading">Chargement du compte…</string>
+    <string name="account_none">Aucune information de compte disponible.</string>
+    <string name="diag_device_format">Appareil : %1$s %2$s\nAndroid : %3$s\nVersion de l\'application : %4$s</string>
+    <string name="diag_logs_subject">Diagnostic IPTV Player</string>
+    <string name="diag_running">En cours…</string>
+    <string name="epg_mapping_input_hint">ID de chaîne EPG (tvg-id)</string>
+    <string name="epg_mapping_saved">Enregistré</string>
+    <string name="guide_match_epg">Associer l\'ID EPG</string>
+    <string name="guide_no_source">Aucune source configurée</string>
+    <string name="guide_updated">Guide mis à jour</string>
+    <string name="guide_update_failed">Impossible de mettre à jour le guide</string>
+    <string name="mini_player_close">Fermer le mini-lecteur</string>
+    <string name="number_zap_no_channel">Aucune chaîne %1$s</string>
+    <string name="player_pause">Pause</string>
+    <string name="profile_active">Actif</string>
+    <string name="profile_delete_confirm">Supprimer ce profil ?</string>
+    <string name="profiles_empty">Aucun profil pour le moment.</string>
+    <string name="screensaver_hint">Appuyez sur une touche pour reprendre</string>
+    <string name="settings_minutes">%1$d min</string>
+    <string name="settings_off">Désactivé</string>
+    <string name="settings_on">Activé</string>
+    <string name="settings_screensaver_off">Désactivé</string>
+    <string name="wizard_connect_message">Ensuite, connectez votre service IPTV pour commencer à regarder.</string>
+    <string name="wizard_connect_title">Prêt à se connecter</string>
+    <string name="wizard_next">Suivant</string>
+    <string name="wizard_step_indicator">Étape %1$d sur %2$d</string>
 </resources>

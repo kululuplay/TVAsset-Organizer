@@ -146,4 +146,34 @@
     <string name="error_stream_not_responding">De stream reageert nu niet, opnieuw proberen.</string>
     <string name="error_empty_playlist">Geen kanalen gevonden in deze afspeellijst.</string>
     <string name="error_unknown">Er ging iets mis. Probeer het opnieuw.</string>
+    <!-- Added for feature wiring (translated) -->
+    <string name="about_check_update">Controleren op updates</string>
+    <string name="about_up_to_date">Je gebruikt de nieuwste versie.</string>
+    <string name="account_connections_value">%1$d / %2$s</string>
+    <string name="account_loading">Account laden…</string>
+    <string name="account_none">Geen accountgegevens beschikbaar.</string>
+    <string name="diag_device_format">Apparaat: %1$s %2$s\nAndroid: %3$s\nApp-versie: %4$s</string>
+    <string name="diag_logs_subject">IPTV Player-diagnose</string>
+    <string name="diag_running">Bezig…</string>
+    <string name="epg_mapping_input_hint">EPG-kanaal-id (tvg-id)</string>
+    <string name="epg_mapping_saved">Opgeslagen</string>
+    <string name="guide_match_epg">EPG-id koppelen</string>
+    <string name="guide_no_source">Geen bron geconfigureerd</string>
+    <string name="guide_updated">Gids bijgewerkt</string>
+    <string name="guide_update_failed">Kan gids niet bijwerken</string>
+    <string name="mini_player_close">Miniplayer sluiten</string>
+    <string name="number_zap_no_channel">Geen kanaal %1$s</string>
+    <string name="player_pause">Pauzeren</string>
+    <string name="profile_active">Actief</string>
+    <string name="profile_delete_confirm">Dit profiel verwijderen?</string>
+    <string name="profiles_empty">Nog geen profielen.</string>
+    <string name="screensaver_hint">Druk op een toets om door te gaan</string>
+    <string name="settings_minutes">%1$d min</string>
+    <string name="settings_off">Uit</string>
+    <string name="settings_on">Aan</string>
+    <string name="settings_screensaver_off">Uit</string>
+    <string name="wizard_connect_message">Verbind vervolgens je IPTV-dienst om te beginnen met kijken.</string>
+    <string name="wizard_connect_title">Klaar om te verbinden</string>
+    <string name="wizard_next">Volgende</string>
+    <string name="wizard_step_indicator">Stap %1$d van %2$d</string>
 </resources>

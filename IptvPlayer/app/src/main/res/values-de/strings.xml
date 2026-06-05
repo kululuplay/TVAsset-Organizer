@@ -146,4 +146,34 @@
     <string name="error_stream_not_responding">Der Stream antwortet gerade nicht, erneuter Versuch.</string>
     <string name="error_empty_playlist">In dieser Playlist wurden keine Kanäle gefunden.</string>
     <string name="error_unknown">Etwas ist schiefgelaufen. Bitte erneut versuchen.</string>
+    <!-- Added for feature wiring (translated) -->
+    <string name="about_check_update">Nach Updates suchen</string>
+    <string name="about_up_to_date">Sie verwenden die neueste Version.</string>
+    <string name="account_connections_value">%1$d / %2$s</string>
+    <string name="account_loading">Konto wird geladen…</string>
+    <string name="account_none">Keine Kontoinformationen verfügbar.</string>
+    <string name="diag_device_format">Gerät: %1$s %2$s\nAndroid: %3$s\nApp-Version: %4$s</string>
+    <string name="diag_logs_subject">IPTV Player Diagnose</string>
+    <string name="diag_running">Läuft…</string>
+    <string name="epg_mapping_input_hint">EPG-Kanal-ID (tvg-id)</string>
+    <string name="epg_mapping_saved">Gespeichert</string>
+    <string name="guide_match_epg">EPG-ID zuordnen</string>
+    <string name="guide_no_source">Keine Quelle konfiguriert</string>
+    <string name="guide_updated">Programm aktualisiert</string>
+    <string name="guide_update_failed">Programm konnte nicht aktualisiert werden</string>
+    <string name="mini_player_close">Mini-Player schließen</string>
+    <string name="number_zap_no_channel">Kein Kanal %1$s</string>
+    <string name="player_pause">Pause</string>
+    <string name="profile_active">Aktiv</string>
+    <string name="profile_delete_confirm">Dieses Profil löschen?</string>
+    <string name="profiles_empty">Noch keine Profile.</string>
+    <string name="screensaver_hint">Beliebige Taste drücken, um fortzufahren</string>
+    <string name="settings_minutes">%1$d Min.</string>
+    <string name="settings_off">Aus</string>
+    <string name="settings_on">An</string>
+    <string name="settings_screensaver_off">Aus</string>
+    <string name="wizard_connect_message">Verbinden Sie als Nächstes Ihren IPTV-Dienst, um loszulegen.</string>
+    <string name="wizard_connect_title">Bereit zum Verbinden</string>
+    <string name="wizard_next">Weiter</string>
+    <string name="wizard_step_indicator">Schritt %1$d von %2$d</string>
 </resources>

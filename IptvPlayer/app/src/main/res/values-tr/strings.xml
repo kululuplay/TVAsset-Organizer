@@ -146,4 +146,34 @@
     <string name="error_stream_not_responding">Yayın şu anda yanıt vermiyor, tekrar deneniyor.</string>
     <string name="error_empty_playlist">Bu listede kanal bulunamadı.</string>
     <string name="error_unknown">Bir şeyler ters gitti. Lütfen tekrar deneyin.</string>
+    <!-- Added for feature wiring (translated) -->
+    <string name="about_check_update">Güncellemeleri denetle</string>
+    <string name="about_up_to_date">En son sürümü kullanıyorsunuz.</string>
+    <string name="account_connections_value">%1$d / %2$s</string>
+    <string name="account_loading">Hesap yükleniyor…</string>
+    <string name="account_none">Hesap bilgisi yok.</string>
+    <string name="diag_device_format">Cihaz: %1$s %2$s\nAndroid: %3$s\nUygulama sürümü: %4$s</string>
+    <string name="diag_logs_subject">IPTV Player tanılama</string>
+    <string name="diag_running">Çalışıyor…</string>
+    <string name="epg_mapping_input_hint">EPG kanal kimliği (tvg-id)</string>
+    <string name="epg_mapping_saved">Kaydedildi</string>
+    <string name="guide_match_epg">EPG kimliğini eşle</string>
+    <string name="guide_no_source">Kaynak ayarlanmadı</string>
+    <string name="guide_updated">Rehber güncellendi</string>
+    <string name="guide_update_failed">Rehber güncellenemedi</string>
+    <string name="mini_player_close">Mini oynatıcıyı kapat</string>
+    <string name="number_zap_no_channel">%1$s kanalı yok</string>
+    <string name="player_pause">Duraklat</string>
+    <string name="profile_active">Etkin</string>
+    <string name="profile_delete_confirm">Bu profil silinsin mi?</string>
+    <string name="profiles_empty">Henüz profil yok.</string>
+    <string name="screensaver_hint">Devam etmek için bir tuşa basın</string>
+    <string name="settings_minutes">%1$d dk</string>
+    <string name="settings_off">Kapalı</string>
+    <string name="settings_on">Açık</string>
+    <string name="settings_screensaver_off">Kapalı</string>
+    <string name="wizard_connect_message">Şimdi izlemeye başlamak için IPTV hizmetinizi bağlayın.</string>
+    <string name="wizard_connect_title">Bağlanmaya hazır</string>
+    <string name="wizard_next">İleri</string>
+    <string name="wizard_step_indicator">Adım %1$d / %2$d</string>
 </resources>

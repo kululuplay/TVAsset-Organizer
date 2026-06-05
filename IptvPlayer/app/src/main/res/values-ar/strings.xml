@@ -146,4 +146,34 @@
     <string name="error_stream_not_responding">البث لا يستجيب حالياً، تتم إعادة المحاولة.</string>
     <string name="error_empty_playlist">لم يتم العثور على قنوات في هذه القائمة.</string>
     <string name="error_unknown">حدث خطأ ما. يرجى المحاولة مرة أخرى.</string>
+    <!-- Added for feature wiring (translated) -->
+    <string name="about_check_update">التحقق من التحديثات</string>
+    <string name="about_up_to_date">أنت تستخدم أحدث إصدار.</string>
+    <string name="account_connections_value">%1$d / %2$s</string>
+    <string name="account_loading">جارٍ تحميل الحساب…</string>
+    <string name="account_none">لا توجد معلومات حساب متاحة.</string>
+    <string name="diag_device_format">الجهاز: %1$s %2$s\nأندرويد: %3$s\nإصدار التطبيق: %4$s</string>
+    <string name="diag_logs_subject">تشخيص IPTV Player</string>
+    <string name="diag_running">جارٍ التشغيل…</string>
+    <string name="epg_mapping_input_hint">معرّف قناة EPG (tvg-id)</string>
+    <string name="epg_mapping_saved">تم الحفظ</string>
+    <string name="guide_match_epg">مطابقة معرّف EPG</string>
+    <string name="guide_no_source">لم يتم تكوين مصدر</string>
+    <string name="guide_updated">تم تحديث الدليل</string>
+    <string name="guide_update_failed">تعذّر تحديث الدليل</string>
+    <string name="mini_player_close">إغلاق المشغّل المصغّر</string>
+    <string name="number_zap_no_channel">لا توجد قناة %1$s</string>
+    <string name="player_pause">إيقاف مؤقت</string>
+    <string name="profile_active">نشط</string>
+    <string name="profile_delete_confirm">حذف هذا الملف الشخصي؟</string>
+    <string name="profiles_empty">لا توجد ملفات شخصية بعد.</string>
+    <string name="screensaver_hint">اضغط أي مفتاح للمتابعة</string>
+    <string name="settings_minutes">%1$d دقيقة</string>
+    <string name="settings_off">إيقاف</string>
+    <string name="settings_on">تشغيل</string>
+    <string name="settings_screensaver_off">إيقاف</string>
+    <string name="wizard_connect_message">بعد ذلك، قم بتوصيل خدمة IPTV الخاصة بك لبدء المشاهدة.</string>
+    <string name="wizard_connect_title">جاهز للاتصال</string>
+    <string name="wizard_next">التالي</string>
+    <string name="wizard_step_indicator">الخطوة %1$d من %2$d</string>
 </resources>
