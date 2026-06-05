@@ -108,6 +108,7 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     private fun setupControls() {
+        binding.backButton.setOnClickListener { finish() }
         binding.playPauseButton.setOnClickListener { togglePlayPause() }
         binding.skipForwardButton.setOnClickListener { seekBy(SKIP_MS) }
         binding.skipBackButton.setOnClickListener { seekBy(-SKIP_MS) }
@@ -168,7 +169,8 @@ class VodPlayerActivity : BaseActivity() {
                 }
                 MediaPlayer.Event.Playing -> {
                     binding.bufferingIndicator.visibility = View.GONE
-                    binding.playPauseButton.setText(R.string.player_pause)
+                    binding.playPauseButton.setImageResource(R.drawable.ic_pause)
+                    binding.playPauseButton.contentDescription = getString(R.string.player_pause)
                     // Apply the deferred resume seek once, now that VLC is ready.
                     if (pendingSeekMs > 0L) {
                         mp.setTime(pendingSeekMs)
@@ -178,13 +180,16 @@ class VodPlayerActivity : BaseActivity() {
                     updateDuration()
                 }
                 MediaPlayer.Event.Paused -> {
-                    binding.playPauseButton.setText(R.string.detail_play)
+                    binding.playPauseButton.setImageResource(R.drawable.ic_play)
+                    binding.playPauseButton.contentDescription = getString(R.string.detail_play)
                 }
                 MediaPlayer.Event.Stopped -> {
-                    binding.playPauseButton.setText(R.string.detail_play)
+                    binding.playPauseButton.setImageResource(R.drawable.ic_play)
+                    binding.playPauseButton.contentDescription = getString(R.string.detail_play)
                 }
                 MediaPlayer.Event.EndReached -> {
-                    binding.playPauseButton.setText(R.string.detail_play)
+                    binding.playPauseButton.setImageResource(R.drawable.ic_play)
+                    binding.playPauseButton.contentDescription = getString(R.string.detail_play)
                     persistResume()
                 }
                 MediaPlayer.Event.EncounteredError -> {

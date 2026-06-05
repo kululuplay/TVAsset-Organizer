@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- On-demand player: video surface + custom control bar (play/pause, seekbar,
-     skip back/forward, audio/subtitle/aspect menus). -->
+<!-- On-demand player: full-bleed video with a cinematic control overlay —
+     a top scrim (back + title + secondary actions), centered transport
+     (skip / play-pause / skip), and a bottom scrim with the seek bar. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#000000">
@@ -13,133 +15,174 @@
 
     <ProgressBar
         android:id="@+id/bufferingIndicator"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
         android:layout_gravity="center"
-        android:indeterminateTint="@color/brand_purple"
+        android:indeterminateTint="@color/accent"
         android:visibility="gone" />
 
-    <!-- Control overlay -->
+    <!-- ===== Top scrim: back, title, secondary actions ===== -->
     <LinearLayout
-        android:id="@+id/controlBar"
+        android:id="@+id/topBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
-        android:orientation="vertical"
-        android:background="@drawable/bg_overlay"
-        android:padding="@dimen/space_m">
+        android:layout_gravity="top"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_scrim_top"
+        android:paddingStart="@dimen/space_l"
+        android:paddingEnd="@dimen/space_l"
+        android:paddingTop="@dimen/space_m"
+        android:paddingBottom="@dimen/space_xl">
+
+        <ImageButton
+            android:id="@+id/backButton"
+            style="@style/Widget.Iptv.IconButton"
+            android:src="@drawable/ic_arrow_back"
+            android:contentDescription="@string/action_back" />
 
         <TextView
             android:id="@+id/titleText"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="@dimen/space_m"
+            android:layout_marginEnd="@dimen/space_m"
             android:textColor="@color/text_primary"
             android:textSize="@dimen/text_title"
             android:textStyle="bold"
             android:maxLines="1"
             android:ellipsize="end"
-            android:layout_marginBottom="@dimen/space_s" />
+            android:shadowColor="#99000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="4"
+            tools:text="Keeper (2025)" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
+        <ImageButton
+            android:id="@+id/audioButton"
+            style="@style/Widget.Iptv.IconButton"
+            android:layout_marginStart="@dimen/space_s"
+            android:src="@drawable/ic_audiotrack"
+            android:contentDescription="@string/audio_track" />
+
+        <ImageButton
+            android:id="@+id/subtitleButton"
+            style="@style/Widget.Iptv.IconButton"
+            android:layout_marginStart="@dimen/space_s"
+            android:src="@drawable/ic_subtitles"
+            android:contentDescription="@string/subtitle_track" />
+
+        <ImageButton
+            android:id="@+id/aspectButton"
+            style="@style/Widget.Iptv.IconButton"
+            android:layout_marginStart="@dimen/space_s"
+            android:src="@drawable/ic_aspect_ratio"
+            android:contentDescription="@string/aspect_ratio" />
+
+        <ImageButton
+            android:id="@+id/sleepButton"
+            style="@style/Widget.Iptv.IconButton"
+            android:layout_marginStart="@dimen/space_s"
+            android:src="@drawable/ic_bedtime"
+            android:contentDescription="@string/sleep_timer" />
+
+        <ImageButton
+            android:id="@+id/castButton"
+            style="@style/Widget.Iptv.IconButton"
+            android:layout_marginStart="@dimen/space_s"
+            android:src="@drawable/ic_cast"
+            android:contentDescription="@string/cast" />
+    </LinearLayout>
+
+    <!-- ===== Center transport: skip back / play-pause / skip forward ===== -->
+    <LinearLayout
+        android:id="@+id/transportBar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <ImageButton
+            android:id="@+id/skipBackButton"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:background="@drawable/bg_icon_button"
+            android:scaleType="centerInside"
+            android:padding="14dp"
+            android:focusable="true"
+            android:src="@drawable/ic_skip_back"
+            android:contentDescription="@string/skip_back" />
+
+        <ImageButton
+            android:id="@+id/playPauseButton"
+            android:layout_width="84dp"
+            android:layout_height="84dp"
+            android:layout_marginStart="@dimen/space_xl"
+            android:layout_marginEnd="@dimen/space_xl"
+            android:background="@drawable/bg_play_circle"
+            android:scaleType="centerInside"
+            android:padding="20dp"
+            android:focusable="true"
+            android:src="@drawable/ic_play"
+            android:contentDescription="@string/detail_play" />
+
+        <ImageButton
+            android:id="@+id/skipForwardButton"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:background="@drawable/bg_icon_button"
+            android:scaleType="centerInside"
+            android:padding="14dp"
+            android:focusable="true"
+            android:src="@drawable/ic_skip_forward"
+            android:contentDescription="@string/skip_forward" />
+    </LinearLayout>
+
+    <!-- ===== Bottom scrim: time + seek bar ===== -->
+    <LinearLayout
+        android:id="@+id/bottomBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_scrim_bottom"
+        android:paddingStart="@dimen/space_l"
+        android:paddingEnd="@dimen/space_l"
+        android:paddingTop="@dimen/space_xl"
+        android:paddingBottom="@dimen/space_l">
+
+        <TextView
+            android:id="@+id/currentTime"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:text="00:00"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_caption"
+            android:fontFamily="monospace" />
 
-            <TextView
-                android:id="@+id/currentTime"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="00:00"
-                android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_caption" />
-
-            <SeekBar
-                android:id="@+id/seekBar"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginHorizontal="@dimen/space_s" />
-
-            <TextView
-                android:id="@+id/totalTime"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="00:00"
-                android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_caption" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
+        <SeekBar
+            android:id="@+id/seekBar"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:layout_marginTop="@dimen/space_s">
+            android:layout_weight="1"
+            android:layout_marginHorizontal="@dimen/space_m"
+            android:paddingTop="@dimen/space_s"
+            android:paddingBottom="@dimen/space_s"
+            android:progressDrawable="@drawable/seekbar_progress"
+            android:thumb="@drawable/seekbar_thumb"
+            android:thumbTint="@color/accent"
+            android:splitTrack="false" />
 
-            <Button
-                android:id="@+id/skipBackButton"
-                style="@style/Widget.Iptv.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="@dimen/space_xs"
-                android:text="@string/skip_back" />
-
-            <Button
-                android:id="@+id/playPauseButton"
-                style="@style/Widget.Iptv.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="@dimen/space_xs"
-                android:text="@string/detail_play" />
-
-            <Button
-                android:id="@+id/skipForwardButton"
-                style="@style/Widget.Iptv.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="@dimen/space_xs"
-                android:text="@string/skip_forward" />
-
-            <Button
-                android:id="@+id/audioButton"
-                style="@style/Widget.Iptv.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="@dimen/space_xs"
-                android:text="@string/audio_track" />
-
-            <Button
-                android:id="@+id/subtitleButton"
-                style="@style/Widget.Iptv.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="@dimen/space_xs"
-                android:text="@string/subtitle_track" />
-
-            <Button
-                android:id="@+id/aspectButton"
-                style="@style/Widget.Iptv.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="@dimen/space_xs"
-                android:text="@string/aspect_ratio" />
-
-            <Button
-                android:id="@+id/sleepButton"
-                style="@style/Widget.Iptv.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="@dimen/space_xs"
-                android:text="@string/sleep_timer" />
-
-            <Button
-                android:id="@+id/castButton"
-                style="@style/Widget.Iptv.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="@dimen/space_xs"
-                android:text="@string/cast" />
-        </LinearLayout>
+        <TextView
+            android:id="@+id/totalTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="00:00"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_caption"
+            android:fontFamily="monospace" />
     </LinearLayout>
 </FrameLayout>
