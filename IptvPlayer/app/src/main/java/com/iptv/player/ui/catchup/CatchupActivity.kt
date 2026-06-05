@@ -23,6 +23,9 @@ import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.player.VodPlayerActivity
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.text.DateFormat
+import java.util.Date
+import java.util.Locale
 
 class CatchupActivity : BaseActivity() {
 
@@ -44,6 +47,13 @@ class CatchupActivity : BaseActivity() {
 
         setupLists()
         observe()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        binding.dateText.text = DateFormat
+            .getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
+            .format(Date())
     }
 
     private fun setupLists() {

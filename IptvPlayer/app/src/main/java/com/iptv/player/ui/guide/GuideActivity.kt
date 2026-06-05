@@ -20,6 +20,9 @@ import com.iptv.player.databinding.ActivityGuideBinding
 import com.iptv.player.ui.common.BaseActivity
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.text.DateFormat
+import java.util.Date
+import java.util.Locale
 
 class GuideActivity : BaseActivity() {
 
@@ -42,6 +45,13 @@ class GuideActivity : BaseActivity() {
         setupLists()
         setupRefresh()
         observe()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        binding.dateText.text = DateFormat
+            .getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
+            .format(Date())
     }
 
     private fun setupLists() {

@@ -1,27 +1,60 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Settings: a vertically scrollable, D-pad friendly list of rows. Rows and
-     section headers are added programmatically into the container. -->
+<!-- Settings: top bar (title + clock/date) over a glass card holding a
+     vertically scrollable, D-pad friendly list of rows added programmatically.
+     Styled to match the Live TV browser. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/bg_root"
+    android:background="@drawable/bg_login_aurora"
     android:paddingHorizontal="@dimen/safe_area_h"
     android:paddingVertical="@dimen/safe_area_v">
 
-    <TextView
+    <!-- Top bar -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/settings_title"
-        android:textColor="@color/text_primary"
-        android:textSize="@dimen/text_big_title"
-        android:textStyle="bold"
-        android:layout_marginBottom="@dimen/space_m" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="@dimen/space_m">
 
-    <ScrollView
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_title"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_big_title"
+            android:textStyle="bold"
+            android:letterSpacing="0.02" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+
+        <com.iptv.player.ui.common.ClockView
+            android:id="@+id/clock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_title"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/dateText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_body"
+            android:layout_marginStart="@dimen/space_m" />
+    </LinearLayout>
+
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:background="@drawable/bg_glass_card"
+        android:padding="@dimen/space_m"
         android:clipToPadding="false"
         android:fillViewport="true">
 
@@ -30,5 +63,5 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical" />
-    </ScrollView>
+    </androidx.core.widget.NestedScrollView>
 </LinearLayout>

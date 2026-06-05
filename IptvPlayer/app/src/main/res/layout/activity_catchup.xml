@@ -1,26 +1,57 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Catch-up / timeshift: channels with an archive on the left, that channel's
-     past programs on the right. -->
+<!-- Catch-up / timeshift: top bar (title + clock/date) | archive channels (left)
+     + past programs (right). Styled to match the Live TV browser. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_root"
+    android:background="@drawable/bg_login_aurora"
     android:paddingHorizontal="@dimen/safe_area_h"
     android:paddingVertical="@dimen/safe_area_v">
 
-    <TextView
-        android:id="@+id/title"
-        android:layout_width="wrap_content"
+    <!-- Top bar -->
+    <LinearLayout
+        android:id="@+id/navBar"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="@string/catchup_title"
-        android:textColor="@color/accent"
-        android:textSize="@dimen/text_title"
-        android:textStyle="bold"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
         android:layout_marginBottom="@dimen/space_m"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/catchup_title"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_title"
+            android:textStyle="bold"
+            android:letterSpacing="0.02" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+
+        <com.iptv.player.ui.common.ClockView
+            android:id="@+id/clock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_title"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/dateText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_body"
+            android:layout_marginStart="@dimen/space_m" />
+    </LinearLayout>
 
     <!-- Left: catch-up channels -->
     <LinearLayout
@@ -28,10 +59,10 @@
         android:layout_width="@dimen/category_width"
         android:layout_height="0dp"
         android:orientation="vertical"
-        android:background="@drawable/bg_panel"
-        android:padding="@dimen/space_s"
+        android:background="@drawable/bg_glass_card"
+        android:padding="@dimen/space_m"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/title"
+        app:layout_constraintTop_toBottomOf="@id/navBar"
         app:layout_constraintBottom_toBottomOf="parent">
 
         <androidx.recyclerview.widget.RecyclerView
@@ -59,9 +90,11 @@
         android:layout_height="0dp"
         android:orientation="vertical"
         android:layout_marginStart="@dimen/space_m"
+        android:background="@drawable/bg_glass_card"
+        android:padding="@dimen/space_m"
         app:layout_constraintStart_toEndOf="@id/channelPanel"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/title"
+        app:layout_constraintTop_toBottomOf="@id/navBar"
         app:layout_constraintBottom_toBottomOf="parent">
 
         <TextView
@@ -73,7 +106,7 @@
             android:textStyle="bold"
             android:maxLines="1"
             android:ellipsize="end"
-            android:layout_marginBottom="@dimen/space_s" />
+            android:layout_marginBottom="@dimen/space_m" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/programList"

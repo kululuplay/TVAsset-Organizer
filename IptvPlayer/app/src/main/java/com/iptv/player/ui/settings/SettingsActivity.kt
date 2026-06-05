@@ -32,6 +32,9 @@ import com.iptv.player.util.LocaleManager
 import com.iptv.player.work.SyncScheduler
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.text.DateFormat
+import java.util.Date
+import java.util.Locale
 
 class SettingsActivity : BaseActivity() {
 
@@ -60,6 +63,13 @@ class SettingsActivity : BaseActivity() {
 
         buildRows()
         observe()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        binding.dateText.text = DateFormat
+            .getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
+            .format(Date())
     }
 
     private fun buildRows() {

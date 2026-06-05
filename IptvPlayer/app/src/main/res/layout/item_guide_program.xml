@@ -6,7 +6,7 @@
     android:layout_width="wrap_content"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@drawable/bg_card_selectable"
+    android:background="@drawable/bg_row"
     android:focusable="true"
     android:focusableInTouchMode="false"
     android:padding="@dimen/space_s"
