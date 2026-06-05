@@ -16,6 +16,7 @@ package com.iptv.player.ui.player
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.SeekBar
@@ -64,6 +65,8 @@ class VodPlayerActivity : BaseActivity() {
         // Debounce after track-detection events before evaluating the hint, so we
         // wait for the full set of audio/subtitle tracks to be parsed by VLC.
         private const val TRACK_HINT_DEBOUNCE_MS = 1200L
+        // Auto-hide the on-screen controls after this much inactivity.
+        private const val CONTROLS_TIMEOUT_MS = 5000L
     }
 
     private lateinit var binding: ActivityVodPlayerBinding
@@ -89,6 +92,11 @@ class VodPlayerActivity : BaseActivity() {
     // Show the multi-language / subtitle hint at most once per playback session.
     private var trackHintShown = false
     private val trackHintRunnable = Runnable { showTrackHintIfAvailable() }
+
+    // Controls (top/transport/bottom bars) auto-hide after a few seconds idle and
+    // reappear on any key press or touch. Bars start visible (see the layout).
+    private var controlsVisible = true
+    private val hideControlsRunnable = Runnable { setControlsVisible(false) }
 
     private val sleepTimer = SleepTimer { finish() }
     private val castController by lazy {
@@ -146,6 +154,29 @@ class VodPlayerActivity : BaseActivity() {
 
         setupControls()
         initPlayer()
+        // Controls start visible; auto-hide them after a few idle seconds.
+        scheduleHideControls()
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        // Any touch keeps the controls up and resets the idle timer.
+        showControls()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val isSystemKey = event.keyCode == KeyEvent.KEYCODE_BACK ||
+            event.keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
+            event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN ||
+            event.keyCode == KeyEvent.KEYCODE_VOLUME_MUTE
+        if (!isSystemKey && event.action == KeyEvent.ACTION_DOWN && !controlsVisible) {
+            // First press only reveals the controls; don't also trigger the
+            // underlying button so the user gets a chance to see/aim.
+            showControls()
+            return true
+        }
+        if (!isSystemKey) showControls()
+        return super.dispatchKeyEvent(event)
     }
 
     private fun setupControls() {
@@ -176,6 +207,38 @@ class VodPlayerActivity : BaseActivity() {
                 mediaPlayer?.setTime(sb?.progress?.toLong() ?: 0L)
             }
         })
+    }
+
+    // ---- Controls auto-hide --------------------------------------------
+
+    /** Reveal the controls (if hidden) and (re)start the idle auto-hide timer. */
+    private fun showControls() {
+        if (!controlsVisible) setControlsVisible(true)
+        scheduleHideControls()
+    }
+
+    private fun scheduleHideControls() {
+        handler.removeCallbacks(hideControlsRunnable)
+        handler.postDelayed(hideControlsRunnable, CONTROLS_TIMEOUT_MS)
+    }
+
+    private fun setControlsVisible(visible: Boolean) {
+        controlsVisible = visible
+        val bars = arrayOf(binding.topBar, binding.transportBar, binding.bottomBar)
+        for (bar in bars) {
+            bar.animate().cancel()
+            if (visible) {
+                bar.visibility = View.VISIBLE
+                bar.animate().alpha(1f).setDuration(200L).start()
+            } else {
+                bar.animate().alpha(0f).setDuration(200L).withEndAction {
+                    // Guard against a re-show that happened mid-animation.
+                    if (!controlsVisible) bar.visibility = View.GONE
+                }.start()
+            }
+        }
+        // When revealing, move focus back onto a control so the D-pad has a target.
+        if (visible) binding.playPauseButton.requestFocus()
     }
 
     private fun initPlayer() {
@@ -212,6 +275,8 @@ class VodPlayerActivity : BaseActivity() {
                     binding.bufferingIndicator.visibility = View.GONE
                     binding.playPauseButton.setImageResource(R.drawable.ic_pause)
                     binding.playPauseButton.contentDescription = getString(R.string.player_pause)
+                    // Restart the idle timer once real playback begins.
+                    scheduleHideControls()
                     // Apply the deferred resume seek once, now that VLC is ready.
                     if (pendingSeekMs > 0L) {
                         mp.setTime(pendingSeekMs)
