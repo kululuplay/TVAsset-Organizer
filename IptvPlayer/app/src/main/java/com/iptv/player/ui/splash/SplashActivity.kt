@@ -46,7 +46,12 @@ class SplashActivity : BaseActivity() {
         val target = when {
             !settings.wizardDone.first() -> WizardActivity::class.java
             !settings.hasSource.first() -> LoginActivity::class.java
-            else -> DashboardActivity::class.java
+            else -> {
+                // Backfill a profile for accounts that connected before profiles were
+                // auto-created, so the Profiles screen isn't empty for existing users.
+                ServiceLocator.repository.backfillProfileFromSource()
+                DashboardActivity::class.java
+            }
         }
         startActivity(Intent(this, target))
         finish()

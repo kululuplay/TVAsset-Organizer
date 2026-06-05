@@ -590,6 +590,45 @@ class IptvRepository(
             )
         }
 
+    /**
+     * Ensures the given source is also saved as a switchable profile and returns
+     * its id. Reuses an existing profile that points at the same source so that
+     * repeated logins don't create duplicates; otherwise inserts a new one. This
+     * is what makes a freshly logged-in account show up on the Profiles screen.
+     */
+    suspend fun ensureProfile(config: SourceConfig, lockAdult: Boolean = false): Long =
+        withContext(Dispatchers.IO) {
+            profileDao.getAll().firstOrNull { it.matches(config) }?.id
+                ?: addProfile(defaultProfileName(config), config, lockAdult)
+        }
+
+    /**
+     * One-time backfill for accounts that connected before profiles were created
+     * automatically: if a source is saved but no profile exists yet, mirror it
+     * into a profile and make it active so the Profiles screen isn't empty.
+     */
+    suspend fun backfillProfileFromSource() = withContext(Dispatchers.IO) {
+        if (profileDao.getAll().isNotEmpty()) return@withContext
+        val config = settings.getSourceConfig() ?: return@withContext
+        settings.setActiveProfileId(ensureProfile(config))
+    }
+
+    private fun ProfileEntity.matches(config: SourceConfig): Boolean =
+        sourceType == config.type.name &&
+            serverUrl == config.serverUrl &&
+            username == config.username &&
+            m3uUrl == config.m3uUrl
+
+    /** A friendly default profile name: the Xtream username, else the source host. */
+    private fun defaultProfileName(config: SourceConfig): String = when (config.type) {
+        SourceType.XTREAM -> config.username.ifBlank { hostOf(config.serverUrl) }
+        SourceType.M3U_URL -> hostOf(config.m3uUrl)
+    }
+
+    private fun hostOf(url: String): String =
+        runCatching { java.net.URI(url).host }.getOrNull()
+            ?.takeIf { it.isNotBlank() } ?: "Playlist"
+
     suspend fun removeProfile(id: Long) = withContext(Dispatchers.IO) { profileDao.remove(id) }
 
     suspend fun getProfile(id: Long): Profile? = withContext(Dispatchers.IO) {

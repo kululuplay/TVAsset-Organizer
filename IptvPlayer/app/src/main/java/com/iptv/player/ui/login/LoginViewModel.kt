@@ -70,6 +70,10 @@ class LoginViewModel : ViewModel() {
                     is Outcome.Failure -> _state.value = State.Error(test.error)
                     is Outcome.Success -> {
                         settings.saveSource(config)
+                        // Mirror the logged-in account into the Profiles list (reusing an
+                        // existing match so re-logins don't duplicate) and make it active,
+                        // so the Profiles screen isn't empty after a successful login.
+                        settings.setActiveProfileId(repo.ensureProfile(config))
                         when (val refresh = repo.refreshLive(config)) {
                             is Outcome.Failure -> _state.value = State.Error(refresh.error)
                             is Outcome.Success -> _state.value = State.Success
