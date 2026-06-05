@@ -189,4 +189,15 @@
     <string name="feature_live">Canlı TV ve spor, net HD kalitesinde</string>
     <string name="feature_vod">Binlerce film ve dizi</string>
     <string name="feature_multi">Her ekranda izleyin</string>
+    <!-- Master-detail redesign -->
+    <string name="settings_general_info">Genel Bilgiler</string>
+    <string name="settings_time_sync">Saat ve eşitleme</string>
+    <string name="settings_device_info">Cihaz Bilgileri</string>
+    <string name="settings_app_version">Uygulama sürümü</string>
+    <string name="settings_device">Cihaz</string>
+    <string name="settings_android">Android sürümü</string>
+    <string name="settings_default_pin">Varsayılan PIN kodu: %1$s</string>
+    <string name="settings_enter_old_pin">Mevcut PIN kodunuzu girin</string>
+    <string name="settings_enter_new_pin">Yeni bir PIN kodu girin</string>
+    <string name="settings_pin_changed">PIN güncellendi</string>
 </resources>

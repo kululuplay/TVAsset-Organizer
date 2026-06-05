@@ -189,4 +189,15 @@
     <string name="feature_live">TV en direct et sport en HD nette</string>
     <string name="feature_vod">Des milliers de films et séries</string>
     <string name="feature_multi">Regardez sur tous vos écrans</string>
+    <!-- Master-detail redesign -->
+    <string name="settings_general_info">Informations générales</string>
+    <string name="settings_time_sync">Heure et synchronisation</string>
+    <string name="settings_device_info">Infos appareil</string>
+    <string name="settings_app_version">Version de l\'application</string>
+    <string name="settings_device">Appareil</string>
+    <string name="settings_android">Version d\'Android</string>
+    <string name="settings_default_pin">Code PIN par défaut : %1$s</string>
+    <string name="settings_enter_old_pin">Saisissez votre code PIN actuel</string>
+    <string name="settings_enter_new_pin">Saisissez un nouveau code PIN</string>
+    <string name="settings_pin_changed">Code PIN mis à jour</string>
 </resources>

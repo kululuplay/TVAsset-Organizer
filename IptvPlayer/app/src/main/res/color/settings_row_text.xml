@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings row label / icon tint. Dark when the row is white (focused/selected),
+     otherwise the normal light foreground. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:color="#0E1116" />
+    <item android:state_selected="true" android:color="#0E1116" />
+    <item android:color="@color/text_primary" />
+</selector>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One PIN digit box (display only; the on-screen keypad holds the focus). -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="@dimen/settings_pin_box"
+    android:layout_height="@dimen/settings_pin_box"
+    android:layout_marginEnd="@dimen/space_m"
+    android:background="@drawable/bg_pin_box"
+    android:gravity="center"
+    android:textColor="@color/text_primary"
+    android:textSize="@dimen/text_title"
+    android:textStyle="bold"
+    android:focusable="false" />

@@ -189,4 +189,15 @@
     <string name="feature_live">Live-TV &amp; Sport in gestochen scharfem HD</string>
     <string name="feature_vod">Tausende Filme &amp; Serien</string>
     <string name="feature_multi">Auf jedem Bildschirm ansehen</string>
+    <!-- Master-detail redesign -->
+    <string name="settings_general_info">Allgemeine Infos</string>
+    <string name="settings_time_sync">Zeit &amp; Synchronisierung</string>
+    <string name="settings_device_info">Geräteinfos</string>
+    <string name="settings_app_version">App-Version</string>
+    <string name="settings_device">Gerät</string>
+    <string name="settings_android">Android-Version</string>
+    <string name="settings_default_pin">Standard-PIN: %1$s</string>
+    <string name="settings_enter_old_pin">Aktuelle PIN eingeben</string>
+    <string name="settings_enter_new_pin">Neue PIN eingeben</string>
+    <string name="settings_pin_changed">PIN aktualisiert</string>
 </resources>

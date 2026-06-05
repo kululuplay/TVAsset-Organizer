@@ -189,4 +189,15 @@
     <string name="feature_live">Live-tv &amp; sport in scherp HD</string>
     <string name="feature_vod">Duizenden films &amp; series</string>
     <string name="feature_multi">Kijk op elk scherm</string>
+    <!-- Master-detail redesign -->
+    <string name="settings_general_info">Algemene info</string>
+    <string name="settings_time_sync">Tijd &amp; synchronisatie</string>
+    <string name="settings_device_info">Apparaatinfo</string>
+    <string name="settings_app_version">App-versie</string>
+    <string name="settings_device">Apparaat</string>
+    <string name="settings_android">Android-versie</string>
+    <string name="settings_default_pin">Standaard pincode: %1$s</string>
+    <string name="settings_enter_old_pin">Voer je huidige pincode in</string>
+    <string name="settings_enter_new_pin">Voer een nieuwe pincode in</string>
+    <string name="settings_pin_changed">Pincode bijgewerkt</string>
 </resources>

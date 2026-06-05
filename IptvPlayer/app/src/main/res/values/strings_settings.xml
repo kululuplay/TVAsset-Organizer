@@ -26,4 +26,16 @@
     <!-- About -->
     <string name="about_check_update">Check for updates</string>
     <string name="about_up_to_date">You\'re on the latest version.</string>
+
+    <!-- Master-detail redesign -->
+    <string name="settings_general_info">General Info</string>
+    <string name="settings_time_sync">Time &amp; sync</string>
+    <string name="settings_device_info">Device Info</string>
+    <string name="settings_app_version">App version</string>
+    <string name="settings_device">Device</string>
+    <string name="settings_android">Android version</string>
+    <string name="settings_default_pin">Default PIN code: %1$s</string>
+    <string name="settings_enter_old_pin">Enter your current PIN</string>
+    <string name="settings_enter_new_pin">Enter a new PIN</string>
+    <string name="settings_pin_changed">PIN updated</string>
 </resources>

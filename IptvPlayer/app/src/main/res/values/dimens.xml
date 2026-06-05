@@ -39,6 +39,13 @@
     <dimen name="nav_rail_width">220dp</dimen>
     <dimen name="nav_item_height">52dp</dimen>
 
+    <!-- Settings (master-detail layout). -->
+    <dimen name="settings_row_min_h">56dp</dimen>
+    <dimen name="settings_flag_w">40dp</dimen>
+    <dimen name="settings_flag_h">28dp</dimen>
+    <dimen name="settings_pin_box">68dp</dimen>
+    <dimen name="settings_pin_key">52dp</dimen>
+
     <!-- EPG guide timeline. -->
     <dimen name="epg_row_height">64dp</dimen>
     <dimen name="epg_channel_col">220dp</dimen>

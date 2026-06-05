@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A left-rail settings row: title plus an optional trailing switch (toggle rows)
+     or value (nav rows). Focusable for D-pad; turns solid white on focus. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="@dimen/settings_row_min_h"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_settings_row"
+    android:focusable="true"
+    android:focusableInTouchMode="false"
+    android:paddingHorizontal="@dimen/space_m"
+    android:paddingVertical="@dimen/space_s"
+    android:layout_marginBottom="@dimen/space_s">
+
+    <TextView
+        android:id="@+id/mTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:duplicateParentState="true"
+        android:textColor="@color/settings_row_text"
+        android:textSize="@dimen/text_body"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/mValue"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/space_s"
+        android:duplicateParentState="true"
+        android:textColor="@color/settings_row_text"
+        android:textSize="@dimen/text_caption"
+        android:visibility="gone" />
+
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/mSwitch"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/space_s"
+        android:clickable="false"
+        android:focusable="false"
+        app:thumbTint="#FFFFFF"
+        app:trackTint="@color/accent_dim"
+        android:visibility="gone" />
+</LinearLayout>

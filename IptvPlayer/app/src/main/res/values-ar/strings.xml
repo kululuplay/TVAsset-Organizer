@@ -189,4 +189,15 @@
     <string name="feature_live">قنوات مباشرة ورياضة بدقة عالية</string>
     <string name="feature_vod">آلاف الأفلام والمسلسلات</string>
     <string name="feature_multi">شاهد على كل الشاشات</string>
+    <!-- Master-detail redesign -->
+    <string name="settings_general_info">معلومات عامة</string>
+    <string name="settings_time_sync">الوقت والمزامنة</string>
+    <string name="settings_device_info">معلومات الجهاز</string>
+    <string name="settings_app_version">إصدار التطبيق</string>
+    <string name="settings_device">الجهاز</string>
+    <string name="settings_android">إصدار أندرويد</string>
+    <string name="settings_default_pin">رمز PIN الافتراضي: %1$s</string>
+    <string name="settings_enter_old_pin">أدخل رمز PIN الحالي</string>
+    <string name="settings_enter_new_pin">أدخل رمز PIN جديد</string>
+    <string name="settings_pin_changed">تم تحديث رمز PIN</string>
 </resources>

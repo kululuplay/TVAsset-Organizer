@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Settings: top bar (title + clock/date) over a glass card holding a
-     vertically scrollable, D-pad friendly list of rows added programmatically.
-     Styled to match the Live TV browser. -->
+<!-- Settings: a master-detail screen. A big title sits above a two-column body:
+     the left rail lists every settings entry (nav rows, toggles and actions); the
+     right panel swaps its content to match the focused/selected left row. Styled
+     to read as a modern, professional 10-foot UI over the aurora background. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -10,13 +11,13 @@
     android:paddingHorizontal="@dimen/safe_area_h"
     android:paddingVertical="@dimen/safe_area_v">
 
-    <!-- Top bar -->
+    <!-- Title bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:layout_marginBottom="@dimen/space_m">
+        android:layout_marginBottom="@dimen/space_l">
 
         <TextView
             android:layout_width="wrap_content"
@@ -49,19 +50,213 @@
             android:layout_marginStart="@dimen/space_m" />
     </LinearLayout>
 
-    <androidx.core.widget.NestedScrollView
+    <!-- Body: master rail + detail panel -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:background="@drawable/bg_glass_card"
-        android:padding="@dimen/space_m"
-        android:clipToPadding="false"
-        android:fillViewport="true">
+        android:orientation="horizontal">
 
-        <LinearLayout
-            android:id="@+id/settingsContainer"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical" />
-    </androidx.core.widget.NestedScrollView>
+        <!-- Master rail -->
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="5"
+            android:clipToPadding="false"
+            android:paddingBottom="@dimen/space_m"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:id="@+id/settingsContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </androidx.core.widget.NestedScrollView>
+
+        <Space
+            android:layout_width="@dimen/space_l"
+            android:layout_height="match_parent" />
+
+        <!-- Detail panel -->
+        <FrameLayout
+            android:id="@+id/detailContainer"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="7">
+
+            <!-- General Info -->
+            <androidx.core.widget.NestedScrollView
+                android:id="@+id/detailGeneral"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:fillViewport="true">
+
+                <LinearLayout
+                    android:id="@+id/generalContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </androidx.core.widget.NestedScrollView>
+
+            <!-- Change Language -->
+            <androidx.core.widget.NestedScrollView
+                android:id="@+id/detailLanguage"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:visibility="gone"
+                android:fillViewport="true">
+
+                <LinearLayout
+                    android:id="@+id/languageContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </androidx.core.widget.NestedScrollView>
+
+            <!-- Change PIN -->
+            <LinearLayout
+                android:id="@+id/detailPin"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center_horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/pinPrompt"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_xl"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_title"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:id="@+id/pinBoxes"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_xl"
+                    android:orientation="horizontal" />
+
+                <LinearLayout
+                    android:id="@+id/pinKeys"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_xl"
+                    android:orientation="horizontal" />
+
+                <TextView
+                    android:id="@+id/pinHint"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_xl"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="@dimen/text_caption" />
+            </LinearLayout>
+
+            <!-- Manage Categories -->
+            <androidx.core.widget.NestedScrollView
+                android:id="@+id/detailCategories"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:visibility="gone"
+                android:fillViewport="true">
+
+                <LinearLayout
+                    android:id="@+id/categoriesContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </androidx.core.widget.NestedScrollView>
+
+            <!-- Player engine -->
+            <androidx.core.widget.NestedScrollView
+                android:id="@+id/detailPlayer"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:visibility="gone"
+                android:fillViewport="true">
+
+                <LinearLayout
+                    android:id="@+id/playerContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </androidx.core.widget.NestedScrollView>
+
+            <!-- Time & sync -->
+            <androidx.core.widget.NestedScrollView
+                android:id="@+id/detailTime"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:visibility="gone"
+                android:fillViewport="true">
+
+                <LinearLayout
+                    android:id="@+id/timeContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </androidx.core.widget.NestedScrollView>
+
+            <!-- TMDB API key -->
+            <LinearLayout
+                android:id="@+id/detailTmdb"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_tmdb"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_title"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_tmdb_hint"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="@dimen/text_caption"
+                    android:layout_marginTop="@dimen/space_s" />
+
+                <EditText
+                    android:id="@+id/tmdbInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_l"
+                    android:background="@drawable/bg_input_modern"
+                    android:padding="@dimen/space_m"
+                    android:singleLine="true"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_muted"
+                    android:textSize="@dimen/text_body"
+                    android:inputType="text"
+                    android:importantForAutofill="no" />
+
+                <TextView
+                    android:id="@+id/tmdbSave"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_l"
+                    android:background="@drawable/bg_settings_row"
+                    android:focusable="true"
+                    android:focusableInTouchMode="false"
+                    android:paddingHorizontal="@dimen/space_xl"
+                    android:paddingVertical="@dimen/space_m"
+                    android:text="@string/action_save"
+                    android:textColor="@color/settings_row_text"
+                    android:textSize="@dimen/text_body"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </FrameLayout>
+    </LinearLayout>
 </LinearLayout>
