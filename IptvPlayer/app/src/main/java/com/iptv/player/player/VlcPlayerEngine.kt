@@ -52,7 +52,14 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
 
         mp.setEventListener { event ->
             when (event.type) {
-                MediaPlayer.Event.Buffering -> listener?.onBuffering()
+                MediaPlayer.Event.Buffering -> {
+                    // VLC keeps firing Buffering during normal playback (cache
+                    // top-ups), ending each cycle at 100%. Only treat <100% as
+                    // actual buffering; 100% means the stream is running, so hide
+                    // the spinner — otherwise it stays on screen forever.
+                    if (event.buffering < 100f) listener?.onBuffering()
+                    else listener?.onPlaying()
+                }
                 MediaPlayer.Event.Playing -> {
                     // VLC only accepts delays once the track is running.
                     applyDelays()
