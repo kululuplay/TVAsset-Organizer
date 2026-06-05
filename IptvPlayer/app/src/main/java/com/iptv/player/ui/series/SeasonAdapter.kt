@@ -30,7 +30,7 @@ class SeasonAdapter(
     }
 
     inner class VH(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val title: TextView = itemView as TextView
+        private val title: TextView = itemView.findViewById(R.id.categoryTitle)
 
         fun bind(season: Season) {
             title.text = itemView.context.getString(R.string.series_season, season.seasonNumber)
