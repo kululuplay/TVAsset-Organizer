@@ -9,3 +9,5 @@ description: Non-obvious constraints for the com.iptv.player Android app (source
   **Why:** debug builds don't minify, so these breakages are invisible until the CI release APK.
 - **String resources are split** across many `strings_*.xml` files per locale (en/tr/de/fr/nl/ar). When adding keys, keep 6-locale parity AND check for cross-file duplicate `name=` (Android fails the build on dup keys across files in the same `values*` dir).
 - **rg gotcha:** `-oh` triggers ripgrep help; use `-oI` for only-matching without filename.
+- **Post-login landing is `DashboardActivity`** (gradient-tile launcher), NOT `HomeActivity`. SplashActivity + LoginActivity route to Dashboard; `HomeActivity` is the 3-pane *Live browser* reached via the Live tile.
+  **Why:** user wanted a Smarters-style launcher home. No dedicated Favorites/Search screen exists yet — those tiles/buttons route to HomeActivity as a stopgap.

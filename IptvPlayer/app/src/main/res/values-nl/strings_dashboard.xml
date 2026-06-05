@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_playlists">Afspeellijsten</string>
+    <string name="nav_favorites">Favorieten</string>
+    <string name="nav_account">Account</string>
+    <string name="action_search">Zoeken</string>
+    <string name="action_refresh">Vernieuwen</string>
+    <string name="action_exit">Afsluiten</string>
+    <string name="dash_refreshing">Inhoud vernieuwen…</string>
+    <string name="dash_refreshed">Inhoud bijgewerkt</string>
+    <string name="dash_refresh_failed">Vernieuwen mislukt</string>
+    <string name="dash_no_source">Geen actieve dienst</string>
+    <string name="dash_playlist">Huidige afspeellijst: %1$s</string>
+    <string name="dash_expires">Verloopt: %1$s</string>
+</resources>

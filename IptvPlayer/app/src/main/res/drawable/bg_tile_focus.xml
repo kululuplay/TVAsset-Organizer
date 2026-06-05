@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Foreground focus ring for dashboard tiles: bright white stroke when focused
+     or selected, transparent otherwise. Works as a FrameLayout foreground. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/tile_radius" />
+            <stroke android:width="3dp" android:color="@color/text_primary" />
+            <solid android:color="#22FFFFFF" />
+        </shape>
+    </item>
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/tile_radius" />
+            <stroke android:width="3dp" android:color="@color/text_primary" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/tile_radius" />
+            <solid android:color="@android:color/transparent" />
+        </shape>
+    </item>
+</selector>

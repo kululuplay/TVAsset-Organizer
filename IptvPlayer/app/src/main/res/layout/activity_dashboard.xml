@@ -1,0 +1,407 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Post-login launcher dashboard. Top bar: brand + live clock/date + circular
+     action buttons. Body: large gradient tiles (Live hero, Movies, Series) and a
+     row of secondary tiles (Playlists, Catch Up, Favorites). Footer: current
+     source + expiry. Fully D-pad driven; tiles scale + ring on focus. -->
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_login_aurora"
+    android:paddingHorizontal="@dimen/safe_area_h"
+    android:paddingVertical="@dimen/safe_area_v">
+
+    <!-- ===== Top bar ===== -->
+    <LinearLayout
+        android:id="@+id/topBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Brand -->
+        <ImageView
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_logo_badge"
+            android:padding="8dp"
+            android:src="@drawable/ic_tv"
+            android:tint="@color/text_primary"
+            android:contentDescription="@string/app_name" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_title"
+            android:textStyle="bold"
+            android:layout_marginStart="@dimen/space_s" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+
+        <!-- Clock + date -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <com.iptv.player.ui.common.ClockView
+                android:id="@+id/clock"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_title"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/dateText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_body"
+                android:layout_marginStart="@dimen/space_m" />
+        </LinearLayout>
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+
+        <!-- Action buttons -->
+        <ImageButton
+            android:id="@+id/btnSearch"
+            style="@style/Widget.Iptv.IconButton"
+            android:src="@drawable/ic_search"
+            android:contentDescription="@string/action_search" />
+
+        <ImageButton
+            android:id="@+id/btnRefresh"
+            style="@style/Widget.Iptv.IconButton"
+            android:layout_marginStart="@dimen/space_s"
+            android:src="@drawable/ic_refresh"
+            android:contentDescription="@string/action_refresh" />
+
+        <ImageButton
+            android:id="@+id/btnSettings"
+            style="@style/Widget.Iptv.IconButton"
+            android:layout_marginStart="@dimen/space_s"
+            android:src="@drawable/ic_settings"
+            android:contentDescription="@string/nav_settings" />
+
+        <ImageButton
+            android:id="@+id/btnAccount"
+            style="@style/Widget.Iptv.IconButton"
+            android:layout_marginStart="@dimen/space_s"
+            android:src="@drawable/ic_account"
+            android:contentDescription="@string/nav_account" />
+
+        <ImageButton
+            android:id="@+id/btnExit"
+            style="@style/Widget.Iptv.IconButton"
+            android:layout_marginStart="@dimen/space_s"
+            android:src="@drawable/ic_power"
+            android:contentDescription="@string/action_exit" />
+    </LinearLayout>
+
+    <!-- ===== Tile grid ===== -->
+    <LinearLayout
+        android:id="@+id/grid"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        android:layout_marginTop="@dimen/space_l"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:layout_constraintBottom_toTopOf="@id/footer">
+
+        <!-- Top: Live hero + (Movies / Series) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="2"
+            android:orientation="horizontal">
+
+            <!-- Live TV hero -->
+            <FrameLayout
+                android:id="@+id/tileLive"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginEnd="@dimen/space_m"
+                android:background="@drawable/bg_tile_live"
+                android:foreground="@drawable/bg_tile_focus"
+                android:stateListAnimator="@animator/tile_focus"
+                android:focusable="true"
+                android:clickable="true">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:orientation="vertical"
+                    android:gravity="center">
+
+                    <ImageView
+                        android:layout_width="72dp"
+                        android:layout_height="72dp"
+                        android:src="@drawable/ic_tv"
+                        android:tint="@color/text_primary"
+                        android:contentDescription="@string/nav_live" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/nav_live"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_big_title"
+                        android:textStyle="bold"
+                        android:layout_marginTop="@dimen/space_m" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <!-- Right column: Movies + Series -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <FrameLayout
+                    android:id="@+id/tileMovies"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:layout_marginBottom="@dimen/space_m"
+                    android:background="@drawable/bg_tile_movies"
+                    android:foreground="@drawable/bg_tile_focus"
+                    android:stateListAnimator="@animator/tile_focus"
+                    android:focusable="true"
+                    android:clickable="true">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_vertical|start"
+                        android:layout_marginStart="@dimen/space_l"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <ImageView
+                            android:layout_width="44dp"
+                            android:layout_height="44dp"
+                            android:src="@drawable/ic_movie"
+                            android:tint="@color/text_primary"
+                            android:contentDescription="@string/nav_movies" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/nav_movies"
+                            android:textColor="@color/text_primary"
+                            android:textSize="@dimen/text_title"
+                            android:textStyle="bold"
+                            android:layout_marginStart="@dimen/space_m" />
+                    </LinearLayout>
+                </FrameLayout>
+
+                <FrameLayout
+                    android:id="@+id/tileSeries"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_tile_series"
+                    android:foreground="@drawable/bg_tile_focus"
+                    android:stateListAnimator="@animator/tile_focus"
+                    android:focusable="true"
+                    android:clickable="true">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_vertical|start"
+                        android:layout_marginStart="@dimen/space_l"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <ImageView
+                            android:layout_width="44dp"
+                            android:layout_height="44dp"
+                            android:src="@drawable/ic_series"
+                            android:tint="@color/text_primary"
+                            android:contentDescription="@string/nav_series" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/nav_series"
+                            android:textColor="@color/text_primary"
+                            android:textSize="@dimen/text_title"
+                            android:textStyle="bold"
+                            android:layout_marginStart="@dimen/space_m" />
+                    </LinearLayout>
+                </FrameLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Bottom: Playlists / Catch Up / Favorites -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:layout_marginTop="@dimen/space_m">
+
+            <FrameLayout
+                android:id="@+id/tilePlaylists"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginEnd="@dimen/space_m"
+                android:background="@drawable/bg_tile_playlists"
+                android:foreground="@drawable/bg_tile_focus"
+                android:stateListAnimator="@animator/tile_focus"
+                android:focusable="true"
+                android:clickable="true">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical|start"
+                    android:layout_marginStart="@dimen/space_l"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:src="@drawable/ic_playlist"
+                        android:tint="@color/text_primary"
+                        android:contentDescription="@string/nav_playlists" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/nav_playlists"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_body"
+                        android:textStyle="bold"
+                        android:layout_marginStart="@dimen/space_s" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/tileCatchup"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginEnd="@dimen/space_m"
+                android:background="@drawable/bg_tile_catchup"
+                android:foreground="@drawable/bg_tile_focus"
+                android:stateListAnimator="@animator/tile_focus"
+                android:focusable="true"
+                android:clickable="true">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical|start"
+                    android:layout_marginStart="@dimen/space_l"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:src="@drawable/ic_catchup"
+                        android:tint="@color/text_primary"
+                        android:contentDescription="@string/nav_catchup" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/nav_catchup"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_body"
+                        android:textStyle="bold"
+                        android:layout_marginStart="@dimen/space_s" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/tileFavorites"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/bg_tile_favorites"
+                android:foreground="@drawable/bg_tile_focus"
+                android:stateListAnimator="@animator/tile_focus"
+                android:focusable="true"
+                android:clickable="true">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical|start"
+                    android:layout_marginStart="@dimen/space_l"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:src="@drawable/ic_star"
+                        android:tint="@color/text_primary"
+                        android:contentDescription="@string/nav_favorites" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/nav_favorites"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_body"
+                        android:textStyle="bold"
+                        android:layout_marginStart="@dimen/space_s" />
+                </LinearLayout>
+            </FrameLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- ===== Footer ===== -->
+    <LinearLayout
+        android:id="@+id/footer"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="@dimen/space_m"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <TextView
+            android:id="@+id/footerSource"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/text_muted"
+            android:textSize="@dimen/text_caption"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/footerExpiry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_muted"
+            android:textSize="@dimen/text_caption" />
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

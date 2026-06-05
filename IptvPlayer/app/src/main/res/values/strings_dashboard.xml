@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dashboard launcher -->
+    <string name="nav_playlists">Playlists</string>
+    <string name="nav_favorites">Favorites</string>
+    <string name="nav_account">Account</string>
+    <string name="action_search">Search</string>
+    <string name="action_refresh">Refresh</string>
+    <string name="action_exit">Exit</string>
+    <string name="dash_refreshing">Refreshing content…</string>
+    <string name="dash_refreshed">Content updated</string>
+    <string name="dash_refresh_failed">Refresh failed</string>
+    <string name="dash_no_source">No active service</string>
+    <string name="dash_playlist">Current Playlist: %1$s</string>
+    <string name="dash_expires">Expires: %1$s</string>
+</resources>

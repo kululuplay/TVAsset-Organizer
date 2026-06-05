@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_playlists">Playlists</string>
+    <string name="nav_favorites">Favoriten</string>
+    <string name="nav_account">Konto</string>
+    <string name="action_search">Suchen</string>
+    <string name="action_refresh">Aktualisieren</string>
+    <string name="action_exit">Beenden</string>
+    <string name="dash_refreshing">Inhalte werden aktualisiert…</string>
+    <string name="dash_refreshed">Inhalte aktualisiert</string>
+    <string name="dash_refresh_failed">Aktualisierung fehlgeschlagen</string>
+    <string name="dash_no_source">Kein aktiver Dienst</string>
+    <string name="dash_playlist">Aktuelle Playlist: %1$s</string>
+    <string name="dash_expires">Läuft ab: %1$s</string>
+</resources>

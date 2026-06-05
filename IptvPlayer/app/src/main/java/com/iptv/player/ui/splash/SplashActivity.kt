@@ -14,7 +14,7 @@ import androidx.lifecycle.lifecycleScope
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.databinding.ActivitySplashBinding
 import com.iptv.player.ui.common.BaseActivity
-import com.iptv.player.ui.home.HomeActivity
+import com.iptv.player.ui.dashboard.DashboardActivity
 import com.iptv.player.ui.login.LoginActivity
 import com.iptv.player.ui.wizard.WizardActivity
 import kotlinx.coroutines.delay
@@ -46,7 +46,7 @@ class SplashActivity : BaseActivity() {
         val target = when {
             !settings.wizardDone.first() -> WizardActivity::class.java
             !settings.hasSource.first() -> LoginActivity::class.java
-            else -> HomeActivity::class.java
+            else -> DashboardActivity::class.java
         }
         startActivity(Intent(this, target))
         finish()

@@ -15,7 +15,7 @@ import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.databinding.ActivityLoginBinding
 import com.iptv.player.ui.common.BaseActivity
-import com.iptv.player.ui.home.HomeActivity
+import com.iptv.player.ui.dashboard.DashboardActivity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -99,7 +99,7 @@ class LoginActivity : BaseActivity() {
     }
 
     private fun goHome() {
-        startActivity(Intent(this, HomeActivity::class.java))
+        startActivity(Intent(this, DashboardActivity::class.java))
         finish()
     }
 }

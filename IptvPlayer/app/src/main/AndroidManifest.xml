@@ -59,6 +59,12 @@
             android:exported="false"
             android:screenOrientation="landscape" />
 
+        <!-- Post-login launcher dashboard. -->
+        <activity
+            android:name=".ui.dashboard.DashboardActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
         <activity
             android:name=".ui.home.HomeActivity"
             android:exported="false"

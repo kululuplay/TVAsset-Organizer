@@ -10,6 +10,7 @@
     <!-- ~5% safe area so content isn't cropped on old TVs. -->
     <dimen name="safe_area_h">48dp</dimen>
     <dimen name="safe_area_v">27dp</dimen>
+    <dimen name="tile_radius">20dp</dimen>
 
     <!-- Font sizes (large, for 10-foot UI). -->
     <dimen name="text_body">20sp</dimen>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_playlists">Oynatma Listeleri</string>
+    <string name="nav_favorites">Favoriler</string>
+    <string name="nav_account">Hesap</string>
+    <string name="action_search">Ara</string>
+    <string name="action_refresh">Yenile</string>
+    <string name="action_exit">Çıkış</string>
+    <string name="dash_refreshing">İçerik yenileniyor…</string>
+    <string name="dash_refreshed">İçerik güncellendi</string>
+    <string name="dash_refresh_failed">Yenileme başarısız</string>
+    <string name="dash_no_source">Etkin hizmet yok</string>
+    <string name="dash_playlist">Geçerli Liste: %1$s</string>
+    <string name="dash_expires">Bitiş: %1$s</string>
+</resources>

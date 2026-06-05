@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_playlists">قوائم التشغيل</string>
+    <string name="nav_favorites">المفضلة</string>
+    <string name="nav_account">الحساب</string>
+    <string name="action_search">بحث</string>
+    <string name="action_refresh">تحديث</string>
+    <string name="action_exit">خروج</string>
+    <string name="dash_refreshing">جارٍ تحديث المحتوى…</string>
+    <string name="dash_refreshed">تم تحديث المحتوى</string>
+    <string name="dash_refresh_failed">فشل التحديث</string>
+    <string name="dash_no_source">لا توجد خدمة نشطة</string>
+    <string name="dash_playlist">القائمة الحالية: %1$s</string>
+    <string name="dash_expires">تنتهي في: %1$s</string>
+</resources>
