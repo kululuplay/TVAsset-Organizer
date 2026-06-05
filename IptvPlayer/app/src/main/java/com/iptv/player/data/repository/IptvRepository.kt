@@ -8,6 +8,7 @@
 package com.iptv.player.data.repository
 
 import android.util.Base64
+import androidx.room.withTransaction
 import com.iptv.player.data.local.AppDatabase
 import com.iptv.player.data.local.entity.ChannelEntity
 import com.iptv.player.data.local.entity.ChannelOverrideEntity
@@ -300,8 +301,12 @@ class IptvRepository(
                     categoryPosition = catOrder[s.categoryId] ?: Int.MAX_VALUE
                 )
             }.mapIndexed { index, e -> e.copy(position = index) }
-            vodDao.clearAll()
-            vodDao.upsertAll(items)
+            // Atomic replace so a cancellation between clear and insert can never
+            // leave the table empty for other readers (e.g. global search).
+            db.withTransaction {
+                vodDao.clearAll()
+                vodDao.upsertAll(items)
+            }
             Outcome.Success(items.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
@@ -371,8 +376,12 @@ class IptvRepository(
                     categoryPosition = catOrder[s.categoryId] ?: Int.MAX_VALUE
                 )
             }.mapIndexed { index, e -> e.copy(position = index) }
-            seriesDao.clearSeries()
-            seriesDao.upsertSeries(items)
+            // Atomic replace so a cancellation between clear and insert can never
+            // leave the table empty for other readers (e.g. global search).
+            db.withTransaction {
+                seriesDao.clearSeries()
+                seriesDao.upsertSeries(items)
+            }
             Outcome.Success(items.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation

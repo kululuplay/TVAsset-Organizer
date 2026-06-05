@@ -20,13 +20,28 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchViewModel : ViewModel() {
 
     private val repo = ServiceLocator.repository
+    private val settings = ServiceLocator.settings
 
     private val query = MutableStateFlow("")
+
+    init {
+        // Live channels are refreshed at login, but the VOD/series caches are only
+        // filled when their own tabs run. Refresh them here too — mirroring how the
+        // Movies/Series screens refresh on open — so movies and series are searchable
+        // from global search even if those tabs were never opened. The atomic replace
+        // in the repository keeps results consistent while the refresh runs.
+        viewModelScope.launch {
+            val config = settings.getSourceConfig() ?: return@launch
+            repo.refreshVod(config)
+            repo.refreshSeries(config)
+        }
+    }
 
     fun setQuery(text: String) {
         query.value = text.trim()
