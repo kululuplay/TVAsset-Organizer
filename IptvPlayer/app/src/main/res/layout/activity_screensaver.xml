@@ -5,7 +5,7 @@
     android:id="@+id/screensaverRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_root">
+    android:background="@drawable/bg_login_aurora">
 
     <LinearLayout
         android:id="@+id/floatingBlock"

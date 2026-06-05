@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/bg_root"
+    android:background="@drawable/bg_login_aurora"
     android:paddingHorizontal="@dimen/safe_area_h"
     android:paddingVertical="@dimen/safe_area_v">
 
@@ -13,7 +13,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/channel_manager_title"
-        android:textColor="@color/accent"
+        android:textColor="@color/text_primary"
         android:textSize="@dimen/text_title"
         android:textStyle="bold"
         android:layout_marginBottom="@dimen/space_xs" />

@@ -39,7 +39,7 @@
         android:id="@+id/rowValue"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="@color/accent"
+        android:textColor="@color/brand_pink"
         android:textSize="@dimen/text_body"
         android:layout_marginStart="@dimen/space_m"
         android:gravity="end" />

@@ -4,7 +4,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_root"
+    android:background="@drawable/bg_login_aurora"
     android:fillViewport="true">
 
     <LinearLayout
@@ -37,7 +37,7 @@
             android:id="@+id/channelName"
             android:layout_width="560dp"
             android:layout_height="wrap_content"
-            android:textColor="@color/accent"
+            android:textColor="@color/brand_pink"
             android:textSize="@dimen/text_title"
             android:textStyle="bold"
             android:gravity="center"

@@ -35,7 +35,7 @@
             android:layout_height="28dp"
             android:src="@drawable/ic_tv"
             android:focusable="true"
-            android:background="@drawable/bg_card_selectable"
+            android:background="@drawable/bg_row"
             android:contentDescription="@string/mini_player_close" />
     </LinearLayout>
 </merge>

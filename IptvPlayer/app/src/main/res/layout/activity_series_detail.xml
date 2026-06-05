@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Series detail: poster + metadata (left) | season selector + episode list. -->
+<!-- Series detail: poster + metadata glass card (left) | season selector +
+     episode list glass card (right). Styled to match the Live TV browser. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_root"
+    android:background="@drawable/bg_login_aurora"
     android:paddingHorizontal="@dimen/safe_area_h"
     android:paddingVertical="@dimen/safe_area_v">
 
@@ -15,7 +16,7 @@
         android:layout_width="@dimen/info_width"
         android:layout_height="0dp"
         android:orientation="vertical"
-        android:background="@drawable/bg_panel"
+        android:background="@drawable/bg_glass_card"
         android:padding="@dimen/space_m"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
@@ -54,7 +55,8 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_m"
             android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_caption" />
+            android:textSize="@dimen/text_caption"
+            android:lineSpacingMultiplier="1.2" />
     </LinearLayout>
 
     <!-- Right: season selector + episodes -->
@@ -64,6 +66,8 @@
         android:layout_height="0dp"
         android:orientation="vertical"
         android:layout_marginStart="@dimen/space_m"
+        android:background="@drawable/bg_glass_card"
+        android:padding="@dimen/space_m"
         app:layout_constraintStart_toEndOf="@id/infoPanel"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"
@@ -85,7 +89,7 @@
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:layout_marginTop="@dimen/space_s">
+            android:layout_marginTop="@dimen/space_m">
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/episodeList"

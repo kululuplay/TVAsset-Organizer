@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/bg_root"
+    android:background="@drawable/bg_login_aurora"
     android:paddingHorizontal="@dimen/safe_area_h"
     android:paddingVertical="@dimen/safe_area_v">
 
@@ -72,7 +72,7 @@
                 android:id="@+id/deviceInfo"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_panel"
+                android:background="@drawable/bg_glass_card"
                 android:padding="@dimen/space_m"
                 android:textColor="@color/text_primary"
                 android:textSize="@dimen/text_caption"

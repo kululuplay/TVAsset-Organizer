@@ -6,7 +6,7 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:background="@drawable/bg_panel"
+    android:background="@drawable/bg_glass_card"
     android:padding="@dimen/space_m"
     android:layout_marginBottom="@dimen/space_xs">
 

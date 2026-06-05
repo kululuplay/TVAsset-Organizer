@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- VOD detail: poster + metadata (plot, cast, director, genre, year, rating)
-     with Play and Trailer actions. -->
+<!-- VOD detail: poster + actions (left) | glass metadata card (right) with plot,
+     cast, director, genre. Styled to match the Live TV browser. -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_root"
+    android:background="@drawable/bg_login_aurora"
     android:paddingHorizontal="@dimen/safe_area_h"
     android:paddingVertical="@dimen/safe_area_v"
     android:fillViewport="true">
@@ -44,13 +44,15 @@
                 android:text="@string/detail_trailer" />
         </LinearLayout>
 
-        <!-- Right: metadata -->
+        <!-- Right: metadata in a glass card -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:layout_marginStart="@dimen/space_l">
+            android:layout_marginStart="@dimen/space_l"
+            android:background="@drawable/bg_glass_card"
+            android:padding="@dimen/space_l">
 
             <TextView
                 android:id="@+id/detailTitle"
@@ -76,7 +78,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_m"
                 android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_body" />
+                android:textSize="@dimen/text_body"
+                android:lineSpacingMultiplier="1.2" />
 
             <TextView
                 android:id="@+id/detailCast"
