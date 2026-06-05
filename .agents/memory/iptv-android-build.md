@@ -26,3 +26,12 @@ because they already lived in `strings_settings.xml`/`strings_guide.xml`/`string
 checking string parity or dup keys — never a single file. Android fails the build on
 duplicate `name=` across ANY two files in the same `values/` folder. Current state: all 6
 locales have 219 keys, full parity, no dups.
+
+## aapt: unescaped apostrophe in strings breaks the build
+A single raw `'` inside a `<string>` value fails aapt with a cryptic
+"Can not extract resource from ParsedResource" / "Failed to compile values resource file
+values-XX/values-XX.xml" — NOT a clear apostrophe message, and XML well-formedness checks
+still PASS (it's an Android-specific rule, not an XML rule). High risk in fr/it (l', d', etc.).
+**How to apply:** apostrophes inside string values must be `\'` (or the whole value wrapped
+in "double quotes"). When touching locale strings, scan ALL locales:
+`grep -rn "'" values*/*.xml | grep '<string' | grep -v "\\'"` should return nothing.

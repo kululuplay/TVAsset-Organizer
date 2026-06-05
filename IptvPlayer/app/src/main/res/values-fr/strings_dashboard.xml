@@ -8,7 +8,7 @@
     <string name="action_exit">Quitter</string>
     <string name="dash_refreshing">Actualisation du contenu…</string>
     <string name="dash_refreshed">Contenu mis à jour</string>
-    <string name="dash_refresh_failed">Échec de l'actualisation</string>
+    <string name="dash_refresh_failed">Échec de l\'actualisation</string>
     <string name="dash_no_source">Aucun service actif</string>
     <string name="dash_playlist">Playlist actuelle : %1$s</string>
     <string name="dash_expires">Expire le : %1$s</string>
