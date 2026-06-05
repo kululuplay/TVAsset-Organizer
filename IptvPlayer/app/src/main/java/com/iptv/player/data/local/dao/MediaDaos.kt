@@ -54,7 +54,7 @@ interface VodDao {
     @Query("SELECT * FROM vod ORDER BY position")
     fun observeAll(): Flow<List<VodEntity>>
 
-    @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY position")
+    @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
     fun observeByCategory(categoryId: String): Flow<List<VodEntity>>
 
     @Query("""
@@ -87,7 +87,7 @@ interface SeriesDao {
     @Query("SELECT * FROM series ORDER BY position")
     fun observeAll(): Flow<List<SeriesEntity>>
 
-    @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY position")
+    @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
     fun observeByCategory(categoryId: String): Flow<List<SeriesEntity>>
 
     @Query("""
