@@ -51,16 +51,16 @@ interface VodDao {
     @Query("DELETE FROM vod")
     suspend fun clearAll()
 
-    @Query("SELECT * FROM vod ORDER BY name")
+    @Query("SELECT * FROM vod ORDER BY addedAt DESC, name")
     fun observeAll(): Flow<List<VodEntity>>
 
-    @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY name")
+    @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
     fun observeByCategory(categoryId: String): Flow<List<VodEntity>>
 
     @Query("SELECT DISTINCT categoryId, categoryName FROM vod WHERE categoryId IS NOT NULL ORDER BY categoryName")
     fun observeCategories(): Flow<List<CategoryRow>>
 
-    @Query("SELECT * FROM vod WHERE name LIKE '%' || :query || '%' ORDER BY name LIMIT 200")
+    @Query("SELECT * FROM vod WHERE name LIKE '%' || :query || '%' ORDER BY addedAt DESC, name LIMIT 200")
     fun search(query: String): Flow<List<VodEntity>>
 
     @Query("SELECT * FROM vod WHERE id = :id LIMIT 1")
@@ -79,16 +79,16 @@ interface SeriesDao {
     @Query("DELETE FROM series")
     suspend fun clearSeries()
 
-    @Query("SELECT * FROM series ORDER BY name")
+    @Query("SELECT * FROM series ORDER BY addedAt DESC, name")
     fun observeAll(): Flow<List<SeriesEntity>>
 
-    @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY name")
+    @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
     fun observeByCategory(categoryId: String): Flow<List<SeriesEntity>>
 
     @Query("SELECT DISTINCT categoryId, categoryName FROM series WHERE categoryId IS NOT NULL ORDER BY categoryName")
     fun observeCategories(): Flow<List<CategoryRow>>
 
-    @Query("SELECT * FROM series WHERE name LIKE '%' || :query || '%' ORDER BY name LIMIT 200")
+    @Query("SELECT * FROM series WHERE name LIKE '%' || :query || '%' ORDER BY addedAt DESC, name LIMIT 200")
     fun search(query: String): Flow<List<SeriesEntity>>
 
     @Query("SELECT * FROM series WHERE id = :id LIMIT 1")

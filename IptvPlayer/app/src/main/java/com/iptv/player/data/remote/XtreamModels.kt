@@ -54,7 +54,9 @@ data class XtreamVodStream(
     @SerializedName("stream_icon") val streamIcon: String?,
     @SerializedName("category_id") val categoryId: String?,
     @SerializedName("rating") val rating: String?,
-    @SerializedName("container_extension") val containerExtension: String?
+    @SerializedName("container_extension") val containerExtension: String?,
+    // Unix timestamp (seconds, as string) when the movie was added to the catalog.
+    @SerializedName("added") val added: String?
 )
 
 data class XtreamVodInfo(
@@ -93,7 +95,10 @@ data class XtreamSeriesItem(
     @SerializedName("genre") val genre: String?,
     @SerializedName("releaseDate") val releaseDate: String?,
     @SerializedName("rating") val rating: String?,
-    @SerializedName("youtube_trailer") val youtubeTrailer: String?
+    @SerializedName("youtube_trailer") val youtubeTrailer: String?,
+    // Unix timestamp (seconds, as string) when the series was last updated
+    // (e.g. a new episode added). Used to surface freshly-updated series first.
+    @SerializedName("last_modified") val lastModified: String?
 )
 
 data class XtreamSeriesInfo(

@@ -24,7 +24,7 @@ data class ProgramEntity(
 
 @Entity(
     tableName = "vod",
-    indices = [Index("categoryId")]
+    indices = [Index("categoryId"), Index("addedAt")]
 )
 data class VodEntity(
     @PrimaryKey val id: String,
@@ -41,12 +41,14 @@ data class VodEntity(
     val releaseDate: String?,
     val durationSecs: Int?,
     val trailerUrl: String?,
-    val tmdbId: String?
+    val tmdbId: String?,
+    /** Unix seconds the movie was added to the catalog; newest sorts first. */
+    val addedAt: Long = 0
 )
 
 @Entity(
     tableName = "series",
-    indices = [Index("categoryId")]
+    indices = [Index("categoryId"), Index("addedAt")]
 )
 data class SeriesEntity(
     @PrimaryKey val id: String,
@@ -61,7 +63,9 @@ data class SeriesEntity(
     val genre: String?,
     val releaseDate: String?,
     val trailerUrl: String?,
-    val tmdbId: String?
+    val tmdbId: String?,
+    /** Unix seconds the series was last updated; newest sorts first. */
+    val addedAt: Long = 0
 )
 
 @Entity(

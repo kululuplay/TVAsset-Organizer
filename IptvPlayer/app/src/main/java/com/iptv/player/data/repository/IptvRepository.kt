@@ -263,7 +263,8 @@ class IptvRepository(
                     categoryName = cats[s.categoryId] ?: "Uncategorized",
                     rating = s.rating?.toDoubleOrNull(),
                     plot = null, cast = null, director = null, genre = null,
-                    releaseDate = null, durationSecs = null, trailerUrl = null, tmdbId = null
+                    releaseDate = null, durationSecs = null, trailerUrl = null, tmdbId = null,
+                    addedAt = s.added?.trim()?.toLongOrNull() ?: 0L
                 )
             }
             vodDao.clearAll()
@@ -327,7 +328,8 @@ class IptvRepository(
                     categoryName = cats[s.categoryId] ?: "Uncategorized",
                     rating = s.rating?.toDoubleOrNull(),
                     plot = s.plot, cast = s.cast, director = s.director, genre = s.genre,
-                    releaseDate = s.releaseDate, trailerUrl = youtube(s.youtubeTrailer), tmdbId = null
+                    releaseDate = s.releaseDate, trailerUrl = youtube(s.youtubeTrailer), tmdbId = null,
+                    addedAt = s.lastModified?.trim()?.toLongOrNull() ?: 0L
                 )
             }
             seriesDao.clearSeries()
