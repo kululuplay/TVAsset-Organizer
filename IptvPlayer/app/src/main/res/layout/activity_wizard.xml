@@ -44,14 +44,24 @@
         android:gravity="center"
         android:layout_marginBottom="@dimen/space_l" />
 
-    <!-- Language picker (only visible on the language step). -->
-    <LinearLayout
-        android:id="@+id/languageGroup"
+    <!-- Language picker (only visible on the language step). Wrapped in a
+         ScrollView so D-pad focus can scroll to languages that fall below the
+         fold (e.g. the last entry on smaller TV screens). -->
+    <ScrollView
+        android:id="@+id/languageScroll"
         android:layout_width="480dp"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:visibility="gone"
-        android:layout_marginBottom="@dimen/space_l" />
+        android:scrollbars="vertical"
+        android:layout_marginBottom="@dimen/space_l">
+
+        <LinearLayout
+            android:id="@+id/languageGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
 
     <LinearLayout
         android:layout_width="480dp"

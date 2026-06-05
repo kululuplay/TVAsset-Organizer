@@ -66,6 +66,10 @@ class WizardActivity : BaseActivity() {
             setOnClickListener {
                 selectedLanguage = tag
                 highlightLanguage()
+                // On TV the natural gesture is "focus a language, press OK" — so
+                // picking a language confirms it and advances immediately rather
+                // than forcing the user to D-pad down to a separate Next button.
+                goNext()
             }
         }
         val lp = android.widget.LinearLayout.LayoutParams(
@@ -88,7 +92,7 @@ class WizardActivity : BaseActivity() {
     private fun render() {
         binding.stepIndicator.text =
             getString(R.string.wizard_step_indicator, step + 1, totalSteps)
-        binding.languageGroup.visibility = View.GONE
+        binding.languageScroll.visibility = View.GONE
         binding.btnBack.visibility = if (step == 0) View.INVISIBLE else View.VISIBLE
 
         when (step) {
@@ -101,7 +105,7 @@ class WizardActivity : BaseActivity() {
             1 -> {
                 binding.stepTitle.setText(R.string.wizard_step_language)
                 binding.stepSubtitle.text = ""
-                binding.languageGroup.visibility = View.VISIBLE
+                binding.languageScroll.visibility = View.VISIBLE
                 binding.btnNext.setText(R.string.wizard_next)
                 highlightLanguage()
                 binding.languageGroup.getChildAt(0)?.requestFocus()
