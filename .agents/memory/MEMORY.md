@@ -3,6 +3,7 @@
 - [API21-safe vector launcher icons](android-vector-launcher-icons.md) — system-drawn icon VectorDrawables can't use inline gradients on API21-23; use flat fills + alpha.
 - [Kotlin trailing-lambda param order](kotlin-trailing-lambda-param-order.md) — required action lambda must stay LAST; appending a defaulted lambda after it breaks every trailing-lambda caller.
 - [In-app update checker via GitHub Releases](inapp-update-checker-github-releases.md) — updater needs a real Release (not CI artifacts); CI auto-publishes one; bump versionName to ship updates.
+- [Source-only import discipline](source-only-import-discipline.md) — can't compile locally; add explicit cross-package imports as you go; CI kspDebugKotlin "Compilation error" usually = a missing import.
 - [IPTV catalog scaling](iptv-catalog-scaling.md) — Movies/Series paged + FTS4; Live stays full in-memory (number-zap); FTS lockstep must run in withTransaction.
 - [Update checker needs public repo](inapp-update-checker-github-releases.md) — unauthenticated GitHub releases API 404s on private repos; repo must be public for in-app OTA to work.
 - [Android TV green-screen on live VLC](android-green-screen-vlc-texture.md) — if green-frame-with-audio persists after `--no-*-dr`, attach VLCVideoLayout with useTextureView=true.

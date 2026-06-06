@@ -25,7 +25,10 @@ class PlayerController(
         if (useVlc) VlcPlayerEngine(context) else ExoPlayerEngine(context)
     },
     /** Scheduling seam (thread-hop + retry timing); fake-able in unit tests. */
-    private val scheduler: PlayerScheduler = HandlerScheduler()
+    private val scheduler: PlayerScheduler = HandlerScheduler(),
+    /** Preferred audio/subtitle tokens restored from settings (applied per stream). */
+    initialAudioToken: String? = null,
+    initialSubtitleToken: String? = null
 ) {
 
     /** UI-facing events from the controller (already engine-agnostic). */
@@ -45,6 +48,11 @@ class PlayerController(
     private var audioDelayMs = 0L
     private var subtitleDelayMs = 0L
 
+    // Preferred audio/subtitle track tokens; applied to every (new) engine so the
+    // choice survives zapping, the Exo->VLC fallback and app restarts.
+    private var preferredAudioTokenInternal: String? = initialAudioToken
+    private var preferredSubtitleTokenInternal: String? = initialSubtitleToken
+
     private val maxRetries = 4
 
     /** True when the active engine can apply audio/subtitle delay (libVLC). */
@@ -61,6 +69,24 @@ class PlayerController(
     fun setSubtitleDelay(ms: Long) {
         subtitleDelayMs = ms
         engine?.setSubtitleDelayMs(ms)
+    }
+
+    // ---- Track selection -------------------------------------------------
+
+    fun availableAudioTracks(): List<TrackOption> = engine?.availableAudioTracks().orEmpty()
+    fun availableSubtitleTracks(): List<TrackOption> = engine?.availableSubtitleTracks().orEmpty()
+
+    val preferredAudioToken: String? get() = preferredAudioTokenInternal
+    val preferredSubtitleToken: String? get() = preferredSubtitleTokenInternal
+
+    fun selectAudioTrack(token: String) {
+        preferredAudioTokenInternal = token
+        engine?.selectAudioTrack(token)
+    }
+
+    fun selectSubtitleTrack(token: String) {
+        preferredSubtitleTokenInternal = token
+        engine?.selectSubtitleTrack(token)
     }
 
     fun play(url: String) {
@@ -92,6 +118,10 @@ class PlayerController(
         // Re-apply any user delay offsets to the (new) engine.
         newEngine.setAudioDelayMs(audioDelayMs)
         newEngine.setSubtitleDelayMs(subtitleDelayMs)
+        // Re-apply remembered track choices (engine applies them once its stream
+        // tracks are available).
+        preferredAudioTokenInternal?.let { newEngine.selectAudioTrack(it) }
+        preferredSubtitleTokenInternal?.let { newEngine.selectSubtitleTrack(it) }
         engine = newEngine
     }
 

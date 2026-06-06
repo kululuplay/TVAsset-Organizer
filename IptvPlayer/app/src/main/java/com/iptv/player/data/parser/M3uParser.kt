@@ -21,18 +21,26 @@ object M3uParser {
         var autoId = 0
 
         reader.forEachLine { raw ->
-            val line = raw.trim()
-            when {
-                line.startsWith("#EXTINF", ignoreCase = true) -> {
-                    pending = parseExtInf(line)
-                }
-                line.isEmpty() || line.startsWith("#") -> {
-                    // Ignore comments / directives we don't use yet.
-                }
-                else -> {
-                    // A URL line completes the previously seen #EXTINF.
-                    val info = pending
-                    if (info != null) {
+            // A single malformed line must never abort parsing the whole playlist.
+            runCatching {
+                val line = raw.trim()
+                when {
+                    line.startsWith("#EXTINF", ignoreCase = true) -> {
+                        pending = parseExtInf(line)
+                    }
+                    line.isEmpty() || line.startsWith("#") -> {
+                        // Ignore comments / directives we don't use yet.
+                    }
+                    else -> {
+                        // A URL line completes the previously seen #EXTINF. If no
+                        // #EXTINF preceded it, treat the bare URL as a minimal
+                        // channel so the entry isn't silently dropped.
+                        val info = pending ?: PendingInfo(
+                            name = line.substringAfterLast('/').ifBlank { "Unknown" },
+                            logo = null,
+                            group = null,
+                            tvgId = null
+                        )
                         channels.add(
                             Channel(
                                 id = "m3u_${autoId++}_${info.tvgId ?: info.name.hashCode()}",

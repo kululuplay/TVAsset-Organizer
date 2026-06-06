@@ -48,6 +48,8 @@ class SettingsStore(private val context: Context) {
         val WIZARD_DONE = booleanPreferencesKey("wizard_done")
         val AUTO_SYNC = booleanPreferencesKey("auto_sync")
         val AUTO_SYNC_HOURS = intPreferencesKey("auto_sync_hours")
+        val PREF_AUDIO_TRACK = stringPreferencesKey("pref_audio_track")
+        val PREF_SUBTITLE_TRACK = stringPreferencesKey("pref_subtitle_track")
     }
 
     // ---- Routing flags --------------------------------------------------
@@ -91,6 +93,22 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setLastChannel(channelId: String) =
         context.dataStore.edit { it[Keys.LAST_CHANNEL] = channelId }
+
+    // ---- Preferred audio / subtitle track ------------------------------
+    // Stored as an engine token (a language tag on ExoPlayer, a track name on
+    // libVLC). Best-effort across engines/streams: re-applied when it matches.
+
+    suspend fun getPreferredAudioTrack(): String? =
+        context.dataStore.data.first()[Keys.PREF_AUDIO_TRACK]
+
+    suspend fun setPreferredAudioTrack(token: String) =
+        context.dataStore.edit { it[Keys.PREF_AUDIO_TRACK] = token }
+
+    suspend fun getPreferredSubtitleTrack(): String? =
+        context.dataStore.data.first()[Keys.PREF_SUBTITLE_TRACK]
+
+    suspend fun setPreferredSubtitleTrack(token: String) =
+        context.dataStore.edit { it[Keys.PREF_SUBTITLE_TRACK] = token }
 
     // ---- Language -------------------------------------------------------
 

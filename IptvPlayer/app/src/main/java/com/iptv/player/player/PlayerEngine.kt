@@ -37,9 +37,51 @@ interface PlayerEngine {
     /** True when this backend can actually apply audio/subtitle delay. */
     val supportsDelay: Boolean get() = false
 
+    // ---- Track selection -------------------------------------------------
+
+    /**
+     * Audio tracks currently exposed by the active stream. Empty until playback
+     * has started and the engine has parsed the stream's tracks.
+     */
+    fun availableAudioTracks(): List<TrackOption> = emptyList()
+
+    /** Subtitle tracks currently exposed by the active stream (excludes "off"). */
+    fun availableSubtitleTracks(): List<TrackOption> = emptyList()
+
+    /**
+     * Apply a chosen audio track. The [token] is a value from a previously
+     * returned [TrackOption] and is remembered by the engine so it can be
+     * re-applied automatically when the next stream starts (zapping / reconnect).
+     */
+    fun selectAudioTrack(token: String) {}
+
+    /**
+     * Apply a chosen subtitle track. [SUBTITLE_OFF] disables subtitles. As with
+     * audio, the choice is remembered and re-applied on later streams.
+     */
+    fun selectSubtitleTrack(token: String) {}
+
     /** Identifies which backend this is (for UI badges / logging). */
     val engineName: String
+
+    companion object {
+        /** Sentinel token meaning "no subtitles". */
+        const val SUBTITLE_OFF = "__off__"
+    }
 }
+
+/**
+ * A selectable audio/subtitle track surfaced to the UI.
+ * @param token engine-specific value used to re-apply the choice (a language tag
+ *   for ExoPlayer, a track name for libVLC).
+ * @param label human-readable text shown in the picker.
+ * @param selected whether this track is the one currently playing.
+ */
+data class TrackOption(
+    val token: String,
+    val label: String,
+    val selected: Boolean = false
+)
 
 /** Playback state callbacks routed to the UI. */
 interface PlayerListener {

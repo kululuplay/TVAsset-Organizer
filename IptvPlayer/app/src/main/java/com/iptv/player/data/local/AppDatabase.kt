@@ -21,6 +21,7 @@ import com.iptv.player.data.local.dao.ProfileDao
 import com.iptv.player.data.local.dao.RecentDao
 import com.iptv.player.data.local.dao.ResumeDao
 import com.iptv.player.data.local.dao.SeriesCategoryDao
+import com.iptv.player.data.local.dao.SeriesDao
 import com.iptv.player.data.local.dao.SeriesFtsDao
 import com.iptv.player.data.local.dao.VodCategoryDao
 import com.iptv.player.data.local.dao.VodDao
@@ -36,6 +37,7 @@ import com.iptv.player.data.local.entity.ProgramEntity
 import com.iptv.player.data.local.entity.RecentEntity
 import com.iptv.player.data.local.entity.ResumeEntity
 import com.iptv.player.data.local.entity.SeriesCategoryEntity
+import com.iptv.player.data.local.entity.SeriesEntity
 import com.iptv.player.data.local.entity.SeriesFtsEntity
 import com.iptv.player.data.local.entity.VodCategoryEntity
 import com.iptv.player.data.local.entity.VodEntity

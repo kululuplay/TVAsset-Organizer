@@ -53,6 +53,7 @@
     <string name="channel_count">%1$d chaînes</string>
 
     <string name="buffering">Chargement…</string>
+    <string name="reconnecting">Reconnexion… (%1$d)</string>
     <string name="player_mode_label">Lecteur</string>
     <string name="audio_track">Audio</string>
     <string name="subtitle_track">Sous-titres</string>

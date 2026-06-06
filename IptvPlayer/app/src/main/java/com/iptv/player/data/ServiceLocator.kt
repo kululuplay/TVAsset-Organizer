@@ -10,6 +10,7 @@ import com.iptv.player.data.local.AppDatabase
 import com.iptv.player.data.prefs.SettingsStore
 import com.iptv.player.data.repository.IptvRepository
 import com.iptv.player.util.AppInfo
+import com.iptv.player.util.RetryInterceptor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -51,6 +52,10 @@ object ServiceLocator {
             httpClient = OkHttpClient.Builder()
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(20, TimeUnit.SECONDS)
+                // Retry transient blips (IO errors / 5xx) with bounded backoff so a
+                // flaky portal doesn't surface as an immediate failure. Sits first
+                // so the UA + logging interceptors run on every attempt.
+                .addInterceptor(RetryInterceptor())
                 // Force a single app identity on every REST / update request.
                 .addInterceptor { chain ->
                     val request = chain.request().newBuilder()

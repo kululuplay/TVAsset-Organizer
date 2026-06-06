@@ -8,6 +8,7 @@ package com.iptv.player.player
 import android.content.Context
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -22,6 +23,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import com.iptv.player.R
 import com.iptv.player.util.AppInfo
+import java.util.Locale
 
 class ExoPlayerEngine(private val context: Context) : PlayerEngine {
 
@@ -30,6 +32,11 @@ class ExoPlayerEngine(private val context: Context) : PlayerEngine {
     private var player: ExoPlayer? = null
     private var playerView: PlayerView? = null
     private var listener: PlayerListener? = null
+
+    // Remembered language preferences, re-applied via track-selection parameters
+    // (which persist on the player across media items, so zapping keeps them).
+    private var preferredAudioLang: String? = null
+    private var preferredSubtitleLang: String? = null
 
     override fun bind(container: ViewGroup) {
         // Small buffers => quick channel zap on live streams.
@@ -129,4 +136,69 @@ class ExoPlayerEngine(private val context: Context) : PlayerEngine {
     override fun setListener(listener: PlayerListener?) {
         this.listener = listener
     }
+
+    // ---- Track selection -------------------------------------------------
+
+    override fun availableAudioTracks(): List<TrackOption> =
+        languageOptions(C.TRACK_TYPE_AUDIO)
+
+    override fun availableSubtitleTracks(): List<TrackOption> =
+        languageOptions(C.TRACK_TYPE_TEXT)
+
+    /** Collapses a track type's groups into one option per distinct language. */
+    private fun languageOptions(trackType: Int): List<TrackOption> {
+        val exo = player ?: return emptyList()
+        val byLang = LinkedHashMap<String, TrackOption>()
+        for (group in exo.currentTracks.groups) {
+            if (group.type != trackType) continue
+            for (i in 0 until group.length) {
+                val lang = group.getTrackFormat(i).language ?: continue
+                val selected = group.isTrackSelected(i)
+                val existing = byLang[lang]
+                byLang[lang] = TrackOption(
+                    token = lang,
+                    label = languageLabel(lang),
+                    selected = selected || (existing?.selected == true)
+                )
+            }
+        }
+        return byLang.values.toList()
+    }
+
+    override fun selectAudioTrack(token: String) {
+        preferredAudioLang = token
+        applyTrackPrefs()
+    }
+
+    override fun selectSubtitleTrack(token: String) {
+        preferredSubtitleLang = token
+        applyTrackPrefs()
+    }
+
+    private fun applyTrackPrefs() {
+        val exo = player ?: return
+        var params = exo.trackSelectionParameters.buildUpon()
+        preferredAudioLang?.takeIf { it.isNotBlank() }?.let {
+            params = params.setPreferredAudioLanguage(it)
+        }
+        when (val sub = preferredSubtitleLang) {
+            null -> { /* untouched */ }
+            PlayerEngine.SUBTITLE_OFF ->
+                params = params
+                    .setPreferredTextLanguage(null)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            else ->
+                params = params
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .setPreferredTextLanguage(sub)
+        }
+        exo.trackSelectionParameters = params.build()
+    }
+
+    private fun languageLabel(lang: String): String =
+        runCatching { Locale(lang).getDisplayLanguage(Locale.getDefault()) }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() && it != lang }
+            ?.replaceFirstChar { it.uppercase(Locale.getDefault()) }
+            ?: lang
 }

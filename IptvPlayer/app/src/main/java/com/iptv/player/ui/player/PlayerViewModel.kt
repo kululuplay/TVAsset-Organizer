@@ -40,6 +40,19 @@ class PlayerViewModel : ViewModel() {
 
     suspend fun playerMode(): PlayerMode = settings.playerMode.first()
 
+    // ---- Preferred audio / subtitle track ------------------------------
+
+    suspend fun preferredAudioToken(): String? = settings.getPreferredAudioTrack()
+    suspend fun preferredSubtitleToken(): String? = settings.getPreferredSubtitleTrack()
+
+    fun savePreferredAudio(token: String) {
+        viewModelScope.launch { settings.setPreferredAudioTrack(token) }
+    }
+
+    fun savePreferredSubtitle(token: String) {
+        viewModelScope.launch { settings.setPreferredSubtitleTrack(token) }
+    }
+
     suspend fun resolveChannel(channelId: String, categoryId: String?): Channel? {
         if (playlist.isEmpty()) loadPlaylist(categoryId)
         currentIndex = playlist.indexOfFirst { it.id == channelId }

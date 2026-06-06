@@ -53,6 +53,7 @@
     <string name="channel_count">%1$d Kanäle</string>
 
     <string name="buffering">Wird geladen…</string>
+    <string name="reconnecting">Erneut verbinden… (%1$d)</string>
     <string name="player_mode_label">Player</string>
     <string name="audio_track">Audio</string>
     <string name="subtitle_track">Untertitel</string>

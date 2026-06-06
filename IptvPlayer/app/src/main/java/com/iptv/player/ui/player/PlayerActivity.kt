@@ -27,6 +27,7 @@ import com.iptv.player.data.model.NowNext
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.databinding.ActivityPlayerBinding
 import com.iptv.player.player.PlayerController
+import com.iptv.player.player.PlayerEngine
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.PlayerScreenGuard
@@ -91,7 +92,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
                 context = this@PlayerActivity,
                 container = binding.videoContainer,
                 mode = mode,
-                callback = this@PlayerActivity
+                callback = this@PlayerActivity,
+                initialAudioToken = viewModel.preferredAudioToken(),
+                initialSubtitleToken = viewModel.preferredSubtitleToken()
             )
             val channel = viewModel.resolveChannel(channelId, categoryId)
             if (channel == null) {
@@ -182,6 +185,17 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         labels.add(getString(R.string.sleep_timer))
         actions.add { showSleepDialog() }
 
+        if (::controller.isInitialized) {
+            if (controller.availableAudioTracks().size > 1) {
+                labels.add(getString(R.string.audio_track))
+                actions.add { showTrackDialog(audio = true) }
+            }
+            if (controller.availableSubtitleTracks().isNotEmpty()) {
+                labels.add(getString(R.string.subtitle_track))
+                actions.add { showTrackDialog(audio = false) }
+            }
+        }
+
         if (::controller.isInitialized && controller.supportsDelay) {
             labels.add(getString(R.string.audio_delay))
             actions.add { showDelayDialog(audio = true) }
@@ -217,6 +231,45 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             val msg = if (min == 0) getString(R.string.sleep_timer_off)
             else getString(R.string.sleep_timer_set, min)
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Lets the user pick an audio or subtitle track. The choice is applied to the
+     * current stream and persisted so it is re-applied to later streams / sessions.
+     * For subtitles a localized "Off" entry is prepended (the engines only return
+     * real tracks).
+     */
+    private fun showTrackDialog(audio: Boolean) {
+        if (!::controller.isInitialized) return
+        val tracks = if (audio) controller.availableAudioTracks()
+        else controller.availableSubtitleTracks()
+
+        val tokens = mutableListOf<String>()
+        val options = mutableListOf<PlayerDialogs.Option>()
+
+        if (!audio) {
+            val offSelected = controller.preferredSubtitleToken == PlayerEngine.SUBTITLE_OFF ||
+                tracks.none { it.selected }
+            tokens.add(PlayerEngine.SUBTITLE_OFF)
+            options.add(PlayerDialogs.Option(getString(R.string.subtitles_off), offSelected))
+        }
+
+        tracks.forEach { track ->
+            tokens.add(track.token)
+            options.add(PlayerDialogs.Option(track.label, track.selected))
+        }
+
+        val titleRes = if (audio) R.string.audio_track else R.string.subtitle_track
+        PlayerDialogs.showOptions(this, getString(titleRes), options) { which ->
+            val token = tokens[which]
+            if (audio) {
+                controller.selectAudioTrack(token)
+                viewModel.savePreferredAudio(token)
+            } else {
+                controller.selectSubtitleTrack(token)
+                viewModel.savePreferredSubtitle(token)
+            }
         }
     }
 
@@ -326,16 +379,20 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     // ---- Controller callbacks ------------------------------------------
 
     override fun onBuffering() {
+        binding.bufferingLabel.setText(R.string.buffering)
         binding.bufferingIndicator.visibility = View.VISIBLE
     }
 
     override fun onPlaying(engineName: String) {
+        binding.bufferingLabel.setText(R.string.buffering)
         binding.bufferingIndicator.visibility = View.GONE
     }
 
     override fun onRetrying(attempt: Int) {
+        // Show an explicit "reconnecting…" state instead of the plain spinner so the
+        // user knows the stream dropped and we're recovering it.
+        binding.bufferingLabel.text = getString(R.string.reconnecting, attempt)
         binding.bufferingIndicator.visibility = View.VISIBLE
-        Toast.makeText(this, R.string.error_stream_not_responding, Toast.LENGTH_SHORT).show()
     }
 
     override fun onFatalError() {

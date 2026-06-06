@@ -45,6 +45,11 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
     private var audioDelayMs = 0L
     private var subtitleDelayMs = 0L
 
+    // Remembered track choices (by libVLC track name / "off"), re-applied on each
+    // (re)start once the new stream's tracks are available.
+    private var preferredAudioToken: String? = null
+    private var preferredSubtitleToken: String? = null
+
     // Per-stream decode state.
     private var currentUrl: String? = null
     private var softwareDecode = false
@@ -119,8 +124,10 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
                     else listener?.onPlaying()
                 }
                 MediaPlayer.Event.Playing -> {
-                    // VLC only accepts delays once the track is running.
+                    // VLC only accepts delays / track changes once the stream is
+                    // running and its tracks have been parsed.
                     applyDelays()
+                    applyPreferredTracks()
                     listener?.onPlaying()
                     // Start watching for a missing video surface only while on the
                     // hardware-decode attempt.
@@ -287,6 +294,57 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
         mediaPlayer?.let {
             it.audioDelay = audioDelayMs * 1000
             it.spuDelay = subtitleDelayMs * 1000
+        }
+    }
+
+    // ---- Track selection -------------------------------------------------
+
+    override fun availableAudioTracks(): List<TrackOption> {
+        val mp = mediaPlayer ?: return emptyList()
+        val current = mp.audioTrack
+        return mp.audioTracks
+            ?.filter { it.id >= 0 }
+            ?.map { TrackOption(token = it.name, label = it.name, selected = it.id == current) }
+            ?: emptyList()
+    }
+
+    override fun availableSubtitleTracks(): List<TrackOption> {
+        val mp = mediaPlayer ?: return emptyList()
+        val current = mp.spuTrack
+        return mp.spuTracks
+            ?.filter { it.id >= 0 }
+            ?.map { TrackOption(token = it.name, label = it.name, selected = it.id == current) }
+            ?: emptyList()
+    }
+
+    override fun selectAudioTrack(token: String) {
+        preferredAudioToken = token
+        applyPreferredAudio()
+    }
+
+    override fun selectSubtitleTrack(token: String) {
+        preferredSubtitleToken = token
+        applyPreferredSubtitle()
+    }
+
+    private fun applyPreferredTracks() {
+        applyPreferredAudio()
+        applyPreferredSubtitle()
+    }
+
+    private fun applyPreferredAudio() {
+        val mp = mediaPlayer ?: return
+        val token = preferredAudioToken ?: return
+        val match = mp.audioTracks?.firstOrNull { it.name == token } ?: return
+        mp.audioTrack = match.id
+    }
+
+    private fun applyPreferredSubtitle() {
+        val mp = mediaPlayer ?: return
+        when (val token = preferredSubtitleToken) {
+            null -> return
+            PlayerEngine.SUBTITLE_OFF -> mp.spuTrack = -1
+            else -> mp.spuTracks?.firstOrNull { it.name == token }?.let { mp.spuTrack = it.id }
         }
     }
 

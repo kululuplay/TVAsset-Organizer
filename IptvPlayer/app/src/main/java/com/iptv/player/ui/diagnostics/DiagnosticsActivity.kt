@@ -7,17 +7,20 @@
 package com.iptv.player.ui.diagnostics
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.DiagnosticResult
 import com.iptv.player.databinding.ActivityDiagnosticsBinding
 import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.util.Logger
 import com.iptv.player.util.NetworkUtils
 import kotlinx.coroutines.launch
 
@@ -96,10 +99,23 @@ class DiagnosticsActivity : BaseActivity() {
                 appendLine("${r.label}: $status (${r.detail})")
             }
         }
+        // Attach the rotating app log file when available so provider/playback
+        // failures captured in the field travel with the diagnostics report.
+        val logUri: Uri? = Logger.shareableFile()?.let { file ->
+            runCatching {
+                FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            }.getOrNull()
+        }
         val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
             putExtra(Intent.EXTRA_SUBJECT, getString(R.string.diag_logs_subject))
             putExtra(Intent.EXTRA_TEXT, summary)
+            if (logUri != null) {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_STREAM, logUri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } else {
+                type = "text/plain"
+            }
         }
         startActivity(Intent.createChooser(intent, getString(R.string.diag_send_logs)))
     }

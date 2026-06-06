@@ -57,6 +57,7 @@ import com.iptv.player.data.remote.TmdbApi
 import com.iptv.player.data.remote.XtreamApi
 import com.iptv.player.data.remote.XtreamUrlBuilder
 import com.iptv.player.util.AppError
+import com.iptv.player.util.Logger
 import com.iptv.player.util.Outcome
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -1122,15 +1123,21 @@ class IptvRepository(
         return retrofitBuilder.baseUrl(base).build().create(XtreamApi::class.java)
     }
 
-    private fun Throwable.toAppError(): AppError = when (this) {
-        is HttpException -> when (code()) {
-            401, 403 -> AppError.BAD_CREDENTIALS
-            else -> AppError.CANNOT_CONNECT
+    private fun Throwable.toAppError(): AppError {
+        val mapped = when (this) {
+            is HttpException -> when (code()) {
+                401, 403 -> AppError.BAD_CREDENTIALS
+                else -> AppError.CANNOT_CONNECT
+            }
+            is IOException -> AppError.CANNOT_CONNECT
+            // OutOfMemoryError (huge playlists/accounts on low-RAM TV boxes) and other
+            // non-Exception Throwables must surface as a friendly error, not crash the app.
+            is OutOfMemoryError -> AppError.EMPTY_PLAYLIST
+            else -> AppError.UNKNOWN
         }
-        is IOException -> AppError.CANNOT_CONNECT
-        // OutOfMemoryError (huge playlists/accounts on low-RAM TV boxes) and other
-        // non-Exception Throwables must surface as a friendly error, not crash the app.
-        is OutOfMemoryError -> AppError.EMPTY_PLAYLIST
-        else -> AppError.UNKNOWN
+        // Record the underlying cause so field logs explain provider failures that
+        // the user only sees as a friendly message.
+        Logger.w("IptvRepository", "Operation failed -> $mapped", this)
+        return mapped
     }
 }
