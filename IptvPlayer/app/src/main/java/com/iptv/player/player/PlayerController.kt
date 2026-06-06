@@ -8,8 +8,6 @@
 package com.iptv.player.player
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.view.ViewGroup
 import com.iptv.player.data.model.PlayerMode
 
@@ -17,7 +15,17 @@ class PlayerController(
     private val context: Context,
     private val container: ViewGroup,
     private val mode: PlayerMode,
-    private val callback: Callback
+    private val callback: Callback,
+    /**
+     * Builds the backend for a given mode. Injectable so tests can supply a fake
+     * engine that records its play()/stop()/release() calls; production uses the
+     * real ExoPlayer / libVLC engines.
+     */
+    private val engineFactory: (useVlc: Boolean) -> PlayerEngine = { useVlc ->
+        if (useVlc) VlcPlayerEngine(context) else ExoPlayerEngine(context)
+    },
+    /** Scheduling seam (thread-hop + retry timing); fake-able in unit tests. */
+    private val scheduler: PlayerScheduler = HandlerScheduler()
 ) {
 
     /** UI-facing events from the controller (already engine-agnostic). */
@@ -28,8 +36,6 @@ class PlayerController(
         fun onFatalError()
         fun onRetrying(attempt: Int)
     }
-
-    private val mainHandler = Handler(Looper.getMainLooper())
 
     private var engine: PlayerEngine? = null
     private var currentUrl: String? = null
@@ -59,7 +65,7 @@ class PlayerController(
 
     fun play(url: String) {
         // Cancel any pending retry from a previous stream so zapping is clean.
-        mainHandler.removeCallbacksAndMessages(null)
+        scheduler.cancelAll()
         currentUrl = url
         triedVlcFallback = false
         retryCount = 0
@@ -80,8 +86,7 @@ class PlayerController(
         val wantName = if (useVlc) "VLC" else "ExoPlayer"
         if (engine?.engineName == wantName) return
         releaseEngine()
-        val newEngine: PlayerEngine =
-            if (useVlc) VlcPlayerEngine(context) else ExoPlayerEngine(context)
+        val newEngine: PlayerEngine = engineFactory(useVlc)
         newEngine.bind(container)
         newEngine.setListener(engineListener)
         // Re-apply any user delay offsets to the (new) engine.
@@ -91,14 +96,14 @@ class PlayerController(
     }
 
     private val engineListener = object : PlayerListener {
-        override fun onBuffering() = post { callback.onBuffering() }
+        override fun onBuffering() = scheduler.runOnMain { callback.onBuffering() }
 
-        override fun onPlaying() = post {
+        override fun onPlaying() = scheduler.runOnMain {
             retryCount = 0
             callback.onPlaying(engine?.engineName ?: "")
         }
 
-        override fun onError(message: String?) = post { handleError() }
+        override fun onError(message: String?) = scheduler.runOnMain { handleError() }
     }
 
     private fun handleError() {
@@ -117,9 +122,9 @@ class PlayerController(
             retryCount++
             callback.onRetrying(retryCount)
             val delay = (1000L * (1 shl (retryCount - 1))).coerceAtMost(8000L)
-            mainHandler.postDelayed({
+            scheduler.postDelayed(delay) {
                 currentUrl?.let { engine?.play(it) }
-            }, delay)
+            }
         } else {
             callback.onFatalError()
         }
@@ -137,7 +142,7 @@ class PlayerController(
      * background.
      */
     fun releaseStream() {
-        mainHandler.removeCallbacksAndMessages(null)
+        scheduler.cancelAll()
         engine?.stop()
     }
 
@@ -149,7 +154,7 @@ class PlayerController(
     }
 
     fun release() {
-        mainHandler.removeCallbacksAndMessages(null)
+        scheduler.cancelAll()
         releaseEngine()
     }
 
@@ -157,10 +162,5 @@ class PlayerController(
         engine?.release()
         engine = null
         container.removeAllViews()
-    }
-
-    private fun post(action: () -> Unit) {
-        if (Looper.myLooper() == Looper.getMainLooper()) action()
-        else mainHandler.post(action)
     }
 }

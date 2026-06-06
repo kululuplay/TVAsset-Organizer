@@ -80,6 +80,15 @@ android {
             useLegacyPackaging = true
         }
     }
+
+    testOptions {
+        unitTests {
+            // Let unit tests hit android.jar stubs without "Method not mocked"
+            // crashes; our player tests inject fakes and never touch real
+            // framework behavior, so default-valued stubs are sufficient.
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {
@@ -137,4 +146,10 @@ dependencies {
     implementation("androidx.media3:media3-common:1.4.1")
     // libVLC = fallback engine (broadest codec coverage: DTS/AC3/EAC3/etc.).
     implementation("org.videolan.android:libvlc-all:3.5.1")
+
+    // --- Unit tests (pure JVM; no emulator / Robolectric) ---
+    testImplementation("junit:junit:4.13.2")
+    // Mockito provides no-op stubs for the Context/ViewGroup the controller
+    // stores but never really uses in tests (engine + scheduler are faked).
+    testImplementation("org.mockito:mockito-core:5.12.0")
 }

@@ -11,3 +11,4 @@
 - [D-pad focus after ListAdapter diff](recyclerview-focus-after-diff.md) — requestFocus on a row must run in submitList's commit callback + post(), not right after submitList (async diff).
 - [Favorites id namespaces](favorites-id-namespaces.md) — favorites table mixes channel/vod_/series_ ids; the channel INNER JOIN silently drops non-channel favorites.
 - [IPTV single-connection contract](iptv-single-connection.md) — one stream/socket max: stop-before-start, serialize transitions, release (not pause) on background, reuse engine + swap Media.
+- [Player unit tests](player-unit-tests.md) — single-connection tests are pure-JVM via scheduler/engineFactory/coordinator seams; no Android SDK locally, they run only in CI.

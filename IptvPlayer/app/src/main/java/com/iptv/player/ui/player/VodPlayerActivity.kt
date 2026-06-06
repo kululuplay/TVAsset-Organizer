@@ -105,13 +105,34 @@ class VodPlayerActivity : BaseActivity() {
 
     // Single-connection state. [transitionLock] serializes every start/stop so a
     // restart can never open a second connection before the first is closed.
-    // [playbackStarted] gates the first foreground; on background we release the
-    // stream entirely (close the socket) and remember [backgroundPositionMs] so
-    // the foreground can re-acquire from where we left off.
+    // The background-release / foreground-reacquire ordering lives in
+    // [playbackCoordinator] (a pure, unit-tested state machine): on background we
+    // release the stream entirely (close the socket) and remember the position so
+    // the foreground can re-acquire from exactly where we left off.
     private val transitionLock = Any()
-    private var playbackStarted = false
-    private var resumeOnForeground = false
-    private var backgroundPositionMs = 0L
+    private val playbackCoordinator = VodPlaybackCoordinator(
+        object : VodPlaybackCoordinator.Actions {
+            override fun persistResume() = this@VodPlayerActivity.persistResume()
+            override fun currentPositionMs(): Long =
+                mediaPlayer?.time?.coerceAtLeast(0L) ?: 0L
+
+            override fun stopStream() {
+                synchronized(transitionLock) {
+                    mediaPlayer?.stop()
+                    detachVideoViews()
+                }
+            }
+
+            override fun startPlayback(positionMs: Long) {
+                // A returning foreground always restarts at hardware-auto decode.
+                softwareDecode = false
+                this@VodPlayerActivity.startPlayback(positionMs)
+            }
+
+            override fun attachViews() = attachVideoViews()
+            override fun detachViews() = detachVideoViews()
+        }
+    )
     private val voutWatchdog = Runnable {
         // Playback started but no video surface ever appeared: hardware decode
         // produced audio only (or a blank/green frame). Retry in software.
@@ -446,7 +467,7 @@ class VodPlayerActivity : BaseActivity() {
             mp.media = media
             media.release()
             mp.play()
-            playbackStarted = true
+            playbackCoordinator.markPlaybackStarted()
             startTimers()
         }
     }
@@ -695,16 +716,9 @@ class VodPlayerActivity : BaseActivity() {
 
     override fun onStart() {
         super.onStart()
-        if (resumeOnForeground) {
-            // Re-acquire the stream we released on background, from where we left.
-            resumeOnForeground = false
-            softwareDecode = false
-            startPlayback(backgroundPositionMs)
-        } else {
-            // First foreground (playback hasn't started yet) or nothing to resume:
-            // just (re)attach the single video surface.
-            attachVideoViews()
-        }
+        // Re-acquire a backgrounded stream (from where we left off) or, on the
+        // first foreground / nothing-to-resume, just (re)attach the surface.
+        playbackCoordinator.onStart()
     }
 
     override fun onStop() {
@@ -712,22 +726,10 @@ class VodPlayerActivity : BaseActivity() {
         handler.removeCallbacks(progressRunnable)
         handler.removeCallbacks(saveRunnable)
         handler.removeCallbacks(voutWatchdog)
-        val mp = mediaPlayer
-        if (mp != null && playbackStarted) {
-            persistResume()
-            backgroundPositionMs = mp.time.coerceAtLeast(0L)
-            resumeOnForeground = true
-            // Fully release the connection on background (close the socket) rather
-            // than pausing, which would keep the single subscription slot busy.
-            synchronized(transitionLock) {
-                mp.stop()
-                detachVideoViews()
-            }
-        } else {
-            // Nothing playing yet: still release the surface so navigating between
-            // players never leaves a stale, double-attached surface behind.
-            detachVideoViews()
-        }
+        // Fully release the connection on background (close the socket) rather
+        // than pausing, which would keep the single subscription slot busy; the
+        // coordinator records the position so onStart can resume from it.
+        playbackCoordinator.onStop()
         // Not in the foreground anymore: don't keep the screen awake.
         screenGuard.keepScreenOn(false)
     }
