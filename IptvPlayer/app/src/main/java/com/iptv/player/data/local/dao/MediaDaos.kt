@@ -15,6 +15,7 @@ import com.iptv.player.data.local.entity.ProfileEntity
 import com.iptv.player.data.local.entity.ProgramEntity
 import com.iptv.player.data.local.entity.ResumeEntity
 import com.iptv.player.data.local.entity.SeriesEntity
+import com.iptv.player.data.local.entity.VodCategoryEntity
 import com.iptv.player.data.local.entity.VodEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -82,6 +83,31 @@ interface VodDao {
 
     @Query("SELECT * FROM vod WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): VodEntity?
+}
+
+@Dao
+interface VodCategoryDao {
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(categories: List<VodCategoryEntity>)
+
+    @Query("DELETE FROM vod_categories")
+    suspend fun clearAll()
+
+    @Query("SELECT * FROM vod_categories ORDER BY position")
+    fun observeAll(): Flow<List<VodCategoryEntity>>
+
+    @Query("SELECT * FROM vod_categories ORDER BY position")
+    suspend fun getAll(): List<VodCategoryEntity>
+
+    @Query("SELECT * FROM vod_categories WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): VodCategoryEntity?
+
+    @Query("SELECT id FROM vod_categories WHERE loaded = 1")
+    suspend fun loadedIds(): List<String>
+
+    @Query("UPDATE vod_categories SET loaded = 1 WHERE id = :id")
+    suspend fun markLoaded(id: String)
 }
 
 @Dao

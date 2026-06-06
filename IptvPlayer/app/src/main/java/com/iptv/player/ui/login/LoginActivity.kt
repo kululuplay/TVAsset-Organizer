@@ -15,7 +15,7 @@ import androidx.lifecycle.lifecycleScope
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.databinding.ActivityLoginBinding
 import com.iptv.player.ui.common.BaseActivity
-import com.iptv.player.ui.dashboard.DashboardActivity
+import com.iptv.player.ui.splash.SplashActivity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -85,7 +85,9 @@ class LoginActivity : BaseActivity() {
     }
 
     private fun goHome() {
-        startActivity(Intent(this, DashboardActivity::class.java))
+        // Route through the branded splash so the prefetch (live/EPG/series/movie
+        // categories) runs before the dashboard, instead of going straight there.
+        startActivity(Intent(this, SplashActivity::class.java))
         finish()
     }
 

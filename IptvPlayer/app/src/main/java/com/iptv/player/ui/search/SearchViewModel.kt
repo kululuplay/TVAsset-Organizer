@@ -31,14 +31,13 @@ class SearchViewModel : ViewModel() {
     private val query = MutableStateFlow("")
 
     init {
-        // Live channels are refreshed at login, but the VOD/series caches are only
-        // filled when their own tabs run. Refresh them here too — mirroring how the
-        // Movies/Series screens refresh on open — so movies and series are searchable
-        // from global search even if those tabs were never opened. The atomic replace
-        // in the repository keeps results consistent while the refresh runs.
+        // Series is a full refresh so it's fully searchable. Movies are lazy
+        // per-category by design, so global movie search only covers categories the
+        // user has already opened/downloaded (an accepted tradeoff to avoid pulling
+        // the whole ~60k catalog); we refresh just the cheap category list here.
         viewModelScope.launch {
             val config = settings.getSourceConfig() ?: return@launch
-            repo.refreshVod(config)
+            repo.refreshVodCategories(config)
             repo.refreshSeries(config)
         }
     }

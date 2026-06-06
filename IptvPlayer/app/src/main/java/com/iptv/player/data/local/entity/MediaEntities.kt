@@ -50,6 +50,23 @@ data class VodEntity(
     val categoryPosition: Int = Int.MAX_VALUE
 )
 
+/**
+ * Movie (VOD) categories, stored independently of the movies themselves so the
+ * category rail can be shown immediately after login — before any category's
+ * movies have been lazily downloaded. [loaded] tracks whether this category's
+ * movies have already been fetched into the [VodEntity] table, so re-opening a
+ * category is instant and we never re-download it needlessly.
+ */
+@Entity(tableName = "vod_categories")
+data class VodCategoryEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    /** Index of this category in the source's category list (preserves order). */
+    val position: Int = Int.MAX_VALUE,
+    /** True once this category's movies have been downloaded into [vod]. */
+    val loaded: Boolean = false
+)
+
 @Entity(
     tableName = "series",
     indices = [Index("categoryId"), Index("addedAt")]

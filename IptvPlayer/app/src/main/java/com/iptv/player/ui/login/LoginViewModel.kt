@@ -74,10 +74,10 @@ class LoginViewModel : ViewModel() {
                         // existing match so re-logins don't duplicate) and make it active,
                         // so the Profiles screen isn't empty after a successful login.
                         settings.setActiveProfileId(repo.ensureProfile(config))
-                        when (val refresh = repo.refreshLive(config)) {
-                            is Outcome.Failure -> _state.value = State.Error(refresh.error)
-                            is Outcome.Success -> _state.value = State.Success
-                        }
+                        // testSource already validated the account; the actual content
+                        // (live/EPG/series/movie categories) is fetched by the branded
+                        // splash prefetch, so we don't refresh here and duplicate work.
+                        _state.value = State.Success
                     }
                 }
             } catch (e: Throwable) {

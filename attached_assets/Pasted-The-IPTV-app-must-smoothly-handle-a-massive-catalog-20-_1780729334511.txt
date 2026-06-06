@@ -1,0 +1,36 @@
+The IPTV app must smoothly handle a massive catalog: ~20,000 live channels and ~300,000 VOD items (movies + series/episodes), while still running on the oldest, low-RAM Android TV/stick devices. The user must experience zero lag or freezing — at app launch, while browsing categories, while scrolling content, and while loading EPG. Architect the whole data and UI layer for this scale. Specifically:
+1. Never load everything into memory.
+
+Do NOT hold 20k channels or 300k VOD items in memory lists. Store the entire catalog in Room (SQLite) on disk and query only what's needed.
+Use the Paging 3 library with a Room PagingSource so lists load page-by-page (e.g. 20–50 items at a time) as the user scrolls. The UI must only ever hold the currently visible window plus a small buffer.
+Index the database properly: indexes on category id, stream/content id, name (for search), and tvg-id (for EPG matching), so queries on 300k rows stay instant.
+
+2. Fast first launch (no blocking, no freeze on open).
+
+On launch, render the UI immediately from cached data in Room — do NOT block the UI waiting for a full playlist/API download.
+Do the heavy Xtream/M3U import and parsing off the main thread (coroutines + IO dispatcher), in a streaming/chunked way, writing to Room in batched transactions (e.g. bulk insert in chunks of a few thousand) instead of one-by-one inserts or one giant transaction.
+Show shimmer/skeleton placeholders while data populates; never a frozen white screen.
+Cache the parsed catalog so subsequent launches are near-instant; refresh in the background and only update changed data (avoid full re-import every launch).
+
+3. Smooth category browsing and scrolling.
+
+Load categories instantly (they're a small list); load each category's content lazily via paging only when opened.
+Use RecyclerView with view recycling + DiffUtil; never inflate thousands of views. Keep view holders lightweight.
+Lazy image loading for logos/posters with Coil or Glide: downscale to the display size, use memory + disk cache, cancel off-screen image requests, and show placeholders. Never decode full-resolution posters for a grid.
+
+4. EPG at scale — must load reliably with no stutter.
+
+For 20k channels the EPG (XMLTV or Xtream) is huge. Parse XMLTV with a streaming SAX/pull parser, NOT by loading the whole XML into memory or using DOM.
+Store EPG in Room and query programs per channel and per time window on demand (only the visible channels and visible time range), not all programs at once.
+Load EPG in the background, show "now/next" quickly from a light query, and load the full timeline only when the guide is opened. Cache EPG and refresh incrementally.
+Make EPG fetching/parsing resilient: handle partial/large/slow downloads without freezing the UI or crashing, with retry on failure.
+
+5. Search at scale.
+
+Search across 300k items must be instant — back it with an indexed Room query (or FTS — full-text search virtual table) and debounce input, not by filtering an in-memory list.
+
+6. Memory & stability.
+
+Keep memory usage flat regardless of catalog size; the app must not grow memory as the user browses. Avoid leaks, release images/cursors, and ensure browsing 300k items never triggers an OutOfMemory on a low-RAM device.
+
+7. Verify on the oldest target device: with a catalog of ~20,000 live channels and ~300,000 VOD items loaded, confirm: app opens fast without freezing, categories and lists scroll smoothly, search returns instantly, EPG loads without stutter, and memory stays stable throughout.

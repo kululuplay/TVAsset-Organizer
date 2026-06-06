@@ -10,6 +10,9 @@ import com.iptv.player.data.local.AppDatabase
 import com.iptv.player.data.prefs.SettingsStore
 import com.iptv.player.data.repository.IptvRepository
 import com.iptv.player.util.AppInfo
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -26,6 +29,15 @@ object ServiceLocator {
         private set
     lateinit var httpClient: OkHttpClient
         private set
+
+    /**
+     * Application-lifetime coroutine scope. Used for work that must outlive the
+     * Activity/ViewModel that started it — notably the splash prefetch, which
+     * should keep running in the background after the splash routes onward so an
+     * unfinished refresh isn't cancelled. SupervisorJob keeps one failing child
+     * from cancelling the others.
+     */
+    val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun init(context: Context) {
         if (initialized) return

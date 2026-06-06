@@ -1,0 +1,16 @@
+While the user is watching content (Live TV or VOD), the app goes to sleep / the stick's lock screen appears after ~15–20 minutes and kicks the user out of playback. This must NEVER happen during active playback — the screen must stay on for the entire session, even during 2–3 hour viewing. BUT if the user actually turns off the TV with the remote Power OFF button, the app must intelligently detect this, stop the player, and return itself to the home screen. Implement both behaviors correctly:
+1. Keep the screen awake during playback (no sleep, no lock screen):
+
+On the playback Activity/View, set the FLAG_KEEP_SCREEN_ON flag (e.g. window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) or keepScreenOn = true on the player view) so the system never dims, sleeps, or shows the lock screen while content is playing.
+Apply this for BOTH the Live TV player and the VOD player.
+This flag must be active only while something is actually playing. When playback is paused/stopped or the user leaves the player, clear the flag (clearFlags) so the device can sleep normally — do not hold the screen on forever.
+Use FLAG_KEEP_SCREEN_ON (window flag) rather than a manual PowerManager wake lock where possible, since it's the recommended approach and is automatically released when the window goes away. Do not leak any wake lock.
+Make sure the app's own logic (auto-reconnect, buffering, EPG refresh) does not cause the screen-on flag to be dropped mid-playback. The screen must stay on continuously for multi-hour sessions.
+
+2. Detect real TV Power OFF and clean up intelligently:
+
+Register a receiver for Intent.ACTION_SCREEN_OFF (and handle onStop/onPause lifecycle). When the user presses the remote Power OFF and the TV/stick screen actually turns off, the app must: stop and fully release the player (stop, detach video views, release MediaPlayer/Media — fully close the stream connection so the single-connection slot is freed), and navigate back to the home screen so that when the TV is turned back on the app is on the home screen, not stuck on a dead player.
+Distinguish this from temporary UI events: a short navigation away or a dialog should NOT trigger full teardown, but a real screen-off / Power OFF should.
+On resume after power-on, the app should show the home screen cleanly (no frozen last frame, no orphaned stream still connected).
+
+3. Verify on the oldest target device: confirm the screen never sleeps or locks during a continuous 2–3 hour playback session, AND that pressing the remote Power OFF stops the player, releases the stream connection, and lands the app on the home screen.

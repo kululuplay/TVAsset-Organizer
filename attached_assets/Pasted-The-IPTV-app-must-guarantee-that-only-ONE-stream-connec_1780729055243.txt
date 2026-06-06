@@ -1,0 +1,21 @@
+The IPTV app must guarantee that only ONE stream connection is ever open at a time, because each customer's subscription allows only 1 simultaneous connection. If an old stream is not fully released, the server keeps counting it as active and the user gets a "this account is in use on another device" error. Fix and enforce this for BOTH the Live TV player and the VOD player.
+1. Hard stop / full release on every channel or content change:
+
+Before starting any new stream, completely stop and fully release the current libVLC playback: call stop(), detach the video views (detachViews), then release the MediaPlayer and the Media object, and null them out. Do not just pause or swap the media URL on the same player while the old one is still connected.
+Ensure the underlying network socket/connection to the previous stream is actually torn down — the previous HTTP/TS/HLS connection must be closed so the server frees the slot instantly. No lingering background connection.
+Reuse a single LibVLC instance, but create a fresh Media for each stream and release the previous one. Never have two Media/playback sessions connected at the same moment.
+Make stop → release → start strictly sequential (use a coroutine Mutex or single-threaded dispatcher) so a fast channel zap can never trigger two overlapping connections (no race condition where the new stream opens before the old one closed).
+Apply the same full-release logic in onStop/onDestroy, when the user presses Back, when navigating between Live and VOD, and when the app goes to background — so no stream is ever left connected in the background.
+
+2. Fast switch without leaking connections:
+
+Channel zapping (up/down or number) must feel instant, but each switch still fully closes the previous connection before opening the new one. Show the zapping overlay/buffering indicator during the brief switch instead of keeping the old stream alive.
+
+3. Buffer tuning for smooth playback with NO freezing/stuttering — including long sessions (stable after 1, 2, 3, 4, 5+ hours):
+
+Live TV: tune libVLC for low-latency but stable live playback — set a sensible network-caching (e.g. around 1000–1500 ms; not too low or it stutters on weak connections, not too high or zapping feels slow), plus appropriate live-caching/file-caching/clock-jitter/clock-synchro options. Enable automatic reconnect on stream drop.
+VOD: use a larger buffer than live (e.g. higher network-caching/file-caching) since smooth playback matters more than latency; support seek without breaking the buffer.
+Long-session stability (critical): playback must stay stable for many hours. Prevent memory growth / buffer overflow over time — make sure buffers don't accumulate, decoder resources are reused cleanly, and there are no leaks that degrade playback after hours. If the stream drifts or the buffer underruns during a long session, recover automatically (rebuffer/reconnect) without crashing or requiring the user to restart.
+Handle audio/video sync over long playback so A/V does not drift apart after hours.
+
+4. Verify on the oldest target device: after switching channels rapidly many times and after a 5+ hour continuous playback session, confirm that only one connection is ever active on the server side, there is no background stream, memory usage stays flat, and playback is still smooth with correct A/V sync.

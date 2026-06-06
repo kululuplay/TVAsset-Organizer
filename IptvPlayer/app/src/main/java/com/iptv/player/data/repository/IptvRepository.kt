@@ -20,6 +20,7 @@ import com.iptv.player.data.local.entity.ProgramEntity
 import com.iptv.player.data.local.entity.RecentEntity
 import com.iptv.player.data.local.entity.ResumeEntity
 import com.iptv.player.data.local.entity.SeriesEntity
+import com.iptv.player.data.local.entity.VodCategoryEntity
 import com.iptv.player.data.local.entity.VodEntity
 import com.iptv.player.data.model.AccountInfo
 import com.iptv.player.data.model.Category
@@ -75,6 +76,7 @@ class IptvRepository(
     private val recentDao = db.recentDao()
     private val epgDao = db.epgDao()
     private val vodDao = db.vodDao()
+    private val vodCategoryDao = db.vodCategoryDao()
     private val seriesDao = db.seriesDao()
     private val profileDao = db.profileDao()
     private val resumeDao = db.resumeDao()
@@ -301,9 +303,14 @@ class IptvRepository(
     fun observeVodByCategory(categoryId: String): Flow<List<VodItem>> =
         vodDao.observeByCategory(categoryId).map { it.map { e -> e.toModel() } }
 
+    /**
+     * Movie categories, read from the dedicated [vod_categories] table so the rail
+     * is available immediately after login — before any category's movies have
+     * been lazily downloaded.
+     */
     fun observeVodCategories(): Flow<List<Category>> =
-        vodDao.observeCategories().map { rows ->
-            rows.map { Category(it.categoryId, it.categoryName ?: "Uncategorized", ContentType.VOD) }
+        vodCategoryDao.observeAll().map { rows ->
+            rows.map { Category(it.id, it.name, ContentType.VOD) }
         }
 
     /** Movie count per category id, used for the category row badges. */
@@ -313,47 +320,98 @@ class IptvRepository(
     fun searchVod(query: String): Flow<List<VodItem>> =
         vodDao.search(query).map { it.map { e -> e.toModel() } }
 
-    suspend fun refreshVod(config: SourceConfig): Outcome<Int> = withContext(Dispatchers.IO) {
+    /**
+     * Fetches and caches only the movie *categories* (not the movies themselves).
+     * This is cheap and lets the Movies rail render immediately. The per-category
+     * [loaded] flag is preserved across refreshes so re-syncing the category list
+     * never forces a re-download of categories whose movies are already cached.
+     */
+    suspend fun refreshVodCategories(config: SourceConfig): Outcome<Int> = withContext(Dispatchers.IO) {
         if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
         try {
             val api = buildXtreamApi(config.serverUrl)
             val catList = api.getVodCategories(config.username, config.password)
-            val cats = catList
-                .associate { (it.categoryId ?: "") to (it.categoryName ?: "Uncategorized") }
-            val catOrder = catList
-                .mapIndexedNotNull { index, c -> c.categoryId?.let { it to index } }
-                .toMap()
-            val items = api.getVodStreams(config.username, config.password).mapNotNull { s ->
-                val id = s.streamId ?: return@mapNotNull null
-                VodEntity(
+            val alreadyLoaded = vodCategoryDao.loadedIds().toSet()
+            val categories = catList.mapIndexedNotNull { index, c ->
+                val id = c.categoryId ?: return@mapIndexedNotNull null
+                VodCategoryEntity(
                     id = id,
-                    name = s.name ?: "Unknown",
-                    streamUrl = XtreamUrlBuilder.movieUrl(
-                        config.serverUrl, config.username, config.password, id,
-                        s.containerExtension ?: "mp4"
-                    ),
-                    posterUrl = s.streamIcon?.takeIf { it.isNotBlank() },
-                    categoryId = s.categoryId,
-                    categoryName = cats[s.categoryId] ?: "Uncategorized",
-                    rating = s.rating?.toDoubleOrNull(),
-                    plot = null, cast = null, director = null, genre = null,
-                    releaseDate = null, durationSecs = null, trailerUrl = null, tmdbId = null,
-                    addedAt = s.added?.trim()?.toLongOrNull() ?: 0L,
-                    categoryPosition = catOrder[s.categoryId] ?: Int.MAX_VALUE
+                    name = c.categoryName ?: "Uncategorized",
+                    position = index,
+                    loaded = id in alreadyLoaded
                 )
-            }.mapIndexed { index, e -> e.copy(position = index) }
-            // Atomic replace so a cancellation between clear and insert can never
-            // leave the table empty for other readers (e.g. global search).
-            db.withTransaction {
-                vodDao.clearAll()
-                vodDao.upsertAll(items)
             }
+            vodCategoryDao.upsertAll(categories)
+            Outcome.Success(categories.size)
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e // never swallow coroutine cancellation
+            Outcome.Failure(e.toAppError())
+        }
+    }
+
+    /** True if this category's movies have already been downloaded into the cache. */
+    suspend fun isVodCategoryLoaded(categoryId: String): Boolean = withContext(Dispatchers.IO) {
+        vodCategoryDao.getById(categoryId)?.loaded == true
+    }
+
+    /**
+     * Lazily downloads a single movie category's movies and *merges* them into the
+     * cache (no full-table wipe), so other already-downloaded categories stay
+     * intact. Skips the network entirely when the category is already loaded
+     * unless [force] is set. Marks the category loaded on success.
+     */
+    suspend fun refreshVodCategory(
+        config: SourceConfig,
+        categoryId: String,
+        force: Boolean = false
+    ): Outcome<Int> = withContext(Dispatchers.IO) {
+        if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
+        val category = vodCategoryDao.getById(categoryId)
+        if (!force && category?.loaded == true) return@withContext Outcome.Success(0)
+        try {
+            val api = buildXtreamApi(config.serverUrl)
+            val catName = category?.name ?: "Uncategorized"
+            val catPosition = category?.position ?: Int.MAX_VALUE
+            val items = api.getVodStreams(config.username, config.password, categoryId)
+                .mapNotNull { s ->
+                    val id = s.streamId ?: return@mapNotNull null
+                    VodEntity(
+                        id = id,
+                        name = s.name ?: "Unknown",
+                        streamUrl = XtreamUrlBuilder.movieUrl(
+                            config.serverUrl, config.username, config.password, id,
+                            s.containerExtension ?: "mp4"
+                        ),
+                        posterUrl = s.streamIcon?.takeIf { it.isNotBlank() },
+                        categoryId = s.categoryId ?: categoryId,
+                        categoryName = catName,
+                        rating = s.rating?.toDoubleOrNull(),
+                        plot = null, cast = null, director = null, genre = null,
+                        releaseDate = null, durationSecs = null, trailerUrl = null, tmdbId = null,
+                        addedAt = s.added?.trim()?.toLongOrNull() ?: 0L,
+                        categoryPosition = catPosition
+                    )
+                }
+            // Merge (REPLACE on id) — never clear, so other categories remain cached.
+            vodDao.upsertAll(items)
+            vodCategoryDao.markLoaded(categoryId)
             Outcome.Success(items.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
             Outcome.Failure(e.toAppError())
         }
     }
+
+    /**
+     * Best-effort prefetch of the first movie category so the "Recently added"
+     * view has content right after the splash, without pulling the whole catalog.
+     */
+    suspend fun prefetchFirstVodCategory(config: SourceConfig): Outcome<Int> =
+        withContext(Dispatchers.IO) {
+            val first = vodCategoryDao.getAll().firstOrNull()
+                ?: return@withContext Outcome.Success(0)
+            refreshVodCategory(config, first.id)
+        }
 
     /** Loads full VOD detail on demand, enriching with TMDB when a key is set. */
     suspend fun getVodDetail(config: SourceConfig, id: String): VodItem? = withContext(Dispatchers.IO) {
@@ -384,7 +442,7 @@ class IptvRepository(
 
     /**
      * Instant, network-free VOD record straight from the local cache (populated
-     * by [refreshVod]). Lets the detail screen render the poster, title and a
+     * by [refreshVodCategory]). Lets the detail screen render the poster, title and a
      * working Play button immediately while [getVodDetail] enriches in the bg.
      */
     suspend fun getVodCached(id: String): VodItem? = withContext(Dispatchers.IO) {
@@ -619,7 +677,9 @@ class IptvRepository(
         val liveOk = refreshLive(config) is Outcome.Success
         refreshEpg(config)
         if (config.type == SourceType.XTREAM) {
-            runCatching { refreshVod(config) }
+            // Movies are lazy per-category, so background sync only refreshes the
+            // category list (cheap) — never the whole ~60k catalog. Series stay full.
+            runCatching { refreshVodCategories(config) }
             runCatching { refreshSeries(config) }
         }
         liveOk

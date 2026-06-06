@@ -18,6 +18,7 @@ import com.iptv.player.data.local.dao.ProfileDao
 import com.iptv.player.data.local.dao.RecentDao
 import com.iptv.player.data.local.dao.ResumeDao
 import com.iptv.player.data.local.dao.SeriesDao
+import com.iptv.player.data.local.dao.VodCategoryDao
 import com.iptv.player.data.local.dao.VodDao
 import com.iptv.player.data.local.entity.ChannelEntity
 import com.iptv.player.data.local.entity.ChannelOverrideEntity
@@ -29,6 +30,7 @@ import com.iptv.player.data.local.entity.ProgramEntity
 import com.iptv.player.data.local.entity.RecentEntity
 import com.iptv.player.data.local.entity.ResumeEntity
 import com.iptv.player.data.local.entity.SeriesEntity
+import com.iptv.player.data.local.entity.VodCategoryEntity
 import com.iptv.player.data.local.entity.VodEntity
 
 @Database(
@@ -39,13 +41,14 @@ import com.iptv.player.data.local.entity.VodEntity
         RecentEntity::class,
         ProgramEntity::class,
         VodEntity::class,
+        VodCategoryEntity::class,
         SeriesEntity::class,
         EpisodeEntity::class,
         ProfileEntity::class,
         ResumeEntity::class,
         EpgMappingEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -56,6 +59,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun recentDao(): RecentDao
     abstract fun epgDao(): EpgDao
     abstract fun vodDao(): VodDao
+    abstract fun vodCategoryDao(): VodCategoryDao
     abstract fun seriesDao(): SeriesDao
     abstract fun profileDao(): ProfileDao
     abstract fun resumeDao(): ResumeDao

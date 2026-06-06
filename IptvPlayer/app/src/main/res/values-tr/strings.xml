@@ -191,6 +191,13 @@
     <string name="feature_live">Canlı TV ve spor, net HD kalitesinde</string>
     <string name="feature_vod">Binlerce film ve dizi</string>
     <string name="feature_multi">Her ekranda izleyin</string>
+
+    <!-- Açılış ekranı / ön yükleme durumu -->
+    <string name="splash_status_starting">Hazırlanıyor…</string>
+    <string name="splash_status_live">Kanallar yükleniyor…</string>
+    <string name="splash_status_epg">EPG indiriliyor…</string>
+    <string name="splash_status_library">Filmler ve diziler hazırlanıyor…</string>
+    <string name="splash_status_ready">Neredeyse hazır…</string>
     <!-- Master-detail redesign -->
     <string name="settings_general_info">Genel Bilgiler</string>
     <string name="settings_time_sync">Saat ve eşitleme</string>

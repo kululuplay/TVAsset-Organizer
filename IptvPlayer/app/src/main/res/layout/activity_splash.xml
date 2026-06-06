@@ -1,10 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Branded splash. Uses the bg_splash layer-list (logo centered on dark bg)
-     and a small progress spinner while we decide where to route the user. -->
+<!-- Branded splash shown after login (and when a logged-in user opens the app)
+     while content is prefetched in the background: centered logo badge + app name
+     + tagline, an indeterminate progress bar and a status line that updates as
+     each prefetch stage runs. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_splash">
+    android:background="@drawable/bg_login_aurora">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
+
+        <FrameLayout
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:background="@drawable/bg_logo_badge">
+
+            <ImageView
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_kululu_logo"
+                android:contentDescription="@string/app_name" />
+        </FrameLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_l"
+            android:text="@string/app_name"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_big_title"
+            android:textStyle="bold"
+            android:letterSpacing="0.02" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_xs"
+            android:text="@string/app_tagline"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_caption" />
+    </LinearLayout>
 
     <LinearLayout
         android:layout_width="wrap_content"
@@ -17,14 +58,18 @@
 
         <ProgressBar
             android:id="@+id/splashProgress"
-            android:layout_width="wrap_content"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="240dp"
             android:layout_height="wrap_content"
+            android:indeterminate="true"
+            android:indeterminateTint="@color/accent"
             android:layout_marginBottom="@dimen/space_m" />
 
         <TextView
+            android:id="@+id/splashStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/app_name"
+            android:text="@string/splash_status_starting"
             android:textColor="@color/text_secondary"
             android:textSize="@dimen/text_caption" />
     </LinearLayout>

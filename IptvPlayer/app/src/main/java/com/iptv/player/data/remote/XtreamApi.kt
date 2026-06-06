@@ -42,10 +42,16 @@ interface XtreamApi {
         @Query("action") action: String = "get_vod_categories"
     ): List<XtreamCategory>
 
+    /**
+     * Movie streams. When [categoryId] is supplied, Xtream returns only that
+     * category's movies (`&category_id={id}`), which is how the app lazily loads
+     * one category at a time instead of pulling the entire (often huge) catalog.
+     */
     @GET("player_api.php")
     suspend fun getVodStreams(
         @Query("username") username: String,
         @Query("password") password: String,
+        @Query("category_id") categoryId: String? = null,
         @Query("action") action: String = "get_vod_streams"
     ): List<XtreamVodStream>
 

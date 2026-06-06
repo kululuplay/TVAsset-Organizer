@@ -38,15 +38,9 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
     private val _refreshing = MutableStateFlow(false)
     val refreshing: StateFlow<Boolean> = _refreshing
 
-    init {
-        // Populate the VOD cache from the network on first open (best-effort).
-        viewModelScope.launch {
-            val config = settings.getSourceConfig() ?: return@launch
-            _refreshing.value = true
-            repo.refreshVod(config)
-            _refreshing.value = false
-        }
-    }
+    // Movies are loaded lazily per category (see [selectCategory]); the full
+    // catalog is never downloaded at once. The category rail comes from the
+    // category cache, which the splash prefetch fills right after login.
 
     /** Categories with a "Recently added" entry pinned to the top, each with a count. */
     val categories: StateFlow<List<Category>> =
@@ -70,8 +64,32 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
     private val selectedCategory = MutableStateFlow<String?>(null)
     private val query = MutableStateFlow("")
 
+    // Categories whose movies are currently being lazily downloaded. Tracked so
+    // overlapping selections don't fetch the same category twice and so the
+    // spinner only hides once *all* in-flight fetches finish.
+    private val inFlight = mutableSetOf<String>()
+
+    /**
+     * Selects a category and, for real categories (not "Recently added"), lazily
+     * downloads that category's movies if they aren't cached yet. The repository
+     * merges into the cache and skips the network when already loaded, so
+     * re-opening a category is instant.
+     */
     fun selectCategory(categoryId: String) {
         selectedCategory.value = categoryId
+        if (categoryId == CAT_ALL) return
+        if (!inFlight.add(categoryId)) return // already fetching this category
+        viewModelScope.launch {
+            try {
+                val config = settings.getSourceConfig() ?: return@launch
+                if (repo.isVodCategoryLoaded(categoryId)) return@launch
+                _refreshing.value = true
+                repo.refreshVodCategory(config, categoryId)
+            } finally {
+                inFlight.remove(categoryId)
+                if (inFlight.isEmpty()) _refreshing.value = false
+            }
+        }
     }
 
     fun setQuery(text: String) {

@@ -22,6 +22,13 @@
     <string name="wizard_step_language">Choose your language</string>
     <string name="wizard_finish">Finish</string>
 
+    <!-- Splash / prefetch status -->
+    <string name="splash_status_starting">Getting things ready…</string>
+    <string name="splash_status_live">Loading channels…</string>
+    <string name="splash_status_epg">Downloading the TV guide…</string>
+    <string name="splash_status_library">Preparing movies and series…</string>
+    <string name="splash_status_ready">Almost there…</string>
+
     <!-- Login -->
     <string name="login_title">Connect your service</string>
     <string name="login_subtitle">Sign in to start streaming</string>
