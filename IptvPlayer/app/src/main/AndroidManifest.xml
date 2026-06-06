@@ -154,6 +154,12 @@
             android:exported="false"
             android:screenOrientation="landscape" />
 
+        <!-- Unified Favorites (channels, movies and series). -->
+        <activity
+            android:name=".ui.favorites.FavoritesActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
         <!-- Channel manager (hide / reorder / favorites). -->
         <activity
             android:name=".ui.channels.ChannelManagerActivity"

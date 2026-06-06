@@ -294,6 +294,7 @@ class HomeActivity : BaseActivity() {
         PinLockHelper.guard(this, isAdult = channel.isAdult()) {
             val intent = Intent(this, PlayerActivity::class.java).apply {
                 putExtra(PlayerActivity.EXTRA_CHANNEL_ID, channel.id)
+                putExtra(PlayerActivity.EXTRA_CATEGORY_ID, lastSelectedCategoryId)
             }
             startActivity(intent)
         }

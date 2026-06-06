@@ -17,8 +17,8 @@ import com.iptv.player.data.ServiceLocator
 import com.iptv.player.databinding.ActivityDashboardBinding
 import com.iptv.player.ui.account.AccountActivity
 import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.ui.favorites.FavoritesActivity
 import com.iptv.player.ui.home.HomeActivity
-import com.iptv.player.ui.home.HomeViewModel
 import com.iptv.player.ui.profiles.ProfilesActivity
 import com.iptv.player.ui.search.SearchActivity
 import com.iptv.player.ui.series.SeriesActivity
@@ -61,13 +61,8 @@ class DashboardActivity : BaseActivity() {
         binding.tileSeries.setOnClickListener { open(SeriesActivity::class.java) }
         binding.tilePlaylists.setOnClickListener { open(ProfilesActivity::class.java) }
         binding.tileContinue.setOnClickListener { open(ContinueWatchingActivity::class.java) }
-        // Open the Live browser straight on its pinned Favorites category.
-        binding.tileFavorites.setOnClickListener {
-            startActivity(
-                Intent(this, HomeActivity::class.java)
-                    .putExtra(HomeActivity.EXTRA_INITIAL_CATEGORY, HomeViewModel.CAT_FAVORITES)
-            )
-        }
+        // Unified favorites across channels, movies and series (not just Live TV).
+        binding.tileFavorites.setOnClickListener { open(FavoritesActivity::class.java) }
     }
 
     private fun wireActions() {

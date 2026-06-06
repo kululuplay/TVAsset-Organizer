@@ -27,6 +27,8 @@ import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.ContinueItem
 import com.iptv.player.data.model.DiagnosticResult
+import com.iptv.player.data.model.FavoriteItem
+import com.iptv.player.data.model.FavoriteKind
 import com.iptv.player.data.model.Episode
 import com.iptv.player.data.model.ResumeKind
 import com.iptv.player.data.model.ResumeMeta
@@ -99,6 +101,26 @@ class IptvRepository(
 
     fun observeFavorites(): Flow<List<Channel>> =
         favoriteDao.observeFavoriteChannels().map { list -> list.map { it.toModel(isFav = true) } }
+
+    /**
+     * All favorites across every content type (live channels, movies, series),
+     * normalized into a single list for the dedicated Favorites screen. Rows whose
+     * underlying content is no longer cached are skipped.
+     */
+    fun observeAllFavorites(): Flow<List<FavoriteItem>> =
+        favoriteDao.observeAll().map { rows -> rows.mapNotNull { resolveFavorite(it.channelId) } }
+
+    private suspend fun resolveFavorite(id: String): FavoriteItem? = when {
+        id.startsWith("vod_") -> vodDao.getById(id.removePrefix("vod_"))?.let {
+            FavoriteItem(id, FavoriteKind.MOVIE, it.name, it.posterUrl, it.id, it.categoryName)
+        }
+        id.startsWith("series_") -> seriesDao.getById(id.removePrefix("series_"))?.let {
+            FavoriteItem(id, FavoriteKind.SERIES, it.name, it.posterUrl, it.id, it.categoryName)
+        }
+        else -> channelDao.getById(id)?.toModel(isFav = true)?.let {
+            FavoriteItem(id, FavoriteKind.CHANNEL, it.name, it.logoUrl, it.id, it.categoryName, it.streamUrl)
+        }
+    }
 
     fun observeRecent(limit: Int = 20): Flow<List<Channel>> =
         recentDao.observeRecentChannels(limit).map { list -> list.map { it.toModel() } }

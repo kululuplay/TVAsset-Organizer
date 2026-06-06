@@ -138,6 +138,10 @@ interface FavoriteDao {
         ORDER BY f.addedAt DESC
     """)
     fun observeFavoriteChannels(): Flow<List<ChannelEntity>>
+
+    /** Every favorite row (channels, movies, series), newest first. */
+    @Query("SELECT * FROM favorites ORDER BY addedAt DESC")
+    fun observeAll(): Flow<List<FavoriteEntity>>
 }
 
 @Dao

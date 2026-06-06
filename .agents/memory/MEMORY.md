@@ -8,3 +8,4 @@
 - [Android TV density normalization](android-tv-density-normalization.md) — UI zoomed/tiny across all pages = box mis-reports densityDpi; lock Configuration.densityDpi to DESIGN_WIDTH_DP (now 1120dp); raising that width = denser UI (more columns/rows).
 - [Cache-first detail screens](cache-first-detail-screens.md) — VOD/Series detail must render Room cache first then refresh network in bg; provider detail APIs can take ~20s.
 - [D-pad focus after ListAdapter diff](recyclerview-focus-after-diff.md) — requestFocus on a row must run in submitList's commit callback + post(), not right after submitList (async diff).
+- [Favorites id namespaces](favorites-id-namespaces.md) — favorites table mixes channel/vod_/series_ ids; the channel INNER JOIN silently drops non-channel favorites.

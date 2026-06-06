@@ -42,6 +42,7 @@
     <string name="section_all">Tümü</string>
     <string name="section_continue_watching">İzlemeye Devam Et</string>
     <string name="continue_empty">Henüz yarım kalan içerik yok. Bir şey izlemeye başlayın, burada görünecek.</string>
+    <string name="favorites_empty">Henüz favori yok. Kanalları, filmleri veya dizileri favoriye ekleyin, burada görünsünler.</string>
     <string name="now_playing">Şimdi oynuyor</string>
     <string name="up_next">Sırada</string>
     <string name="epg_min_left">%1$d dk kaldı</string>

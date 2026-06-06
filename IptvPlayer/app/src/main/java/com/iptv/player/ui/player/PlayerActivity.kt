@@ -36,6 +36,12 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     companion object {
         const val EXTRA_CHANNEL_ID = "extra_channel_id"
+
+        /**
+         * Optional source category id (e.g. HomeViewModel.CAT_FAVORITES) so up/down
+         * zapping cycles within the list the channel was opened from. Null = all live.
+         */
+        const val EXTRA_CATEGORY_ID = "extra_category_id"
         private const val OVERLAY_TIMEOUT = 4000L
         private const val LONG_PRESS_MS = 600L
     }
@@ -71,6 +77,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             finish()
             return
         }
+        val categoryId = intent.getStringExtra(EXTRA_CATEGORY_ID)
 
         lifecycleScope.launch {
             val mode: PlayerMode = viewModel.playerMode()
@@ -80,7 +87,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
                 mode = mode,
                 callback = this@PlayerActivity
             )
-            val channel = viewModel.resolveChannel(channelId)
+            val channel = viewModel.resolveChannel(channelId, categoryId)
             if (channel == null) {
                 Toast.makeText(this@PlayerActivity, R.string.error_unknown, Toast.LENGTH_SHORT).show()
                 finish()
