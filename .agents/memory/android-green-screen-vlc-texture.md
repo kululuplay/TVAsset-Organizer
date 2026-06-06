@@ -1,14 +1,17 @@
 ---
-name: Android TV green-screen on live VLC
-description: When green-frame-with-audio persists on libVLC live playback despite disabling direct rendering, switch to TextureView.
+name: Android TV green-screen / doubled-image on libVLC
+description: How libVLC video output is set up to avoid green screen and doubled/ghosted image on low-end Android TV sticks.
 ---
 
-On some Android TV panels libVLC shows a solid green picture (audio fine) for live channels.
+On some Android TV panels/sticks libVLC showed a solid green picture (audio fine) and/or a doubled/ghosted image on Live TV and VOD.
 
-The rule (in order of escalation):
-1. First mitigation: VLC options `--no-mediacodec-dr` and `--no-omxil-dr` (disable hardware direct rendering). This fixes most cases, including VOD (H.264).
-2. If green still persists for **live** streams (often different/HEVC codecs) even with those options, the SurfaceView hardware-overlay presentation path is the culprit. Fix: attach the VLCVideoLayout with `useTextureView=true` — i.e. `mediaPlayer.attachViews(layout, null, subtitles, /*useTextureView=*/ true)`. TextureView routes decoded frames through the GPU and bypasses the overlay/color path.
+Current rule (supersedes the earlier "switch live to TextureView" decision):
 
-**Why:** `--no-*-dr` only changes how decoded frames reach the surface, not the surface type. Some panels still mishandle YUV overlays on a SurfaceView; TextureView (GPU sampling) avoids it entirely. The ExoPlayer path already used `app:surface_type=texture_view` for the same reason.
+1. **Single video surface only.** Attach the media player with `mp.attachViews(layout, null, /*subtitles=*/false, /*useTextureView=*/false)` — a plain SurfaceView, no TextureView, and no separate subtitle surface. Embedded subtitles still render (blended onto the single video surface). Two surfaces (TextureView + hardware decode, or an extra subtitle surface) were the cause of the doubled image, and TextureView + hardware decode was re-triggering green frames on cheaper sticks.
+2. **Keep the direct-rendering options** `--no-mediacodec-dr` and `--no-omxil-dr` plus `--avcodec-hw=any` (hardware decode, automatic). These fix most green-frame cases by copying decoded frames out instead of pushing them straight to the surface.
+3. **Per-stream hardware→software fallback as the safety net.** Each stream starts at hardware-auto. If it raises `EncounteredError`, or fires `Playing` but no `Vout` (voutCount>0) appears within ~6s (audio-only / blank / green frame), restart the *same* stream once forcing software decode (`setHWDecoderEnabled(false,false)` + `:avcodec-hw=none`). Post the restart off the VLC event thread. Only after software also fails is the error surfaced. This replaces the old TextureView crutch for the panels that motivated it.
+4. **Surface lifecycle.** Guard attach with a `viewsAttached` flag so `attachViews` is never called twice without `detachViews`. Detach on pause / onStop and re-attach on resume / onStart, so navigating between Live and VOD never leaves a stale, double-attached surface behind.
 
-**How to apply:** VOD path (`VodPlayerActivity`) works on SurfaceView so it was left alone; only the live engine (`VlcPlayerEngine`) was switched to TextureView. Tradeoff: TextureView uses slightly more GPU/power. If an edge device regresses with TextureView, a runtime SurfaceView/TextureView toggle would be the next step.
+**Why:** The green frame is the decoder/overlay color path; the doubled image is two attached surfaces. The watchdog can detect "no video output" but cannot detect a green-but-present frame, so the option/surface changes (steps 1–2) are the real green-screen fix and the SW fallback (step 3) covers true HW-decode failures.
+
+**How to apply:** Live engine = `VlcPlayerEngine.kt`; VOD = `VodPlayerActivity.kt`. Both use the single-SurfaceView attach, the vout watchdog + error fallback, and detach/attach across the lifecycle. The VLC engine's internal SW fallback runs *before* it reports onError, so it doesn't fight `PlayerController`'s Exo→VLC fallback or retry/backoff. ExoPlayer path still uses `app:surface_type=texture_view` (unchanged).

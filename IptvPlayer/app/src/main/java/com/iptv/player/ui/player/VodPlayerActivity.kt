@@ -67,6 +67,9 @@ class VodPlayerActivity : BaseActivity() {
         private const val TRACK_HINT_DEBOUNCE_MS = 1200L
         // Auto-hide the on-screen controls after this much inactivity.
         private const val CONTROLS_TIMEOUT_MS = 5000L
+        // How long after playback starts we wait for a video surface before
+        // assuming hardware decode failed silently and restarting in software.
+        private const val VOUT_TIMEOUT_MS = 6000L
     }
 
     private lateinit var binding: ActivityVodPlayerBinding
@@ -88,6 +91,17 @@ class VodPlayerActivity : BaseActivity() {
     // Position to jump to once playback actually starts (resume support). VLC only
     // accepts a seek after the first Playing event, so we defer it until then.
     private var pendingSeekMs = 0L
+
+    // Per-stream decode state: each stream starts at hardware-auto and falls back
+    // to software decode once if it errors or produces no video surface.
+    private var softwareDecode = false
+    private var sawVout = false
+    private var viewsAttached = false
+    private val voutWatchdog = Runnable {
+        // Playback started but no video surface ever appeared: hardware decode
+        // produced audio only (or a blank/green frame). Retry in software.
+        if (!sawVout && !softwareDecode) restartSoftware()
+    }
 
     // Show the multi-language / subtitle hint at most once per playback session.
     private var trackHintShown = false
@@ -247,6 +261,9 @@ class VodPlayerActivity : BaseActivity() {
         val options = arrayListOf(
             "--network-caching=$CACHING_MS",
             "--file-caching=$CACHING_MS",
+            // Hardware decode, automatic: libVLC picks MediaCodec when usable and
+            // degrades to software on its own; the watchdog below adds a
+            // per-stream software restart for panels that fail silently.
             "--avcodec-hw=any",
             // Disable hardware direct rendering — prevents the green-screen-with-
             // audio bug on TV panels whose surface can't take decoder frames raw.
@@ -266,8 +283,13 @@ class VodPlayerActivity : BaseActivity() {
             )
         }
         binding.videoContainer.addView(layout)
-        // true = render embedded subtitles onto the video surface.
-        mp.attachViews(layout, null, true, false)
+        libVlc = vlc
+        mediaPlayer = mp
+        videoLayout = layout
+        // Single video surface only: a plain SurfaceView with no separate
+        // subtitle surface (subtitles are blended onto the video surface). A
+        // second surface caused the doubled/ghosted image on low-end TV sticks.
+        attachVideoViews()
 
         mp.setEventListener { event ->
             when (event.type) {
@@ -294,6 +316,18 @@ class VodPlayerActivity : BaseActivity() {
                         handler.removeCallbacks(trackHintRunnable)
                         handler.postDelayed(trackHintRunnable, TRACK_HINT_DEBOUNCE_MS)
                     }
+                    // Watch for a missing video surface (hardware decode produced
+                    // audio only / a blank frame) while on the hardware attempt.
+                    if (!softwareDecode) {
+                        handler.removeCallbacks(voutWatchdog)
+                        handler.postDelayed(voutWatchdog, VOUT_TIMEOUT_MS)
+                    }
+                }
+                MediaPlayer.Event.Vout -> {
+                    if (event.voutCount > 0) {
+                        sawVout = true
+                        handler.removeCallbacks(voutWatchdog)
+                    }
                 }
                 MediaPlayer.Event.ESAdded -> {
                     // Each elementary stream (audio/subtitle) detected resets the
@@ -317,15 +351,18 @@ class VodPlayerActivity : BaseActivity() {
                     persistResume()
                 }
                 MediaPlayer.Event.EncounteredError -> {
-                    binding.bufferingIndicator.visibility = View.GONE
+                    // Hardware decode error: silently retry the same stream in
+                    // software once before surfacing the failure to the user.
+                    // Posted off the VLC event thread before touching the player.
+                    if (!softwareDecode) {
+                        handler.post { restartSoftware() }
+                    } else {
+                        binding.bufferingIndicator.visibility = View.GONE
+                    }
                 }
                 MediaPlayer.Event.LengthChanged -> updateDuration()
             }
         }
-
-        libVlc = vlc
-        mediaPlayer = mp
-        videoLayout = layout
 
         lifecycleScope.launch {
             aspect = settings.aspectRatio.first()
@@ -349,12 +386,27 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     private fun preparePlayback(positionMs: Long) {
+        // A fresh stream always starts at hardware-auto.
+        softwareDecode = false
+        startPlayback(positionMs)
+    }
+
+    private fun startPlayback(positionMs: Long) {
         val vlc = libVlc ?: return
         val mp = mediaPlayer ?: return
         val url = streamUrl ?: return
+        handler.removeCallbacks(voutWatchdog)
+        sawVout = false
         pendingSeekMs = positionMs
         val media = Media(vlc, android.net.Uri.parse(url)).apply {
-            setHWDecoderEnabled(true, true)
+            if (softwareDecode) {
+                // Force pure software decode for this restart.
+                setHWDecoderEnabled(false, false)
+                addOption(":avcodec-hw=none")
+            } else {
+                // Hardware decode, automatic (libVLC may fall back internally).
+                setHWDecoderEnabled(true, false)
+            }
             addOption(":network-caching=$CACHING_MS")
             addOption(":file-caching=$CACHING_MS")
             addOption(":http-reconnect")
@@ -364,6 +416,36 @@ class VodPlayerActivity : BaseActivity() {
         media.release()
         mp.play()
         startTimers()
+    }
+
+    /**
+     * Restart the current stream in software decode after a hardware-decode
+     * error or a missing video surface. Resumes from roughly where we were so
+     * the switch is invisible to the viewer.
+     */
+    private fun restartSoftware() {
+        if (softwareDecode) return
+        softwareDecode = true
+        val resumeAt = (mediaPlayer?.time ?: 0L).coerceAtLeast(pendingSeekMs)
+        startPlayback(resumeAt)
+    }
+
+    // ---- Video surface lifecycle ---------------------------------------
+
+    private fun attachVideoViews() {
+        if (viewsAttached) return
+        val mp = mediaPlayer ?: return
+        val layout = videoLayout ?: return
+        // 3rd arg false = no separate subtitle surface; 4th arg false = plain
+        // SurfaceView (not TextureView). One video surface only.
+        mp.attachViews(layout, null, false, false)
+        viewsAttached = true
+    }
+
+    private fun detachVideoViews() {
+        if (!viewsAttached) return
+        mediaPlayer?.detachViews()
+        viewsAttached = false
     }
 
     private fun startTimers() {
@@ -578,12 +660,23 @@ class VodPlayerActivity : BaseActivity() {
 
     // ---- Lifecycle ------------------------------------------------------
 
+    override fun onStart() {
+        super.onStart()
+        // Re-attach the single video surface when returning to the foreground so
+        // video reappears after navigating away and back.
+        attachVideoViews()
+    }
+
     override fun onStop() {
         super.onStop()
         persistResume()
         handler.removeCallbacks(progressRunnable)
         handler.removeCallbacks(saveRunnable)
+        handler.removeCallbacks(voutWatchdog)
         mediaPlayer?.pause()
+        // Release the surface on background so navigating between players never
+        // leaves a stale, double-attached surface behind.
+        detachVideoViews()
     }
 
     override fun onDestroy() {
@@ -593,7 +686,7 @@ class VodPlayerActivity : BaseActivity() {
         handler.removeCallbacksAndMessages(null)
         mediaPlayer?.setEventListener(null)
         mediaPlayer?.stop()
-        mediaPlayer?.detachViews()
+        detachVideoViews()
         mediaPlayer?.release()
         libVlc?.release()
         mediaPlayer = null
