@@ -14,3 +14,4 @@
 - [IPTV single-connection contract](iptv-single-connection.md) — one stream/socket max: stop-before-start, serialize transitions, release (not pause) on background, reuse engine + swap Media.
 - [Player unit tests](player-unit-tests.md) — single-connection tests are pure-JVM via scheduler/engineFactory/coordinator seams; no Android SDK locally, they run only in CI.
 - [ExoPlayer→libVLC fallback for undecodable audio](player-engine-fallback.md) — Exo can play mute with no error (MP2/AC-3); force onError so VLC takes over.
+- [Dashboard keyless weather + signal](dashboard-keyless-weather.md) — real weather via IP geolocation + Open-Meteo, NO key/location perm; Wi-Fi RSSI needs ACCESS_WIFI_STATE + runCatching.

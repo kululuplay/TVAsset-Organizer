@@ -12,4 +12,36 @@
     <string name="dash_no_source">Etkin hizmet yok</string>
     <string name="dash_playlist">Geçerli Liste: %1$s</string>
     <string name="dash_expires">Bitiş: %1$s</string>
+
+    <!-- Modern dashboard -->
+    <string name="dash_prompt_title">Ne izlemek istersiniz?</string>
+    <string name="dash_prompt_subtitle">Gezinmek için yön tuşlarını, açmak için OK tuşunu kullanın.</string>
+    <string name="dash_newly_added">Yeni eklenenler</string>
+    <string name="dash_new_badge">YENİ</string>
+    <string name="dash_select_hint">Seç · OK</string>
+    <string name="dash_sub_live">Kanallar &amp; spor</string>
+    <string name="dash_sub_movies">Talep üzerine filmler</string>
+    <string name="dash_sub_series">Diziler &amp; bölümler</string>
+    <string name="dash_sub_settings">Tercihler</string>
+    <string name="dash_sub_favorites">Kaydettikleriniz</string>
+    <string name="dash_sub_continue">İzlemeye devam et</string>
+    <string name="dash_sub_playlists">Kaynakları yönet</string>
+    <string name="dash_sub_search">Her şeyi bul</string>
+    <string name="dash_sub_account">Profil &amp; hizmet</string>
+
+    <!-- Weather pill -->
+    <string name="weather_unavailable">Hava durumu yok</string>
+    <string name="weather_temp_format">%1$d°</string>
+    <string name="weather_clear">Açık</string>
+    <string name="weather_partly">Parçalı bulutlu</string>
+    <string name="weather_cloudy">Bulutlu</string>
+    <string name="weather_fog">Sisli</string>
+    <string name="weather_rain">Yağmurlu</string>
+    <string name="weather_snow">Karlı</string>
+    <string name="weather_storm">Fırtına</string>
+
+    <!-- Network signal -->
+    <string name="signal_good">İyi</string>
+    <string name="signal_weak">Zayıf</string>
+    <string name="signal_offline">Çevrimdışı</string>
 </resources>

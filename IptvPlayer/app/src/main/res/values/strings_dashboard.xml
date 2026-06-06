@@ -13,4 +13,36 @@
     <string name="dash_no_source">No active service</string>
     <string name="dash_playlist">Current Playlist: %1$s</string>
     <string name="dash_expires">Expires: %1$s</string>
+
+    <!-- Modern dashboard -->
+    <string name="dash_prompt_title">What would you like to watch?</string>
+    <string name="dash_prompt_subtitle">Use the arrow keys to browse, press OK to open.</string>
+    <string name="dash_newly_added">Newly added</string>
+    <string name="dash_new_badge">NEW</string>
+    <string name="dash_select_hint">Select · OK</string>
+    <string name="dash_sub_live">Channels &amp; sports</string>
+    <string name="dash_sub_movies">Films on demand</string>
+    <string name="dash_sub_series">Shows &amp; episodes</string>
+    <string name="dash_sub_settings">Preferences</string>
+    <string name="dash_sub_favorites">Your saved picks</string>
+    <string name="dash_sub_continue">Resume watching</string>
+    <string name="dash_sub_playlists">Manage sources</string>
+    <string name="dash_sub_search">Find anything</string>
+    <string name="dash_sub_account">Profile &amp; service</string>
+
+    <!-- Weather pill -->
+    <string name="weather_unavailable">Weather unavailable</string>
+    <string name="weather_temp_format">%1$d°</string>
+    <string name="weather_clear">Clear</string>
+    <string name="weather_partly">Partly cloudy</string>
+    <string name="weather_cloudy">Cloudy</string>
+    <string name="weather_fog">Fog</string>
+    <string name="weather_rain">Rain</string>
+    <string name="weather_snow">Snow</string>
+    <string name="weather_storm">Storm</string>
+
+    <!-- Network signal -->
+    <string name="signal_good">Good</string>
+    <string name="signal_weak">Weak</string>
+    <string name="signal_offline">Offline</string>
 </resources>
