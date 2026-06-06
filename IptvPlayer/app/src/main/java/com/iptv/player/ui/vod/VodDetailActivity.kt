@@ -1,8 +1,8 @@
 /*
  * VodDetailActivity.kt
- * Movie detail screen. Loads the full (optionally TMDB-enriched) VOD detail on
- * demand and shows poster, plot, cast, director, genre, year and rating with
- * Play and Trailer actions. Play opens the on-demand player with a resume id.
+ * Movie detail screen: a full-bleed backdrop hero with title, star rating, year,
+ * duration, genres, plot and a circular cast row. Play resumes when a saved
+ * position exists; Trailer opens externally; the heart toggles favorite state.
  */
 package com.iptv.player.ui.vod
 
@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
 import coil.load
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
@@ -19,7 +20,9 @@ import com.iptv.player.data.model.ResumeKind
 import com.iptv.player.data.model.VodItem
 import com.iptv.player.databinding.ActivityVodDetailBinding
 import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.ui.common.CastAdapter
 import com.iptv.player.ui.common.LogoPlaceholder
+import com.iptv.player.ui.common.RatingStars
 import com.iptv.player.ui.player.VodPlayerActivity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -33,13 +36,20 @@ class VodDetailActivity : BaseActivity() {
     private lateinit var binding: ActivityVodDetailBinding
     private val repo = ServiceLocator.repository
     private val settings = ServiceLocator.settings
+    private val castAdapter = CastAdapter()
 
     private var current: VodItem? = null
+    private var hasResume = false
+    private var isFavorite = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityVodDetailBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        binding.castList.layoutManager =
+            LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        binding.castList.adapter = castAdapter
 
         val id = intent.getStringExtra(EXTRA_VOD_ID)
         if (id == null) {
@@ -47,9 +57,10 @@ class VodDetailActivity : BaseActivity() {
             return
         }
 
-        binding.playButton.setOnClickListener { launchPlayer(autoResume = false) }
-        binding.resumeButton.setOnClickListener { launchPlayer(autoResume = true) }
+        binding.playButton.setOnClickListener { launchPlayer(autoResume = hasResume) }
         binding.trailerButton.setOnClickListener { openTrailer() }
+        binding.favoriteButton.setOnClickListener { toggleFavorite(id) }
+        binding.playButton.post { binding.playButton.requestFocus() }
 
         load(id)
     }
@@ -89,9 +100,17 @@ class VodDetailActivity : BaseActivity() {
     private suspend fun showItem(item: VodItem) {
         current = item
         bind(item)
-        // Offer a one-tap "continue" when a resume position already exists.
-        val resumed = repo.getResume("vod_" + item.id) > 0L
-        binding.resumeButton.visibility = if (resumed) View.VISIBLE else View.GONE
+        // Play auto-resumes when a saved position already exists.
+        hasResume = repo.getResume("vod_" + item.id) > 0L
+        // Reflect the stored favorite state on the heart icon.
+        isFavorite = try {
+            repo.isContentFavorite("vod_" + item.id)
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (t: Throwable) {
+            false
+        }
+        renderFavorite()
     }
 
     private fun bind(item: VodItem) {
@@ -99,40 +118,65 @@ class VodDetailActivity : BaseActivity() {
 
         val placeholder = LogoPlaceholder.forName(this, item.name)
         if (item.posterUrl.isNullOrBlank()) {
-            binding.detailPoster.setImageDrawable(placeholder)
+            binding.detailBackdrop.setImageDrawable(placeholder)
         } else {
-            binding.detailPoster.load(item.posterUrl) {
+            binding.detailBackdrop.load(item.posterUrl) {
                 placeholder(placeholder); error(placeholder)
             }
         }
 
+        RatingStars.apply(binding.ratingStars, item.rating)
+
         val year = item.releaseDate?.take(4)?.takeIf { it.isNotBlank() }
-        val rating = item.rating?.takeIf { it > 0 }?.let { String.format("%.1f", it) }
-        val meta = buildList {
-            if (year != null) add(getString(R.string.detail_year) + ": " + year)
-            if (rating != null) add(getString(R.string.detail_rating) + ": " + rating)
-        }.joinToString("   ")
-        binding.detailMeta.text = meta
-        binding.detailMeta.visibility = if (meta.isBlank()) View.GONE else View.VISIBLE
+        binding.detailYear.text = year ?: ""
+        binding.detailYear.visibility = if (year != null) View.VISIBLE else View.GONE
+
+        val duration = item.durationSecs?.takeIf { it > 0 }?.let { formatDuration(it) }
+        binding.detailDuration.text = duration ?: ""
+        binding.detailDuration.visibility = if (duration != null) View.VISIBLE else View.GONE
+
+        binding.detailGenre.text = item.genre.orEmpty()
+        binding.detailGenre.visibility = if (item.genre.isNullOrBlank()) View.GONE else View.VISIBLE
 
         binding.detailPlot.text = item.plot.orEmpty()
         binding.detailPlot.visibility = if (item.plot.isNullOrBlank()) View.GONE else View.VISIBLE
 
-        bindLabeled(binding.detailCast, R.string.detail_cast, item.cast)
-        bindLabeled(binding.detailDirector, R.string.detail_director, item.director)
-        bindLabeled(binding.detailGenre, R.string.detail_genre, item.genre)
-
         binding.trailerButton.visibility =
             if (item.trailerUrl.isNullOrBlank()) View.GONE else View.VISIBLE
+
+        val cast = CastAdapter.parse(item.cast).take(12)
+        castAdapter.submitList(cast)
+        val showCast = cast.isNotEmpty()
+        binding.castLabel.visibility = if (showCast) View.VISIBLE else View.GONE
+        binding.castList.visibility = if (showCast) View.VISIBLE else View.GONE
     }
 
-    private fun bindLabeled(view: android.widget.TextView, labelRes: Int, value: String?) {
-        if (value.isNullOrBlank()) {
-            view.visibility = View.GONE
-        } else {
-            view.visibility = View.VISIBLE
-            view.text = getString(labelRes) + ": " + value
+    /** Seconds -> "H:MM:SS" (or "M:SS" when under an hour). */
+    private fun formatDuration(secs: Int): String {
+        val h = secs / 3600
+        val m = (secs % 3600) / 60
+        val s = secs % 60
+        return if (h > 0) String.format("%d:%02d:%02d", h, m, s)
+        else String.format("%d:%02d", m, s)
+    }
+
+    private fun toggleFavorite(id: String) {
+        lifecycleScope.launch {
+            isFavorite = try {
+                repo.toggleFavorite("vod_" + id)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                return@launch
+            }
+            renderFavorite()
         }
+    }
+
+    private fun renderFavorite() {
+        binding.favoriteButton.setImageResource(
+            if (isFavorite) R.drawable.ic_heart_filled else R.drawable.ic_heart
+        )
     }
 
     private fun launchPlayer(autoResume: Boolean) {

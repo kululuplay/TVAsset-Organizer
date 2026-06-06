@@ -1,118 +1,229 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- VOD detail: poster + actions (left) | glass metadata card (right) with plot,
-     cast, director, genre. Styled to match the Live TV browser. -->
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- VOD detail hero: full-bleed backdrop with a left scrim. Title, star rating,
+     year, duration, genres, plot and Play / Trailer / favorite actions sit on
+     the left; the cast row is pinned to the bottom. -->
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_login_aurora"
-    android:paddingHorizontal="@dimen/safe_area_h"
-    android:paddingVertical="@dimen/safe_area_v"
-    android:fillViewport="true">
+    android:background="@color/bg_root">
+
+    <ImageView
+        android:id="@+id/detailBackdrop"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:scaleType="centerCrop"
+        android:contentDescription="@string/nav_movies"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <View
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@drawable/bg_scrim_left"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <View
+        android:layout_width="0dp"
+        android:layout_height="220dp"
+        android:background="@drawable/bg_scrim_bottom"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/heroGuideline"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintGuide_percent="0.62" />
 
     <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/safe_area_h"
+        android:paddingVertical="@dimen/safe_area_v"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="@id/heroGuideline">
 
-        <!-- Left: poster + actions -->
+        <TextView
+            android:id="@+id/detailTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_big_title"
+            android:textStyle="bold"
+            android:maxLines="2"
+            android:ellipsize="end" />
+
+        <!-- Rating + year + duration + genres -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="@dimen/space_m">
 
-            <ImageView
-                android:id="@+id/detailPoster"
-                android:layout_width="@dimen/poster_width"
-                android:layout_height="@dimen/poster_height"
-                android:scaleType="centerCrop"
-                android:contentDescription="@string/nav_movies" />
-
-            <Button
-                android:id="@+id/resumeButton"
-                style="@style/Widget.Iptv.Button"
-                android:layout_width="@dimen/poster_width"
+            <LinearLayout
+                android:id="@+id/ratingStars"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_m"
-                android:text="@string/resume_continue"
-                android:visibility="gone" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginEnd="@dimen/space_m">
 
-            <Button
-                android:id="@+id/playButton"
-                style="@style/Widget.Iptv.Button"
-                android:layout_width="@dimen/poster_width"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_m"
-                android:text="@string/detail_play" />
-
-            <Button
-                android:id="@+id/trailerButton"
-                style="@style/Widget.Iptv.Button"
-                android:layout_width="@dimen/poster_width"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_s"
-                android:text="@string/detail_trailer" />
-        </LinearLayout>
-
-        <!-- Right: metadata in a glass card -->
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:layout_marginStart="@dimen/space_l"
-            android:background="@drawable/bg_glass_card"
-            android:padding="@dimen/space_l">
+                <ImageView android:id="@+id/star1" android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_star_outline" android:contentDescription="@string/detail_rating" />
+                <ImageView android:id="@+id/star2" android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
+                <ImageView android:id="@+id/star3" android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
+                <ImageView android:id="@+id/star4" android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
+                <ImageView android:id="@+id/star5" android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
+            </LinearLayout>
 
             <TextView
-                android:id="@+id/detailTitle"
-                android:layout_width="match_parent"
+                android:id="@+id/detailYear"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_big_title"
-                android:textStyle="bold"
-                android:maxLines="2"
-                android:ellipsize="end" />
-
-            <TextView
-                android:id="@+id/detailMeta"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_s"
-                android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_body" />
-
-            <TextView
-                android:id="@+id/detailPlot"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_m"
+                android:background="@drawable/bg_time_chip"
+                android:paddingHorizontal="@dimen/space_s"
+                android:paddingVertical="2dp"
                 android:textColor="@color/text_primary"
                 android:textSize="@dimen/text_body"
-                android:lineSpacingMultiplier="1.2" />
+                android:textStyle="bold"
+                android:visibility="gone" />
 
             <TextView
-                android:id="@+id/detailCast"
-                android:layout_width="match_parent"
+                android:id="@+id/detailDuration"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_m"
+                android:layout_marginStart="@dimen/space_m"
+                android:drawableStart="@drawable/ic_clock"
+                android:drawablePadding="@dimen/space_xs"
+                android:gravity="center_vertical"
                 android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_caption" />
-
-            <TextView
-                android:id="@+id/detailDirector"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_s"
-                android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_caption" />
+                android:textSize="@dimen/text_body"
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/detailGenre"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_s"
+                android:layout_marginStart="@dimen/space_m"
                 android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_caption" />
+                android:textSize="@dimen/text_body"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:visibility="gone" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/detailPlot"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_m"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_body"
+            android:lineSpacingMultiplier="1.2"
+            android:maxLines="4"
+            android:ellipsize="end" />
+
+        <!-- Actions -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="@dimen/space_l">
+
+            <LinearLayout
+                android:id="@+id/playButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/bg_pill_light"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:paddingHorizontal="@dimen/space_l"
+                android:paddingVertical="@dimen/space_m">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_play"
+                    android:tint="#101820"
+                    android:layout_marginEnd="@dimen/space_s"
+                    android:contentDescription="@null" />
+
+                <TextView
+                    android:id="@+id/playLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/detail_play"
+                    android:textColor="#101820"
+                    android:textSize="@dimen/text_body"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/trailerButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/space_m"
+                android:background="@drawable/bg_pill_dark"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="@dimen/space_l"
+                android:paddingVertical="@dimen/space_m"
+                android:text="@string/detail_trailer"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <ImageView
+                android:id="@+id/favoriteButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/space_m"
+                android:background="@drawable/bg_pill_dark"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:padding="@dimen/space_m"
+                android:src="@drawable/ic_heart"
+                android:contentDescription="@string/section_favorites" />
+        </LinearLayout>
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/castLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/detail_cast"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_title"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/castList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_s"
+            android:clipToPadding="false"
+            android:visibility="gone" />
     </LinearLayout>
-</ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,12 +1,14 @@
 /*
  * SeriesDetailActivity.kt
- * Series detail screen. Loads seasons + episodes on demand, shows a horizontal
- * season selector and the episode list for the selected season. Clicking an
- * episode starts on-demand playback with a per-episode resume id.
+ * Series detail screen: a full-bleed backdrop hero with title, star rating,
+ * year, genres, an expandable plot and Play / Trailer / favorite actions. Below
+ * sit the Seasons chips and a horizontal episode rail. Play resumes the last
+ * watched episode when available, otherwise starts the season's first episode.
  */
 package com.iptv.player.ui.series
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
@@ -19,9 +21,12 @@ import com.iptv.player.data.model.ContinueItem
 import com.iptv.player.data.model.Episode
 import com.iptv.player.data.model.ResumeKind
 import com.iptv.player.data.model.Season
+import com.iptv.player.data.model.Series
 import com.iptv.player.databinding.ActivitySeriesDetailBinding
 import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.ui.common.CastAdapter
 import com.iptv.player.ui.common.LogoPlaceholder
+import com.iptv.player.ui.common.RatingStars
 import com.iptv.player.ui.player.VodPlayerActivity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
@@ -31,6 +36,8 @@ class SeriesDetailActivity : BaseActivity() {
 
     companion object {
         const val EXTRA_SERIES_ID = "extra_series_id"
+        private const val PLOT_COLLAPSED = 3
+        private const val PLOT_EXPANDED = 20
     }
 
     private lateinit var binding: ActivitySeriesDetailBinding
@@ -43,6 +50,10 @@ class SeriesDetailActivity : BaseActivity() {
     private var seriesId: String? = null
     private var seriesName: String = ""
     private var seriesPoster: String? = null
+    private var seriesTrailer: String? = null
+    private var currentSeason: Season? = null
+    private var latestResume: ContinueItem? = null
+    private var isFavorite = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,7 +68,12 @@ class SeriesDetailActivity : BaseActivity() {
         seriesId = id
 
         setupLists()
+        binding.playButton.setOnClickListener { onPlay() }
+        binding.trailerButton.setOnClickListener { openTrailer() }
+        binding.favoriteButton.setOnClickListener { toggleFavorite(id) }
+
         loadHeader(id)
+        loadFavorite(id)
         loadSeasons(id)
         loadResumeState(id)
     }
@@ -69,13 +85,13 @@ class SeriesDetailActivity : BaseActivity() {
         binding.seasonList.adapter = seasonAdapter
 
         episodeAdapter = EpisodeAdapter(onClicked = { playEpisode(it) })
-        binding.episodeList.layoutManager = LinearLayoutManager(this)
+        binding.episodeList.layoutManager =
+            LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.episodeList.adapter = episodeAdapter
     }
 
-    /** Per-episode progress + a one-tap continue for the last-watched episode. */
+    /** Per-episode progress + the last-watched episode for a one-tap Play resume. */
     private fun loadResumeState(id: String) {
-        binding.continueButton.visibility = View.GONE
         lifecycleScope.launch {
             // Resume metadata is a non-essential overlay; a lookup failure (e.g. a
             // stale local cache) must never stop the series page from opening.
@@ -90,13 +106,21 @@ class SeriesDetailActivity : BaseActivity() {
                 return@launch
             }
             episodeAdapter.setProgress(progress)
+            latestResume = latest
             if (latest != null) {
-                binding.continueButton.text = getString(R.string.resume_continue) + "  " +
+                binding.playLabel.text = getString(R.string.resume_continue) + "  " +
                     getString(R.string.episode_se_format, latest.seasonNumber, latest.episodeNumber)
-                binding.continueButton.visibility = View.VISIBLE
-                binding.continueButton.setOnClickListener { resumeLatest(latest) }
             }
         }
+    }
+
+    private fun onPlay() {
+        val latest = latestResume
+        if (latest != null) {
+            resumeLatest(latest)
+            return
+        }
+        currentSeason?.episodes?.firstOrNull()?.let { playEpisode(it) }
     }
 
     private fun resumeLatest(item: ContinueItem) {
@@ -117,38 +141,87 @@ class SeriesDetailActivity : BaseActivity() {
 
     private fun loadHeader(id: String) {
         lifecycleScope.launch {
-            val series = try {
+            val series: Series? = try {
                 repo.observeSeries().first().firstOrNull { it.id == id }
             } catch (ce: CancellationException) {
                 throw ce
             } catch (t: Throwable) {
                 null
             }
-            if (series != null) {
-                seriesName = series.name
-                seriesPoster = series.posterUrl
-                binding.detailTitle.text = series.name
-                val placeholder = LogoPlaceholder.forName(this@SeriesDetailActivity, series.name)
-                if (series.posterUrl.isNullOrBlank()) {
-                    binding.detailPoster.setImageDrawable(placeholder)
-                } else {
-                    binding.detailPoster.load(series.posterUrl) {
-                        placeholder(placeholder); error(placeholder)
-                    }
-                }
-                val year = series.releaseDate?.take(4)?.takeIf { it.isNotBlank() }
-                val rating = series.rating?.takeIf { it > 0 }?.let { String.format("%.1f", it) }
-                val meta = buildList {
-                    if (year != null) add(getString(R.string.detail_year) + ": " + year)
-                    if (rating != null) add(getString(R.string.detail_rating) + ": " + rating)
-                }.joinToString("   ")
-                binding.detailMeta.text = meta
-                binding.detailMeta.visibility = if (meta.isBlank()) View.GONE else View.VISIBLE
-                binding.detailPlot.text = series.plot.orEmpty()
-                binding.detailPlot.visibility =
-                    if (series.plot.isNullOrBlank()) View.GONE else View.VISIBLE
+            if (series != null) bindHeader(series)
+        }
+    }
+
+    private fun bindHeader(series: Series) {
+        seriesName = series.name
+        seriesPoster = series.posterUrl
+        seriesTrailer = series.trailerUrl
+        episodeAdapter.fallbackPoster = series.posterUrl
+
+        binding.detailTitle.text = series.name
+
+        val placeholder = LogoPlaceholder.forName(this, series.name)
+        if (series.posterUrl.isNullOrBlank()) {
+            binding.detailBackdrop.setImageDrawable(placeholder)
+        } else {
+            binding.detailBackdrop.load(series.posterUrl) {
+                placeholder(placeholder); error(placeholder)
             }
         }
+
+        RatingStars.apply(binding.ratingStars, series.rating)
+
+        val year = series.releaseDate?.take(4)?.takeIf { it.isNotBlank() }
+        binding.detailYear.text = year ?: ""
+        binding.detailYear.visibility = if (year != null) View.VISIBLE else View.GONE
+
+        binding.detailGenre.text = series.genre.orEmpty()
+        binding.detailGenre.visibility = if (series.genre.isNullOrBlank()) View.GONE else View.VISIBLE
+
+        binding.detailPlot.text = series.plot.orEmpty()
+        val hasPlot = !series.plot.isNullOrBlank()
+        binding.detailPlot.visibility = if (hasPlot) View.VISIBLE else View.GONE
+        binding.detailPlot.maxLines = PLOT_COLLAPSED
+        binding.detailMore.visibility = if (hasPlot) View.VISIBLE else View.GONE
+        binding.detailMore.setOnClickListener {
+            val expanded = binding.detailPlot.maxLines > PLOT_COLLAPSED
+            binding.detailPlot.maxLines = if (expanded) PLOT_COLLAPSED else PLOT_EXPANDED
+        }
+
+        binding.trailerButton.visibility =
+            if (series.trailerUrl.isNullOrBlank()) View.GONE else View.VISIBLE
+    }
+
+    private fun loadFavorite(id: String) {
+        lifecycleScope.launch {
+            isFavorite = try {
+                repo.isContentFavorite("series_" + id)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                false
+            }
+            renderFavorite()
+        }
+    }
+
+    private fun toggleFavorite(id: String) {
+        lifecycleScope.launch {
+            isFavorite = try {
+                repo.toggleFavorite("series_" + id)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                return@launch
+            }
+            renderFavorite()
+        }
+    }
+
+    private fun renderFavorite() {
+        binding.favoriteButton.setImageResource(
+            if (isFavorite) R.drawable.ic_heart_filled else R.drawable.ic_heart
+        )
     }
 
     private fun loadSeasons(id: String) {
@@ -165,8 +238,7 @@ class SeriesDetailActivity : BaseActivity() {
             }
             val hasCache = cached.isNotEmpty()
             if (hasCache) {
-                seasonAdapter.submitList(cached)
-                showSeason(cached.first())
+                seasonAdapter.submitList(cached) { showSeason(cached.first()) }
             }
             // Spinner only on a cold open with nothing cached to display yet.
             binding.loading.visibility = if (hasCache) View.GONE else View.VISIBLE
@@ -192,12 +264,13 @@ class SeriesDetailActivity : BaseActivity() {
                 episodeAdapter.submitList(emptyList())
                 return@launch
             }
-            seasonAdapter.submitList(seasons)
-            showSeason(seasons.first())
+            seasonAdapter.submitList(seasons) { showSeason(seasons.first()) }
         }
     }
 
     private fun showSeason(season: Season) {
+        currentSeason = season
+        seasonAdapter.setSelected(season.seasonNumber)
         episodeAdapter.submitList(season.episodes)
         binding.emptyState.visibility =
             if (season.episodes.isEmpty()) View.VISIBLE else View.GONE
@@ -217,5 +290,14 @@ class SeriesDetailActivity : BaseActivity() {
             putExtra(VodPlayerActivity.EXTRA_EPISODE, episode.episodeNumber)
         }
         startActivity(intent)
+    }
+
+    private fun openTrailer() {
+        val url = seriesTrailer ?: return
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }.onFailure {
+            Toast.makeText(this, R.string.error_unknown, Toast.LENGTH_SHORT).show()
+        }
     }
 }

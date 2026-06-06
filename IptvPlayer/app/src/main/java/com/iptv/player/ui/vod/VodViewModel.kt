@@ -5,8 +5,10 @@
  */
 package com.iptv.player.ui.vod
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Category
 import com.iptv.player.data.model.ContentType
@@ -23,7 +25,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class VodViewModel : ViewModel() {
+class VodViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo = ServiceLocator.repository
     private val settings = ServiceLocator.settings
@@ -45,12 +47,22 @@ class VodViewModel : ViewModel() {
         }
     }
 
-    /** Categories with an "All" entry pinned to the top. */
+    /** Categories with a "Recently added" entry pinned to the top, each with a count. */
     val categories: StateFlow<List<Category>> =
-        repo.observeVodCategories().map { cats ->
+        combine(
+            repo.observeVodCategories(),
+            repo.observeVodCategoryCounts()
+        ) { cats, counts ->
             buildList {
-                add(Category(CAT_ALL, "All", ContentType.VOD))
-                addAll(cats)
+                add(
+                    Category(
+                        CAT_ALL,
+                        getApplication<Application>().getString(R.string.cat_recently_added),
+                        ContentType.VOD,
+                        count = counts.values.sum()
+                    )
+                )
+                addAll(cats.map { it.copy(count = counts[it.id]) })
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

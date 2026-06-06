@@ -1,62 +1,127 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Series detail: poster + metadata glass card (left) | season selector +
-     episode list glass card (right). Styled to match the Live TV browser. -->
+<!-- Series detail hero: full-bleed backdrop with a left scrim. Title, rating,
+     year, duration, genres, plot (+ more) and Play / Trailer / favorite sit on
+     the left; the Seasons chips and the episode rail span the bottom. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_login_aurora"
-    android:paddingHorizontal="@dimen/safe_area_h"
-    android:paddingVertical="@dimen/safe_area_v">
+    android:background="@color/bg_root">
 
-    <!-- Left: poster + meta -->
-    <LinearLayout
-        android:id="@+id/infoPanel"
-        android:layout_width="@dimen/info_width"
+    <ImageView
+        android:id="@+id/detailBackdrop"
+        android:layout_width="0dp"
         android:layout_height="0dp"
-        android:orientation="vertical"
-        android:background="@drawable/bg_glass_card"
-        android:padding="@dimen/space_m"
-        app:layout_constraintStart_toStartOf="parent"
+        android:scaleType="centerCrop"
+        android:contentDescription="@string/nav_series"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent">
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-        <ImageView
-            android:id="@+id/detailPoster"
-            android:layout_width="@dimen/poster_width"
-            android:layout_height="@dimen/poster_height"
-            android:layout_gravity="center_horizontal"
-            android:scaleType="centerCrop"
-            android:contentDescription="@string/nav_series" />
+    <View
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@drawable/bg_scrim_left"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-        <Button
-            android:id="@+id/continueButton"
-            style="@style/Widget.Iptv.Button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_m"
-            android:text="@string/resume_continue"
-            android:visibility="gone" />
+    <View
+        android:layout_width="0dp"
+        android:layout_height="360dp"
+        android:background="@drawable/bg_scrim_bottom"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/heroGuideline"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintGuide_percent="0.62" />
+
+    <!-- Top-left info block -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/safe_area_h"
+        android:paddingTop="@dimen/safe_area_v"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="@id/heroGuideline">
 
         <TextView
             android:id="@+id/detailTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_m"
             android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_title"
+            android:textSize="@dimen/text_big_title"
             android:textStyle="bold"
-            android:maxLines="3"
+            android:maxLines="2"
             android:ellipsize="end" />
 
-        <TextView
-            android:id="@+id/detailMeta"
-            android:layout_width="match_parent"
+        <LinearLayout
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_s"
-            android:textColor="@color/text_secondary"
-            android:textSize="@dimen/text_caption" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="@dimen/space_m">
+
+            <LinearLayout
+                android:id="@+id/ratingStars"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginEnd="@dimen/space_m">
+
+                <ImageView android:id="@+id/star1" android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_star_outline" android:contentDescription="@string/detail_rating" />
+                <ImageView android:id="@+id/star2" android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
+                <ImageView android:id="@+id/star3" android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
+                <ImageView android:id="@+id/star4" android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
+                <ImageView android:id="@+id/star5" android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/detailYear"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_time_chip"
+                android:paddingHorizontal="@dimen/space_s"
+                android:paddingVertical="2dp"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/detailDuration"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/space_m"
+                android:drawableStart="@drawable/ic_clock"
+                android:drawablePadding="@dimen/space_xs"
+                android:gravity="center_vertical"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_body"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/detailGenre"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/space_m"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_body"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:visibility="gone" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/detailPlot"
@@ -64,46 +129,130 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_m"
             android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_caption"
-            android:lineSpacingMultiplier="1.2" />
-    </LinearLayout>
+            android:textSize="@dimen/text_body"
+            android:lineSpacingMultiplier="1.2"
+            android:maxLines="3"
+            android:ellipsize="end" />
 
-    <!-- Right: season selector + episodes -->
-    <LinearLayout
-        android:id="@+id/episodePanel"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:orientation="vertical"
-        android:layout_marginStart="@dimen/space_m"
-        android:background="@drawable/bg_glass_card"
-        android:padding="@dimen/space_m"
-        app:layout_constraintStart_toEndOf="@id/infoPanel"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent">
-
-        <HorizontalScrollView
-            android:layout_width="match_parent"
+        <TextView
+            android:id="@+id/detailMore"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:scrollbars="none">
+            android:layout_marginTop="@dimen/space_xs"
+            android:background="@drawable/bg_pill_dark"
+            android:focusable="true"
+            android:focusableInTouchMode="false"
+            android:paddingHorizontal="@dimen/space_m"
+            android:paddingVertical="@dimen/space_xs"
+            android:text="@string/detail_more"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_caption"
+            android:visibility="gone" />
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/seasonList"
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="@dimen/space_l">
+
+            <LinearLayout
+                android:id="@+id/playButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:clipToPadding="false" />
-        </HorizontalScrollView>
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/bg_pill_light"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:paddingHorizontal="@dimen/space_l"
+                android:paddingVertical="@dimen/space_m">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_play"
+                    android:tint="#101820"
+                    android:layout_marginEnd="@dimen/space_s"
+                    android:contentDescription="@null" />
+
+                <TextView
+                    android:id="@+id/playLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/detail_play"
+                    android:textColor="#101820"
+                    android:textSize="@dimen/text_body"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/trailerButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/space_m"
+                android:background="@drawable/bg_pill_dark"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="@dimen/space_l"
+                android:paddingVertical="@dimen/space_m"
+                android:text="@string/detail_trailer"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <ImageView
+                android:id="@+id/favoriteButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/space_m"
+                android:background="@drawable/bg_pill_dark"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:padding="@dimen/space_m"
+                android:src="@drawable/ic_heart"
+                android:contentDescription="@string/section_favorites" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Bottom: seasons + episodes rail -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/safe_area_h"
+        android:paddingBottom="@dimen/safe_area_v"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:id="@+id/seasonsLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/detail_seasons"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_title"
+            android:textStyle="bold"
+            android:layout_marginBottom="@dimen/space_s" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/seasonList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clipToPadding="false" />
 
         <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
+            android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_m">
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/episodeList"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="wrap_content"
                 android:clipToPadding="false" />
 
             <ProgressBar

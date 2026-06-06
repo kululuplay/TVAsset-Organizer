@@ -1,7 +1,7 @@
 /*
  * SeriesAdapter.kt
- * Poster grid for Series. Mirrors VodAdapter: Coil posters + rating badge with
- * DiffUtil for smooth scrolling on weak devices.
+ * Poster grid for Series. Mirrors VodAdapter: poster, title and release year
+ * with a floating rating badge, DiffUtil for smooth scrolling.
  */
 package com.iptv.player.ui.series
 
@@ -9,6 +9,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
@@ -36,19 +37,23 @@ class SeriesAdapter(
     inner class VH(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val poster: ImageView = itemView.findViewById(R.id.posterImage)
         private val name: TextView = itemView.findViewById(R.id.posterName)
+        private val meta: TextView = itemView.findViewById(R.id.posterMeta)
+        private val ratingRow: LinearLayout = itemView.findViewById(R.id.posterRatingRow)
         private val rating: TextView = itemView.findViewById(R.id.posterRating)
-        private val star: ImageView = itemView.findViewById(R.id.posterStar)
 
         fun bind(item: Series) {
             name.text = item.name
+
+            val year = item.releaseDate?.take(4)?.takeIf { it.isNotBlank() }
+            meta.text = year ?: ""
+            meta.visibility = if (year != null) View.VISIBLE else View.GONE
+
             val ratingText = item.rating?.takeIf { it > 0 }?.let { String.format("%.1f", it) }
             if (ratingText != null) {
                 rating.text = ratingText
-                rating.visibility = View.VISIBLE
-                star.visibility = View.VISIBLE
+                ratingRow.visibility = View.VISIBLE
             } else {
-                rating.visibility = View.GONE
-                star.visibility = View.GONE
+                ratingRow.visibility = View.GONE
             }
 
             val placeholder = LogoPlaceholder.forName(itemView.context, item.name)

@@ -156,6 +156,11 @@ class IptvRepository(
         !isFav
     }
 
+    /** Whether a generic content id (e.g. "vod_42", "series_7") is favorited. */
+    suspend fun isContentFavorite(id: String): Boolean = withContext(Dispatchers.IO) {
+        favoriteDao.isFavorite(id)
+    }
+
     suspend fun markWatched(channelId: String) = withContext(Dispatchers.IO) {
         recentDao.add(RecentEntity(channelId, System.currentTimeMillis()))
         recentDao.trim(keep = 50)
@@ -275,6 +280,10 @@ class IptvRepository(
             rows.map { Category(it.categoryId, it.categoryName ?: "Uncategorized", ContentType.VOD) }
         }
 
+    /** Movie count per category id, used for the category row badges. */
+    fun observeVodCategoryCounts(): Flow<Map<String, Int>> =
+        vodDao.observeCategoryCounts().map { rows -> rows.associate { it.categoryId to it.count } }
+
     fun searchVod(query: String): Flow<List<VodItem>> =
         vodDao.search(query).map { it.map { e -> e.toModel() } }
 
@@ -367,6 +376,10 @@ class IptvRepository(
         seriesDao.observeCategories().map { rows ->
             rows.map { Category(it.categoryId, it.categoryName ?: "Uncategorized", ContentType.SERIES) }
         }
+
+    /** Series count per category id, used for the category row badges. */
+    fun observeSeriesCategoryCounts(): Flow<Map<String, Int>> =
+        seriesDao.observeCategoryCounts().map { rows -> rows.associate { it.categoryId to it.count } }
 
     fun searchSeries(query: String): Flow<List<Series>> =
         seriesDao.search(query).map { it.map { e -> e.toModel() } }

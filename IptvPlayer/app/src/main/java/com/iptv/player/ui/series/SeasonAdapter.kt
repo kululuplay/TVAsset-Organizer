@@ -1,7 +1,8 @@
 /*
  * SeasonAdapter.kt
- * Horizontal season selector chips. Reuses item_category for a focusable,
- * D-pad friendly button look. Reports the selected season number.
+ * Horizontal season selector chips. The chosen season stays highlighted (white
+ * card) even when focus moves down into the episode rail. Reports the selected
+ * season on focus / click.
  */
 package com.iptv.player.ui.series
 
@@ -19,9 +20,18 @@ class SeasonAdapter(
     private val onSelected: (Season) -> Unit
 ) : ListAdapter<Season, SeasonAdapter.VH>(DIFF) {
 
+    /** Season number to render as "selected" while focus is on the episodes. */
+    private var selectedNumber: Int? = null
+
+    fun setSelected(seasonNumber: Int?) {
+        if (selectedNumber == seasonNumber) return
+        selectedNumber = seasonNumber
+        notifyDataSetChanged()
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_category, parent, false)
+            .inflate(R.layout.item_season, parent, false)
         return VH(view)
     }
 
@@ -34,6 +44,7 @@ class SeasonAdapter(
 
         fun bind(season: Season) {
             title.text = itemView.context.getString(R.string.series_season, season.seasonNumber)
+            itemView.isSelected = season.seasonNumber == selectedNumber
             itemView.setOnFocusChangeListener { _, hasFocus ->
                 if (hasFocus) onSelected(season)
             }

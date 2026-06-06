@@ -68,6 +68,14 @@ interface VodDao {
     @Query("SELECT * FROM vod WHERE name LIKE '%' || :query || '%' ORDER BY addedAt DESC, name LIMIT 200")
     fun search(query: String): Flow<List<VodEntity>>
 
+    /** Movie count per category id, used for the category row badges. */
+    @Query("""
+        SELECT categoryId AS categoryId, COUNT(*) AS count FROM vod
+        WHERE categoryId IS NOT NULL
+        GROUP BY categoryId
+    """)
+    fun observeCategoryCounts(): Flow<List<CategoryCountRow>>
+
     @Query("SELECT * FROM vod WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): VodEntity?
 }
@@ -100,6 +108,14 @@ interface SeriesDao {
 
     @Query("SELECT * FROM series WHERE name LIKE '%' || :query || '%' ORDER BY addedAt DESC, name LIMIT 200")
     fun search(query: String): Flow<List<SeriesEntity>>
+
+    /** Series count per category id, used for the category row badges. */
+    @Query("""
+        SELECT categoryId AS categoryId, COUNT(*) AS count FROM series
+        WHERE categoryId IS NOT NULL
+        GROUP BY categoryId
+    """)
+    fun observeCategoryCounts(): Flow<List<CategoryCountRow>>
 
     @Query("SELECT * FROM series WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): SeriesEntity?

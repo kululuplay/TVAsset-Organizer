@@ -100,6 +100,9 @@
     <string name="detail_plot">Plot</string>
     <string name="series_season">Season %1$d</string>
     <string name="series_episode">Episode %1$d</string>
+    <string name="detail_more">more</string>
+    <string name="detail_seasons">Seasons</string>
+    <string name="cat_recently_added">Recently added</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Poster card for the VOD / series grid. The card fills its grid cell
-     (match_parent) and the artwork keeps a fixed 2:3 ratio, so posters stay
-     proportional and gap-free at every TV resolution. Focusable for D-pad. -->
+<!-- Poster card for the VOD / series grid. The artwork keeps a 2:3 ratio; the
+     title and year sit below it. A small rating badge floats over the poster
+     when a rating is known. Focusable for D-pad. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -24,45 +24,62 @@
         app:layout_constraintDimensionRatio="H,2:3"
         android:contentDescription="@string/nav_movies" />
 
+    <!-- Floating rating badge (top-right of the poster). -->
+    <LinearLayout
+        android:id="@+id/posterRatingRow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_time_chip"
+        android:paddingHorizontal="@dimen/space_s"
+        android:paddingVertical="2dp"
+        android:layout_margin="@dimen/space_xs"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="@id/posterImage"
+        app:layout_constraintEnd_toEndOf="@id/posterImage">
+
+        <ImageView
+            android:id="@+id/posterStar"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:src="@drawable/ic_star"
+            android:layout_marginEnd="2dp"
+            android:contentDescription="@string/detail_rating" />
+
+        <TextView
+            android:id="@+id/posterRating"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_caption"
+            android:textStyle="bold"
+            android:maxLines="1" />
+    </LinearLayout>
+
     <TextView
         android:id="@+id/posterName"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_xs"
+        android:layout_marginTop="@dimen/space_s"
         android:textColor="@color/text_primary"
         android:textSize="@dimen/text_caption"
+        android:textStyle="bold"
         android:maxLines="1"
         android:ellipsize="end"
         app:layout_constraintTop_toBottomOf="@id/posterImage"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <LinearLayout
-        android:id="@+id/posterRatingRow"
+    <TextView
+        android:id="@+id/posterMeta"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_caption"
+        android:maxLines="1"
+        android:ellipsize="end"
         app:layout_constraintTop_toBottomOf="@id/posterName"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <ImageView
-            android:id="@+id/posterStar"
-            android:layout_width="14dp"
-            android:layout_height="14dp"
-            android:src="@drawable/ic_star"
-            android:layout_marginEnd="@dimen/space_xs"
-            android:visibility="gone"
-            android:contentDescription="@string/detail_rating" />
-
-        <TextView
-            android:id="@+id/posterRating"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textColor="@color/text_secondary"
-            android:textSize="@dimen/text_caption"
-            android:maxLines="1" />
-    </LinearLayout>
+        app:layout_constraintEnd_toEndOf="parent" />
 </androidx.constraintlayout.widget.ConstraintLayout>

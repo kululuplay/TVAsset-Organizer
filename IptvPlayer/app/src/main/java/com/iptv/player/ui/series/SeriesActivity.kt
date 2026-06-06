@@ -56,7 +56,11 @@ class SeriesActivity : BaseActivity() {
 
     private fun setupLists() {
         categoryAdapter = CategoryAdapter(
-            onFocused = { viewModel.selectCategory(it.id) },
+            onFocused = { cat ->
+                viewModel.selectCategory(cat.id)
+                categoryAdapter.setSelected(cat.id)
+                binding.contentTitle.text = cat.name
+            },
             onClicked = { focusFirstItem() }
         )
         binding.categoryList.layoutManager = LinearLayoutManager(this)
@@ -86,8 +90,15 @@ class SeriesActivity : BaseActivity() {
     private fun observe() {
         lifecycleScope.launch {
             viewModel.categories.collectLatest { cats ->
-                categoryAdapter.submitList(cats)
-                if (cats.isNotEmpty()) viewModel.selectCategory(cats.first().id)
+                val firstLoad = categoryAdapter.currentList.isEmpty()
+                categoryAdapter.submitList(cats) {
+                    if (firstLoad && cats.isNotEmpty()) {
+                        val first = cats.first()
+                        viewModel.selectCategory(first.id)
+                        categoryAdapter.setSelected(first.id)
+                        binding.contentTitle.text = first.name
+                    }
+                }
             }
         }
         lifecycleScope.launch {

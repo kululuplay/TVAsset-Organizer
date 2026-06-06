@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Series: top bar (title + clock/date) | categories (left) + search + poster
-     grid (center). Styled to match the Live TV browser. -->
+<!-- Series: left = search + category list (name + count); right = section header
+     ("Recently added" / category) + poster grid. Matches the Live TV browser. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -10,50 +10,7 @@
     android:paddingHorizontal="@dimen/safe_area_h"
     android:paddingVertical="@dimen/safe_area_v">
 
-    <!-- Top bar -->
-    <LinearLayout
-        android:id="@+id/navBar"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="@dimen/space_m"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/nav_series"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_title"
-            android:textStyle="bold"
-            android:letterSpacing="0.02" />
-
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1" />
-
-        <com.iptv.player.ui.common.ClockView
-            android:id="@+id/clock"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_title"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/dateText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="@color/text_secondary"
-            android:textSize="@dimen/text_body"
-            android:layout_marginStart="@dimen/space_m" />
-    </LinearLayout>
-
-    <!-- Left: categories -->
+    <!-- Left: search + categories -->
     <LinearLayout
         android:id="@+id/categoryPanel"
         android:layout_width="@dimen/category_width"
@@ -62,19 +19,21 @@
         android:background="@drawable/bg_glass_card"
         android:padding="@dimen/space_m"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/navBar"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <TextView
+        <EditText
+            android:id="@+id/searchInput"
+            style="@style/Widget.Iptv.Input"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/categories_title"
-            android:textColor="@color/text_secondary"
-            android:textSize="@dimen/text_caption"
-            android:textStyle="bold"
-            android:letterSpacing="0.05"
-            android:paddingHorizontal="@dimen/space_s"
-            android:layout_marginBottom="@dimen/space_s" />
+            android:drawableStart="@drawable/ic_search"
+            android:drawablePadding="@dimen/space_s"
+            android:hint="@string/search_hint"
+            android:imeOptions="actionSearch"
+            android:inputType="text"
+            android:maxLines="1"
+            android:layout_marginBottom="@dimen/space_m" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/categoryList"
@@ -85,30 +44,53 @@
             android:focusable="false" />
     </LinearLayout>
 
-    <!-- Center: search + poster grid -->
+    <!-- Right: section header + poster grid -->
     <LinearLayout
         android:id="@+id/contentPanel"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:orientation="vertical"
         android:layout_marginStart="@dimen/space_m"
-        android:background="@drawable/bg_glass_card"
-        android:padding="@dimen/space_m"
         app:layout_constraintStart_toEndOf="@id/categoryPanel"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/navBar"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <EditText
-            android:id="@+id/searchInput"
-            style="@style/Widget.Iptv.Input"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="@string/search_hint"
-            android:imeOptions="actionSearch"
-            android:inputType="text"
-            android:maxLines="1"
-            android:layout_marginBottom="@dimen/space_m" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="@dimen/space_m">
+
+            <TextView
+                android:id="@+id/contentTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/cat_recently_added"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_title"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <com.iptv.player.ui.common.ClockView
+                android:id="@+id/clock"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/dateText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_caption"
+                android:layout_marginStart="@dimen/space_m" />
+        </LinearLayout>
 
         <FrameLayout
             android:layout_width="match_parent"
