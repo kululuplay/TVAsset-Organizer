@@ -3,3 +3,7 @@ modules = ["python-3.11", "java-graalvm22.3"]
 expertMode = true
 
 [nix]
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 30000
