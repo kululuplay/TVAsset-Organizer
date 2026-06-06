@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- About: app name, version and a (placeholder) update check. -->
+<!-- About: app name, version and a modern in-app updater with live download
+     progress (percent, downloaded/total size, speed and ETA). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -43,6 +44,81 @@
         android:gravity="center"
         android:visibility="gone" />
 
+    <!-- Live download card: big percent, progress bar, size + speed/ETA. -->
+    <LinearLayout
+        android:id="@+id/updateProgressCard"
+        android:layout_width="560dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/bg_glass_card"
+        android:padding="@dimen/space_l"
+        android:layout_marginTop="@dimen/space_l"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:baselineAligned="false"
+            android:gravity="bottom">
+
+            <TextView
+                android:id="@+id/updatePercent"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="0%"
+                android:textColor="@color/accent"
+                android:textSize="44sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/updateDownloadingLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/about_download_started"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_caption"
+                android:paddingBottom="6dp" />
+        </LinearLayout>
+
+        <ProgressBar
+            android:id="@+id/updateProgressBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="10dp"
+            android:layout_marginTop="@dimen/space_m"
+            android:max="100"
+            android:progress="0"
+            android:progressDrawable="@drawable/update_progress" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:baselineAligned="false"
+            android:layout_marginTop="@dimen/space_m">
+
+            <TextView
+                android:id="@+id/updateSize"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
+                android:gravity="start" />
+
+            <TextView
+                android:id="@+id/updateSpeedEta"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_caption"
+                android:gravity="end" />
+        </LinearLayout>
+    </LinearLayout>
+
     <Button
         android:id="@+id/btnCheckUpdate"
         style="@style/Widget.Iptv.Button"
@@ -58,5 +134,14 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/space_s"
         android:text="@string/about_update_now"
+        android:visibility="gone" />
+
+    <Button
+        android:id="@+id/btnCancelUpdate"
+        style="@style/Widget.Iptv.Button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_s"
+        android:text="@string/about_download_cancel"
         android:visibility="gone" />
 </LinearLayout>

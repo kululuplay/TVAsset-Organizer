@@ -52,5 +52,10 @@
     <string name="about_update_failed">Güncelleme denetimi başarısız. Tekrar deneyin.</string>
     <string name="about_download_started">Güncelleme indiriliyor…</string>
     <string name="about_install_permission">Güncellemek için bu kaynaktan uygulama yüklemeye izin verin.</string>
+    <string name="about_download_preparing">Hazırlanıyor…</string>
+    <string name="about_download_size">%1$s / %2$s</string>
+    <string name="about_download_meta">%1$s/sn · %2$s kaldı</string>
+    <string name="about_download_complete">İndirme tamamlandı. Yükleyici açılıyor…</string>
+    <string name="about_download_cancel">İptal</string>
 
 </resources>

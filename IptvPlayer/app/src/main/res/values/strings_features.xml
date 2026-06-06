@@ -53,5 +53,10 @@
     <string name="about_update_failed">Update check failed. Please try again.</string>
     <string name="about_download_started">Downloading update…</string>
     <string name="about_install_permission">Allow installing apps from this source to update.</string>
+    <string name="about_download_preparing">Preparing…</string>
+    <string name="about_download_size">%1$s / %2$s</string>
+    <string name="about_download_meta">%1$s/s · %2$s left</string>
+    <string name="about_download_complete">Download complete. Opening installer…</string>
+    <string name="about_download_cancel">Cancel</string>
 
 </resources>
