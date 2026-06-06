@@ -21,6 +21,7 @@ import com.iptv.player.databinding.ActivityVodDetailBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.player.VodPlayerActivity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 class VodDetailActivity : BaseActivity() {
@@ -55,19 +56,42 @@ class VodDetailActivity : BaseActivity() {
 
     private fun load(id: String) {
         lifecycleScope.launch {
+            // 1) Render the cached record instantly so the poster, title and a
+            //    working Play button appear at once instead of waiting on the
+            //    (sometimes slow) detail API. The stream URL is already cached.
+            val cached = repo.getVodCached(id)
+            if (cached != null) showItem(cached)
+
+            // 2) Enrich (plot, cast, director, trailer, better poster) in the
+            //    background and refresh the screen when it arrives. Network
+            //    hiccups must never block or close an already-shown page.
             val config = settings.getSourceConfig()
-            val item = if (config != null) repo.getVodDetail(config, id) else null
-            if (item == null) {
-                Toast.makeText(this@VodDetailActivity, R.string.error_unknown, Toast.LENGTH_SHORT).show()
-                finish()
-                return@launch
+            val detailed = if (config != null) {
+                try {
+                    repo.getVodDetail(config, id)
+                } catch (ce: CancellationException) {
+                    throw ce
+                } catch (t: Throwable) {
+                    null
+                }
+            } else null
+
+            when {
+                detailed != null -> showItem(detailed)
+                cached == null -> {
+                    Toast.makeText(this@VodDetailActivity, R.string.error_unknown, Toast.LENGTH_SHORT).show()
+                    finish()
+                }
             }
-            current = item
-            bind(item)
-            // Offer a one-tap "continue" when a resume position already exists.
-            val resumed = repo.getResume("vod_" + item.id) > 0L
-            binding.resumeButton.visibility = if (resumed) View.VISIBLE else View.GONE
         }
+    }
+
+    private suspend fun showItem(item: VodItem) {
+        current = item
+        bind(item)
+        // Offer a one-tap "continue" when a resume position already exists.
+        val resumed = repo.getResume("vod_" + item.id) > 0L
+        binding.resumeButton.visibility = if (resumed) View.VISIBLE else View.GONE
     }
 
     private fun bind(item: VodItem) {

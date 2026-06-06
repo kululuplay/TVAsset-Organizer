@@ -2,3 +2,4 @@
 - [API21-safe vector launcher icons](android-vector-launcher-icons.md) — system-drawn icon VectorDrawables can't use inline gradients on API21-23; use flat fills + alpha.
 - [Kotlin trailing-lambda param order](kotlin-trailing-lambda-param-order.md) — required action lambda must stay LAST; appending a defaulted lambda after it breaks every trailing-lambda caller.
 - [In-app update checker via GitHub Releases](inapp-update-checker-github-releases.md) — updater needs a real Release (not CI artifacts); CI auto-publishes one; bump versionName to ship updates.
+- [Cache-first detail screens](cache-first-detail-screens.md) — VOD/Series detail must render Room cache first then refresh network in bg; provider detail APIs can take ~20s.

@@ -152,9 +152,26 @@ class SeriesDetailActivity : BaseActivity() {
     }
 
     private fun loadSeasons(id: String) {
-        binding.loading.visibility = View.VISIBLE
         binding.emptyState.visibility = View.GONE
         lifecycleScope.launch {
+            // 1) Show cached episodes instantly on a repeat visit so the list
+            //    appears at once instead of waiting on the series-info API.
+            val cached = try {
+                repo.getCachedSeasons(id)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                emptyList()
+            }
+            val hasCache = cached.isNotEmpty()
+            if (hasCache) {
+                seasonAdapter.submitList(cached)
+                showSeason(cached.first())
+            }
+            // Spinner only on a cold open with nothing cached to display yet.
+            binding.loading.visibility = if (hasCache) View.GONE else View.VISIBLE
+
+            // 2) Refresh from the network (also re-caches episodes for next time).
             val seasons = try {
                 val config = settings.getSourceConfig()
                 if (config != null) repo.getSeasons(config, id) else emptyList()
@@ -164,6 +181,11 @@ class SeriesDetailActivity : BaseActivity() {
                 emptyList<Season>()
             }
             binding.loading.visibility = View.GONE
+
+            // Cache was already on screen; the refresh just updated the DB so we
+            // leave the user's view undisturbed.
+            if (hasCache) return@launch
+
             if (seasons.isEmpty()) {
                 binding.emptyState.visibility = View.VISIBLE
                 seasonAdapter.submitList(emptyList())

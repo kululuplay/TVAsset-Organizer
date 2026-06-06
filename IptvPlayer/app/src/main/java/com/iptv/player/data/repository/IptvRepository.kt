@@ -318,7 +318,7 @@ class IptvRepository(
     suspend fun getVodDetail(config: SourceConfig, id: String): VodItem? = withContext(Dispatchers.IO) {
         val cached = vodDao.getById(id)?.toModel() ?: return@withContext null
         if (config.type != SourceType.XTREAM) return@withContext enrichWithTmdb(cached, isMovie = true)
-        runCatching {
+        val merged = try {
             val api = buildXtreamApi(config.serverUrl)
             val info = api.getVodInfo(config.username, config.password, id).info
             cached.copy(
@@ -333,7 +333,21 @@ class IptvRepository(
                 posterUrl = info?.movieImage?.takeIf { it.isNotBlank() } ?: cached.posterUrl,
                 tmdbId = info?.tmdbId
             )
-        }.getOrDefault(cached).let { enrichWithTmdb(it, isMovie = true) }
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (t: Throwable) {
+            cached
+        }
+        enrichWithTmdb(merged, isMovie = true)
+    }
+
+    /**
+     * Instant, network-free VOD record straight from the local cache (populated
+     * by [refreshVod]). Lets the detail screen render the poster, title and a
+     * working Play button immediately while [getVodDetail] enriches in the bg.
+     */
+    suspend fun getVodCached(id: String): VodItem? = withContext(Dispatchers.IO) {
+        vodDao.getById(id)?.toModel()
     }
 
     // ---- Series ---------------------------------------------------------
@@ -392,7 +406,7 @@ class IptvRepository(
     /** Loads seasons + episodes for a series and caches the episodes. */
     suspend fun getSeasons(config: SourceConfig, seriesId: String): List<Season> = withContext(Dispatchers.IO) {
         if (config.type != SourceType.XTREAM) return@withContext emptyList()
-        runCatching {
+        try {
             val api = buildXtreamApi(config.serverUrl)
             val info = api.getSeriesInfo(config.username, config.password, seriesId)
             val episodeEntities = mutableListOf<EpisodeEntity>()
@@ -421,14 +435,30 @@ class IptvRepository(
             }.sortedBy { it.seasonNumber }
             if (episodeEntities.isNotEmpty()) seriesDao.upsertEpisodes(episodeEntities)
             seasons
-        }.getOrElse {
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (t: Throwable) {
             // Fall back to cached episodes if the network call fails.
-            seriesDao.episodesFor(seriesId)
-                .groupBy { it.seasonNumber }
-                .map { (num, eps) -> Season(seriesId, num, eps.map { e -> e.toModel() }) }
-                .sortedBy { it.seasonNumber }
+            cachedSeasons(seriesId)
         }
     }
+
+    /**
+     * Instant, network-free seasons/episodes from the local cache (populated by a
+     * previous [getSeasons] call). Lets the series screen show episodes right away
+     * on a repeat visit while [getSeasons] refreshes the cache in the background.
+     */
+    suspend fun getCachedSeasons(seriesId: String): List<Season> = withContext(Dispatchers.IO) {
+        cachedSeasons(seriesId)
+    }
+
+    private suspend fun cachedSeasons(seriesId: String): List<Season> =
+        seriesDao.episodesFor(seriesId)
+            .groupBy { it.seasonNumber }
+            .map { (num, eps) ->
+                Season(seriesId, num, eps.map { e -> e.toModel() }.sortedBy { it.episodeNumber })
+            }
+            .sortedBy { it.seasonNumber }
 
     // ---- EPG ------------------------------------------------------------
 
