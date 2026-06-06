@@ -218,4 +218,16 @@
     <string name="update_remind_later">Daha sonra hatırlat</string>
     <string name="update_version_tag">v%1$s</string>
     <string name="no_guide">Program bilgisi yok</string>
+    <plurals name="new_movies_added">
+        <item quantity="one">%d yeni film eklendi</item>
+        <item quantity="other">%d yeni film eklendi</item>
+    </plurals>
+    <plurals name="new_series_added">
+        <item quantity="one">%d yeni dizi eklendi</item>
+        <item quantity="other">%d yeni dizi eklendi</item>
+    </plurals>
+    <plurals name="new_channels_added">
+        <item quantity="one">%d yeni kanal eklendi</item>
+        <item quantity="other">%d yeni kanal eklendi</item>
+    </plurals>
 </resources>

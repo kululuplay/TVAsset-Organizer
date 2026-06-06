@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Transient top-right "N new …" notice. Non-focusable so it never traps D-pad. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/popupRoot"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_new_content_popup"
+    android:paddingHorizontal="@dimen/space_m"
+    android:paddingVertical="@dimen/space_s"
+    android:elevation="8dp"
+    android:focusable="false"
+    android:focusableInTouchMode="false"
+    android:duplicateParentState="false">
+
+    <ImageView
+        android:id="@+id/popupIcon"
+        android:layout_width="26dp"
+        android:layout_height="26dp"
+        android:layout_marginEnd="@dimen/space_s"
+        android:tint="@color/accent"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_movie" />
+
+    <TextView
+        android:id="@+id/popupText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_body"
+        android:textStyle="bold"
+        tools:text="13 yeni film eklendi" />
+</LinearLayout>

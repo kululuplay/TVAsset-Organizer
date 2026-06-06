@@ -209,4 +209,28 @@
     <string name="update_remind_later">ذكّرني لاحقًا</string>
     <string name="update_version_tag">v%1$s</string>
     <string name="no_guide">لا يوجد دليل متاح</string>
+    <plurals name="new_movies_added">
+        <item quantity="zero">تمت إضافة %d فيلم جديد</item>
+        <item quantity="one">تمت إضافة فيلم جديد واحد</item>
+        <item quantity="two">تمت إضافة فيلمين جديدين</item>
+        <item quantity="few">تمت إضافة %d أفلام جديدة</item>
+        <item quantity="many">تمت إضافة %d فيلمًا جديدًا</item>
+        <item quantity="other">تمت إضافة %d فيلم جديد</item>
+    </plurals>
+    <plurals name="new_series_added">
+        <item quantity="zero">تمت إضافة %d مسلسل جديد</item>
+        <item quantity="one">تمت إضافة مسلسل جديد واحد</item>
+        <item quantity="two">تمت إضافة مسلسلين جديدين</item>
+        <item quantity="few">تمت إضافة %d مسلسلات جديدة</item>
+        <item quantity="many">تمت إضافة %d مسلسلًا جديدًا</item>
+        <item quantity="other">تمت إضافة %d مسلسل جديد</item>
+    </plurals>
+    <plurals name="new_channels_added">
+        <item quantity="zero">تمت إضافة %d قناة جديدة</item>
+        <item quantity="one">تمت إضافة قناة جديدة واحدة</item>
+        <item quantity="two">تمت إضافة قناتين جديدتين</item>
+        <item quantity="few">تمت إضافة %d قنوات جديدة</item>
+        <item quantity="many">تمت إضافة %d قناةً جديدة</item>
+        <item quantity="other">تمت إضافة %d قناة جديدة</item>
+    </plurals>
 </resources>

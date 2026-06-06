@@ -209,4 +209,16 @@
     <string name="update_remind_later">Später erinnern</string>
     <string name="update_version_tag">v%1$s</string>
     <string name="no_guide">Kein Programm verfügbar</string>
+    <plurals name="new_movies_added">
+        <item quantity="one">%d neuer Film hinzugefügt</item>
+        <item quantity="other">%d neue Filme hinzugefügt</item>
+    </plurals>
+    <plurals name="new_series_added">
+        <item quantity="one">%d neue Serie hinzugefügt</item>
+        <item quantity="other">%d neue Serien hinzugefügt</item>
+    </plurals>
+    <plurals name="new_channels_added">
+        <item quantity="one">%d neuer Sender hinzugefügt</item>
+        <item quantity="other">%d neue Sender hinzugefügt</item>
+    </plurals>
 </resources>

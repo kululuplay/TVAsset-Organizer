@@ -105,6 +105,10 @@ interface VodDao {
 
     @Query("SELECT * FROM vod WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): VodEntity?
+
+    /** All movie ids in a category, used to detect newly-added movies on refresh. */
+    @Query("SELECT id FROM vod WHERE categoryId = :categoryId")
+    suspend fun idsForCategory(categoryId: String): List<String>
 }
 
 @Dao
@@ -196,6 +200,10 @@ interface SeriesDao {
 
     @Query("SELECT * FROM episodes WHERE seriesId = :seriesId ORDER BY seasonNumber, episodeNumber")
     suspend fun episodesFor(seriesId: String): List<EpisodeEntity>
+
+    /** All series ids in a category, used to detect newly-added series on refresh. */
+    @Query("SELECT id FROM series WHERE categoryId = :categoryId")
+    suspend fun idsForCategory(categoryId: String): List<String>
 }
 
 @Dao

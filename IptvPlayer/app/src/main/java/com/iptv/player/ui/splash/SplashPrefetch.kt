@@ -13,6 +13,7 @@ package com.iptv.player.ui.splash
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.SourceConfig
+import com.iptv.player.util.NewContentNotifier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +53,9 @@ object SplashPrefetch {
             if (job?.isActive == true) return
             _stage.value = Stage.STARTING
             _essentialDone.value = false
+            // Fresh launch — clear any leftover "new content" tallies so the
+            // notices reflect only what this launch's refresh discovers.
+            NewContentNotifier.reset()
             job = ServiceLocator.appScope.launch { run(config) }
         }
     }

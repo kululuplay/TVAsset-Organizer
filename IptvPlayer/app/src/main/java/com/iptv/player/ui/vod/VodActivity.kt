@@ -8,14 +8,19 @@ package com.iptv.player.ui.vod
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.paging.LoadState
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.iptv.player.R
 import com.iptv.player.databinding.ActivityVodBinding
 import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.ui.common.NewContentPopup
 import com.iptv.player.ui.common.PinLockHelper
+import com.iptv.player.util.NewContentNotifier
 import com.iptv.player.ui.common.autoFitColumns
 import com.iptv.player.ui.common.isAdult
 import com.iptv.player.ui.home.CategoryAdapter
@@ -43,6 +48,28 @@ class VodActivity : BaseActivity() {
 
         setupLists()
         observe()
+        observeNewContent()
+    }
+
+    /**
+     * Flashes a transient top-right notice when the launch refresh found movies
+     * that weren't cached before, then clears the tally so it shows only once.
+     */
+    private fun observeNewContent() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                NewContentNotifier.newMovies.collectLatest { count ->
+                    if (count > 0) {
+                        NewContentPopup.show(
+                            this@VodActivity,
+                            R.drawable.ic_movie,
+                            resources.getQuantityString(R.plurals.new_movies_added, count, count)
+                        )
+                        NewContentNotifier.consumeMovies()
+                    }
+                }
+            }
+        }
     }
 
     override fun onResume() {

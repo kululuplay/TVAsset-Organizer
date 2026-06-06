@@ -81,6 +81,10 @@ interface ChannelDao {
     @Query("SELECT COUNT(*) FROM channels WHERE type = :type")
     suspend fun countByType(type: String): Int
 
+    /** All channel ids of a type, used to detect newly-added channels on refresh. */
+    @Query("SELECT id FROM channels WHERE type = :type")
+    suspend fun idsForType(type: String): List<String>
+
     // Channel count per category, used to show the badge on category rows. Mirrors
     // the visible-list semantics of observeByCategory: hidden channels are excluded.
     @Query("""

@@ -14,8 +14,10 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import android.view.KeyEvent
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import coil.load
 import com.iptv.player.R
@@ -24,10 +26,12 @@ import com.iptv.player.databinding.ActivityHomeBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.ChannelText
 import com.iptv.player.ui.common.LogoPlaceholder
+import com.iptv.player.ui.common.NewContentPopup
 import com.iptv.player.ui.common.NumberZapInputHelper
 import com.iptv.player.ui.common.PinLockHelper
 import com.iptv.player.ui.common.isAdult
 import com.iptv.player.ui.player.PlayerActivity
+import com.iptv.player.util.NewContentNotifier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -88,6 +92,28 @@ class HomeActivity : BaseActivity() {
 
         setupLists()
         observe()
+        observeNewContent()
+    }
+
+    /**
+     * Flashes a transient top-right notice when the launch refresh found live
+     * channels that weren't cached before, then clears the tally so it shows once.
+     */
+    private fun observeNewContent() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                NewContentNotifier.newLive.collectLatest { count ->
+                    if (count > 0) {
+                        NewContentPopup.show(
+                            this@HomeActivity,
+                            R.drawable.ic_tv,
+                            resources.getQuantityString(R.plurals.new_channels_added, count, count)
+                        )
+                        NewContentNotifier.consumeLive()
+                    }
+                }
+            }
+        }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =

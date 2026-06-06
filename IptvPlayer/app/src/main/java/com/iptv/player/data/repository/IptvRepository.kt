@@ -34,6 +34,7 @@ import com.iptv.player.data.model.AccountInfo
 import com.iptv.player.data.model.Category
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.ContentType
+import com.iptv.player.util.NewContentNotifier
 import com.iptv.player.data.model.ContinueItem
 import com.iptv.player.data.model.DiagnosticResult
 import com.iptv.player.data.model.FavoriteItem
@@ -271,6 +272,14 @@ class IptvRepository(
             // Stamp each channel with its index in the source list so the visible
             // order matches what the server delivered.
             val ordered = channels.mapIndexed { index, ch -> ch.copy(position = index) }
+            // Count genuinely-new live channels (Xtream ids are stable) so the Live
+            // screen can flash a "N new channels" notice. Captured before the wipe
+            // below; skipped on the very first load (no prior data) to avoid a
+            // false popup, and skipped for M3U whose ids aren't refresh-stable.
+            val newLiveCount = if (config.type == SourceType.XTREAM) {
+                val existing = channelDao.idsForType(ContentType.LIVE.name).toSet()
+                if (existing.isEmpty()) 0 else ordered.count { it.id !in existing }
+            } else 0
             // Replace channels + their search index atomically so live search never
             // sees a half-built index (or an empty one) if this is interrupted.
             // Insert in chunks: large Xtream accounts / M3U lists can hold tens of
@@ -286,6 +295,7 @@ class IptvRepository(
                     channelFtsDao.insertAll(batch.map { ChannelFtsEntity(it.id, it.name) })
                 }
             }
+            if (newLiveCount > 0) NewContentNotifier.addLive(newLiveCount)
             Outcome.Success(ordered.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
@@ -455,6 +465,13 @@ class IptvRepository(
                         categoryPosition = catPosition
                     )
                 }
+            // How many of these are genuinely new to the cache. Only meaningful on a
+            // forced re-check of an already-loaded category (the launch sweep): a first
+            // load has no prior rows, so everything would look "new". Guard on
+            // categoryId so a backend that ignores category filtering and returns the
+            // whole catalog can't inflate this category's count.
+            val existingIds = vodDao.idsForCategory(categoryId).toSet()
+            val newCount = items.count { it.categoryId == categoryId && it.id !in existingIds }
             // Merge (REPLACE on id) — never clear, so other categories remain
             // cached. Keep the FTS index in lockstep (drop this batch's old rows
             // then re-insert), all atomically so search never sees a half index.
@@ -464,7 +481,10 @@ class IptvRepository(
                 vodFtsDao.insertAll(items.map { VodFtsEntity(it.id, it.name) })
             }
             vodCategoryDao.markLoaded(categoryId)
-            Outcome.Success(items.size)
+            // On a forced launch sweep, return the genuine new-count so the caller can
+            // aggregate across categories and notify once; non-forced loads keep the
+            // legacy item-count contract.
+            Outcome.Success(if (force) newCount else items.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
             Outcome.Failure(e.toAppError())
@@ -498,6 +518,9 @@ class IptvRepository(
                     is Outcome.Failure -> Unit // keep going; best-effort per category
                 }
             }
+            // Notify the Movies screen once with the launch's total new count, so it
+            // shows a single "N new movies" popup instead of one per category.
+            if (added > 0) NewContentNotifier.addMovies(added)
             Outcome.Success(added)
         }
 
@@ -651,6 +674,11 @@ class IptvRepository(
                     categoryPosition = catPosition
                 )
             }
+            // How many of these are genuinely new to the cache. Only meaningful on a
+            // forced re-check of an already-loaded category (the launch sweep). Guard on
+            // categoryId so a backend that ignores category filtering can't inflate it.
+            val existingIds = seriesDao.idsForCategory(categoryId).toSet()
+            val newCount = items.count { it.categoryId == categoryId && it.id !in existingIds }
             // Merge (REPLACE on id), keeping the FTS index in lockstep, atomically.
             db.withTransaction {
                 seriesDao.upsertSeries(items)
@@ -658,7 +686,7 @@ class IptvRepository(
                 seriesFtsDao.insertAll(items.map { SeriesFtsEntity(it.id, it.name) })
             }
             seriesCategoryDao.markLoaded(categoryId)
-            Outcome.Success(items.size)
+            Outcome.Success(if (force) newCount else items.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
             Outcome.Failure(e.toAppError())
@@ -692,6 +720,8 @@ class IptvRepository(
                     is Outcome.Failure -> Unit // keep going; best-effort per category
                 }
             }
+            // Notify the Series screen once with the launch's total new count.
+            if (added > 0) NewContentNotifier.addSeries(added)
             Outcome.Success(added)
         }
 
