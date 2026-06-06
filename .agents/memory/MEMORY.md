@@ -4,5 +4,6 @@
 - [In-app update checker via GitHub Releases](inapp-update-checker-github-releases.md) — updater needs a real Release (not CI artifacts); CI auto-publishes one; bump versionName to ship updates.
 - [Update checker needs public repo](inapp-update-checker-github-releases.md) — unauthenticated GitHub releases API 404s on private repos; repo must be public for in-app OTA to work.
 - [Android TV green-screen on live VLC](android-green-screen-vlc-texture.md) — if green-frame-with-audio persists after `--no-*-dr`, attach VLCVideoLayout with useTextureView=true.
+- [Android TV density normalization](android-tv-density-normalization.md) — UI zoomed/tiny across all pages = box mis-reports densityDpi; lock Configuration.densityDpi to DESIGN_WIDTH_DP (now 1120dp); raising that width = denser UI (more columns/rows).
 - [Cache-first detail screens](cache-first-detail-screens.md) — VOD/Series detail must render Room cache first then refresh network in bg; provider detail APIs can take ~20s.
 - [D-pad focus after ListAdapter diff](recyclerview-focus-after-diff.md) — requestFocus on a row must run in submitList's commit callback + post(), not right after submitList (async diff).
