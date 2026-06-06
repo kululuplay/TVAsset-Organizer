@@ -12,6 +12,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -37,6 +38,10 @@ class ExoPlayerEngine(private val context: Context) : PlayerEngine {
     // (which persist on the player across media items, so zapping keeps them).
     private var preferredAudioLang: String? = null
     private var preferredSubtitleLang: String? = null
+
+    // Guards the unsupported-audio fallback so it bubbles up at most once per
+    // stream (onTracksChanged can fire repeatedly). Reset on every play().
+    private var reportedUnsupportedAudio = false
 
     override fun bind(container: ViewGroup) {
         // Small buffers => quick channel zap on live streams.
@@ -72,6 +77,19 @@ class ExoPlayerEngine(private val context: Context) : PlayerEngine {
 
             override fun onPlayerError(error: PlaybackException) {
                 listener?.onError(error.errorCodeName)
+            }
+
+            override fun onTracksChanged(tracks: Tracks) {
+                // The stream carries audio but this device has no decoder for any
+                // of it (e.g. MPEG audio / MP2, which most Android TVs lack). The
+                // track selector silently drops the undecodable audio, so the
+                // picture would play mute with no error — and the libVLC fallback
+                // (which decodes MP2/AC-3/DTS in software) would never kick in.
+                // Surface it as an error so the controller switches to libVLC.
+                if (!reportedUnsupportedAudio && allAudioUnsupported(tracks)) {
+                    reportedUnsupportedAudio = true
+                    listener?.onError("UNSUPPORTED_AUDIO")
+                }
             }
         })
 
@@ -116,9 +134,27 @@ class ExoPlayerEngine(private val context: Context) : PlayerEngine {
 
     override fun play(url: String) {
         val exo = player ?: return
+        reportedUnsupportedAudio = false
         exo.setMediaItem(MediaItem.fromUri(url))
         exo.playWhenReady = true
         exo.prepare()
+    }
+
+    /**
+     * True when the media has at least one audio track but none of them is
+     * decodable on this device — i.e. playback would be silent. A stream with no
+     * audio at all (video-only) returns false so it is not treated as broken.
+     */
+    private fun allAudioUnsupported(tracks: Tracks): Boolean {
+        var hasAudio = false
+        for (group in tracks.groups) {
+            if (group.type != C.TRACK_TYPE_AUDIO) continue
+            hasAudio = true
+            for (i in 0 until group.length) {
+                if (group.isTrackSupported(i)) return false
+            }
+        }
+        return hasAudio
     }
 
     override fun pause() { player?.playWhenReady = false }
