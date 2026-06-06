@@ -1,16 +1,12 @@
 /*
  * VodActivity.kt
- * Movies (VOD) screen: categories on the left, a focusable poster grid in the
- * center, and a search field that filters across all movies. Clicking a poster
- * opens the VOD detail screen. Fully D-pad driven for TV.
+ * Movies (VOD) screen: categories on the left and a focusable poster grid in the
+ * center. Clicking a poster opens the VOD detail screen. Fully D-pad driven for TV.
  */
 package com.iptv.player.ui.vod
 
 import android.content.Intent
 import android.os.Bundle
-import android.text.Editable
-import android.text.TextWatcher
-import android.view.KeyEvent
 import android.view.View
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -44,7 +40,6 @@ class VodActivity : BaseActivity() {
         setContentView(binding.root)
 
         setupLists()
-        setupSearch()
         observe()
     }
 
@@ -78,28 +73,6 @@ class VodActivity : BaseActivity() {
         binding.posterGrid.adapter = vodAdapter
     }
 
-    private fun setupSearch() {
-        binding.searchInput.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                viewModel.setQuery(s?.toString() ?: "")
-            }
-            override fun afterTextChanged(s: Editable?) {}
-        })
-        // Hard guarantee D-pad escape from the search box: an EditText consumes
-        // LEFT/RIGHT for cursor movement and DOWN handling varies across TV
-        // devices, so move focus into content explicitly instead of relying on
-        // geometric focus search.
-        binding.searchInput.setOnKeyListener { _, keyCode, event ->
-            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
-            when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_DOWN -> { focusFirstCategory(); true }
-                KeyEvent.KEYCODE_DPAD_RIGHT -> { focusFirstItem(); true }
-                else -> false
-            }
-        }
-    }
-
     private fun observe() {
         lifecycleScope.launch {
             viewModel.categories.collectLatest { cats ->
@@ -110,9 +83,8 @@ class VodActivity : BaseActivity() {
                         viewModel.selectCategory(first.id)
                         categoryAdapter.setSelected(first.id)
                         binding.contentTitle.text = first.name
-                        // Land focus on the content (first category) instead of
-                        // the search box, so the screen is navigable on entry and
-                        // the user can D-pad down/right; UP returns to search.
+                        // Land focus on the first category so the screen is
+                        // navigable on entry and the user can D-pad down/right.
                         focusFirstCategory()
                     }
                 }
@@ -121,7 +93,7 @@ class VodActivity : BaseActivity() {
         lifecycleScope.launch {
             viewModel.items.collectLatest { items ->
                 vodAdapter.submitList(items) {
-                    // New category / search result: start from the first poster.
+                    // New category: start from the first poster.
                     binding.posterGrid.scrollToPosition(0)
                 }
                 binding.emptyState.visibility =

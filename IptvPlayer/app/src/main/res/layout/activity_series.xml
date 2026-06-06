@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Series: left = search + category list (name + count); right = section header
+<!-- Series: left = category list (name + count); right = section header
      ("Recently added" / category) + poster grid. Matches the Live TV browser. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -10,10 +10,10 @@
     android:paddingHorizontal="@dimen/safe_area_h"
     android:paddingVertical="@dimen/safe_area_v">
 
-    <!-- Left: search + categories -->
+    <!-- Left: categories -->
     <LinearLayout
         android:id="@+id/categoryPanel"
-        android:layout_width="@dimen/category_width"
+        android:layout_width="@dimen/category_width_wide"
         android:layout_height="0dp"
         android:orientation="vertical"
         android:background="@drawable/bg_glass_card"
@@ -21,21 +21,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent">
-
-        <EditText
-            android:id="@+id/searchInput"
-            style="@style/Widget.Iptv.Input"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:drawableStart="@drawable/ic_search"
-            android:drawablePadding="@dimen/space_s"
-            android:hint="@string/search_hint"
-            android:imeOptions="actionSearch"
-            android:inputType="text"
-            android:maxLines="1"
-            android:nextFocusDown="@id/categoryList"
-            android:nextFocusRight="@id/posterGrid"
-            android:layout_marginBottom="@dimen/space_m" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/categoryList"
