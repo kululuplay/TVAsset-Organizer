@@ -51,6 +51,11 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
     private var sawVout = false
     private var viewsAttached = false
 
+    // Serializes every start/stop/release transition so a fast channel zap or a
+    // retry firing mid-switch can never open the new stream before the old one is
+    // fully torn down (which would briefly hold two connections to the server).
+    private val transitionLock = Any()
+
     private val watchdog = Handler(Looper.getMainLooper())
     private val voutWatchdog = Runnable {
         // Playback reported Playing but no video surface ever appeared: hardware
@@ -63,7 +68,8 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
         // absorb jitter, plus options that keep playback real-time on weak
         // hardware instead of accumulating delay (the main cause of stutter).
         val options = arrayListOf(
-            // Bigger live buffer soaks up network hiccups before they freeze.
+            // Low-latency-but-stable live buffer: small enough to keep zapping
+            // responsive, big enough to ride out normal network jitter.
             "--network-caching=$NETWORK_CACHING_MS",
             "--live-caching=$NETWORK_CACHING_MS",
             // Many IPTV TS streams carry irregular PCR/timestamps; disabling the
@@ -145,32 +151,43 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
     }
 
     private fun startMedia(url: String, software: Boolean) {
-        val vlc = libVlc ?: return
-        val mp = mediaPlayer ?: return
-        cancelVoutWatchdog()
-        sawVout = false
-        val media = Media(vlc, Uri.parse(url)).apply {
-            if (software) {
-                // Force pure software decode for this restart.
-                setHWDecoderEnabled(false, false)
-                addOption(":avcodec-hw=none")
-            } else {
-                // Hardware decode, automatic (libVLC may fall back internally).
-                setHWDecoderEnabled(true, false)
+        synchronized(transitionLock) {
+            val vlc = libVlc ?: return
+            val mp = mediaPlayer ?: return
+            cancelVoutWatchdog()
+            sawVout = false
+            // Single-connection contract: fully tear down the previous stream
+            // before opening the next. stop() closes the prior network socket so
+            // the server frees the one allowed slot immediately — without it, a
+            // fast zap or the retry path would swap the media URL on a still-
+            // connected player and the server would briefly count two active
+            // connections ("this account is in use on another device").
+            mp.stop()
+            // The surface is detached on stop()/background; re-attach before play.
+            attachViews()
+            val media = Media(vlc, Uri.parse(url)).apply {
+                if (software) {
+                    // Force pure software decode for this restart.
+                    setHWDecoderEnabled(false, false)
+                    addOption(":avcodec-hw=none")
+                } else {
+                    // Hardware decode, automatic (libVLC may fall back internally).
+                    setHWDecoderEnabled(true, false)
+                }
+                // Mirror the instance buffer/jitter tuning at the stream level.
+                addOption(":network-caching=$NETWORK_CACHING_MS")
+                addOption(":live-caching=$NETWORK_CACHING_MS")
+                addOption(":clock-jitter=0")
+                addOption(":clock-synchro=0")
+                // Auto-reconnect dropped HTTP connections instead of erroring out.
+                addOption(":http-reconnect")
+                // Per-stream User-Agent override (HTTP(S) playlist + segments).
+                addOption(":http-user-agent=${AppInfo.USER_AGENT}")
             }
-            // Mirror the instance buffer/jitter tuning at the stream level.
-            addOption(":network-caching=$NETWORK_CACHING_MS")
-            addOption(":live-caching=$NETWORK_CACHING_MS")
-            addOption(":clock-jitter=0")
-            addOption(":clock-synchro=0")
-            // Auto-reconnect dropped HTTP connections instead of erroring out.
-            addOption(":http-reconnect")
-            // Per-stream User-Agent override (covers HTTP(S) playlist + segments).
-            addOption(":http-user-agent=${AppInfo.USER_AGENT}")
+            mp.media = media
+            media.release()
+            mp.play()
         }
-        mp.media = media
-        media.release()
-        mp.play()
     }
 
     private fun restartSoftware() {
@@ -226,22 +243,29 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
     }
 
     override fun stop() {
-        cancelVoutWatchdog()
-        mediaPlayer?.stop()
+        synchronized(transitionLock) {
+            cancelVoutWatchdog()
+            // stop() closes the network socket so the single connection slot is
+            // freed immediately; detach the surface so nothing stale lingers.
+            mediaPlayer?.stop()
+            detachViews()
+        }
     }
 
     override fun release() {
-        cancelVoutWatchdog()
-        mediaPlayer?.setEventListener(null)
-        mediaPlayer?.stop()
-        detachViews()
-        mediaPlayer?.release()
-        libVlc?.release()
-        mediaPlayer = null
-        libVlc = null
-        videoLayout = null
-        listener = null
-        currentUrl = null
+        synchronized(transitionLock) {
+            cancelVoutWatchdog()
+            mediaPlayer?.setEventListener(null)
+            mediaPlayer?.stop()
+            detachViews()
+            mediaPlayer?.release()
+            libVlc?.release()
+            mediaPlayer = null
+            libVlc = null
+            videoLayout = null
+            listener = null
+            currentUrl = null
+        }
     }
 
     override fun setListener(listener: PlayerListener?) {
@@ -268,11 +292,11 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
 
     companion object {
         /**
-         * Live/network buffer in ms. A larger buffer trades a little extra
-         * zap/startup latency for far fewer stalls and freezes on jittery IPTV
-         * connections — the priority for smooth Android TV playback.
+         * Live/network buffer in ms. Kept low (~1.5 s) so channel zapping stays
+         * responsive while still riding out normal IPTV jitter; combined with
+         * --http-reconnect this auto-recovers from brief drops without stalling.
          */
-        private const val NETWORK_CACHING_MS = 3000
+        private const val NETWORK_CACHING_MS = 1500
 
         /**
          * How long after the Playing event we wait for a video surface before

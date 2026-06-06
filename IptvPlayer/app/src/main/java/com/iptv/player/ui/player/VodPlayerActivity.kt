@@ -61,8 +61,10 @@ class VodPlayerActivity : BaseActivity() {
         const val EXTRA_AUTO_RESUME = "extra_auto_resume"
         private const val SKIP_MS = 10_000L
         private const val SAVE_INTERVAL_MS = 10_000L
-        // Buffer (ms) for smooth start-up and seeking on jittery connections.
-        private const val CACHING_MS = 1500
+        // VOD buffer (ms): larger than live so start-up and seeking stay smooth on
+        // jittery connections without breaking the buffer. --http-reconnect keeps
+        // a dropped connection recovering over long movies.
+        private const val CACHING_MS = 4000
         // How long the "languages / subtitles available" banner stays visible.
         private const val TRACK_HINT_MS = 4500L
         // Debounce after track-detection events before evaluating the hint, so we
@@ -100,6 +102,16 @@ class VodPlayerActivity : BaseActivity() {
     private var softwareDecode = false
     private var sawVout = false
     private var viewsAttached = false
+
+    // Single-connection state. [transitionLock] serializes every start/stop so a
+    // restart can never open a second connection before the first is closed.
+    // [playbackStarted] gates the first foreground; on background we release the
+    // stream entirely (close the socket) and remember [backgroundPositionMs] so
+    // the foreground can re-acquire from where we left off.
+    private val transitionLock = Any()
+    private var playbackStarted = false
+    private var resumeOnForeground = false
+    private var backgroundPositionMs = 0L
     private val voutWatchdog = Runnable {
         // Playback started but no video surface ever appeared: hardware decode
         // produced audio only (or a blank/green frame). Retry in software.
@@ -404,30 +416,39 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     private fun startPlayback(positionMs: Long) {
-        val vlc = libVlc ?: return
-        val mp = mediaPlayer ?: return
-        val url = streamUrl ?: return
-        handler.removeCallbacks(voutWatchdog)
-        sawVout = false
-        pendingSeekMs = positionMs
-        val media = Media(vlc, android.net.Uri.parse(url)).apply {
-            if (softwareDecode) {
-                // Force pure software decode for this restart.
-                setHWDecoderEnabled(false, false)
-                addOption(":avcodec-hw=none")
-            } else {
-                // Hardware decode, automatic (libVLC may fall back internally).
-                setHWDecoderEnabled(true, false)
+        synchronized(transitionLock) {
+            val vlc = libVlc ?: return
+            val mp = mediaPlayer ?: return
+            val url = streamUrl ?: return
+            handler.removeCallbacks(voutWatchdog)
+            sawVout = false
+            // Single-connection contract: close any existing stream before opening
+            // the next so only one VOD connection is ever held (a software-decode
+            // restart or a returning foreground must not stack a second socket).
+            mp.stop()
+            // The surface is detached on background; re-attach before playing.
+            attachVideoViews()
+            pendingSeekMs = positionMs
+            val media = Media(vlc, android.net.Uri.parse(url)).apply {
+                if (softwareDecode) {
+                    // Force pure software decode for this restart.
+                    setHWDecoderEnabled(false, false)
+                    addOption(":avcodec-hw=none")
+                } else {
+                    // Hardware decode, automatic (libVLC may fall back internally).
+                    setHWDecoderEnabled(true, false)
+                }
+                addOption(":network-caching=$CACHING_MS")
+                addOption(":file-caching=$CACHING_MS")
+                addOption(":http-reconnect")
+                addOption(":http-user-agent=${AppInfo.USER_AGENT}")
             }
-            addOption(":network-caching=$CACHING_MS")
-            addOption(":file-caching=$CACHING_MS")
-            addOption(":http-reconnect")
-            addOption(":http-user-agent=${AppInfo.USER_AGENT}")
+            mp.media = media
+            media.release()
+            mp.play()
+            playbackStarted = true
+            startTimers()
         }
-        mp.media = media
-        media.release()
-        mp.play()
-        startTimers()
     }
 
     /**
@@ -674,21 +695,39 @@ class VodPlayerActivity : BaseActivity() {
 
     override fun onStart() {
         super.onStart()
-        // Re-attach the single video surface when returning to the foreground so
-        // video reappears after navigating away and back.
-        attachVideoViews()
+        if (resumeOnForeground) {
+            // Re-acquire the stream we released on background, from where we left.
+            resumeOnForeground = false
+            softwareDecode = false
+            startPlayback(backgroundPositionMs)
+        } else {
+            // First foreground (playback hasn't started yet) or nothing to resume:
+            // just (re)attach the single video surface.
+            attachVideoViews()
+        }
     }
 
     override fun onStop() {
         super.onStop()
-        persistResume()
         handler.removeCallbacks(progressRunnable)
         handler.removeCallbacks(saveRunnable)
         handler.removeCallbacks(voutWatchdog)
-        mediaPlayer?.pause()
-        // Release the surface on background so navigating between players never
-        // leaves a stale, double-attached surface behind.
-        detachVideoViews()
+        val mp = mediaPlayer
+        if (mp != null && playbackStarted) {
+            persistResume()
+            backgroundPositionMs = mp.time.coerceAtLeast(0L)
+            resumeOnForeground = true
+            // Fully release the connection on background (close the socket) rather
+            // than pausing, which would keep the single subscription slot busy.
+            synchronized(transitionLock) {
+                mp.stop()
+                detachVideoViews()
+            }
+        } else {
+            // Nothing playing yet: still release the surface so navigating between
+            // players never leaves a stale, double-attached surface behind.
+            detachVideoViews()
+        }
         // Not in the foreground anymore: don't keep the screen awake.
         screenGuard.keepScreenOn(false)
     }

@@ -63,21 +63,31 @@ class PlayerController(
         currentUrl = url
         triedVlcFallback = false
         retryCount = 0
-        // Pick the initial engine based on the user's chosen mode.
-        startEngine(useVlc = mode == PlayerMode.VLC)
+        // Reuse the existing engine (so a single LibVLC instance is kept and only
+        // the Media is swapped); the engine itself fully stops the prior stream
+        // before opening the next, guaranteeing one connection at a time.
+        ensureEngine(useVlc = mode == PlayerMode.VLC)
+        engine?.play(url)
     }
 
-    private fun startEngine(useVlc: Boolean) {
+    /**
+     * Make sure [engine] is the requested backend, reusing it when it already is
+     * so we don't tear down and recreate LibVLC/ExoPlayer on every channel zap.
+     * Only when the backend actually has to change do we release the old one
+     * first — never leaving two engines (and two connections) alive at once.
+     */
+    private fun ensureEngine(useVlc: Boolean) {
+        val wantName = if (useVlc) "VLC" else "ExoPlayer"
+        if (engine?.engineName == wantName) return
         releaseEngine()
         val newEngine: PlayerEngine =
             if (useVlc) VlcPlayerEngine(context) else ExoPlayerEngine(context)
         newEngine.bind(container)
         newEngine.setListener(engineListener)
-        engine = newEngine
         // Re-apply any user delay offsets to the (new) engine.
         newEngine.setAudioDelayMs(audioDelayMs)
         newEngine.setSubtitleDelayMs(subtitleDelayMs)
-        currentUrl?.let { newEngine.play(it) }
+        engine = newEngine
     }
 
     private val engineListener = object : PlayerListener {
@@ -97,7 +107,8 @@ class PlayerController(
         if (mode == PlayerMode.AUTO && onExo && !triedVlcFallback) {
             triedVlcFallback = true
             retryCount = 0
-            startEngine(useVlc = true)
+            ensureEngine(useVlc = true)
+            currentUrl?.let { engine?.play(it) }
             return
         }
 
@@ -117,6 +128,25 @@ class PlayerController(
     fun pause() = engine?.pause()
     fun resume() = engine?.resume()
     fun stop() = engine?.stop()
+
+    /**
+     * Fully release the live connection (closes the network socket) while keeping
+     * the engine instance, so the single subscription slot frees the moment the
+     * app is backgrounded — pausing alone would keep the socket (and slot) open.
+     * Pending retries are cancelled so nothing reopens the stream in the
+     * background.
+     */
+    fun releaseStream() {
+        mainHandler.removeCallbacksAndMessages(null)
+        engine?.stop()
+    }
+
+    /** Re-open the last stream after returning to the foreground. */
+    fun reacquireStream() {
+        val url = currentUrl ?: return
+        retryCount = 0
+        engine?.play(url)
+    }
 
     fun release() {
         mainHandler.removeCallbacksAndMessages(null)

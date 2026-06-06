@@ -368,7 +368,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     override fun onStop() {
         super.onStop()
-        if (::controller.isInitialized) controller.pause()
+        // Fully release the stream on background (close the socket) so the single
+        // subscription slot frees immediately — pausing would keep it occupied.
+        if (::controller.isInitialized) controller.releaseStream()
         // Not in the foreground anymore: don't keep the screen awake.
         screenGuard.keepScreenOn(false)
     }
@@ -376,7 +378,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     override fun onStart() {
         super.onStart()
         if (::controller.isInitialized) {
-            controller.resume()
+            // Re-open the stream we released when returning to the foreground.
+            controller.reacquireStream()
             // Returning to an active session: hold the screen on again.
             if (currentChannel != null) screenGuard.keepScreenOn(true)
         }
