@@ -248,6 +248,10 @@ class VodPlayerActivity : BaseActivity() {
             "--network-caching=$CACHING_MS",
             "--file-caching=$CACHING_MS",
             "--avcodec-hw=any",
+            // Disable hardware direct rendering — prevents the green-screen-with-
+            // audio bug on TV panels whose surface can't take decoder frames raw.
+            "--no-mediacodec-dr",
+            "--no-omxil-dr",
             "--http-reconnect",
             "--http-user-agent=${AppInfo.USER_AGENT}"
         )

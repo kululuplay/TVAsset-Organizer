@@ -6,6 +6,7 @@
 package com.iptv.player.player
 
 import android.content.Context
+import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -19,6 +20,7 @@ import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
+import com.iptv.player.R
 import com.iptv.player.util.AppInfo
 
 class ExoPlayerEngine(private val context: Context) : PlayerEngine {
@@ -66,12 +68,11 @@ class ExoPlayerEngine(private val context: Context) : PlayerEngine {
             }
         })
 
-        val view = PlayerView(context).apply {
-            useController = false
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
+        // Inflated from XML so the surface is a TextureView (app:surface_type),
+        // which avoids the green-screen-with-audio overlay bug seen with the
+        // default SurfaceView on some Android TV panels.
+        val view = (LayoutInflater.from(context)
+            .inflate(R.layout.view_exo_player, container, false) as PlayerView).apply {
             this.player = exo
         }
         container.addView(view)

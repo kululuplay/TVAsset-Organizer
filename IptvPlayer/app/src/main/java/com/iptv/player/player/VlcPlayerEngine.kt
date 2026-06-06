@@ -44,6 +44,12 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
             // Keep playback real-time: let VLC drop late frames (the defaults)
             // rather than rendering every frame and lagging further behind.
             "--avcodec-hw=any",
+            // Disable hardware "direct rendering": several Android TV panels show
+            // a solid green picture (audio fine) when the MediaCodec/OMX decoder
+            // pushes frames straight to the surface. Copying frames out first
+            // keeps hardware decode but renders correctly.
+            "--no-mediacodec-dr",
+            "--no-omxil-dr",
             // Cut decode load so cheap TV boxes keep up: skip the deblocking
             // loop filter and allow fast (slightly looser) decoding.
             "--avcodec-skiploopfilter=all",
