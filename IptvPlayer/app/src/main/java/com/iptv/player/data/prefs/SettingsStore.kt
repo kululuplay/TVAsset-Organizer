@@ -50,6 +50,7 @@ class SettingsStore(private val context: Context) {
         val AUTO_SYNC_HOURS = intPreferencesKey("auto_sync_hours")
         val PREF_AUDIO_TRACK = stringPreferencesKey("pref_audio_track")
         val PREF_SUBTITLE_TRACK = stringPreferencesKey("pref_subtitle_track")
+        val EXPIRY_WARN_SUPPRESSED = longPreferencesKey("expiry_warn_suppressed")
     }
 
     // ---- Routing flags --------------------------------------------------
@@ -207,6 +208,16 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setEpgUpdatedAt(time: Long) =
         context.dataStore.edit { it[Keys.EPG_UPDATED_AT] = time }
+
+    // ---- Subscription expiry warning -----------------------------------
+    // Stores the expiry timestamp the user chose to suppress the reminder for.
+    // A later renewal (a different expiry date) re-enables the reminder.
+
+    suspend fun getSuppressedExpiryWarning(): Long =
+        context.dataStore.data.first()[Keys.EXPIRY_WARN_SUPPRESSED] ?: 0L
+
+    suspend fun setSuppressedExpiryWarning(expiryMs: Long) =
+        context.dataStore.edit { it[Keys.EXPIRY_WARN_SUPPRESSED] = expiryMs }
 
     // ---- Source config --------------------------------------------------
 

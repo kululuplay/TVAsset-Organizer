@@ -221,4 +221,9 @@
         <item quantity="one">%d neuer Sender hinzugefügt</item>
         <item quantity="other">%d neue Sender hinzugefügt</item>
     </plurals>
+
+    <!-- Erinnerung an baldigen Abo-Ablauf (wird beim Start automatisch angezeigt) -->
+    <string name="expiry_warning_title">Abonnement läuft bald ab</string>
+    <string name="expiry_warning_message">Ihr Abonnement endet in 5 Tagen oder weniger. Um Unterbrechungen Ihrer Streams zu vermeiden, verlängern Sie es bitte rechtzeitig bei Ihrem IPTV-Anbieter.</string>
+    <string name="expiry_warning_dont_show">Nicht mehr anzeigen</string>
 </resources>

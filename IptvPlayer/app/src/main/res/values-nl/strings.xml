@@ -221,4 +221,9 @@
         <item quantity="one">%d nieuw kanaal toegevoegd</item>
         <item quantity="other">%d nieuwe kanalen toegevoegd</item>
     </plurals>
+
+    <!-- Herinnering bijna verlopen abonnement (wordt automatisch bij het starten getoond) -->
+    <string name="expiry_warning_title">Abonnement verloopt binnenkort</string>
+    <string name="expiry_warning_message">Uw abonnement verloopt over 5 dagen of minder. Om onderbreking van uw streams te voorkomen, verleng het tijdig bij uw IPTV-provider.</string>
+    <string name="expiry_warning_dont_show">Niet meer tonen</string>
 </resources>

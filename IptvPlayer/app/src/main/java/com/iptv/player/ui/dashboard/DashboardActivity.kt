@@ -24,6 +24,7 @@ import com.iptv.player.ui.search.SearchActivity
 import com.iptv.player.ui.series.SeriesActivity
 import com.iptv.player.ui.settings.SettingsActivity
 import com.iptv.player.ui.vod.VodActivity
+import com.iptv.player.update.ExpiryWarningPrompt
 import com.iptv.player.update.UpdatePrompt
 import kotlinx.coroutines.launch
 import java.text.DateFormat
@@ -45,7 +46,9 @@ class DashboardActivity : BaseActivity() {
         binding.tileLive.requestFocus()
 
         // Quietly check for a newer build once per session and offer to update.
-        UpdatePrompt.maybeShow(this)
+        // If no update prompt shows, fall back to the subscription-expiry reminder
+        // so the two launch dialogs never overlap.
+        UpdatePrompt.maybeShow(this) { ExpiryWarningPrompt.maybeShow(this) }
     }
 
     override fun onResume() {

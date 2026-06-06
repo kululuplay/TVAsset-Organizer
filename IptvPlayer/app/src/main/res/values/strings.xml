@@ -205,4 +205,9 @@
         <item quantity="one">%d new channel added</item>
         <item quantity="other">%d new channels added</item>
     </plurals>
+
+    <!-- Subscription expiry reminder (shown automatically at launch) -->
+    <string name="expiry_warning_title">Subscription expiring soon</string>
+    <string name="expiry_warning_message">Your subscription expires in 5 days or less. To avoid interruption to your streams, please renew in advance with your IPTV provider.</string>
+    <string name="expiry_warning_dont_show">Don\'t show again</string>
 </resources>

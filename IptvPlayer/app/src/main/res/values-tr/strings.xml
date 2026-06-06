@@ -230,4 +230,9 @@
         <item quantity="one">%d yeni kanal eklendi</item>
         <item quantity="other">%d yeni kanal eklendi</item>
     </plurals>
+
+    <!-- Abonelik bitiş uyarısı (açılışta otomatik gösterilir) -->
+    <string name="expiry_warning_title">Aboneliğiniz bitmek üzere</string>
+    <string name="expiry_warning_message">Aboneliğinizin bitimine son 5 gün kaldı. Yayınlarınızın kesilmesini istemiyorsanız, lütfen uzatma işlemini önceden IPTV sağlayıcınız ile gerçekleştirin.</string>
+    <string name="expiry_warning_dont_show">Bir daha gösterme</string>
 </resources>

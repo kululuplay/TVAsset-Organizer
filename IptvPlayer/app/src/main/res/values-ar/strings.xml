@@ -233,4 +233,9 @@
         <item quantity="many">تمت إضافة %d قناةً جديدة</item>
         <item quantity="other">تمت إضافة %d قناة جديدة</item>
     </plurals>
+
+    <!-- تذكير قرب انتهاء الاشتراك (يظهر تلقائيًا عند بدء التشغيل) -->
+    <string name="expiry_warning_title">اشتراكك على وشك الانتهاء</string>
+    <string name="expiry_warning_message">تبقّى على انتهاء اشتراكك ٥ أيام أو أقل. لتجنّب انقطاع البث، يُرجى التجديد مسبقًا مع مزوّد خدمة IPTV الخاص بك.</string>
+    <string name="expiry_warning_dont_show">عدم الإظهار مرة أخرى</string>
 </resources>

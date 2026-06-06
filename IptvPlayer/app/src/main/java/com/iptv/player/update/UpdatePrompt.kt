@@ -32,20 +32,35 @@ object UpdatePrompt {
      * Checks for an update off the main thread and, if one is available and we have
      * not already prompted this session, shows a non-blocking modern dialog. Safe to
      * call from any [AppCompatActivity] onCreate.
+     *
+     * [onNoPrompt] is invoked (on the main thread) when no update dialog is shown —
+     * because none is available, the check failed, or one was already shown this
+     * session. Callers use it to chain a different launch dialog (e.g. the expiry
+     * reminder) so the two never overlap.
      */
-    fun maybeShow(activity: AppCompatActivity) {
-        if (shownThisSession) return
+    fun maybeShow(activity: AppCompatActivity, onNoPrompt: (() -> Unit)? = null) {
+        if (shownThisSession) {
+            onNoPrompt?.invoke()
+            return
+        }
         activity.lifecycleScope.launch {
             val result = try {
                 UpdateChecker(ServiceLocator.httpClient).check(BuildConfig.VERSION_NAME)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                onNoPrompt?.invoke()
                 return@launch
             }
-            if (result !is UpdateResult.Available) return@launch
+            if (result !is UpdateResult.Available) {
+                onNoPrompt?.invoke()
+                return@launch
+            }
             // Don't touch the window once the Activity is going away.
-            if (shownThisSession || activity.isFinishing || activity.isDestroyed) return@launch
+            if (shownThisSession || activity.isFinishing || activity.isDestroyed) {
+                onNoPrompt?.invoke()
+                return@launch
+            }
             shownThisSession = true
 
             showDialog(activity, result.info)
