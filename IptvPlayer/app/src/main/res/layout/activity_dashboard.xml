@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Post-login launcher dashboard. Top bar: brand + live clock/date + circular
-     action buttons. Body: cohesive dark glass tiles with colored icon badges -
-     a Live TV hero (subtle brand glow) plus Movies/Series, then a row of
-     secondary tiles (Playlists, Catch Up, Favorites). Footer: current source +
-     expiry. Fully D-pad driven; tiles scale + brand-pink ring on focus. -->
+     action buttons. Body: a scrollable area (so the Continue Watching rail can
+     appear above the tiles without ever squashing them) holding cohesive dark
+     glass tiles with colored icon badges - a Live TV hero plus Movies/Series,
+     then a row of secondary tiles (Playlists, Catch Up, Favorites). Footer:
+     current source + expiry stays pinned. Fully D-pad driven; tiles scale +
+     brand-pink ring on focus, and focusing an off-screen tile auto-scrolls. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -113,317 +115,328 @@
             android:contentDescription="@string/action_exit" />
     </LinearLayout>
 
-    <!-- ===== Continue Watching rail (hidden until there is in-progress content) ===== -->
-    <LinearLayout
-        android:id="@+id/continueSection"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:layout_marginTop="@dimen/space_l"
-        android:visibility="gone"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/topBar">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/section_continue_watching"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_title"
-            android:textStyle="bold" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/continueList"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_s"
-            android:clipToPadding="false"
-            android:focusable="false" />
-    </LinearLayout>
-
-    <!-- ===== Tile grid ===== -->
-    <LinearLayout
-        android:id="@+id/grid"
+    <!-- ===== Scrollable body: Continue rail (optional) + tile grid ===== -->
+    <ScrollView
+        android:id="@+id/scrollBody"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:orientation="vertical"
-        android:layout_marginTop="@dimen/space_l"
+        android:layout_marginTop="@dimen/space_m"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:scrollbars="none"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/continueSection"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
         app:layout_constraintBottom_toTopOf="@id/footer">
 
-        <!-- Top: Live hero + (Movies / Series) -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="2"
-            android:orientation="horizontal">
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
 
-            <!-- Live TV hero -->
-            <FrameLayout
-                android:id="@+id/tileLive"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:layout_marginEnd="@dimen/space_m"
-                android:background="@drawable/bg_tile_hero"
-                android:foreground="@drawable/bg_tile_focus"
-                android:stateListAnimator="@animator/tile_focus"
-                android:focusable="true"
-                android:clickable="true">
+            <!-- ===== Continue Watching rail (hidden until there is in-progress content) ===== -->
+            <LinearLayout
+                android:id="@+id/continueSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginBottom="@dimen/space_l"
+                android:visibility="gone">
 
-                <LinearLayout
+                <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="center_vertical|start"
-                    android:layout_marginStart="@dimen/space_xl"
-                    android:orientation="vertical"
-                    android:gravity="start">
+                    android:text="@string/section_continue_watching"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_title"
+                    android:textStyle="bold" />
 
-                    <ImageView
-                        android:layout_width="@dimen/badge_hero"
-                        android:layout_height="@dimen/badge_hero"
-                        android:background="@drawable/bg_badge_live"
-                        android:padding="@dimen/space_l"
-                        android:src="@drawable/ic_tv"
-                        android:tint="@color/text_primary"
-                        android:contentDescription="@string/nav_live" />
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/continueList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_s"
+                    android:clipToPadding="false"
+                    android:focusable="false" />
+            </LinearLayout>
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/nav_live"
-                        android:textColor="@color/text_primary"
-                        android:textSize="@dimen/text_big_title"
-                        android:textStyle="bold"
-                        android:layout_marginTop="@dimen/space_l" />
-
-                    <View
-                        android:layout_width="56dp"
-                        android:layout_height="4dp"
-                        android:layout_marginTop="@dimen/space_m"
-                        android:background="@drawable/bg_accent_underline" />
-                </LinearLayout>
-            </FrameLayout>
-
-            <!-- Right column: Movies + Series -->
+            <!-- ===== Tile grid (fixed heights so it never collapses) ===== -->
             <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
+                android:id="@+id/grid"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <FrameLayout
-                    android:id="@+id/tileMovies"
+                <!-- Top: Live hero + (Movies / Series) -->
+                <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_weight="1"
-                    android:layout_marginBottom="@dimen/space_m"
-                    android:background="@drawable/bg_tile_surface"
-                    android:foreground="@drawable/bg_tile_focus"
-                    android:stateListAnimator="@animator/tile_focus"
-                    android:focusable="true"
-                    android:clickable="true">
+                    android:layout_height="220dp"
+                    android:orientation="horizontal">
 
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center_vertical|start"
-                        android:layout_marginStart="@dimen/space_l"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical">
+                    <!-- Live TV hero -->
+                    <FrameLayout
+                        android:id="@+id/tileLive"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="@dimen/space_m"
+                        android:background="@drawable/bg_tile_hero"
+                        android:foreground="@drawable/bg_tile_focus"
+                        android:stateListAnimator="@animator/tile_focus"
+                        android:focusable="true"
+                        android:clickable="true">
 
-                        <ImageView
-                            android:layout_width="@dimen/badge_medium"
-                            android:layout_height="@dimen/badge_medium"
-                            android:background="@drawable/bg_badge_movies"
-                            android:padding="@dimen/space_m"
-                            android:src="@drawable/ic_movie"
-                            android:tint="@color/text_primary"
-                            android:contentDescription="@string/nav_movies" />
-
-                        <TextView
+                        <LinearLayout
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/nav_movies"
-                            android:textColor="@color/text_primary"
-                            android:textSize="@dimen/text_title"
-                            android:textStyle="bold"
-                            android:layout_marginStart="@dimen/space_m" />
-                    </LinearLayout>
-                </FrameLayout>
+                            android:layout_gravity="center_vertical|start"
+                            android:layout_marginStart="@dimen/space_xl"
+                            android:orientation="vertical"
+                            android:gravity="start">
 
-                <FrameLayout
-                    android:id="@+id/tileSeries"
-                    android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_tile_surface"
-                    android:foreground="@drawable/bg_tile_focus"
-                    android:stateListAnimator="@animator/tile_focus"
-                    android:focusable="true"
-                    android:clickable="true">
+                            <ImageView
+                                android:layout_width="@dimen/badge_hero"
+                                android:layout_height="@dimen/badge_hero"
+                                android:background="@drawable/bg_badge_live"
+                                android:padding="@dimen/space_l"
+                                android:src="@drawable/ic_tv"
+                                android:tint="@color/text_primary"
+                                android:contentDescription="@string/nav_live" />
 
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/nav_live"
+                                android:textColor="@color/text_primary"
+                                android:textSize="@dimen/text_big_title"
+                                android:textStyle="bold"
+                                android:layout_marginTop="@dimen/space_l" />
+
+                            <View
+                                android:layout_width="56dp"
+                                android:layout_height="4dp"
+                                android:layout_marginTop="@dimen/space_m"
+                                android:background="@drawable/bg_accent_underline" />
+                        </LinearLayout>
+                    </FrameLayout>
+
+                    <!-- Right column: Movies + Series -->
                     <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center_vertical|start"
-                        android:layout_marginStart="@dimen/space_l"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical">
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
 
-                        <ImageView
-                            android:layout_width="@dimen/badge_medium"
-                            android:layout_height="@dimen/badge_medium"
-                            android:background="@drawable/bg_badge_series"
-                            android:padding="@dimen/space_m"
-                            android:src="@drawable/ic_series"
-                            android:tint="@color/text_primary"
-                            android:contentDescription="@string/nav_series" />
+                        <FrameLayout
+                            android:id="@+id/tileMovies"
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:layout_marginBottom="@dimen/space_m"
+                            android:background="@drawable/bg_tile_surface"
+                            android:foreground="@drawable/bg_tile_focus"
+                            android:stateListAnimator="@animator/tile_focus"
+                            android:focusable="true"
+                            android:clickable="true">
 
-                        <TextView
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="center_vertical|start"
+                                android:layout_marginStart="@dimen/space_l"
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical">
+
+                                <ImageView
+                                    android:layout_width="@dimen/badge_medium"
+                                    android:layout_height="@dimen/badge_medium"
+                                    android:background="@drawable/bg_badge_movies"
+                                    android:padding="@dimen/space_m"
+                                    android:src="@drawable/ic_movie"
+                                    android:tint="@color/text_primary"
+                                    android:contentDescription="@string/nav_movies" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/nav_movies"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="@dimen/text_title"
+                                    android:textStyle="bold"
+                                    android:layout_marginStart="@dimen/space_m" />
+                            </LinearLayout>
+                        </FrameLayout>
+
+                        <FrameLayout
+                            android:id="@+id/tileSeries"
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_tile_surface"
+                            android:foreground="@drawable/bg_tile_focus"
+                            android:stateListAnimator="@animator/tile_focus"
+                            android:focusable="true"
+                            android:clickable="true">
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="center_vertical|start"
+                                android:layout_marginStart="@dimen/space_l"
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical">
+
+                                <ImageView
+                                    android:layout_width="@dimen/badge_medium"
+                                    android:layout_height="@dimen/badge_medium"
+                                    android:background="@drawable/bg_badge_series"
+                                    android:padding="@dimen/space_m"
+                                    android:src="@drawable/ic_series"
+                                    android:tint="@color/text_primary"
+                                    android:contentDescription="@string/nav_series" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/nav_series"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="@dimen/text_title"
+                                    android:textStyle="bold"
+                                    android:layout_marginStart="@dimen/space_m" />
+                            </LinearLayout>
+                        </FrameLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Bottom: Playlists / Catch Up / Favorites -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="130dp"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="@dimen/space_m">
+
+                    <FrameLayout
+                        android:id="@+id/tilePlaylists"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="@dimen/space_m"
+                        android:background="@drawable/bg_tile_surface"
+                        android:foreground="@drawable/bg_tile_focus"
+                        android:stateListAnimator="@animator/tile_focus"
+                        android:focusable="true"
+                        android:clickable="true">
+
+                        <LinearLayout
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/nav_series"
-                            android:textColor="@color/text_primary"
-                            android:textSize="@dimen/text_title"
-                            android:textStyle="bold"
-                            android:layout_marginStart="@dimen/space_m" />
-                    </LinearLayout>
-                </FrameLayout>
+                            android:layout_gravity="center_vertical|start"
+                            android:layout_marginStart="@dimen/space_l"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <ImageView
+                                android:layout_width="@dimen/badge_small"
+                                android:layout_height="@dimen/badge_small"
+                                android:background="@drawable/bg_badge_playlists"
+                                android:padding="@dimen/space_s"
+                                android:src="@drawable/ic_playlist"
+                                android:tint="@color/text_primary"
+                                android:contentDescription="@string/nav_playlists" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/nav_playlists"
+                                android:textColor="@color/text_primary"
+                                android:textSize="@dimen/text_body"
+                                android:textStyle="bold"
+                                android:layout_marginStart="@dimen/space_m" />
+                        </LinearLayout>
+                    </FrameLayout>
+
+                    <FrameLayout
+                        android:id="@+id/tileCatchup"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="@dimen/space_m"
+                        android:background="@drawable/bg_tile_surface"
+                        android:foreground="@drawable/bg_tile_focus"
+                        android:stateListAnimator="@animator/tile_focus"
+                        android:focusable="true"
+                        android:clickable="true">
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center_vertical|start"
+                            android:layout_marginStart="@dimen/space_l"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <ImageView
+                                android:layout_width="@dimen/badge_small"
+                                android:layout_height="@dimen/badge_small"
+                                android:background="@drawable/bg_badge_catchup"
+                                android:padding="@dimen/space_s"
+                                android:src="@drawable/ic_catchup"
+                                android:tint="@color/text_primary"
+                                android:contentDescription="@string/nav_catchup" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/nav_catchup"
+                                android:textColor="@color/text_primary"
+                                android:textSize="@dimen/text_body"
+                                android:textStyle="bold"
+                                android:layout_marginStart="@dimen/space_m" />
+                        </LinearLayout>
+                    </FrameLayout>
+
+                    <FrameLayout
+                        android:id="@+id/tileFavorites"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_tile_surface"
+                        android:foreground="@drawable/bg_tile_focus"
+                        android:stateListAnimator="@animator/tile_focus"
+                        android:focusable="true"
+                        android:clickable="true">
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center_vertical|start"
+                            android:layout_marginStart="@dimen/space_l"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <ImageView
+                                android:layout_width="@dimen/badge_small"
+                                android:layout_height="@dimen/badge_small"
+                                android:background="@drawable/bg_badge_favorites"
+                                android:padding="@dimen/space_s"
+                                android:src="@drawable/ic_star"
+                                android:tint="@color/text_primary"
+                                android:contentDescription="@string/nav_favorites" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/nav_favorites"
+                                android:textColor="@color/text_primary"
+                                android:textSize="@dimen/text_body"
+                                android:textStyle="bold"
+                                android:layout_marginStart="@dimen/space_m" />
+                        </LinearLayout>
+                    </FrameLayout>
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
-
-        <!-- Bottom: Playlists / Catch Up / Favorites -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:orientation="horizontal"
-            android:layout_marginTop="@dimen/space_m">
-
-            <FrameLayout
-                android:id="@+id/tilePlaylists"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:layout_marginEnd="@dimen/space_m"
-                android:background="@drawable/bg_tile_surface"
-                android:foreground="@drawable/bg_tile_focus"
-                android:stateListAnimator="@animator/tile_focus"
-                android:focusable="true"
-                android:clickable="true">
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center_vertical|start"
-                    android:layout_marginStart="@dimen/space_l"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <ImageView
-                        android:layout_width="@dimen/badge_small"
-                        android:layout_height="@dimen/badge_small"
-                        android:background="@drawable/bg_badge_playlists"
-                        android:padding="@dimen/space_s"
-                        android:src="@drawable/ic_playlist"
-                        android:tint="@color/text_primary"
-                        android:contentDescription="@string/nav_playlists" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/nav_playlists"
-                        android:textColor="@color/text_primary"
-                        android:textSize="@dimen/text_body"
-                        android:textStyle="bold"
-                        android:layout_marginStart="@dimen/space_m" />
-                </LinearLayout>
-            </FrameLayout>
-
-            <FrameLayout
-                android:id="@+id/tileCatchup"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:layout_marginEnd="@dimen/space_m"
-                android:background="@drawable/bg_tile_surface"
-                android:foreground="@drawable/bg_tile_focus"
-                android:stateListAnimator="@animator/tile_focus"
-                android:focusable="true"
-                android:clickable="true">
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center_vertical|start"
-                    android:layout_marginStart="@dimen/space_l"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <ImageView
-                        android:layout_width="@dimen/badge_small"
-                        android:layout_height="@dimen/badge_small"
-                        android:background="@drawable/bg_badge_catchup"
-                        android:padding="@dimen/space_s"
-                        android:src="@drawable/ic_catchup"
-                        android:tint="@color/text_primary"
-                        android:contentDescription="@string/nav_catchup" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/nav_catchup"
-                        android:textColor="@color/text_primary"
-                        android:textSize="@dimen/text_body"
-                        android:textStyle="bold"
-                        android:layout_marginStart="@dimen/space_m" />
-                </LinearLayout>
-            </FrameLayout>
-
-            <FrameLayout
-                android:id="@+id/tileFavorites"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:background="@drawable/bg_tile_surface"
-                android:foreground="@drawable/bg_tile_focus"
-                android:stateListAnimator="@animator/tile_focus"
-                android:focusable="true"
-                android:clickable="true">
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center_vertical|start"
-                    android:layout_marginStart="@dimen/space_l"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <ImageView
-                        android:layout_width="@dimen/badge_small"
-                        android:layout_height="@dimen/badge_small"
-                        android:background="@drawable/bg_badge_favorites"
-                        android:padding="@dimen/space_s"
-                        android:src="@drawable/ic_star"
-                        android:tint="@color/text_primary"
-                        android:contentDescription="@string/nav_favorites" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/nav_favorites"
-                        android:textColor="@color/text_primary"
-                        android:textSize="@dimen/text_body"
-                        android:textStyle="bold"
-                        android:layout_marginStart="@dimen/space_m" />
-                </LinearLayout>
-            </FrameLayout>
-        </LinearLayout>
-    </LinearLayout>
+    </ScrollView>
 
     <!-- ===== Footer ===== -->
     <LinearLayout
