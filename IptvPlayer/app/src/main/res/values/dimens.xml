@@ -22,6 +22,13 @@
     <dimen name="text_big_title">32sp</dimen>
     <dimen name="text_caption">16sp</dimen>
 
+    <!-- Detail (hero) screens: tighter than the global 10-foot sizes so the
+         backdrop info block and season/episode rails do not feel zoomed-in. -->
+    <dimen name="detail_title_text">26sp</dimen>
+    <dimen name="detail_section_text">20sp</dimen>
+    <dimen name="detail_meta_text">15sp</dimen>
+    <dimen name="detail_action_text">16sp</dimen>
+
     <dimen name="category_width">248dp</dimen>
     <dimen name="info_width">300dp</dimen>
     <dimen name="channel_logo">56dp</dimen>

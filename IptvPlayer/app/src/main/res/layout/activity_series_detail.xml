@@ -60,7 +60,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_big_title"
+            android:textSize="@dimen/detail_title_text"
             android:textStyle="bold"
             android:maxLines="2"
             android:ellipsize="end" />
@@ -80,11 +80,11 @@
                 android:gravity="center_vertical"
                 android:layout_marginEnd="@dimen/space_m">
 
-                <ImageView android:id="@+id/star1" android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_star_outline" android:contentDescription="@string/detail_rating" />
-                <ImageView android:id="@+id/star2" android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
-                <ImageView android:id="@+id/star3" android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
-                <ImageView android:id="@+id/star4" android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
-                <ImageView android:id="@+id/star5" android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
+                <ImageView android:id="@+id/star1" android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_star_outline" android:contentDescription="@string/detail_rating" />
+                <ImageView android:id="@+id/star2" android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
+                <ImageView android:id="@+id/star3" android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
+                <ImageView android:id="@+id/star4" android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
+                <ImageView android:id="@+id/star5" android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
             </LinearLayout>
 
             <TextView
@@ -95,7 +95,7 @@
                 android:paddingHorizontal="@dimen/space_s"
                 android:paddingVertical="2dp"
                 android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_body"
+                android:textSize="@dimen/detail_meta_text"
                 android:textStyle="bold"
                 android:visibility="gone" />
 
@@ -108,7 +108,7 @@
                 android:drawablePadding="@dimen/space_xs"
                 android:gravity="center_vertical"
                 android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_body"
+                android:textSize="@dimen/detail_meta_text"
                 android:visibility="gone" />
 
             <TextView
@@ -117,7 +117,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="@dimen/space_m"
                 android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_body"
+                android:textSize="@dimen/detail_meta_text"
                 android:maxLines="1"
                 android:ellipsize="end"
                 android:visibility="gone" />
@@ -129,7 +129,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_m"
             android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_body"
+            android:textSize="@dimen/detail_meta_text"
             android:lineSpacingMultiplier="1.2"
             android:maxLines="3"
             android:ellipsize="end" />
@@ -165,6 +165,7 @@
                 android:background="@drawable/bg_pill_light"
                 android:focusable="true"
                 android:focusableInTouchMode="false"
+                android:nextFocusDown="@id/seasonList"
                 android:paddingHorizontal="@dimen/space_l"
                 android:paddingVertical="@dimen/space_m">
 
@@ -182,7 +183,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/detail_play"
                     android:textColor="#101820"
-                    android:textSize="@dimen/text_body"
+                    android:textSize="@dimen/detail_action_text"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -199,7 +200,7 @@
                 android:paddingVertical="@dimen/space_m"
                 android:text="@string/detail_trailer"
                 android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_body"
+                android:textSize="@dimen/detail_action_text"
                 android:textStyle="bold"
                 android:visibility="gone" />
 
@@ -234,7 +235,7 @@
             android:layout_height="wrap_content"
             android:text="@string/detail_seasons"
             android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_title"
+            android:textSize="@dimen/detail_section_text"
             android:textStyle="bold"
             android:layout_marginBottom="@dimen/space_s" />
 
@@ -242,6 +243,8 @@
             android:id="@+id/seasonList"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:nextFocusUp="@id/playButton"
+            android:nextFocusDown="@id/episodeList"
             android:clipToPadding="false" />
 
         <FrameLayout
@@ -253,6 +256,7 @@
                 android:id="@+id/episodeList"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:nextFocusUp="@id/seasonList"
                 android:clipToPadding="false" />
 
             <ProgressBar
@@ -269,7 +273,7 @@
                 android:layout_gravity="center"
                 android:text="@string/empty_channels"
                 android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_body"
+                android:textSize="@dimen/detail_meta_text"
                 android:visibility="gone" />
         </FrameLayout>
     </LinearLayout>

@@ -37,7 +37,7 @@ class SeriesDetailActivity : BaseActivity() {
     companion object {
         const val EXTRA_SERIES_ID = "extra_series_id"
         private const val PLOT_COLLAPSED = 3
-        private const val PLOT_EXPANDED = 20
+        private const val PLOT_EXPANDED = 6
     }
 
     private lateinit var binding: ActivitySeriesDetailBinding
