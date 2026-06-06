@@ -35,3 +35,12 @@ reinstall.
 before pushing (bump `versionCode` too). The updater compares only numeric version
 parts, so same-version pushes reuse tag `v1.0.0` and clients stay "up to date".
 No bump = no detected update.
+
+**Immutable releases (CI publish gotcha):** GitHub now serves published releases as
+IMMUTABLE — their assets cannot be deleted or overwritten. `softprops/action-gh-release`
+re-running on an EXISTING release tries to delete+re-upload the asset and fails with
+"Cannot delete asset from an immutable release". Fix (in place): a `gh release view
+v<ver>` guard step (id `rel`) gates the publish step with
+`steps.rel.outputs.exists == 'false'`, so re-running CI on the same version is a no-op
+and only a versionName bump creates a fresh release. The publish step needs
+`permissions: contents: write` and `GH_TOKEN` for the guard's `gh` call.

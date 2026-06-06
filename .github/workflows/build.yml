@@ -92,8 +92,27 @@ jobs:
             cp app/build/outputs/apk/debug/app-debug.apk "release-assets/KululuIPTV-v${VER}.apk"
           fi
 
-      - name: Publish GitHub Release
+      # GitHub serves published releases as IMMUTABLE: their assets can no longer be
+      # deleted or overwritten. softprops would try to delete + re-upload the asset
+      # on an existing release and fail ("Cannot delete asset from an immutable
+      # release"). So publish ONLY when no release exists for this versionName. To
+      # ship an update, bump versionName (+ versionCode) so a fresh tag is created;
+      # re-running CI on the same version is then a safe no-op.
+      - name: Check if release already exists
+        id: rel
         if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "v${{ steps.stage.outputs.version }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release v${{ steps.stage.outputs.version }} already exists - skipping publish (immutable)."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish GitHub Release
+        if: github.event_name != 'pull_request' && steps.rel.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.stage.outputs.version }}
