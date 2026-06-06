@@ -26,8 +26,17 @@ class CategoryAdapter(
 
     fun setSelected(id: String?) {
         if (selectedId == id) return
+        val prev = selectedId
         selectedId = id
-        notifyDataSetChanged()
+        // Repaint ONLY the two affected rows, and via a payload so we don't rebind
+        // their focus listeners. A blanket notifyDataSetChanged() here rebinds every
+        // row on each focus move, which makes the RecyclerView lose the D-pad focus
+        // (it snaps back to the top) — the user then can't scroll past the first
+        // couple of categories. Targeted, payloaded updates keep focus intact.
+        currentList.indexOfFirst { it.id == prev }
+            .takeIf { it >= 0 }?.let { notifyItemChanged(it, PAYLOAD_SELECTION) }
+        currentList.indexOfFirst { it.id == id }
+            .takeIf { it >= 0 }?.let { notifyItemChanged(it, PAYLOAD_SELECTION) }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -38,6 +47,16 @@ class CategoryAdapter(
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         holder.bind(getItem(position))
+    }
+
+    override fun onBindViewHolder(holder: VH, position: Int, payloads: MutableList<Any>) {
+        // Selection-only update: flip the outline without a full rebind, so the
+        // currently focused row keeps its focus.
+        if (payloads.contains(PAYLOAD_SELECTION)) {
+            holder.itemView.isSelected = getItem(position).id == selectedId
+        } else {
+            super.onBindViewHolder(holder, position, payloads)
+        }
     }
 
     inner class VH(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -56,6 +75,8 @@ class CategoryAdapter(
     }
 
     companion object {
+        private const val PAYLOAD_SELECTION = "selection"
+
         private val DIFF = object : DiffUtil.ItemCallback<Category>() {
             override fun areItemsTheSame(a: Category, b: Category) = a.id == b.id
             override fun areContentsTheSame(a: Category, b: Category) = a == b

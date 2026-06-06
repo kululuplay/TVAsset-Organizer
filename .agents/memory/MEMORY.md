@@ -9,7 +9,7 @@
 - [Android TV green-screen on live VLC](android-green-screen-vlc-texture.md) — if green-frame-with-audio persists after `--no-*-dr`, attach VLCVideoLayout with useTextureView=true.
 - [Android TV density normalization](android-tv-density-normalization.md) — UI zoomed/tiny across all pages = box mis-reports densityDpi; lock Configuration.densityDpi to DESIGN_WIDTH_DP (now 1120dp); raising that width = denser UI (more columns/rows).
 - [Cache-first detail screens](cache-first-detail-screens.md) — VOD/Series detail must render Room cache first then refresh network in bg; provider detail APIs can take ~20s.
-- [D-pad focus after ListAdapter diff](recyclerview-focus-after-diff.md) — requestFocus on a row must run in submitList's commit callback + post(), not right after submitList (async diff).
+- [D-pad focus after ListAdapter diff](recyclerview-focus-after-diff.md) — requestFocus in submitList commit callback+post; and NEVER notifyDataSetChanged from a focus listener (kills D-pad focus) — use payloaded notifyItemChanged.
 - [Favorites id namespaces](favorites-id-namespaces.md) — favorites table mixes channel/vod_/series_ ids; the channel INNER JOIN silently drops non-channel favorites.
 - [IPTV single-connection contract](iptv-single-connection.md) — one stream/socket max: stop-before-start, serialize transitions, release (not pause) on background, reuse engine + swap Media.
 - [Player unit tests](player-unit-tests.md) — single-connection tests are pure-JVM via scheduler/engineFactory/coordinator seams; no Android SDK locally, they run only in CI.
