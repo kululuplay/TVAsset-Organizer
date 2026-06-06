@@ -16,7 +16,6 @@ import com.iptv.player.data.local.entity.ProfileEntity
 import com.iptv.player.data.local.entity.ProgramEntity
 import com.iptv.player.data.local.entity.ResumeEntity
 import com.iptv.player.data.local.entity.SeriesCategoryEntity
-import com.iptv.player.data.local.entity.SeriesEntity
 import com.iptv.player.data.local.entity.SeriesFtsEntity
 import com.iptv.player.data.local.entity.VodCategoryEntity
 import com.iptv.player.data.local.entity.VodEntity

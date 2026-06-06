@@ -382,7 +382,6 @@ class IptvRepository(
         return Pager(pagingConfig) { vodDao.pagingSearch(match) }
             .flow.map { data -> data.map { it.toModel() } }
     }
-
     /**
      * Fetches and caches only the movie *categories* (not the movies themselves).
      * This is cheap and lets the Movies rail render immediately. The per-category

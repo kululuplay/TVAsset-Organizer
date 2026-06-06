@@ -9,6 +9,7 @@
  */
 package com.iptv.player.ui.player
 
+import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -28,7 +29,9 @@ import com.iptv.player.databinding.ActivityPlayerBinding
 import com.iptv.player.player.PlayerController
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
+import com.iptv.player.ui.common.PlayerScreenGuard
 import com.iptv.player.ui.common.SleepTimer
+import com.iptv.player.ui.dashboard.DashboardActivity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -58,6 +61,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     private var epgJob: Job? = null
 
     private val sleepTimer = SleepTimer { finish() }
+    private val screenGuard = PlayerScreenGuard(this) { teardownAndGoHome() }
     private val castController by lazy {
         CastController(this) {
             val channel = currentChannel ?: return@CastController null
@@ -71,6 +75,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         setContentView(binding.root)
 
         castController.attach()
+        // Listen for a real device screen-off (remote Power OFF) to tear down.
+        screenGuard.register()
 
         val channelId = intent.getStringExtra(EXTRA_CHANNEL_ID)
         if (channelId == null) {
@@ -100,6 +106,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     private fun startChannel(channel: Channel) {
         currentChannel = channel
         controller.play(channel.streamUrl)
+        // Hold the screen on for the whole live session (buffering / reconnects
+        // included). The flag is dropped when the user leaves or playback stops.
+        screenGuard.keepScreenOn(true)
         showOverlay(channel)
     }
 
@@ -331,7 +340,28 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     override fun onFatalError() {
         binding.bufferingIndicator.visibility = View.GONE
+        // Nothing is playing; let the device sleep normally again.
+        screenGuard.keepScreenOn(false)
         Toast.makeText(this, R.string.error_cannot_connect, Toast.LENGTH_LONG).show()
+    }
+
+    // ---- Power-off teardown --------------------------------------------
+
+    /**
+     * Invoked on a real device screen-off (remote Power OFF). Fully release the
+     * player so the single stream connection closes, then return to the home
+     * screen so power-on lands cleanly on Home instead of a dead player.
+     */
+    private fun teardownAndGoHome() {
+        screenGuard.keepScreenOn(false)
+        if (::controller.isInitialized) controller.release()
+        val intent = Intent(this, DashboardActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        startActivity(intent)
+        finish()
     }
 
     // ---- Lifecycle ------------------------------------------------------
@@ -339,17 +369,24 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     override fun onStop() {
         super.onStop()
         if (::controller.isInitialized) controller.pause()
+        // Not in the foreground anymore: don't keep the screen awake.
+        screenGuard.keepScreenOn(false)
     }
 
     override fun onStart() {
         super.onStart()
-        if (::controller.isInitialized) controller.resume()
+        if (::controller.isInitialized) {
+            controller.resume()
+            // Returning to an active session: hold the screen on again.
+            if (currentChannel != null) screenGuard.keepScreenOn(true)
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         epgJob?.cancel()
         sleepTimer.release()
+        screenGuard.unregister()
         castController.detach()
         overlayHandler.removeCallbacksAndMessages(null)
         if (::controller.isInitialized) controller.release()

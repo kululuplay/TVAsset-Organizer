@@ -13,6 +13,7 @@
  */
 package com.iptv.player.ui.player
 
+import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -30,7 +31,9 @@ import com.iptv.player.data.model.ResumeKind
 import com.iptv.player.data.model.ResumeMeta
 import com.iptv.player.databinding.ActivityVodPlayerBinding
 import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.ui.common.PlayerScreenGuard
 import com.iptv.player.ui.common.SleepTimer
+import com.iptv.player.ui.dashboard.DashboardActivity
 import com.iptv.player.util.AppInfo
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -113,6 +116,7 @@ class VodPlayerActivity : BaseActivity() {
     private val hideControlsRunnable = Runnable { setControlsVisible(false) }
 
     private val sleepTimer = SleepTimer { finish() }
+    private val screenGuard = PlayerScreenGuard(this) { teardownAndGoHome() }
     private val castController by lazy {
         CastController(this) {
             val url = streamUrl ?: return@CastController null
@@ -167,6 +171,8 @@ class VodPlayerActivity : BaseActivity() {
         }
 
         setupControls()
+        // Listen for a real device screen-off (remote Power OFF) to tear down.
+        screenGuard.register()
         initPlayer()
         // Controls start visible; auto-hide them after a few idle seconds.
         scheduleHideControls()
@@ -301,6 +307,8 @@ class VodPlayerActivity : BaseActivity() {
                     binding.bufferingIndicator.visibility = View.GONE
                     binding.playPauseButton.setImageResource(R.drawable.ic_pause)
                     binding.playPauseButton.contentDescription = getString(R.string.player_pause)
+                    // Hold the screen on only while actually playing.
+                    screenGuard.keepScreenOn(true)
                     // Restart the idle timer once real playback begins.
                     scheduleHideControls()
                     // Apply the deferred resume seek once, now that VLC is ready.
@@ -340,14 +348,18 @@ class VodPlayerActivity : BaseActivity() {
                 MediaPlayer.Event.Paused -> {
                     binding.playPauseButton.setImageResource(R.drawable.ic_play)
                     binding.playPauseButton.contentDescription = getString(R.string.detail_play)
+                    // Paused: let the device sleep normally again.
+                    screenGuard.keepScreenOn(false)
                 }
                 MediaPlayer.Event.Stopped -> {
                     binding.playPauseButton.setImageResource(R.drawable.ic_play)
                     binding.playPauseButton.contentDescription = getString(R.string.detail_play)
+                    screenGuard.keepScreenOn(false)
                 }
                 MediaPlayer.Event.EndReached -> {
                     binding.playPauseButton.setImageResource(R.drawable.ic_play)
                     binding.playPauseButton.contentDescription = getString(R.string.detail_play)
+                    screenGuard.keepScreenOn(false)
                     persistResume()
                 }
                 MediaPlayer.Event.EncounteredError -> {
@@ -677,12 +689,30 @@ class VodPlayerActivity : BaseActivity() {
         // Release the surface on background so navigating between players never
         // leaves a stale, double-attached surface behind.
         detachVideoViews()
+        // Not in the foreground anymore: don't keep the screen awake.
+        screenGuard.keepScreenOn(false)
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        sleepTimer.release()
-        castController.detach()
+    /**
+     * Invoked on a real device screen-off (remote Power OFF). Saves the resume
+     * position, fully releases the player so the single stream connection closes,
+     * then returns to the home screen so power-on lands cleanly on Home.
+     */
+    private fun teardownAndGoHome() {
+        persistResume()
+        screenGuard.keepScreenOn(false)
+        releasePlayer()
+        val intent = Intent(this, DashboardActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        startActivity(intent)
+        finish()
+    }
+
+    /** Fully tears down libVLC. Safe to call more than once. */
+    private fun releasePlayer() {
         handler.removeCallbacksAndMessages(null)
         mediaPlayer?.setEventListener(null)
         mediaPlayer?.stop()
@@ -692,5 +722,13 @@ class VodPlayerActivity : BaseActivity() {
         mediaPlayer = null
         libVlc = null
         videoLayout = null
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        sleepTimer.release()
+        screenGuard.unregister()
+        castController.detach()
+        releasePlayer()
     }
 }

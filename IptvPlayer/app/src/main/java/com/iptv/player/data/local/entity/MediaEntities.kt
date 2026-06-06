@@ -84,7 +84,6 @@ data class SeriesCategoryEntity(
     /** True once this category's series have been downloaded into [series]. */
     val loaded: Boolean = false
 )
-
 @Entity(
     tableName = "series",
     indices = [Index("categoryId"), Index("addedAt")]

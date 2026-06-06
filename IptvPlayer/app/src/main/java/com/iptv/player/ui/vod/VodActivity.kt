@@ -121,6 +121,13 @@ class VodActivity : BaseActivity() {
                 if (loading) binding.emptyState.visibility = View.GONE
             }
         }
+        // Lightweight spinner while a category's movies are lazily downloading.
+        lifecycleScope.launch {
+            viewModel.refreshing.collectLatest { loading ->
+                binding.loadingIndicator.visibility = if (loading) View.VISIBLE else View.GONE
+                if (loading) binding.emptyState.visibility = View.GONE
+            }
+        }
     }
 
     /** Moves focus onto the first category row (the on-entry focus target). */
