@@ -1,13 +1,17 @@
 /*
  * UpdatePrompt.kt
  * Lightweight launch-time update check. The first time an update is found within a
- * process session it shows a single dialog and routes the user to AboutActivity to
- * download/install. Stays completely silent on failure or when already up to date,
- * so a flaky network never interrupts the user.
+ * process session it shows a single modern dialog and routes the user to
+ * AboutActivity to download/install. Stays completely silent on failure or when
+ * already up to date, so a flaky network never interrupts the user. Picking
+ * "remind me later" simply dismisses; the check runs again on the next launch.
  */
 package com.iptv.player.update
 
 import android.content.Intent
+import android.view.LayoutInflater
+import android.view.View
+import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -26,8 +30,8 @@ object UpdatePrompt {
 
     /**
      * Checks for an update off the main thread and, if one is available and we have
-     * not already prompted this session, shows a non-blocking dialog. Safe to call
-     * from any [AppCompatActivity] onCreate.
+     * not already prompted this session, shows a non-blocking modern dialog. Safe to
+     * call from any [AppCompatActivity] onCreate.
      */
     fun maybeShow(activity: AppCompatActivity) {
         if (shownThisSession) return
@@ -44,19 +48,43 @@ object UpdatePrompt {
             if (shownThisSession || activity.isFinishing || activity.isDestroyed) return@launch
             shownThisSession = true
 
-            AlertDialog.Builder(activity)
-                .setTitle(R.string.update_available_title)
-                .setMessage(
-                    activity.getString(R.string.update_available_message, result.info.versionName)
-                )
-                .setPositiveButton(R.string.about_update_now) { _, _ ->
-                    activity.startActivity(
-                        Intent(activity, AboutActivity::class.java)
-                            .putExtra(AboutActivity.EXTRA_AUTO_CHECK, true)
-                    )
-                }
-                .setNegativeButton(R.string.update_later, null)
-                .show()
+            showDialog(activity, result.info)
         }
+    }
+
+    private fun showDialog(activity: AppCompatActivity, info: UpdateInfo) {
+        val view = LayoutInflater.from(activity).inflate(R.layout.dialog_update, null)
+
+        view.findViewById<TextView>(R.id.updateVersion).text =
+            activity.getString(R.string.update_version_tag, info.versionName)
+        view.findViewById<TextView>(R.id.updateMessage).text =
+            activity.getString(R.string.update_available_message, info.versionName)
+
+        val notesView = view.findViewById<TextView>(R.id.updateNotes)
+        val notesScroll = view.findViewById<View>(R.id.updateNotesScroll)
+        val notes = info.notes?.trim()
+        if (!notes.isNullOrEmpty()) {
+            notesView.text = notes
+            notesScroll.visibility = View.VISIBLE
+        }
+
+        val dialog = AlertDialog.Builder(activity, R.style.ThemeOverlay_Iptv_Dialog)
+            .setView(view)
+            .create()
+
+        val updateNow = view.findViewById<View>(R.id.updateNowButton)
+        updateNow.setOnClickListener {
+            dialog.dismiss()
+            activity.startActivity(
+                Intent(activity, AboutActivity::class.java)
+                    .putExtra(AboutActivity.EXTRA_AUTO_CHECK, true)
+            )
+        }
+        view.findViewById<View>(R.id.updateLaterButton).setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
+        updateNow.requestFocus()
     }
 }
