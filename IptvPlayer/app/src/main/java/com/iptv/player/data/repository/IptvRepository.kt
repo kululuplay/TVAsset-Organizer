@@ -482,6 +482,25 @@ class IptvRepository(
             refreshVodCategory(config, first.id)
         }
 
+    /**
+     * Re-syncs every movie category the user has already opened (loaded == true)
+     * so newly added movies surface on each app launch. Force-refreshes via upsert
+     * (REPLACE on id) — existing items stay put (no flicker), only new ones appear.
+     * Best-effort: a single category's failure never aborts the rest. Xtream only.
+     */
+    suspend fun refreshLoadedVodCategories(config: SourceConfig): Outcome<Int> =
+        withContext(Dispatchers.IO) {
+            if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
+            var added = 0
+            for (id in vodCategoryDao.loadedIds()) {
+                when (val r = refreshVodCategory(config, id, force = true)) {
+                    is Outcome.Success -> added += r.data
+                    is Outcome.Failure -> Unit // keep going; best-effort per category
+                }
+            }
+            Outcome.Success(added)
+        }
+
     /** Loads full VOD detail on demand, enriching with TMDB when a key is set. */
     suspend fun getVodDetail(config: SourceConfig, id: String): VodItem? = withContext(Dispatchers.IO) {
         val cached = vodDao.getById(id)?.toModel() ?: return@withContext null
@@ -655,6 +674,25 @@ class IptvRepository(
             val first = seriesCategoryDao.getAll().firstOrNull()
                 ?: return@withContext Outcome.Success(0)
             refreshSeriesCategory(config, first.id)
+        }
+
+    /**
+     * Re-syncs every series category the user has already opened (loaded == true)
+     * so newly added series surface on each app launch. Force-refreshes via upsert,
+     * so existing items stay put (no flicker) and only new ones appear. Best-effort:
+     * a single category's failure never aborts the rest. Xtream only.
+     */
+    suspend fun refreshLoadedSeriesCategories(config: SourceConfig): Outcome<Int> =
+        withContext(Dispatchers.IO) {
+            if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
+            var added = 0
+            for (id in seriesCategoryDao.loadedIds()) {
+                when (val r = refreshSeriesCategory(config, id, force = true)) {
+                    is Outcome.Success -> added += r.data
+                    is Outcome.Failure -> Unit // keep going; best-effort per category
+                }
+            }
+            Outcome.Success(added)
         }
 
     /** Loads seasons + episodes for a series and caches the episodes. */

@@ -79,8 +79,17 @@ object SplashPrefetch {
             _essentialDone.value = true
         }
 
+        // Re-sync the movie/series categories the user has already opened so newly
+        // added titles show up on every app launch. Runs in the background after
+        // the splash has already proceeded, force-refreshing via upsert so cached
+        // items never flicker — only genuinely new content is added. Done before the
+        // warm-up below so the first category isn't fetched twice in one run.
+        runCatchingCancellable { repo.refreshLoadedVodCategories(config) }
+        runCatchingCancellable { repo.refreshLoadedSeriesCategories(config) }
+
         // Best-effort: warm "Recently added" for both rails without pulling the
-        // whole catalog (one category each).
+        // whole catalog (one category each). Not forced, so a category already
+        // refreshed by the loaded-sweep above is skipped here (no duplicate fetch).
         runCatchingCancellable { repo.prefetchFirstVodCategory(config) }
         runCatchingCancellable { repo.prefetchFirstSeriesCategory(config) }
         _stage.value = Stage.READY
