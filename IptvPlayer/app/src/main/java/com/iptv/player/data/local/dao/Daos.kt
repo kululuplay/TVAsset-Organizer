@@ -11,6 +11,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.iptv.player.data.local.entity.ChannelEntity
+import com.iptv.player.data.local.entity.ChannelFtsEntity
 import com.iptv.player.data.local.entity.ChannelOverrideEntity
 import com.iptv.player.data.local.entity.FavoriteEntity
 import com.iptv.player.data.local.entity.RecentEntity
@@ -65,6 +66,15 @@ interface ChannelDao {
     @Query("SELECT * FROM channels WHERE name LIKE '%' || :query || '%' AND type = :type ORDER BY name LIMIT 200")
     fun search(query: String, type: String): Flow<List<ChannelEntity>>
 
+    /** FTS-backed instant search. [query] is a sanitized FTS MATCH expression. */
+    @Query("""
+        SELECT c.* FROM channels c
+        JOIN channels_fts ON c.id = channels_fts.id
+        WHERE channels_fts MATCH :query AND c.type = :type
+        ORDER BY c.name LIMIT 200
+    """)
+    fun searchFts(query: String, type: String): Flow<List<ChannelEntity>>
+
     @Query("SELECT * FROM channels WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): ChannelEntity?
 
@@ -100,6 +110,20 @@ data class ManagedChannelRow(
     val hidden: Boolean,
     val sortOrder: Int?
 )
+
+/**
+ * Full-text search index for live channels. The repository rebuilds it whenever
+ * live channels are refreshed (full replace). Mirrors only id + name.
+ */
+@Dao
+interface ChannelFtsDao {
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(rows: List<ChannelFtsEntity>)
+
+    @Query("DELETE FROM channels_fts")
+    suspend fun clearAll()
+}
 
 @Dao
 interface ChannelOverrideDao {

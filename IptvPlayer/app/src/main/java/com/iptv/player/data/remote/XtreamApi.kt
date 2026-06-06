@@ -76,6 +76,9 @@ interface XtreamApi {
     suspend fun getSeries(
         @Query("username") username: String,
         @Query("password") password: String,
+        // Optional: scope to one category for lazy per-category loading. When null
+        // the provider returns the full series catalog (legacy behaviour).
+        @Query("category_id") categoryId: String? = null,
         @Query("action") action: String = "get_series"
     ): List<XtreamSeriesItem>
 

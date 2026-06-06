@@ -8,9 +8,14 @@
 package com.iptv.player.data.repository
 
 import android.util.Base64
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.map
 import androidx.room.withTransaction
 import com.iptv.player.data.local.AppDatabase
 import com.iptv.player.data.local.entity.ChannelEntity
+import com.iptv.player.data.local.entity.ChannelFtsEntity
 import com.iptv.player.data.local.entity.ChannelOverrideEntity
 import com.iptv.player.data.local.entity.EpgMappingEntity
 import com.iptv.player.data.local.entity.EpisodeEntity
@@ -19,9 +24,12 @@ import com.iptv.player.data.local.entity.ProfileEntity
 import com.iptv.player.data.local.entity.ProgramEntity
 import com.iptv.player.data.local.entity.RecentEntity
 import com.iptv.player.data.local.entity.ResumeEntity
+import com.iptv.player.data.local.entity.SeriesCategoryEntity
 import com.iptv.player.data.local.entity.SeriesEntity
+import com.iptv.player.data.local.entity.SeriesFtsEntity
 import com.iptv.player.data.local.entity.VodCategoryEntity
 import com.iptv.player.data.local.entity.VodEntity
+import com.iptv.player.data.local.entity.VodFtsEntity
 import com.iptv.player.data.model.AccountInfo
 import com.iptv.player.data.model.Category
 import com.iptv.player.data.model.Channel
@@ -54,6 +62,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -78,9 +87,33 @@ class IptvRepository(
     private val vodDao = db.vodDao()
     private val vodCategoryDao = db.vodCategoryDao()
     private val seriesDao = db.seriesDao()
+    private val seriesCategoryDao = db.seriesCategoryDao()
     private val profileDao = db.profileDao()
     private val resumeDao = db.resumeDao()
     private val epgMappingDao = db.epgMappingDao()
+    private val vodFtsDao = db.vodFtsDao()
+    private val seriesFtsDao = db.seriesFtsDao()
+    private val channelFtsDao = db.channelFtsDao()
+
+    /**
+     * Shared Paging config. enablePlaceholders=false keeps memory bounded to the
+     * loaded windows (the whole point on low-RAM TV boxes); a page of 60 fills a
+     * TV poster grid comfortably while staying small.
+     */
+    private val pagingConfig = PagingConfig(pageSize = 60, enablePlaceholders = false)
+
+    /**
+     * Turns raw user input into a safe FTS4 MATCH expression: splits on
+     * non-alphanumerics and appends a prefix wildcard to each token, AND-ed
+     * together (e.g. "harry pot" -> "harry* pot*"). Returns "" when there's
+     * nothing to match so callers can short-circuit to an empty result instead
+     * of issuing an invalid empty MATCH (which SQLite rejects).
+     */
+    private fun toFtsQuery(raw: String): String =
+        raw.trim().lowercase()
+            .split(Regex("[^\\p{L}\\p{N}]+"))
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { "$it*" }
 
     // ---- Reactive reads (UI layer) --------------------------------------
 
@@ -127,8 +160,11 @@ class IptvRepository(
     fun observeRecent(limit: Int = 20): Flow<List<Channel>> =
         recentDao.observeRecentChannels(limit).map { list -> list.map { it.toModel() } }
 
-    fun search(query: String, type: ContentType): Flow<List<Channel>> =
-        channelDao.search(query, type.name).map { list -> list.map { it.toModel() } }
+    fun search(query: String, type: ContentType): Flow<List<Channel>> {
+        val match = toFtsQuery(query)
+        if (match.isBlank()) return flowOf(emptyList())
+        return channelDao.searchFts(match, type.name).map { list -> list.map { it.toModel() } }
+    }
 
     suspend fun getChannel(id: String): Channel? = channelDao.getById(id)?.toModel()
 
@@ -231,15 +267,23 @@ class IptvRepository(
                 SourceType.M3U_URL -> loadM3u(config)
             }
             if (channels.isEmpty()) return@withContext Outcome.Failure(AppError.EMPTY_PLAYLIST)
-            channelDao.clearType(ContentType.LIVE.name)
             // Stamp each channel with its index in the source list so the visible
             // order matches what the server delivered.
             val ordered = channels.mapIndexed { index, ch -> ch.copy(position = index) }
+            // Replace channels + their search index atomically so live search never
+            // sees a half-built index (or an empty one) if this is interrupted.
             // Insert in chunks: large Xtream accounts / M3U lists can hold tens of
             // thousands of channels. Mapping + inserting all at once spikes memory and
             // can OOM on low-RAM TV boxes, so bound the peak by batching.
-            ordered.chunked(1000).forEach { batch ->
-                channelDao.upsertAll(batch.map { it.toEntity() })
+            db.withTransaction {
+                channelDao.clearType(ContentType.LIVE.name)
+                ordered.chunked(1000).forEach { batch ->
+                    channelDao.upsertAll(batch.map { it.toEntity() })
+                }
+                channelFtsDao.clearAll()
+                ordered.chunked(1000).forEach { batch ->
+                    channelFtsDao.insertAll(batch.map { ChannelFtsEntity(it.id, it.name) })
+                }
             }
             Outcome.Success(ordered.size)
         } catch (e: Throwable) {
@@ -320,6 +364,25 @@ class IptvRepository(
     fun searchVod(query: String): Flow<List<VodItem>> =
         vodDao.search(query).map { it.map { e -> e.toModel() } }
 
+    // ---- Paging 3 (bounded movie lists) ---------------------------------
+
+    /** Whole movie cache, newest first — the "Recently added" default view. */
+    fun pagingRecentVod(): Flow<PagingData<VodItem>> =
+        Pager(pagingConfig) { vodDao.pagingRecent() }
+            .flow.map { data -> data.map { it.toModel() } }
+
+    fun pagingVodByCategory(categoryId: String): Flow<PagingData<VodItem>> =
+        Pager(pagingConfig) { vodDao.pagingByCategory(categoryId) }
+            .flow.map { data -> data.map { it.toModel() } }
+
+    /** Instant FTS search, paged. Empty input yields an empty page (no MATCH). */
+    fun pagingVodSearch(query: String): Flow<PagingData<VodItem>> {
+        val match = toFtsQuery(query)
+        if (match.isBlank()) return flowOf(PagingData.empty())
+        return Pager(pagingConfig) { vodDao.pagingSearch(match) }
+            .flow.map { data -> data.map { it.toModel() } }
+    }
+
     /**
      * Fetches and caches only the movie *categories* (not the movies themselves).
      * This is cheap and lets the Movies rail render immediately. The per-category
@@ -392,8 +455,14 @@ class IptvRepository(
                         categoryPosition = catPosition
                     )
                 }
-            // Merge (REPLACE on id) — never clear, so other categories remain cached.
-            vodDao.upsertAll(items)
+            // Merge (REPLACE on id) — never clear, so other categories remain
+            // cached. Keep the FTS index in lockstep (drop this batch's old rows
+            // then re-insert), all atomically so search never sees a half index.
+            db.withTransaction {
+                vodDao.upsertAll(items)
+                vodFtsDao.deleteByIds(items.map { it.id })
+                vodFtsDao.insertAll(items.map { VodFtsEntity(it.id, it.name) })
+            }
             vodCategoryDao.markLoaded(categoryId)
             Outcome.Success(items.size)
         } catch (e: Throwable) {
@@ -460,9 +529,14 @@ class IptvRepository(
     fun observeSeriesByCategory(categoryId: String): Flow<List<Series>> =
         seriesDao.observeByCategory(categoryId).map { it.map { e -> e.toModel() } }
 
+    /**
+     * Series categories, read from the dedicated [series_categories] table so the
+     * rail is available immediately after login — before any category's series
+     * have been lazily downloaded. Mirrors [observeVodCategories].
+     */
     fun observeSeriesCategories(): Flow<List<Category>> =
-        seriesDao.observeCategories().map { rows ->
-            rows.map { Category(it.categoryId, it.categoryName ?: "Uncategorized", ContentType.SERIES) }
+        seriesCategoryDao.observeAll().map { rows ->
+            rows.map { Category(it.id, it.name, ContentType.SERIES) }
         }
 
     /** Series count per category id, used for the category row badges. */
@@ -472,43 +546,116 @@ class IptvRepository(
     fun searchSeries(query: String): Flow<List<Series>> =
         seriesDao.search(query).map { it.map { e -> e.toModel() } }
 
-    suspend fun refreshSeries(config: SourceConfig): Outcome<Int> = withContext(Dispatchers.IO) {
+    // ---- Paging 3 (bounded series lists) --------------------------------
+
+    /** Whole series cache, newest first — the "Recently added" default view. */
+    fun pagingRecentSeries(): Flow<PagingData<Series>> =
+        Pager(pagingConfig) { seriesDao.pagingRecent() }
+            .flow.map { data -> data.map { it.toModel() } }
+
+    fun pagingSeriesByCategory(categoryId: String): Flow<PagingData<Series>> =
+        Pager(pagingConfig) { seriesDao.pagingByCategory(categoryId) }
+            .flow.map { data -> data.map { it.toModel() } }
+
+    /** Instant FTS search, paged. Empty input yields an empty page (no MATCH). */
+    fun pagingSeriesSearch(query: String): Flow<PagingData<Series>> {
+        val match = toFtsQuery(query)
+        if (match.isBlank()) return flowOf(PagingData.empty())
+        return Pager(pagingConfig) { seriesDao.pagingSearch(match) }
+            .flow.map { data -> data.map { it.toModel() } }
+    }
+
+    /**
+     * Fetches and caches only the series *categories* (not the series themselves),
+     * mirroring [refreshVodCategories]. Cheap, so the Series rail renders right
+     * away; the per-category [loaded] flag is preserved across refreshes so a
+     * re-sync never forces a re-download of an already-cached category.
+     */
+    suspend fun refreshSeriesCategories(config: SourceConfig): Outcome<Int> = withContext(Dispatchers.IO) {
         if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
         try {
             val api = buildXtreamApi(config.serverUrl)
             val catList = api.getSeriesCategories(config.username, config.password)
-            val cats = catList
-                .associate { (it.categoryId ?: "") to (it.categoryName ?: "Uncategorized") }
-            val catOrder = catList
-                .mapIndexedNotNull { index, c -> c.categoryId?.let { it to index } }
-                .toMap()
-            val items = api.getSeries(config.username, config.password).mapNotNull { s ->
+            val alreadyLoaded = seriesCategoryDao.loadedIds().toSet()
+            val categories = catList.mapIndexedNotNull { index, c ->
+                val id = c.categoryId ?: return@mapIndexedNotNull null
+                SeriesCategoryEntity(
+                    id = id,
+                    name = c.categoryName ?: "Uncategorized",
+                    position = index,
+                    loaded = id in alreadyLoaded
+                )
+            }
+            seriesCategoryDao.upsertAll(categories)
+            Outcome.Success(categories.size)
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e // never swallow coroutine cancellation
+            Outcome.Failure(e.toAppError())
+        }
+    }
+
+    /** True if this category's series have already been downloaded into the cache. */
+    suspend fun isSeriesCategoryLoaded(categoryId: String): Boolean = withContext(Dispatchers.IO) {
+        seriesCategoryDao.getById(categoryId)?.loaded == true
+    }
+
+    /**
+     * Lazily downloads a single series category's series and *merges* them into
+     * the cache (no full-table wipe), so other already-downloaded categories stay
+     * intact. Skips the network when the category is already loaded unless [force]
+     * is set. Keeps the FTS index in lockstep and marks the category loaded.
+     */
+    suspend fun refreshSeriesCategory(
+        config: SourceConfig,
+        categoryId: String,
+        force: Boolean = false
+    ): Outcome<Int> = withContext(Dispatchers.IO) {
+        if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
+        val category = seriesCategoryDao.getById(categoryId)
+        if (!force && category?.loaded == true) return@withContext Outcome.Success(0)
+        try {
+            val api = buildXtreamApi(config.serverUrl)
+            val catName = category?.name ?: "Uncategorized"
+            val catPosition = category?.position ?: Int.MAX_VALUE
+            val items = api.getSeries(config.username, config.password, categoryId).mapNotNull { s ->
                 val id = s.seriesId ?: return@mapNotNull null
                 SeriesEntity(
                     id = id,
                     name = s.name ?: "Unknown",
                     posterUrl = s.cover?.takeIf { it.isNotBlank() },
-                    categoryId = s.categoryId,
-                    categoryName = cats[s.categoryId] ?: "Uncategorized",
+                    categoryId = s.categoryId ?: categoryId,
+                    categoryName = catName,
                     rating = s.rating?.toDoubleOrNull(),
                     plot = s.plot, cast = s.cast, director = s.director, genre = s.genre,
                     releaseDate = s.releaseDate, trailerUrl = youtube(s.youtubeTrailer), tmdbId = null,
                     addedAt = s.lastModified?.trim()?.toLongOrNull() ?: 0L,
-                    categoryPosition = catOrder[s.categoryId] ?: Int.MAX_VALUE
+                    categoryPosition = catPosition
                 )
-            }.mapIndexed { index, e -> e.copy(position = index) }
-            // Atomic replace so a cancellation between clear and insert can never
-            // leave the table empty for other readers (e.g. global search).
-            db.withTransaction {
-                seriesDao.clearSeries()
-                seriesDao.upsertSeries(items)
             }
+            // Merge (REPLACE on id), keeping the FTS index in lockstep, atomically.
+            db.withTransaction {
+                seriesDao.upsertSeries(items)
+                seriesFtsDao.deleteByIds(items.map { it.id })
+                seriesFtsDao.insertAll(items.map { SeriesFtsEntity(it.id, it.name) })
+            }
+            seriesCategoryDao.markLoaded(categoryId)
             Outcome.Success(items.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
             Outcome.Failure(e.toAppError())
         }
     }
+
+    /**
+     * Best-effort prefetch of the first series category so the "Recently added"
+     * view has content right after the splash, without pulling the whole catalog.
+     */
+    suspend fun prefetchFirstSeriesCategory(config: SourceConfig): Outcome<Int> =
+        withContext(Dispatchers.IO) {
+            val first = seriesCategoryDao.getAll().firstOrNull()
+                ?: return@withContext Outcome.Success(0)
+            refreshSeriesCategory(config, first.id)
+        }
 
     /** Loads seasons + episodes for a series and caches the episodes. */
     suspend fun getSeasons(config: SourceConfig, seriesId: String): List<Season> = withContext(Dispatchers.IO) {
@@ -677,10 +824,22 @@ class IptvRepository(
         val liveOk = refreshLive(config) is Outcome.Success
         refreshEpg(config)
         if (config.type == SourceType.XTREAM) {
-            // Movies are lazy per-category, so background sync only refreshes the
-            // category list (cheap) — never the whole ~60k catalog. Series stay full.
-            runCatching { refreshVodCategories(config) }
-            runCatching { refreshSeries(config) }
+            // Movies and series are both lazy per-category, so background sync only
+            // refreshes the category lists (cheap) — never the whole catalog.
+            // Best-effort: a category-list failure must not fail the whole sync,
+            // but coroutine cancellation must always propagate.
+            try {
+                refreshVodCategories(config)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+            }
+            try {
+                refreshSeriesCategories(config)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+            }
         }
         liveOk
     }

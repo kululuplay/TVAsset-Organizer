@@ -5,6 +5,7 @@
  */
 package com.iptv.player.data.local.dao
 
+import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -14,9 +15,12 @@ import com.iptv.player.data.local.entity.EpisodeEntity
 import com.iptv.player.data.local.entity.ProfileEntity
 import com.iptv.player.data.local.entity.ProgramEntity
 import com.iptv.player.data.local.entity.ResumeEntity
+import com.iptv.player.data.local.entity.SeriesCategoryEntity
 import com.iptv.player.data.local.entity.SeriesEntity
+import com.iptv.player.data.local.entity.SeriesFtsEntity
 import com.iptv.player.data.local.entity.VodCategoryEntity
 import com.iptv.player.data.local.entity.VodEntity
+import com.iptv.player.data.local.entity.VodFtsEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -72,6 +76,24 @@ interface VodDao {
 
     @Query("SELECT * FROM vod WHERE name LIKE '%' || :query || '%' ORDER BY addedAt DESC, name LIMIT 200")
     fun search(query: String): Flow<List<VodEntity>>
+
+    // ---- Paging 3 sources (bounded, lazily-paged for huge catalogs) -----
+
+    /** Whole movie cache, newest first — the "Recently added" default view. */
+    @Query("SELECT * FROM vod ORDER BY addedAt DESC, name")
+    fun pagingRecent(): PagingSource<Int, VodEntity>
+
+    @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
+    fun pagingByCategory(categoryId: String): PagingSource<Int, VodEntity>
+
+    /** FTS-backed instant search, paged. [query] is a sanitized FTS MATCH expression. */
+    @Query("""
+        SELECT v.* FROM vod v
+        JOIN vod_fts ON v.id = vod_fts.id
+        WHERE vod_fts MATCH :query
+        ORDER BY v.addedAt DESC, v.name
+    """)
+    fun pagingSearch(query: String): PagingSource<Int, VodEntity>
 
     /** Movie count per category id, used for the category row badges. */
     @Query("""
@@ -142,6 +164,24 @@ interface SeriesDao {
 
     @Query("SELECT * FROM series WHERE name LIKE '%' || :query || '%' ORDER BY addedAt DESC, name LIMIT 200")
     fun search(query: String): Flow<List<SeriesEntity>>
+
+    // ---- Paging 3 sources (bounded, lazily-paged for huge catalogs) -----
+
+    /** Whole series cache, newest first — the "Recently added" default view. */
+    @Query("SELECT * FROM series ORDER BY addedAt DESC, name")
+    fun pagingRecent(): PagingSource<Int, SeriesEntity>
+
+    @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
+    fun pagingByCategory(categoryId: String): PagingSource<Int, SeriesEntity>
+
+    /** FTS-backed instant search, paged. [query] is a sanitized FTS MATCH expression. */
+    @Query("""
+        SELECT s.* FROM series s
+        JOIN series_fts ON s.id = series_fts.id
+        WHERE series_fts MATCH :query
+        ORDER BY s.addedAt DESC, s.name
+    """)
+    fun pagingSearch(query: String): PagingSource<Int, SeriesEntity>
 
     /** Series count per category id, used for the category row badges. */
     @Query("""
@@ -219,4 +259,65 @@ interface EpgMappingDao {
 
     @Query("SELECT * FROM epg_mapping")
     suspend fun getAll(): List<EpgMappingEntity>
+}
+
+/**
+ * Series categories DAO. Mirrors [VodCategoryDao] so the series screen can show
+ * its category rail instantly and lazily load each category's series on demand.
+ */
+@Dao
+interface SeriesCategoryDao {
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(categories: List<SeriesCategoryEntity>)
+
+    @Query("DELETE FROM series_categories")
+    suspend fun clearAll()
+
+    @Query("SELECT * FROM series_categories ORDER BY position")
+    fun observeAll(): Flow<List<SeriesCategoryEntity>>
+
+    @Query("SELECT * FROM series_categories ORDER BY position")
+    suspend fun getAll(): List<SeriesCategoryEntity>
+
+    @Query("SELECT * FROM series_categories WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): SeriesCategoryEntity?
+
+    @Query("SELECT id FROM series_categories WHERE loaded = 1")
+    suspend fun loadedIds(): List<String>
+
+    @Query("UPDATE series_categories SET loaded = 1 WHERE id = :id")
+    suspend fun markLoaded(id: String)
+}
+
+// ---- Full-text search maintenance DAOs ----------------------------------
+// Each mirrors the id/name of its content table. The repository keeps them in
+// lockstep: full replace for live, per-category merge (deleteByIds + insertAll)
+// for movies/series. FTS4 has no uniqueness constraint, so stale rows must be
+// deleted before re-insert to avoid duplicate search hits.
+
+@Dao
+interface VodFtsDao {
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(rows: List<VodFtsEntity>)
+
+    @Query("DELETE FROM vod_fts")
+    suspend fun clearAll()
+
+    @Query("DELETE FROM vod_fts WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
+}
+
+@Dao
+interface SeriesFtsDao {
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(rows: List<SeriesFtsEntity>)
+
+    @Query("DELETE FROM series_fts")
+    suspend fun clearAll()
+
+    @Query("DELETE FROM series_fts WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
 }

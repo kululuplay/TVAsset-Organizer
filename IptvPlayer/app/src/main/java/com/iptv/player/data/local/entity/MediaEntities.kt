@@ -67,6 +67,24 @@ data class VodCategoryEntity(
     val loaded: Boolean = false
 )
 
+/**
+ * Series categories, stored independently of the series themselves so the
+ * category rail can be shown immediately after login — before any category's
+ * series have been lazily downloaded. Mirrors [VodCategoryEntity]: [loaded]
+ * tracks whether this category's series have already been fetched into the
+ * [SeriesEntity] table, so re-opening a category is instant and we never
+ * re-download it needlessly.
+ */
+@Entity(tableName = "series_categories")
+data class SeriesCategoryEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    /** Index of this category in the source's category list (preserves order). */
+    val position: Int = Int.MAX_VALUE,
+    /** True once this category's series have been downloaded into [series]. */
+    val loaded: Boolean = false
+)
+
 @Entity(
     tableName = "series",
     indices = [Index("categoryId"), Index("addedAt")]

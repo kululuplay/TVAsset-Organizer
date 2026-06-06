@@ -13,18 +13,22 @@ import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Category
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.VodItem
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class VodViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo = ServiceLocator.repository
@@ -96,16 +100,22 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
         query.value = text.trim()
     }
 
-    /** Movies for the current query, or selected category when the query is empty. */
-    val items: StateFlow<List<VodItem>> =
-        combine(selectedCategory, query) { catId, q -> catId to q }
+    /**
+     * Paged movies for the current query, or the selected category when the query
+     * is empty. The query is debounced so typing doesn't re-query on every
+     * keystroke; [cachedIn] keeps the paged stream alive across config changes.
+     */
+    val items: Flow<PagingData<VodItem>> =
+        combine(
+            selectedCategory,
+            query.debounce(250).distinctUntilChanged()
+        ) { catId, q -> catId to q }
             .flatMapLatest { (catId, q) ->
-                val source: Flow<List<VodItem>> = when {
-                    q.isNotEmpty() -> repo.searchVod(q)
-                    catId == null || catId == CAT_ALL -> repo.observeRecentVod(RECENT_LIMIT)
-                    else -> repo.observeVodByCategory(catId)
+                when {
+                    q.isNotEmpty() -> repo.pagingVodSearch(q)
+                    catId == null || catId == CAT_ALL -> repo.pagingRecentVod()
+                    else -> repo.pagingVodByCategory(catId)
                 }
-                source
             }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .cachedIn(viewModelScope)
 }

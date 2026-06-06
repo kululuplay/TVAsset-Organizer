@@ -13,6 +13,7 @@ import android.text.TextWatcher
 import android.view.View
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.paging.LoadState
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.databinding.ActivitySearchBinding
@@ -118,17 +119,29 @@ class SearchActivity : BaseActivity() {
             }
         }
         lifecycleScope.launch {
-            viewModel.movies.collectLatest { list ->
-                movieAdapter.submitList(list)
-                hasMovies = list.isNotEmpty()
-                updateEmptyState()
+            viewModel.movies.collectLatest { data ->
+                movieAdapter.submitData(data)
             }
         }
         lifecycleScope.launch {
-            viewModel.series.collectLatest { list ->
-                seriesAdapter.submitList(list)
-                hasSeries = list.isNotEmpty()
-                updateEmptyState()
+            movieAdapter.loadStateFlow.collectLatest { state ->
+                if (state.refresh is LoadState.NotLoading) {
+                    hasMovies = movieAdapter.itemCount > 0
+                    updateEmptyState()
+                }
+            }
+        }
+        lifecycleScope.launch {
+            viewModel.series.collectLatest { data ->
+                seriesAdapter.submitData(data)
+            }
+        }
+        lifecycleScope.launch {
+            seriesAdapter.loadStateFlow.collectLatest { state ->
+                if (state.refresh is LoadState.NotLoading) {
+                    hasSeries = seriesAdapter.itemCount > 0
+                    updateEmptyState()
+                }
             }
         }
     }

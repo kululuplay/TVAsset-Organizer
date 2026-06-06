@@ -13,16 +13,22 @@ import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.Series
 import com.iptv.player.data.model.VodItem
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class SearchViewModel : ViewModel() {
 
     private val repo = ServiceLocator.repository
@@ -30,15 +36,19 @@ class SearchViewModel : ViewModel() {
 
     private val query = MutableStateFlow("")
 
+    // Debounced query shared by all three result streams so typing doesn't fire a
+    // query per keystroke across live/movies/series at once.
+    private val debouncedQuery = query.debounce(250).distinctUntilChanged()
+
     init {
-        // Series is a full refresh so it's fully searchable. Movies are lazy
-        // per-category by design, so global movie search only covers categories the
-        // user has already opened/downloaded (an accepted tradeoff to avoid pulling
-        // the whole ~60k catalog); we refresh just the cheap category list here.
+        // Both movies and series are lazy per-category by design, so global search
+        // only covers categories the user has already opened/downloaded (an
+        // accepted tradeoff to avoid pulling the whole catalog). We refresh just
+        // the cheap category lists here.
         viewModelScope.launch {
             val config = settings.getSourceConfig() ?: return@launch
             repo.refreshVodCategories(config)
-            repo.refreshSeries(config)
+            repo.refreshSeriesCategories(config)
         }
     }
 
@@ -46,18 +56,20 @@ class SearchViewModel : ViewModel() {
         query.value = text.trim()
     }
 
+    // Live stays a plain list (FTS): live counts are bounded and the UI shows them
+    // all, so paging would add complexity without benefit here.
     val channels: StateFlow<List<Channel>> =
-        query.flatMapLatest { q ->
+        debouncedQuery.flatMapLatest { q ->
             if (q.isEmpty()) flowOf(emptyList()) else repo.search(q, ContentType.LIVE)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val movies: StateFlow<List<VodItem>> =
-        query.flatMapLatest { q ->
-            if (q.isEmpty()) flowOf(emptyList()) else repo.searchVod(q)
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val movies: Flow<PagingData<VodItem>> =
+        debouncedQuery.flatMapLatest { q ->
+            if (q.isEmpty()) flowOf(PagingData.empty()) else repo.pagingVodSearch(q)
+        }.cachedIn(viewModelScope)
 
-    val series: StateFlow<List<Series>> =
-        query.flatMapLatest { q ->
-            if (q.isEmpty()) flowOf<List<Series>>(emptyList()) else repo.searchSeries(q)
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val series: Flow<PagingData<Series>> =
+        debouncedQuery.flatMapLatest { q ->
+            if (q.isEmpty()) flowOf(PagingData.empty()) else repo.pagingSeriesSearch(q)
+        }.cachedIn(viewModelScope)
 }

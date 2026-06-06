@@ -11,8 +11,8 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.paging.PagingDataAdapter
 import androidx.recyclerview.widget.DiffUtil
-import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.iptv.player.R
@@ -22,7 +22,7 @@ import com.iptv.player.ui.common.LogoPlaceholder
 class VodAdapter(
     private val onFocused: (VodItem) -> Unit,
     private val onClicked: (VodItem) -> Unit
-) : ListAdapter<VodItem, VodAdapter.VH>(DIFF) {
+) : PagingDataAdapter<VodItem, VodAdapter.VH>(DIFF) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val view = LayoutInflater.from(parent.context)
@@ -31,7 +31,9 @@ class VodAdapter(
     }
 
     override fun onBindViewHolder(holder: VH, position: Int) {
-        holder.bind(getItem(position))
+        // Paging may hand back null for not-yet-loaded placeholders; skip those.
+        val item = getItem(position) ?: return
+        holder.bind(item)
     }
 
     inner class VH(itemView: View) : RecyclerView.ViewHolder(itemView) {

@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.view.View
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.paging.LoadState
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.databinding.ActivitySeriesBinding
@@ -20,6 +21,7 @@ import com.iptv.player.ui.common.autoFitColumns
 import com.iptv.player.ui.common.isAdult
 import com.iptv.player.ui.home.CategoryAdapter
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -92,13 +94,32 @@ class SeriesActivity : BaseActivity() {
             }
         }
         lifecycleScope.launch {
-            viewModel.items.collectLatest { items ->
-                seriesAdapter.submitList(items) {
-                    // New category: start from the first poster.
-                    binding.posterGrid.scrollToPosition(0)
+            viewModel.items.collectLatest { data ->
+                seriesAdapter.submitData(data)
+            }
+        }
+        // When a fresh page settles (category switch / new search), jump to the top.
+        lifecycleScope.launch {
+            seriesAdapter.loadStateFlow
+                .distinctUntilChangedBy { it.refresh }
+                .collectLatest { state ->
+                    if (state.refresh is LoadState.NotLoading) {
+                        binding.posterGrid.scrollToPosition(0)
+                    }
                 }
-                binding.emptyState.visibility =
-                    if (items.isEmpty()) View.VISIBLE else View.GONE
+        }
+        // Empty state: only once the refresh has settled with nothing to show.
+        lifecycleScope.launch {
+            seriesAdapter.loadStateFlow.collectLatest { state ->
+                val empty = state.refresh is LoadState.NotLoading && seriesAdapter.itemCount == 0
+                binding.emptyState.visibility = if (empty) View.VISIBLE else View.GONE
+            }
+        }
+        // Lightweight spinner while a category's series are lazily downloading.
+        lifecycleScope.launch {
+            viewModel.refreshing.collectLatest { loading ->
+                binding.loadingIndicator.visibility = if (loading) View.VISIBLE else View.GONE
+                if (loading) binding.emptyState.visibility = View.GONE
             }
         }
     }

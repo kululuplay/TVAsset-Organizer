@@ -101,7 +101,12 @@ dependencies {
     // --- Persistence (Room) ---
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
+    // Room PagingSource support (Room -> Paging 3 bridge).
+    implementation("androidx.room:room-paging:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
+
+    // --- Paging 3 (bounded, lazily-loaded lists for huge catalogs) ---
+    implementation("androidx.paging:paging-runtime-ktx:3.3.2")
 
     // --- DataStore (settings / saved login) ---
     implementation("androidx.datastore:datastore-preferences:1.1.1")

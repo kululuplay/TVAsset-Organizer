@@ -69,7 +69,9 @@ object SplashPrefetch {
             stage(Stage.LIVE) { repo.refreshLive(config) }
             stage(Stage.EPG) { repo.refreshEpg(config) }
             stage(Stage.LIBRARY) {
-                repo.refreshSeries(config)
+                // Both movies and series are lazy per-category, so only the cheap
+                // category lists are fetched here — never the whole catalog.
+                repo.refreshSeriesCategories(config)
                 repo.refreshVodCategories(config)
             }
         } finally {
@@ -77,8 +79,10 @@ object SplashPrefetch {
             _essentialDone.value = true
         }
 
-        // Best-effort: warm "Recently added" without pulling the whole catalog.
+        // Best-effort: warm "Recently added" for both rails without pulling the
+        // whole catalog (one category each).
         runCatchingCancellable { repo.prefetchFirstVodCategory(config) }
+        runCatchingCancellable { repo.prefetchFirstSeriesCategory(config) }
         _stage.value = Stage.READY
     }
 
