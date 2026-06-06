@@ -148,6 +148,12 @@
             android:exported="false"
             android:screenOrientation="landscape" />
 
+        <!-- Continue Watching (in-progress movies/episodes). -->
+        <activity
+            android:name=".ui.dashboard.ContinueWatchingActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
         <!-- Channel manager (hide / reorder / favorites). -->
         <activity
             android:name=".ui.channels.ChannelManagerActivity"

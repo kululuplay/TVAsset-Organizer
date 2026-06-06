@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Post-login launcher dashboard. Top bar: brand + live clock/date + circular
-     action buttons. Body: a scrollable area (so the Continue Watching rail can
-     appear above the tiles without ever squashing them) holding cohesive dark
-     glass tiles with colored icon badges - a Live TV hero plus Movies/Series,
-     then a row of secondary tiles (Playlists, Catch Up, Favorites). Footer:
-     current source + expiry stays pinned. Fully D-pad driven; tiles scale +
-     brand-pink ring on focus, and focusing an off-screen tile auto-scrolls. -->
+     action buttons. Body: a scrollable area holding cohesive dark glass tiles
+     with colored icon badges - a Live TV hero plus Movies/Series, then a row of
+     secondary tiles (Playlists, Continue Watching, Favorites). The Continue
+     Watching tile opens a dedicated page; resume items are not shown inline here.
+     Footer: current source + expiry stays pinned. Fully D-pad driven; tiles scale
+     + brand-pink ring on focus, and focusing an off-screen tile auto-scrolls. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -133,32 +133,6 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
-
-            <!-- ===== Continue Watching rail (hidden until there is in-progress content) ===== -->
-            <LinearLayout
-                android:id="@+id/continueSection"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:layout_marginBottom="@dimen/space_l"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/section_continue_watching"
-                    android:textColor="@color/text_primary"
-                    android:textSize="@dimen/text_title"
-                    android:textStyle="bold" />
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/continueList"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/space_s"
-                    android:clipToPadding="false"
-                    android:focusable="false" />
-            </LinearLayout>
 
             <!-- ===== Tile grid (fixed heights so it never collapses) ===== -->
             <LinearLayout
@@ -356,7 +330,7 @@
                     </FrameLayout>
 
                     <FrameLayout
-                        android:id="@+id/tileCatchup"
+                        android:id="@+id/tileContinue"
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
                         android:layout_weight="1"
@@ -380,14 +354,14 @@
                                 android:layout_height="@dimen/badge_small"
                                 android:background="@drawable/bg_badge_catchup"
                                 android:padding="@dimen/space_s"
-                                android:src="@drawable/ic_catchup"
+                                android:src="@drawable/ic_clock"
                                 android:tint="@color/text_primary"
-                                android:contentDescription="@string/nav_catchup" />
+                                android:contentDescription="@string/section_continue_watching" />
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="@string/nav_catchup"
+                                android:text="@string/section_continue_watching"
                                 android:textColor="@color/text_primary"
                                 android:textSize="@dimen/text_body"
                                 android:textStyle="bold"

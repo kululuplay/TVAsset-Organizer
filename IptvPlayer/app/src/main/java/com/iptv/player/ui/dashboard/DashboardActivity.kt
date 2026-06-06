@@ -1,7 +1,7 @@
 /*
  * DashboardActivity.kt
  * The post-login launcher home. A grid of gradient tiles (Live / Movies / Series
- * + Playlists / Catch Up / Favorites) over the cinematic aurora background, with a
+ * + Playlists / Continue Watching / Favorites) over the cinematic aurora background, with a
  * top bar that shows the clock + date and circular action buttons (search, refresh,
  * settings, account, exit). Fully D-pad driven; each tile opens its section.
  */
@@ -10,30 +10,21 @@ package com.iptv.player.ui.dashboard
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.view.View
 import android.widget.Toast
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
-import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
-import com.iptv.player.data.model.ContinueItem
 import com.iptv.player.databinding.ActivityDashboardBinding
 import com.iptv.player.ui.account.AccountActivity
-import com.iptv.player.ui.catchup.CatchupActivity
 import com.iptv.player.ui.common.BaseActivity
-import com.iptv.player.ui.common.PinLockHelper
 import com.iptv.player.ui.home.HomeActivity
 import com.iptv.player.ui.home.HomeViewModel
-import com.iptv.player.ui.player.VodPlayerActivity
 import com.iptv.player.ui.profiles.ProfilesActivity
 import com.iptv.player.ui.search.SearchActivity
 import com.iptv.player.ui.series.SeriesActivity
 import com.iptv.player.ui.settings.SettingsActivity
 import com.iptv.player.ui.vod.VodActivity
 import com.iptv.player.update.UpdatePrompt
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -41,7 +32,6 @@ import java.util.Date
 class DashboardActivity : BaseActivity() {
 
     private lateinit var binding: ActivityDashboardBinding
-    private lateinit var continueAdapter: ContinueWatchingAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,49 +40,12 @@ class DashboardActivity : BaseActivity() {
 
         wireTiles()
         wireActions()
-        setupContinueRail()
 
         // Land on the Live hero so the remote has an obvious starting point.
         binding.tileLive.requestFocus()
 
         // Quietly check for a newer build once per session and offer to update.
         UpdatePrompt.maybeShow(this)
-    }
-
-    private fun setupContinueRail() {
-        continueAdapter = ContinueWatchingAdapter(onClicked = { resume(it) })
-        binding.continueList.layoutManager =
-            LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-        binding.continueList.adapter = continueAdapter
-
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                ServiceLocator.repository.observeContinueWatching().collectLatest { items ->
-                    continueAdapter.submitList(items)
-                    binding.continueSection.visibility =
-                        if (items.isEmpty()) View.GONE else View.VISIBLE
-                }
-            }
-        }
-    }
-
-    private fun resume(item: ContinueItem) {
-        PinLockHelper.guard(this, isAdult = PinLockHelper.looksAdult(item.title)) {
-            val intent = Intent(this, VodPlayerActivity::class.java).apply {
-                putExtra(VodPlayerActivity.EXTRA_STREAM_URL, item.streamUrl)
-                putExtra(VodPlayerActivity.EXTRA_TITLE, item.title)
-                putExtra(VodPlayerActivity.EXTRA_RESUME_ID, item.contentId)
-                putExtra(VodPlayerActivity.EXTRA_RESUME_TYPE, item.kind.raw)
-                putExtra(VodPlayerActivity.EXTRA_RESUME_TITLE, item.title)
-                putExtra(VodPlayerActivity.EXTRA_POSTER_URL, item.posterUrl)
-                putExtra(VodPlayerActivity.EXTRA_VOD_ID, item.vodId)
-                putExtra(VodPlayerActivity.EXTRA_SERIES_ID, item.seriesId)
-                putExtra(VodPlayerActivity.EXTRA_SEASON, item.seasonNumber)
-                putExtra(VodPlayerActivity.EXTRA_EPISODE, item.episodeNumber)
-                putExtra(VodPlayerActivity.EXTRA_AUTO_RESUME, true)
-            }
-            startActivity(intent)
-        }
     }
 
     override fun onResume() {
@@ -107,7 +60,7 @@ class DashboardActivity : BaseActivity() {
         binding.tileMovies.setOnClickListener { open(VodActivity::class.java) }
         binding.tileSeries.setOnClickListener { open(SeriesActivity::class.java) }
         binding.tilePlaylists.setOnClickListener { open(ProfilesActivity::class.java) }
-        binding.tileCatchup.setOnClickListener { open(CatchupActivity::class.java) }
+        binding.tileContinue.setOnClickListener { open(ContinueWatchingActivity::class.java) }
         // Open the Live browser straight on its pinned Favorites category.
         binding.tileFavorites.setOnClickListener {
             startActivity(
