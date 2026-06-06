@@ -272,6 +272,10 @@ class IptvRepository(
 
     fun observeVod(): Flow<List<VodItem>> = vodDao.observeAll().map { it.map { e -> e.toModel() } }
 
+    /** Latest [limit] movies by added date, for the "Recently added" rail. */
+    fun observeRecentVod(limit: Int): Flow<List<VodItem>> =
+        vodDao.observeRecent(limit).map { it.map { e -> e.toModel() } }
+
     fun observeVodByCategory(categoryId: String): Flow<List<VodItem>> =
         vodDao.observeByCategory(categoryId).map { it.map { e -> e.toModel() } }
 
@@ -368,6 +372,10 @@ class IptvRepository(
     // ---- Series ---------------------------------------------------------
 
     fun observeSeries(): Flow<List<Series>> = seriesDao.observeAll().map { it.map { e -> e.toModel() } }
+
+    /** Latest [limit] series by added date, for the "Recently added" rail. */
+    fun observeRecentSeries(limit: Int): Flow<List<Series>> =
+        seriesDao.observeRecent(limit).map { it.map { e -> e.toModel() } }
 
     fun observeSeriesByCategory(categoryId: String): Flow<List<Series>> =
         seriesDao.observeByCategory(categoryId).map { it.map { e -> e.toModel() } }

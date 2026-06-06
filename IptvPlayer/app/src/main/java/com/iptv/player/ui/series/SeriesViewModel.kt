@@ -32,6 +32,7 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
 
     companion object {
         const val CAT_ALL = "__all__"
+        const val RECENT_LIMIT = 20
     }
 
     private val _refreshing = MutableStateFlow(false)
@@ -59,7 +60,7 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
                         CAT_ALL,
                         getApplication<Application>().getString(R.string.cat_recently_added),
                         ContentType.SERIES,
-                        count = counts.values.sum()
+                        count = counts.values.sum().coerceAtMost(RECENT_LIMIT)
                     )
                 )
                 addAll(cats.map { it.copy(count = counts[it.id]) })
@@ -83,7 +84,7 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
             .flatMapLatest { (catId, q) ->
                 val source: Flow<List<Series>> = when {
                     q.isNotEmpty() -> repo.searchSeries(q)
-                    catId == null || catId == CAT_ALL -> repo.observeSeries()
+                    catId == null || catId == CAT_ALL -> repo.observeRecentSeries(RECENT_LIMIT)
                     else -> repo.observeSeriesByCategory(catId)
                 }
                 source

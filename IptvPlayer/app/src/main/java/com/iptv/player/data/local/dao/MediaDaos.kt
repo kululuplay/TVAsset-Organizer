@@ -54,6 +54,10 @@ interface VodDao {
     @Query("SELECT * FROM vod ORDER BY position")
     fun observeAll(): Flow<List<VodEntity>>
 
+    /** Most recently added movies first, capped to :limit, for the "Recently added" rail. */
+    @Query("SELECT * FROM vod ORDER BY addedAt DESC, name LIMIT :limit")
+    fun observeRecent(limit: Int): Flow<List<VodEntity>>
+
     @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
     fun observeByCategory(categoryId: String): Flow<List<VodEntity>>
 
@@ -94,6 +98,10 @@ interface SeriesDao {
 
     @Query("SELECT * FROM series ORDER BY position")
     fun observeAll(): Flow<List<SeriesEntity>>
+
+    /** Most recently added series first, capped to :limit, for the "Recently added" rail. */
+    @Query("SELECT * FROM series ORDER BY addedAt DESC, name LIMIT :limit")
+    fun observeRecent(limit: Int): Flow<List<SeriesEntity>>
 
     @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
     fun observeByCategory(categoryId: String): Flow<List<SeriesEntity>>
