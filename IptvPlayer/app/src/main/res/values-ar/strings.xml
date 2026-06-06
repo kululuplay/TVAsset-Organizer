@@ -205,4 +205,5 @@
     <string name="update_available_title">يتوفر تحديث</string>
     <string name="update_available_message">الإصدار %1$s متوفر. هل تريد التحديث الآن؟</string>
     <string name="update_later">لاحقًا</string>
+    <string name="no_guide">لا يوجد دليل متاح</string>
 </resources>

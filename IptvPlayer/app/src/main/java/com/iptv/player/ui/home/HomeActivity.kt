@@ -1,9 +1,10 @@
 /*
  * HomeActivity.kt
- * The 3-pane Android TV home screen:
- *   left   = categories (incl. Favorites / Recently Watched)
- *   center = channels for the focused category
- *   right  = info panel for the focused channel (logo + name; EPG comes later)
+ * The 2-pane Android TV Live screen:
+ *   left  = a single list that shows categories, and drills into that category's
+ *           channels on OK (Back returns to categories).
+ *   right = a large channel preview (number + name + current program caption)
+ *           on top, and the EPG schedule list for that channel below.
  * Fully D-pad driven. Click a channel to open the player.
  */
 package com.iptv.player.ui.home
@@ -27,9 +28,9 @@ import com.iptv.player.ui.common.NumberZapInputHelper
 import com.iptv.player.ui.common.PinLockHelper
 import com.iptv.player.ui.common.isAdult
 import com.iptv.player.ui.player.PlayerActivity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -43,6 +44,7 @@ class HomeActivity : BaseActivity() {
 
     private lateinit var categoryAdapter: CategoryAdapter
     private lateinit var channelAdapter: ChannelAdapter
+    private lateinit var epgAdapter: ProgramAdapter
 
     /** Last channels rendered, used by the number-key zap lookup. */
     private var currentChannels: List<Channel> = emptyList()
@@ -75,6 +77,10 @@ class HomeActivity : BaseActivity() {
         )
     }
 
+    /** True while the left pane shows the channel list (drilled into a category). */
+    private val inChannelView: Boolean
+        get() = binding.channelList.visibility == View.VISIBLE
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityHomeBinding.inflate(layoutInflater)
@@ -84,23 +90,23 @@ class HomeActivity : BaseActivity() {
         observe()
     }
 
-    override fun onResume() {
-        super.onResume()
-        // Navigation now lives on the Dashboard; this screen just shows the date.
-        binding.dateText.text = DateFormat
-            .getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
-            .format(Date())
-    }
-
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
         zap.handleKeyDown(keyCode) || super.onKeyDown(keyCode, event)
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        // Back from the channel list returns to the category list, matching the
+        // 2-pane drill-down. Otherwise leave the screen as usual.
+        if (inChannelView) {
+            showCategories()
+        } else {
+            super.onBackPressed()
+        }
+    }
 
     private fun setupLists() {
         categoryAdapter = CategoryAdapter(
             onFocused = {
-                // Only reset scroll/focus when the category truly changes, so a
-                // re-focus of the same category can't leave the flag armed and make
-                // an unrelated emission (e.g. a favorite toggle) jump to the top.
                 if (it.id != lastSelectedCategoryId) {
                     lastSelectedCategoryId = it.id
                     pendingScrollReset = true
@@ -108,15 +114,14 @@ class HomeActivity : BaseActivity() {
                 }
             },
             onClicked = { category ->
-                // Locked (adult) categories require the PIN before you can enter
-                // them. Once unlocked, remember it for the rest of the session.
+                // Locked (adult) categories require the PIN before drilling in.
                 if (category.isAdult() && category.id !in unlockedCategories) {
                     PinLockHelper.guard(this, isAdult = true) {
                         unlockedCategories.add(category.id)
-                        focusFirstChannel()
+                        enterChannelView()
                     }
                 } else {
-                    focusFirstChannel()
+                    enterChannelView()
                 }
             }
         )
@@ -136,7 +141,11 @@ class HomeActivity : BaseActivity() {
         binding.channelList.layoutManager = LinearLayoutManager(this)
         binding.channelList.adapter = channelAdapter
 
-        // The preview surface opens the currently focused channel.
+        epgAdapter = ProgramAdapter()
+        binding.epgList.layoutManager = LinearLayoutManager(this)
+        binding.epgList.adapter = epgAdapter
+
+        // The preview surface opens the currently previewed channel.
         binding.previewCard.setOnClickListener {
             currentInfoChannel?.let { openPlayer(it) }
         }
@@ -145,17 +154,18 @@ class HomeActivity : BaseActivity() {
     private fun observe() {
         lifecycleScope.launch {
             viewModel.categories.collectLatest { cats ->
-                categoryAdapter.submitList(cats)
-                if (cats.isNotEmpty() && !initialSelectionDone) {
-                    initialSelectionDone = true
-                    // Honour an explicitly requested category (e.g. Favorites from the
-                    // dashboard); otherwise land on the first real category after the
-                    // pinned Favorites/Recent entries.
-                    val requested = intent.getStringExtra(EXTRA_INITIAL_CATEGORY)
-                    val target = cats.firstOrNull { it.id == requested }
-                        ?: cats.getOrNull(2) ?: cats.first()
-                    lastSelectedCategoryId = target.id
-                    viewModel.selectCategory(target.id)
+                categoryAdapter.submitList(cats) {
+                    // Run the one-time initial selection after the list has committed
+                    // so focusCategory() can find the target row reliably.
+                    if (cats.isNotEmpty() && !initialSelectionDone) {
+                        initialSelectionDone = true
+                        val requested = intent.getStringExtra(EXTRA_INITIAL_CATEGORY)
+                        val target = cats.firstOrNull { it.id == requested }
+                            ?: cats.getOrNull(2) ?: cats.first()
+                        lastSelectedCategoryId = target.id
+                        viewModel.selectCategory(target.id)
+                        focusCategory(target.id)
+                    }
                 }
             }
         }
@@ -163,11 +173,15 @@ class HomeActivity : BaseActivity() {
             viewModel.channels.collectLatest { channels ->
                 currentChannels = channels
                 channelAdapter.submitList(channels) {
-                    // After a category switch, jump the list back to the first item
-                    // so focus starts there (not on a leftover scroll position).
                     if (pendingScrollReset) {
                         pendingScrollReset = false
                         binding.channelList.scrollToPosition(0)
+                    }
+                    // While still browsing categories, preview the first channel
+                    // of the focused category (like the reference design).
+                    if (!inChannelView) {
+                        val first = channels.firstOrNull()
+                        if (first != null) showInfo(first) else clearPreview()
                     }
                 }
                 binding.emptyState.visibility =
@@ -185,47 +199,75 @@ class HomeActivity : BaseActivity() {
 
     private fun showInfo(channel: Channel) {
         currentInfoChannel = channel
-        val number = channel.number?.let { "$it | " } ?: ""
-        binding.infoName.text = number + ChannelText.clean(channel.name)
-        binding.infoCategory.text = channel.categoryName ?: ""
+        binding.previewNumber.text = channel.number?.toString() ?: ""
+        binding.previewTitle.text = ChannelText.clean(channel.name)
         val placeholder = LogoPlaceholder.forName(this, channel.name)
         if (channel.logoUrl.isNullOrBlank()) {
             binding.infoLogo.setImageDrawable(placeholder)
+            binding.previewCaptionLogo.setImageDrawable(placeholder)
         } else {
             binding.infoLogo.load(channel.logoUrl) {
-                placeholder(placeholder)
-                error(placeholder)
+                placeholder(placeholder); error(placeholder)
+            }
+            binding.previewCaptionLogo.load(channel.logoUrl) {
+                placeholder(placeholder); error(placeholder)
             }
         }
-        // Reset before the async EPG lookup resolves.
-        binding.infoNow.text = ""
-        binding.infoNowTime.text = ""
-        binding.infoNowDesc.text = ""
-        binding.infoNext.text = ""
-        binding.infoNextTime.text = ""
-        binding.liveBadge.visibility = View.GONE
-        binding.nowProgress.visibility = View.GONE
+        binding.previewProgram.text = ""
+        epgAdapter.submitList(emptyList())
+        binding.epgEmpty.visibility = View.GONE
+
         nowNextJob?.cancel()
         nowNextJob = lifecycleScope.launch {
-            val nn = viewModel.nowNext(channel)
-            nn.now?.let { now ->
-                binding.infoNow.text = now.title
-                binding.infoNowTime.text = "${timeFmt.format(Date(now.startMs))} - ${timeFmt.format(Date(now.stopMs))}"
-                binding.infoNowDesc.text = now.description ?: ""
-                binding.liveBadge.visibility = View.VISIBLE
-                val span = (now.stopMs - now.startMs).toFloat()
-                if (span > 0f) {
-                    val pct = ((System.currentTimeMillis() - now.startMs) / span * 100f)
-                        .toInt().coerceIn(0, 100)
-                    binding.nowProgress.progress = pct
-                    binding.nowProgress.visibility = View.VISIBLE
+            try {
+                val programs = viewModel.programs(channel)
+                val now = System.currentTimeMillis()
+                val current = programs.firstOrNull { it.isLiveAt(now) }
+                binding.previewProgram.text = current?.let {
+                    "${timeFmt.format(Date(it.startMs))} - ${timeFmt.format(Date(it.stopMs))}  ${it.title}"
+                } ?: ""
+                epgAdapter.submitList(programs) {
+                    val idx = programs.indexOfFirst { it.isLiveAt(now) }
+                    if (idx >= 0) binding.epgList.scrollToPosition(idx)
                 }
-            }
-            nn.next?.let { next ->
-                binding.infoNext.text = next.title
-                binding.infoNextTime.text = "${timeFmt.format(Date(next.startMs))} - ${timeFmt.format(Date(next.stopMs))}"
+                binding.epgEmpty.visibility =
+                    if (programs.isEmpty()) View.VISIBLE else View.GONE
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                // Best-effort guide: never let an EPG fetch crash the UI coroutine.
+                epgAdapter.submitList(emptyList())
+                binding.epgEmpty.visibility = View.VISIBLE
             }
         }
+    }
+
+    private fun clearPreview() {
+        currentInfoChannel = null
+        binding.previewNumber.text = ""
+        binding.previewTitle.text = ""
+        binding.previewProgram.text = ""
+        binding.infoLogo.setImageDrawable(null)
+        binding.previewCaptionLogo.setImageDrawable(null)
+        nowNextJob?.cancel()
+        epgAdapter.submitList(emptyList())
+        binding.epgEmpty.visibility = View.GONE
+    }
+
+    /** Drills from the category list into its channel list. */
+    private fun enterChannelView() {
+        if (currentChannels.isEmpty()) return
+        categoryAdapter.setSelected(lastSelectedCategoryId)
+        binding.channelList.visibility = View.VISIBLE
+        binding.categoryList.visibility = View.GONE
+        focusFirstChannel()
+    }
+
+    /** Returns from the channel list back to the category list. */
+    private fun showCategories() {
+        binding.categoryList.visibility = View.VISIBLE
+        binding.channelList.visibility = View.GONE
+        lastSelectedCategoryId?.let { focusCategory(it) }
     }
 
     /** Moves focus into the channel list, always landing on the first channel. */
@@ -234,6 +276,17 @@ class HomeActivity : BaseActivity() {
         binding.channelList.post {
             (binding.channelList.findViewHolderForAdapterPosition(0)?.itemView
                 ?: binding.channelList).requestFocus()
+        }
+    }
+
+    /** Moves focus onto a given category row. */
+    private fun focusCategory(id: String) {
+        val pos = (0 until categoryAdapter.itemCount)
+            .firstOrNull { categoryAdapter.currentList.getOrNull(it)?.id == id } ?: 0
+        binding.categoryList.scrollToPosition(pos)
+        binding.categoryList.post {
+            (binding.categoryList.findViewHolderForAdapterPosition(pos)?.itemView
+                ?: binding.categoryList).requestFocus()
         }
     }
 

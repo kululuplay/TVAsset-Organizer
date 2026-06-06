@@ -205,4 +205,5 @@
     <string name="update_available_title">Update beschikbaar</string>
     <string name="update_available_message">Versie %1$s is beschikbaar. Wil je nu bijwerken?</string>
     <string name="update_later">Later</string>
+    <string name="no_guide">Geen gids beschikbaar</string>
 </resources>

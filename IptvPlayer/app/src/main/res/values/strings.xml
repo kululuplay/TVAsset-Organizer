@@ -177,4 +177,5 @@
     <string name="update_available_title">Update available</string>
     <string name="update_available_message">Version %1$s is available. Would you like to update now?</string>
     <string name="update_later">Later</string>
+    <string name="no_guide">No guide available</string>
 </resources>

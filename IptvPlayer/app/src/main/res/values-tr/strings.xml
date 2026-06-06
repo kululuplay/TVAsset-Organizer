@@ -205,4 +205,5 @@
     <string name="update_available_title">Güncelleme mevcut</string>
     <string name="update_available_message">%1$s sürümü çıktı. Şimdi güncellemek ister misiniz?</string>
     <string name="update_later">Sonra</string>
+    <string name="no_guide">Program bilgisi yok</string>
 </resources>

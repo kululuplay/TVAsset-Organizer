@@ -205,4 +205,5 @@
     <string name="update_available_title">Update verfügbar</string>
     <string name="update_available_message">Version %1$s ist verfügbar. Möchten Sie jetzt aktualisieren?</string>
     <string name="update_later">Später</string>
+    <string name="no_guide">Kein Programm verfügbar</string>
 </resources>

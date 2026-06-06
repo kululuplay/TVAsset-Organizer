@@ -20,6 +20,16 @@ class CategoryAdapter(
     private val onClicked: (Category) -> Unit
 ) : ListAdapter<Category, CategoryAdapter.VH>(DIFF) {
 
+    /** Id of the category to show as "selected" (white outline) when focus is
+     *  elsewhere (e.g. after drilling into its channels). */
+    private var selectedId: String? = null
+
+    fun setSelected(id: String?) {
+        if (selectedId == id) return
+        selectedId = id
+        notifyDataSetChanged()
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_category, parent, false)
@@ -32,9 +42,12 @@ class CategoryAdapter(
 
     inner class VH(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val title: TextView = itemView.findViewById(R.id.categoryTitle)
+        private val count: TextView = itemView.findViewById(R.id.categoryCount)
 
         fun bind(category: Category) {
             title.text = category.name
+            count.text = category.count?.toString() ?: ""
+            itemView.isSelected = category.id == selectedId
             itemView.setOnFocusChangeListener { _, hasFocus ->
                 if (hasFocus) onFocused(category)
             }

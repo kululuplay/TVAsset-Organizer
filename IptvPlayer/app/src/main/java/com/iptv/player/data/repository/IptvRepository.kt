@@ -91,6 +91,12 @@ class IptvRepository(
     fun observeChannelsByCategory(type: ContentType, categoryId: String): Flow<List<Channel>> =
         channelDao.observeByCategory(type.name, categoryId).map { list -> list.map { it.toModel() } }
 
+    /** Channel counts per category id, used for the category row badges. */
+    fun observeCategoryCounts(type: ContentType): Flow<Map<String, Int>> =
+        channelDao.observeCategoryCounts(type.name).map { rows ->
+            rows.associate { it.categoryId to it.count }
+        }
+
     fun observeFavorites(): Flow<List<Channel>> =
         favoriteDao.observeFavoriteChannels().map { list -> list.map { it.toModel(isFav = true) } }
 

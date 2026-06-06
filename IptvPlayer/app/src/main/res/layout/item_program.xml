@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Right-pane EPG row: status dot (emerald = airing now, gray = others) +
+     program title + start/stop time range. Display only (not focusable). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="52dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_card"
+    android:paddingHorizontal="@dimen/space_m"
+    android:paddingVertical="@dimen/space_s"
+    android:layout_marginBottom="@dimen/space_s">
+
+    <View
+        android:id="@+id/programDot"
+        android:layout_width="14dp"
+        android:layout_height="14dp"
+        android:layout_marginEnd="@dimen/space_m"
+        android:background="@drawable/bg_epg_dot" />
+
+    <TextView
+        android:id="@+id/programTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_body"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/programTime"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_caption"
+        android:textStyle="bold"
+        android:layout_marginStart="@dimen/space_m" />
+</LinearLayout>

@@ -70,12 +70,28 @@ interface ChannelDao {
 
     @Query("SELECT COUNT(*) FROM channels WHERE type = :type")
     suspend fun countByType(type: String): Int
+
+    // Channel count per category, used to show the badge on category rows. Mirrors
+    // the visible-list semantics of observeByCategory: hidden channels are excluded.
+    @Query("""
+        SELECT c.categoryId AS categoryId, COUNT(*) AS count FROM channels c
+        LEFT JOIN channel_overrides o ON o.channelId = c.id
+        WHERE c.type = :type AND c.categoryId IS NOT NULL AND COALESCE(o.hidden, 0) = 0
+        GROUP BY c.categoryId
+    """)
+    fun observeCategoryCounts(type: String): Flow<List<CategoryCountRow>>
 }
 
 /** Projection row for the distinct category query. */
 data class CategoryRow(
     val categoryId: String,
     val categoryName: String?
+)
+
+/** Projection row for the per-category channel count query. */
+data class CategoryCountRow(
+    val categoryId: String,
+    val count: Int
 )
 
 /** Projection joining a channel with its (optional) per-user override state. */

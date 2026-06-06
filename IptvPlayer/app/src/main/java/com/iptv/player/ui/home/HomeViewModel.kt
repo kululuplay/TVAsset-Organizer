@@ -13,6 +13,7 @@ import com.iptv.player.data.model.Category
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.NowNext
+import com.iptv.player.data.model.Program
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,16 +35,17 @@ class HomeViewModel : ViewModel() {
         const val CAT_RECENT = "__recent__"
     }
 
-    /** Categories with Favorites + Recent pinned to the top. */
+    /** Categories with Favorites + Recent pinned to the top, each with a count. */
     val categories: StateFlow<List<Category>> =
         combine(
             repo.observeCategories(ContentType.LIVE),
-            repo.observeFavorites()
-        ) { cats, _ ->
+            repo.observeFavorites(),
+            repo.observeCategoryCounts(ContentType.LIVE)
+        ) { cats, favs, counts ->
             buildList {
-                add(Category(CAT_FAVORITES, "Favorites", ContentType.LIVE))
+                add(Category(CAT_FAVORITES, "Favorites", ContentType.LIVE, count = favs.size))
                 add(Category(CAT_RECENT, "Recently Watched", ContentType.LIVE))
-                addAll(cats)
+                addAll(cats.map { it.copy(count = counts[it.id]) })
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -77,4 +79,15 @@ class HomeViewModel : ViewModel() {
 
     /** Now/next EPG for the focused channel (best-effort; empty if no guide). */
     suspend fun nowNext(channel: Channel): NowNext = repo.getNowNext(channel)
+
+    /**
+     * EPG schedule for the focused channel: a window from a few hours back to
+     * roughly a day ahead, used to populate the right-pane program list.
+     */
+    suspend fun programs(channel: Channel): List<Program> {
+        val now = System.currentTimeMillis()
+        val from = now - 3 * 60 * 60 * 1000L
+        val to = now + 24 * 60 * 60 * 1000L
+        return repo.getProgramsWindow(channel, from, to)
+    }
 }

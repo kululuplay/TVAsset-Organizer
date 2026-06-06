@@ -10,7 +10,9 @@ package com.iptv.player.data.model
 data class Category(
     val id: String,
     val name: String,
-    val type: ContentType = ContentType.LIVE
+    val type: ContentType = ContentType.LIVE,
+    /** Number of channels in this category (null = unknown / not shown). */
+    val count: Int? = null
 )
 
 /** A single playable channel / stream. */
