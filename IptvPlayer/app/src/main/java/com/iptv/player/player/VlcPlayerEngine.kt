@@ -71,8 +71,14 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
             )
         }
         container.addView(layout)
-        // false = no subtitle surface yet (added with subtitle feature later).
-        mp.attachViews(layout, null, false, false)
+        // 3rd arg false = no subtitle surface yet (added with subtitle feature
+        // later). 4th arg true = render through a TextureView instead of the
+        // default SurfaceView: on several Android TV panels live channels still
+        // show a solid green picture (audio fine) through the SurfaceView
+        // hardware-overlay path even with mediacodec/omxil direct rendering
+        // disabled. A TextureView routes decoded frames through the GPU and
+        // avoids that overlay/color path entirely.
+        mp.attachViews(layout, null, false, true)
 
         mp.setEventListener { event ->
             when (event.type) {
