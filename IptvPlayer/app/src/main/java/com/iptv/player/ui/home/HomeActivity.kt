@@ -21,6 +21,7 @@ import com.iptv.player.R
 import com.iptv.player.data.model.Channel
 import com.iptv.player.databinding.ActivityHomeBinding
 import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.ui.common.ChannelText
 import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.NumberZapInputHelper
 import com.iptv.player.ui.common.PinLockHelper
@@ -185,7 +186,7 @@ class HomeActivity : BaseActivity() {
     private fun showInfo(channel: Channel) {
         currentInfoChannel = channel
         val number = channel.number?.let { "$it | " } ?: ""
-        binding.infoName.text = number + channel.name
+        binding.infoName.text = number + ChannelText.clean(channel.name)
         binding.infoCategory.text = channel.categoryName ?: ""
         val placeholder = LogoPlaceholder.forName(this, channel.name)
         if (channel.logoUrl.isNullOrBlank()) {

@@ -17,6 +17,7 @@ import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.iptv.player.R
 import com.iptv.player.data.model.Channel
+import com.iptv.player.ui.common.ChannelText
 import com.iptv.player.ui.common.LogoPlaceholder
 
 class ChannelAdapter(
@@ -42,7 +43,7 @@ class ChannelAdapter(
         private val favStar: ImageView = itemView.findViewById(R.id.favStar)
 
         fun bind(channel: Channel) {
-            name.text = channel.name
+            name.text = ChannelText.clean(channel.name)
             number.text = channel.number?.toString() ?: ""
             favStar.visibility = if (channel.isFavorite) View.VISIBLE else View.GONE
 
