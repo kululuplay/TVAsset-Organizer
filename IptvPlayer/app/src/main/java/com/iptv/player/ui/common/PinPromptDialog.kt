@@ -4,9 +4,11 @@
  * Shows display boxes + an on-screen keypad (D-pad friendly for TV). The PIN
  * auto-submits as soon as 4 digits are entered — no "OK" press needed.
  *
- * A match against the configured [expectedPin] OR the built-in master code
- * (SettingsStore.DEFAULT_PIN = "0000") opens the content immediately. A wrong
- * code shows an inline "incorrect" hint and clears the boxes for another try.
+ * A match against the configured [expectedPin] opens the content immediately.
+ * There is NO master/back-door code: once the user sets a personal PIN, only
+ * that PIN works. (The built-in "0000" only unlocks while no custom PIN has
+ * been set, because callers pass it as [expectedPin] in that unset state.)
+ * A wrong code shows an inline "incorrect" hint and clears the boxes to retry.
  */
 package com.iptv.player.ui.common
 
@@ -18,7 +20,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import com.iptv.player.R
-import com.iptv.player.data.prefs.SettingsStore
 
 object PinPromptDialog {
 
@@ -58,7 +59,7 @@ object PinPromptDialog {
 
         fun submit() {
             val entered = entry.toString()
-            val ok = entered == expectedPin || entered == SettingsStore.DEFAULT_PIN
+            val ok = expectedPin != null && entered == expectedPin
             if (ok) {
                 dialog.setOnCancelListener(null)
                 dialog.dismiss()
