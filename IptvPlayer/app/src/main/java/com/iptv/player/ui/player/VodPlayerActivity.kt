@@ -248,19 +248,16 @@ class VodPlayerActivity : BaseActivity() {
             "--network-caching=$CACHING_MS",
             "--file-caching=$CACHING_MS",
             "--avcodec-hw=any",
-            // Do NOT disable direct rendering: on Amlogic the HW decoder draws on
-            // an underlay plane; DR-off copies frames out and reintroduces the
-            // green screen. Keep DR on + SurfaceView output.
-            // Known-good 32-bit display chroma resolves the green color-format
-            // mismatch some panels show on high-bitrate 1080p H.264.
-            "--android-display-chroma=RV32",
+            // Disable MediaCodec/OMX direct rendering (known-good v1.0.1 baseline):
+            // VLC renders decoded frames via the android_display vout onto the
+            // SurfaceView. The opaque DR path + a forced RV32 display chroma froze
+            // playback on this Amlogic box ("output: 17 unknown" + "dequeue_in
+            // timeout"). No deinterlace and no display-chroma override here.
+            "--no-mediacodec-dr",
+            "--no-omxil-dr",
             // Decode audio to PCM (no SPDIF/passthrough) so AC-3/E-AC-3/DTS are
             // always audible on plain HDMI sinks.
             "--no-spdif",
-            // NO software deinterlace on the hardware path: the Amlogic decoder
-            // outputs opaque MediaCodec buffers that a deinterlace filter cannot
-            // touch — it stalls the pipeline (frozen video). The HW decoder
-            // deinterlaces natively, and VOD movies are almost always progressive.
             "--http-reconnect",
             "--http-user-agent=${AppInfo.USER_AGENT}"
         )

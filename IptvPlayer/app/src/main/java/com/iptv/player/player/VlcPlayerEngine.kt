@@ -12,8 +12,11 @@
  *     = false) so libVLC's AWindow handler is fully wired and the Amlogic-style
  *     hardware underlay video plane can actually be shown. TextureView CANNOT
  *     display that underlay and guarantees a green frame on real sticks.
- *   - Deinterlace enabled (interlaced 1080i feeds green-screen on Amlogic HW
- *     without it); explicit RV32 display chroma + no hardware direct-rendering.
+ *   - Direct rendering OFF (--no-mediacodec-dr / --no-omxil-dr) to match the
+ *     known-good v1.0.1 baseline; do NOT force a display chroma (RV32) — both the
+ *     opaque-DR path and the chroma override froze playback on Amlogic
+ *     ("output: 17 unknown" + "dequeue_in timeout"). See the Amlogic green-screen
+ *     memory note. Software deinterlace is applied ONLY on the forceSoftware path.
  *   - forceSoftware: disable MediaCodec entirely for streams where the hardware
  *     decoder produced a green/blank frame.
  */
@@ -63,14 +66,16 @@ class VlcPlayerEngine(
             "--clock-synchro=0",
             // Hardware decode unless we've been told to force software.
             if (forceSoftware) "--avcodec-hw=none" else "--avcodec-hw=any",
-            // NOTE: do NOT disable direct rendering (--no-mediacodec-dr /
-            // --no-omxil-dr). On Amlogic the hardware decoder draws onto a
-            // dedicated underlay video plane; copying frames out (DR off) fights
-            // that path and REINTRODUCES the green screen (A/B-confirmed on the
-            // user's real hardware). Keep DR on + SurfaceView output instead.
-            // Resolve the color-format mismatch behind the green frame by asking
-            // for a known-good 32-bit display chroma.
-            "--android-display-chroma=RV32",
+            // Disable MediaCodec/OMX direct rendering — this matches the known-good
+            // v1.0.1 baseline. VLC reads decoded frames into its own pictures and
+            // renders them via the android_display vout onto the SurfaceView. The
+            // opaque direct-rendering path FROZE on this Amlogic box: VLC logged
+            // "output: 17 unknown" then "dequeue_in timeout: no input available"
+            // (= frozen video while audio kept playing). Do NOT add a display
+            // chroma override here either: --android-display-chroma=RV32 forced VLC
+            // onto an unrecognized byte-buffer format and caused the same stall.
+            "--no-mediacodec-dr",
+            "--no-omxil-dr",
             // Cut decode load so cheap TV boxes keep up: skip the deblocking
             // loop filter and allow fast (slightly looser) decoding.
             "--avcodec-skiploopfilter=all",

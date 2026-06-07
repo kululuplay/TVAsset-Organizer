@@ -1,0 +1,1328 @@
+06-07 14:50:11.298  1233  1233 W ThreadPoolForeg: type=1400 audit(0.0:4398): avc: denied { write } for name="traced_producer" dev="tmpfs" ino=14648 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:traced_producer_socket:s0 tclass=sock_file permissive=0 app=com.google.android.gms
+06-07 14:50:12.142  1113  1113 W ThreadPoolForeg: type=1400 audit(0.0:4399): avc: denied { write } for name="traced_producer" dev="tmpfs" ino=14648 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:traced_producer_socket:s0 tclass=sock_file permissive=0 app=com.google.android.gms
+06-07 14:50:16.310   565  1636 I ActivityTaskManager: START u0 {act=android.intent.action.MAIN cat=[android.intent.category.LEANBACK_LAUNCHER] flg=0x10000000 pkg=com.iptv.player cmp=com.iptv.player/.ui.splash.SplashActivity} from uid 10045
+06-07 14:50:16.366  1326  1326 D MiTv-TvService-Parent: current foreground packagename is com.iptv.player mFgClassName: com.iptv.player.ui.splash.SplashActivity
+06-07 14:50:16.486  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-07 14:50:20.451   565  1272 E TaskPersister: File error accessing recents directory (directory doesn't exist?).
+06-07 14:50:22.454   565  1636 I ActivityTaskManager: START u0 {cmp=com.iptv.player/.ui.dashboard.DashboardActivity} from uid 10078
+06-07 14:50:22.466  1326  1567 I MitvPolicyDatabaseManager: updatePackageUsage com.iptv.player/com.iptv.player.ui.splash.SplashActivity (0,1,6)
+06-07 14:50:22.476  1326  1326 D MiTv-TvService-Parent: current foreground packagename is com.iptv.player mFgClassName: com.iptv.player.ui.dashboard.DashboardActivity
+06-07 14:50:22.755  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=2131428216, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-07 14:50:23.123   365   404 E BufferQueueProducer: [com.iptv.player/com.iptv.player.ui.splash.SplashActivity#0](id:16d00000339,api:0,p:-1,c:365) disconnect: not connected (req=1)
+06-07 14:50:24.043   565  1637 I ActivityTaskManager: START u0 {cmp=com.iptv.player/.ui.home.HomeActivity} from uid 10078
+06-07 14:50:24.054  1326  1567 I MitvPolicyDatabaseManager: updatePackageUsage com.iptv.player/com.iptv.player.ui.dashboard.DashboardActivity (0,1,1)
+06-07 14:50:24.093  1326  1326 D MiTv-TvService-Parent: current foreground packagename is com.iptv.player mFgClassName: com.iptv.player.ui.home.HomeActivity
+06-07 14:50:24.246  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-07 14:50:24.587   365   562 E BufferQueueProducer: [com.iptv.player/com.iptv.player.ui.dashboard.DashboardActivity#0](id:16d0000033a,api:0,p:-1,c:365) disconnect: not connected (req=1)
+06-07 14:50:24.838  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-07 14:50:25.059  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-07 14:50:25.745  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-07 14:50:26.216  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-07 14:50:26.267   565  1272 E TaskPersister: File error accessing recents directory (directory doesn't exist?).
+06-07 14:50:27.020   565  1637 I ActivityTaskManager: START u0 {cmp=com.iptv.player/.ui.player.PlayerActivity (has extras)} from uid 10078
+06-07 14:50:27.038  1326  1567 I MitvPolicyDatabaseManager: updatePackageUsage com.iptv.player/com.iptv.player.ui.home.HomeActivity (0,1,2)
+06-07 14:50:27.046  1326  1326 D MiTv-TvService-Parent: current foreground packagename is com.iptv.player mFgClassName: com.iptv.player.ui.player.PlayerActivity
+06-07 14:50:27.175  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-07 14:50:27.224 24437 24437 D PlaybackLog: [Controller] play mode=VLC decoder=AUTO start=VLC_HW
+06-07 14:50:27.242 24437 24437 D PlaybackLog: [VLC] play forceSoftware=false passthrough=false
+06-07 14:50:27.573   365   405 E BufferQueueProducer: [com.iptv.player/com.iptv.player.ui.home.HomeActivity#0](id:16d0000033b,api:0,p:-1,c:365) disconnect: not connected (req=1)
+06-07 14:50:27.947 24437 24903 E VLC     : [c0e40670/6147] libvlc window: request 1 not implemented
+06-07 14:50:27.948 24437 24903 E VLC     : [f5192520/6147] libvlc vout display: can't get Subtitles Surface
+06-07 14:50:27.948 24437 24903 E VLC     : [c0e40670/6147] libvlc window: request 1 not implemented
+06-07 14:50:27.954 24437 24902 D AudioTrack: set(): streamType -1, sampleRate 48000, format 0x1, channelMask 0x3, frameCount 8200, flags #0, notificationFrames 0, sessionId 0, transferType 3, uid -1, pid -1
+06-07 14:50:27.961 24437 24902 W AudioTrack: Use of stream types is deprecated for operations other than volume control
+06-07 14:50:27.961 24437 24902 W AudioTrack: See the documentation of AudioTrack() for what to use instead with android.media.AudioAttributes to qualify your playback use case
+06-07 14:50:27.964 24437 24903 E VLC     : [c0e40670/6147] libvlc window: request 0 not implemented
+06-07 14:50:27.964 24437 24903 E VLC     : [c0e40670/6147] libvlc window: request 0 not implemented
+06-07 14:50:27.965 24437 24903 E VLC     : [c0e40670/6147] libvlc window: request 1 not implemented
+06-07 14:50:27.984 24437 24908 I OMXClient: IOmx service obtained
+06-07 14:50:27.985   468 17284 I chatty  : uid=1046(mediacodec) HwBinder:468_8 expire 327 lines
+06-07 14:50:27.987     0     0 I [40454.353032@3]  resman: 169 appname:OMX-166, type=0
+06-07 14:50:27.996 24437 24907 D MediaCodec: flushMediametrics
+06-07 14:50:27.996 24437 24907 I MediaCodec: [OMX.amlogic.avc.decoder.awesome2] setting surface generation to 25023500
+06-07 14:50:27.998   468   468 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 6 lines
+06-07 14:50:27.998 24437 24908 I AmAVUtils: AmAVUtils::getComponentRole isEncoder :0 mime:video/avc 
+06-07 14:50:27.998 24437 24908 I MediaVendorExt: AmAVUtils::getComponentRole isEncoder :0 mime:video/avc 
+06-07 14:50:28.003 24437 24908 I AmAVUtils: AmAVUtils::isAudioExtendFormat input = video/avc
+06-07 14:50:28.003 24437 24908 I AmAVUtils: AmAVUtils::isExtendFormat input = video/avc
+06-07 14:50:28.012   468 24909 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 131 lines
+06-07 14:50:28.017 24437 24908 W ACodec  : [OMX.amlogic.avc.decoder.awesome2] setting nBufferCountActual to 15 failed: -1010
+06-07 14:50:28.019   468  3948 I chatty  : uid=1046(mediacodec) HwBinder:468_5 expire 24 lines
+06-07 14:50:28.022   468  6193 I chatty  : uid=1046(mediacodec) HwBinder:468_6 expire 15 lines
+06-07 14:50:28.023   468   515 I chatty  : uid=1046(mediacodec) HwBinder:468_2 expire 34 lines
+06-07 14:50:28.026   468 24912 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 58 lines
+06-07 14:50:28.031     0     0 I [40454.393953@0]  [280]: vcodec_dec decoder ffffff8008b24000
+06-07 14:50:28.031     0     0 I [40454.394041@0]  [280]: release decoder ffffff8008b24000
+06-07 14:50:28.031     0     0 I [40454.394440@0]  [281]: vcodec_dec decoder ffffff80475b8000
+06-07 14:50:28.031     0     0 I         : [40454.395102@0]  vdec_init, dev_name:ammvdec_h264_v4l, vdec_type=VDEC_TYPE_FRAME_BLOCK, format: 2
+06-07 14:50:28.031     0     0 D [40454.396015@0]  0: pdata->config=parm_v4l_codec_enable:1;mh264_double_write_mode:16;parm_v4l_buffer_margin:5;parm_v4l_canvas_mem_mode:0;parm_v4l_canvas_mem_endian:0;parm_v4l_low_latency_mode:0;parm_v4l_metadata_config_flag:49154;
+06-07 14:50:28.031     0     0 D         : [40454.396067@0]  ammvdec_h264_mmu_init tvp = 0x0 mmu_enable 0
+06-07 14:50:28.031     0     0 D         : [40454.396072@0]  decoder_bmmu_box_alloc_box, tvp_flags = 0
+06-07 14:50:28.031     0     0 D [40454.396506@0]  0: ammvdec_h264_probe mmu_enable 0 double_write_mode 0x10
+06-07 14:50:28.043     0     0 D [40454.405622@0]  0: ammvdec_h264 mem-addr=0,buff_offset=55410000,buf_start=55400000
+06-07 14:50:28.043     0     0 W         : [40454.405906@0]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:50:28.043     0     0 I         : [40454.406080@0]  [TEE], the fw (h264_multi) will be loaded...
+06-07 14:50:28.043     0     0 D         : [40454.406127@0]  vh264_init, phy_addr=aef0000 vaddr=00000000c99df061
+06-07 14:50:28.047     0     0 D         : [40454.412503@0]  vdec_init, vf_provider_name = vdec.h264.00, b 0
+06-07 14:50:28.049   468 24916 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 68 lines
+06-07 14:50:28.050   468 24917 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 8 lines
+06-07 14:50:28.065 24437 24903 E VLC     : [c0e40670/6147] libvlc window: request 1 not implemented
+06-07 14:50:28.215     0     0 I [40454.414450@2]  [281]: H264 Instance >> ffffffc0145c7000
+06-07 14:50:28.231 24437 24908 W ACodec  : [OMX.amlogic.avc.decoder.awesome2] setting nBufferCountActual to 16 failed: -1010
+06-07 14:50:28.260     0     0 D [40454.624228@0]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:50:28.283     0     0 I [40454.648123@0]  [281]: H264 set HDR infos
+06-07 14:50:28.403 24437 24911 E VLC     : [e9092100/614f] libvlc decoder: output: 17 unknown, 1920x1080 stride 1920 1080, crop 0 0 0 0
+06-07 14:50:28.408   365   562 E BufferQueueProducer: [SurfaceView - com.iptv.player/com.iptv.player.ui.player.PlayerActivity#0](id:16d0000033d,api:0,p:-1,c:365) disconnect: not connected (req=1)
+06-07 14:50:28.409 24437 24903 E VLC     : [c0e40670/6147] libvlc window: request 1 not implemented
+06-07 14:50:28.410 24437 24903 E VLC     : [f5192520/6147] libvlc vout display: can't get Subtitles Surface
+06-07 14:50:28.410 24437 24903 E VLC     : [c0e40670/6147] libvlc window: request 1 not implemented
+06-07 14:50:28.435 24437 24903 E VLC     : [c0e40670/6147] libvlc window: request 0 not implemented
+06-07 14:50:28.435 24437 24903 E VLC     : [c0e40670/6147] libvlc window: request 0 not implemented
+06-07 14:50:28.442 24437 24903 E VLC     : [c0e40670/6147] libvlc window: request 1 not implemented
+06-07 14:50:29.194 24437 24906 W AudioTrack: restartIfDisabled(209): releaseBuffer() track 0xc317b970 disabled due to previous underrun, restarting
+06-07 14:50:29.510 24922 24922 W mitv.tvhome.atv: type=1400 audit(0.0:4406): avc: denied { execute } for path="/vendor/framework/oat/arm/droidlogic.odex" dev="dm-8" ino=518 scontext=u:r:priv_app:s0:c512,c768 tcontext=u:object_r:vendor_framework_file:s0 tclass=file permissive=0 app=com.mitv.tvhome.atv
+06-07 14:50:29.514 24922 24922 W mitv.tvhome.atv: type=1400 audit(0.0:4407): avc: denied { execute } for path="/vendor/framework/oat/arm/droidlogic.odex" dev="dm-8" ino=518 scontext=u:r:priv_app:s0:c512,c768 tcontext=u:object_r:vendor_framework_file:s0 tclass=file permissive=0 app=com.mitv.tvhome.atv
+06-07 14:50:29.870 24922 24922 I FirebaseCrashlytics: Initializing Crashlytics 17.1.1
+06-07 14:50:30.068 24437 24903 E VLC     : [c0e40670/6147] libvlc window: request 3 not implemented
+06-07 14:50:30.107   565  1272 E TaskPersister: File error accessing recents directory (directory doesn't exist?).
+06-07 14:50:30.362 24922 24922 W mitv.tvhome.atv: type=1400 audit(0.0:4408): avc: denied { read } for name="partitions" dev="proc" ino=4026532096 scontext=u:r:priv_app:s0:c512,c768 tcontext=u:object_r:proc_partitions:s0 tclass=file permissive=0 app=com.mitv.tvhome.atv
+06-07 14:50:30.373 24922 24922 W System.err: java.io.FileNotFoundException: /proc/partitions: open failed: EACCES (Permission denied)
+06-07 14:50:30.390 24922 24922 W System.err: Caused by: android.system.ErrnoException: open failed: EACCES (Permission denied)
+06-07 14:50:32.034  1296  1614 I katniss_interactor_PackageCache: Apps for Intent { act=android.intent.action.MAIN cat=[android.intent.category.LEANBACK_LAUNCHER] }: [AppInfo(enabled=true, longVersionCode=85141808, packageName=com.android.vending, versionCode=85141808, versionName=51.4.18-24 [8] [PR] 912842776), AppInfo(enabled=true, longVersionCode=530320320, packageName=com.google.android.youtube.tv, versionCode=530320320, versionName=5.30.320), AppInfo(enabled=true, longVersionCode=112007300, packageName=com.google.android.youtube.tvmusic, versionCode=112007300, versionName=1.12.07), AppInfo(enabled=true, longVersionCode=23, packageName=com.mitv.dream, versionCode=23, versionName=2.2.14), AppInfo(enabled=true, longVersionCode=138, packageName=com.mitv.tvhome.atv, versionCode=138, versionName=4.4.14), AppInfo(enabled=true, longVersionCode=606023231, packageName=com.amazon.amazonvideo.livingroom, versionCode=606023231, versionName=6.23.23+v15.5.0.70-armv7a), AppInfo(enabled=true, longVersionCode=663905470, packageName=com.google.android.play.games, versionCode=663905470, versionName=2025.09.66390 (902601108.902601108-040700)), AppInfo(enabled=true, longVersionCode=56, packageName=com.mitv.tvhome.mitvplus, versionCode=56, versionName=3.9.7), AppInfo(enabled=true, longVersionCode=25028, packageName=com.netflix.ninja, versionCode=25028, versionName=13.0.1 build 25028), AppInfo(enabled=true, longVersionCode=163, packageName=com.xiaomi.mitv.smartshare, versionCode=163, versionName=1.3.63), AppInfo(enabled=true, longVersionCode=1777613590, packageName=com.disney.disneyplus, versionCode=1777613590, versionName=26.7.0+rc4-2026.05.01), AppInfo(enabled=true, longVersionCode=74, packageName=com.esaba.downloader, versionCode=74, versionName=2.0.3-ForGoogleAndroidDevices), AppInfo(enabled=true, longVersionCode=274759681, packageName=com.exxen.android, versionCode=274759681, versionName=tv3.1.0.0), AppInfo(enabled=true, longVersionCode=14, packageName=com.iptv.player, versionCode=14, versionName=1.1.1), AppInfo(enabled=true, longVersionCode=35, packageName=com.net.iptv, versionCode=35, versionName=4.4), AppInfo(enabled=true, longVersionCode=67, packageName=com.rma.speedtesttv, versionCode=67, versionName=1.25.10.27.3), AppInfo(enabled=true, longVersionCode=4001032, packageName=com.turkcell.ott, versionCode=4001032, versionName=4.4.0)]
+06-07 14:50:33.097   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:50:33.121   565  1389 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:50:33.898  1296  1613 I katniss_interactor_PackageCache: Apps for Intent { act=android.intent.action.MAIN cat=[android.intent.category.LEANBACK_LAUNCHER] }: [AppInfo(enabled=true, longVersionCode=85141808, packageName=com.android.vending, versionCode=85141808, versionName=51.4.18-24 [8] [PR] 912842776), AppInfo(enabled=true, longVersionCode=530320320, packageName=com.google.android.youtube.tv, versionCode=530320320, versionName=5.30.320), AppInfo(enabled=true, longVersionCode=112007300, packageName=com.google.android.youtube.tvmusic, versionCode=112007300, versionName=1.12.07), AppInfo(enabled=true, longVersionCode=23, packageName=com.mitv.dream, versionCode=23, versionName=2.2.14), AppInfo(enabled=true, longVersionCode=138, packageName=com.mitv.tvhome.atv, versionCode=138, versionName=4.4.14), AppInfo(enabled=true, longVersionCode=606023231, packageName=com.amazon.amazonvideo.livingroom, versionCode=606023231, versionName=6.23.23+v15.5.0.70-armv7a), AppInfo(enabled=true, longVersionCode=663905470, packageName=com.google.android.play.games, versionCode=663905470, versionName=2025.09.66390 (902601108.902601108-040700)), AppInfo(enabled=true, longVersionCode=56, packageName=com.mitv.tvhome.mitvplus, versionCode=56, versionName=3.9.7), AppInfo(enabled=true, longVersionCode=25028, packageName=com.netflix.ninja, versionCode=25028, versionName=13.0.1 build 25028), AppInfo(enabled=true, longVersionCode=163, packageName=com.xiaomi.mitv.smartshare, versionCode=163, versionName=1.3.63), AppInfo(enabled=true, longVersionCode=1777613590, packageName=com.disney.disneyplus, versionCode=1777613590, versionName=26.7.0+rc4-2026.05.01), AppInfo(enabled=true, longVersionCode=74, packageName=com.esaba.downloader, versionCode=74, versionName=2.0.3-ForGoogleAndroidDevices), AppInfo(enabled=true, longVersionCode=274759681, packageName=com.exxen.android, versionCode=274759681, versionName=tv3.1.0.0), AppInfo(enabled=true, longVersionCode=14, packageName=com.iptv.player, versionCode=14, versionName=1.1.1), AppInfo(enabled=true, longVersionCode=35, packageName=com.net.iptv, versionCode=35, versionName=4.4), AppInfo(enabled=true, longVersionCode=67, packageName=com.rma.speedtesttv, versionCode=67, versionName=1.25.10.27.3), AppInfo(enabled=true, longVersionCode=4001032, packageName=com.turkcell.ott, versionCode=4001032, versionName=4.4.0)]
+06-07 14:50:36.113   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:50:36.133   565  1636 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:50:38.755   468 24916 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 34 lines
+06-07 14:50:39.125   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:50:39.143   565  1390 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:50:41.334  1233  1233 W ThreadPoolForeg: type=1400 audit(0.0:4409): avc: denied { write } for name="traced_producer" dev="tmpfs" ino=14648 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:traced_producer_socket:s0 tclass=sock_file permissive=0 app=com.google.android.gms
+06-07 14:50:42.140   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:50:42.157   565  1636 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:50:42.170  1113  1113 W ThreadPoolForeg: type=1400 audit(0.0:4410): avc: denied { write } for name="traced_producer" dev="tmpfs" ino=14648 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:traced_producer_socket:s0 tclass=sock_file permissive=0 app=com.google.android.gms
+06-07 14:50:44.847   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:50:45.155   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:50:45.178   565   876 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:50:45.215   565  1636 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:50:48.184   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:50:48.207   565  1390 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:50:49.486   468 24916 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 84 lines
+06-07 14:50:51.199   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:50:51.213   565   876 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:50:54.213   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:50:54.227   565  1845 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:50:57.226   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:50:57.251   565   800 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:50:58.733 24437 24437 D PlaybackLog: [Controller] play mode=VLC decoder=AUTO start=VLC_HW
+06-07 14:50:58.768 24437 24911 E NdkMediaCodec: sf error code: -38
+06-07 14:50:58.769   468 24909 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 57 lines
+06-07 14:50:58.788   468 24912 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 6 lines
+06-07 14:50:58.795     0     0 W         : [40485.161579@2]  vmh264 reset
+06-07 14:50:58.795     0     0 D [40485.161595@2]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:50:58.795     0     0 W         : [40485.161622@2]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:50:58.795     0     0 D [40485.161708@2]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:50:58.807     0     0 W         : [40485.171671@2]  vmh264 reset
+06-07 14:50:58.807     0     0 D [40485.171686@2]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:50:58.807     0     0 W         : [40485.171719@2]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:50:58.807     0     0 D [40485.172375@2]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:50:58.810   468 24989 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 2 lines
+06-07 14:50:58.843     0     0 W         : [40485.210122@0]  vmh264 reset
+06-07 14:50:58.843     0     0 D [40485.210137@0]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:50:58.843     0     0 W         : [40485.210168@0]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:50:58.843     0     0 D [40485.210268@0]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:50:58.855     0     0 W         : [40485.219800@0]  vmh264 reset
+06-07 14:50:58.855     0     0 D [40485.219811@0]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:50:58.855     0     0 W         : [40485.219837@0]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:50:58.855     0     0 D [40485.219910@0]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:50:58.858   468 24992 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 2 lines
+06-07 14:50:58.858   468 24909 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 14 lines
+06-07 14:50:58.859   468 24912 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 1 line
+06-07 14:50:58.859   468 24916 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 4 lines
+06-07 14:50:58.871     0     0 I [40485.234801@3]  [281]: release decoder ffffff80475b8000
+06-07 14:50:58.871     0     0 W         : [40485.234915@3]  vmh264 reset
+06-07 14:50:58.871     0     0 D [40485.234927@3]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:50:58.871     0     0 W         : [40485.234954@3]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:50:58.871     0     0 D [40485.235029@3]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:50:58.875     0     0 D [40485.239657@3]  0: vh264_stop
+06-07 14:50:58.886   468  6193 I chatty  : uid=1046(mediacodec) HwBinder:468_6 expire 215 lines
+06-07 14:50:58.891 24437 24893 D MediaCodec: flushMediametrics
+06-07 14:50:58.900 24437 24893 D AudioTrack: stop(209): called with 0 frames delivered
+06-07 14:50:58.921   365   405 E BufferQueueProducer: [SurfaceView - com.iptv.player/com.iptv.player.ui.player.PlayerActivity#0](id:16d0000033d,api:0,p:-1,c:365) disconnect: not connected (req=1)
+06-07 14:50:58.929   565   630 D InputDispatcher: Waiting to send key to Window{1190900 u0 com.iptv.player/com.iptv.player.ui.player.PlayerActivity} because there are unprocessed events that may cause focus to change
+06-07 14:50:58.946 24437 24437 D PlaybackLog: [VLC] play forceSoftware=false passthrough=false
+06-07 14:50:59.493 24437 25002 I VLC     : [e909d380/61aa] libvlc packetizer: AAC channels: 2 samplerate: 48000
+06-07 14:50:59.505 24437 25002 D AudioTrack: set(): streamType -1, sampleRate 48000, format 0x1, channelMask 0x3, frameCount 8200, flags #0, notificationFrames 0, sessionId 0, transferType 3, uid -1, pid -1
+06-07 14:50:59.513 24437 25002 W AudioTrack: Use of stream types is deprecated for operations other than volume control
+06-07 14:50:59.513 24437 25002 W AudioTrack: See the documentation of AudioTrack() for what to use instead with android.media.AudioAttributes to qualify your playback use case
+06-07 14:50:59.529 24437 25005 E VLC     : [f52f5a10/61ad] libvlc window: request 1 not implemented
+06-07 14:50:59.530 24437 25005 E VLC     : [f51ac7d0/61ad] libvlc vout display: can't get Subtitles Surface
+06-07 14:50:59.530 24437 25005 E VLC     : [f52f5a10/61ad] libvlc window: request 1 not implemented
+06-07 14:50:59.542 24437 25005 E VLC     : [f52f5a10/61ad] libvlc window: request 0 not implemented
+06-07 14:50:59.543 24437 25005 E VLC     : [f52f5a10/61ad] libvlc window: request 0 not implemented
+06-07 14:50:59.543 24437 25005 E VLC     : [f52f5a10/61ad] libvlc window: request 1 not implemented
+06-07 14:50:59.554 24437 25008 I OMXClient: IOmx service obtained
+06-07 14:50:59.558   468   468 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 4 lines
+06-07 14:50:59.559     0     0 I [40485.922296@1]  resman: 170 appname:OMX-167, type=0
+06-07 14:50:59.559 24437 25007 D MediaCodec: flushMediametrics
+06-07 14:50:59.559 24437 25007 I MediaCodec: [OMX.amlogic.avc.decoder.awesome2] setting surface generation to 25023501
+06-07 14:50:59.560 24437 25008 I AmAVUtils: AmAVUtils::getComponentRole isEncoder :0 mime:video/avc 
+06-07 14:50:59.560 24437 25008 I MediaVendorExt: AmAVUtils::getComponentRole isEncoder :0 mime:video/avc 
+06-07 14:50:59.563 24437 25008 I AmAVUtils: AmAVUtils::isAudioExtendFormat input = video/avc
+06-07 14:50:59.563 24437 25008 I AmAVUtils: AmAVUtils::isExtendFormat input = video/avc
+06-07 14:50:59.567   468 17284 I chatty  : uid=1046(mediacodec) HwBinder:468_8 expire 12 lines
+06-07 14:50:59.576   468 25009 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 93 lines
+06-07 14:50:59.579 24437 25008 W ACodec  : [OMX.amlogic.avc.decoder.awesome2] setting nBufferCountActual to 15 failed: -1010
+06-07 14:50:59.580   468  6193 I chatty  : uid=1046(mediacodec) HwBinder:468_6 expire 104 lines
+06-07 14:50:59.593   468 25012 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 26 lines
+06-07 14:50:59.595     0     0 I [40485.960044@0]  [282]: vcodec_dec decoder ffffff8008b24000
+06-07 14:50:59.595     0     0 I [40485.960117@0]  [282]: release decoder ffffff8008b24000
+06-07 14:50:59.595     0     0 I [40485.960498@0]  [283]: vcodec_dec decoder ffffff80475b8000
+06-07 14:50:59.595     0     0 I         : [40485.961192@0]  vdec_init, dev_name:ammvdec_h264_v4l, vdec_type=VDEC_TYPE_FRAME_BLOCK, format: 2
+06-07 14:50:59.599     0     0 D [40485.962081@0]  0: pdata->config=parm_v4l_codec_enable:1;mh264_double_write_mode:16;parm_v4l_buffer_margin:5;parm_v4l_canvas_mem_mode:0;parm_v4l_canvas_mem_endian:0;parm_v4l_low_latency_mode:0;parm_v4l_metadata_config_flag:49154;
+06-07 14:50:59.599     0     0 D         : [40485.962133@0]  ammvdec_h264_mmu_init tvp = 0x0 mmu_enable 0
+06-07 14:50:59.599     0     0 D         : [40485.962137@0]  decoder_bmmu_box_alloc_box, tvp_flags = 0
+06-07 14:50:59.599     0     0 D [40485.962652@0]  0: ammvdec_h264_probe mmu_enable 0 double_write_mode 0x10
+06-07 14:50:59.604   468 25016 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 24 lines
+06-07 14:50:59.605   468 25017 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 7 lines
+06-07 14:50:59.607     0     0 D [40485.966214@0]  0: ammvdec_h264 mem-addr=0,buff_offset=55410000,buf_start=55400000
+06-07 14:50:59.608     0     0 W         : [40485.966372@0]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:50:59.608     0     0 I         : [40485.966489@0]  [TEE], the fw (h264_multi) will be loaded...
+06-07 14:50:59.608     0     0 D         : [40485.966518@0]  vh264_init, phy_addr=29cf1000 vaddr=00000000d492aaf3
+06-07 14:50:59.608     0     0 D         : [40485.968189@0]  vdec_init, vf_provider_name = vdec.h264.00, b 0
+06-07 14:50:59.643 24437 25005 E VLC     : [f52f5a10/61ad] libvlc window: request 1 not implemented
+06-07 14:50:59.691     0     0 I [40485.970141@0]  [283]: H264 Instance >> ffffffc011ea1000
+06-07 14:50:59.697   468 17284 I chatty  : uid=1046(mediacodec) HwBinder:468_8 expire 18 lines
+06-07 14:50:59.702   468   468 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 1 line
+06-07 14:50:59.705 24437 25008 W ACodec  : [OMX.amlogic.avc.decoder.awesome2] setting nBufferCountActual to 15 failed: -1010
+06-07 14:50:59.723     0     0 D [40486.087694@3]  0: vh264_set_params active_buf_spec_num 14 dec_dpb_size 3 collocate_buf_num 6
+06-07 14:50:59.726   468 25009 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 104 lines
+06-07 14:50:59.726   468 25012 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 36 lines
+06-07 14:50:59.726   468 25016 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 78 lines
+06-07 14:50:59.735     0     0 I [40486.097947@0]  [283]: H264 set HDR infos
+06-07 14:50:59.736   468 17284 I chatty  : uid=1046(mediacodec) HwBinder:468_8 expire 3 lines
+06-07 14:50:59.737 24437 25011 E VLC     : [e90a1fa0/61b3] libvlc decoder: output: 17 unknown, 1920x1080 stride 1920 1088, crop 0 0 0 0
+06-07 14:50:59.745   365   404 E BufferQueueProducer: [SurfaceView - com.iptv.player/com.iptv.player.ui.player.PlayerActivity#1](id:16d0000033e,api:0,p:-1,c:365) disconnect: not connected (req=1)
+06-07 14:50:59.745 24437 25005 E VLC     : [f52f5a10/61ad] libvlc window: request 1 not implemented
+06-07 14:50:59.746 24437 25005 E VLC     : [f51ac7d0/61ad] libvlc vout display: can't get Subtitles Surface
+06-07 14:50:59.746 24437 25005 E VLC     : [f52f5a10/61ad] libvlc window: request 1 not implemented
+06-07 14:50:59.756   468  6193 I chatty  : uid=1046(mediacodec) HwBinder:468_6 expire 30 lines
+06-07 14:50:59.762 24437 25005 E VLC     : [f52f5a10/61ad] libvlc window: request 0 not implemented
+06-07 14:50:59.762 24437 25005 E VLC     : [f52f5a10/61ad] libvlc window: request 0 not implemented
+06-07 14:50:59.774 24437 25005 E VLC     : [f52f5a10/61ad] libvlc window: request 1 not implemented
+06-07 14:51:00.245   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:51:00.263   565   800 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:51:01.006 24437 25005 E VLC     : [f52f5a10/61ad] libvlc window: request 3 not implemented
+06-07 14:51:03.259   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:51:03.278   565  1845 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:51:06.280   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:51:06.297   565  1390 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:51:06.436  2497 25028 I aeay    : I/O exception (java.net.SocketException) caught when processing request: Broken pipe
+06-07 14:51:08.331 24437 24437 D PlaybackLog: [Controller] play mode=VLC decoder=AUTO start=VLC_HW
+06-07 14:51:08.553   565   630 D InputDispatcher: Waiting to send key to Window{1190900 u0 com.iptv.player/com.iptv.player.ui.player.PlayerActivity} because there are unprocessed events that may cause focus to change
+06-07 14:51:08.566 24437 25011 E NdkMediaCodec: sf error code: -38
+06-07 14:51:08.583     0     0 W         : [40494.948002@0]  vmh264 reset
+06-07 14:51:08.583     0     0 D [40494.948034@0]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:51:08.583     0     0 W         : [40494.948066@0]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:08.583     0     0 D [40494.948157@0]  0: vh264_set_params active_buf_spec_num 14 dec_dpb_size 3 collocate_buf_num 6
+06-07 14:51:08.587     0     0 W         : [40494.953399@1]  vmh264 reset
+06-07 14:51:08.587     0     0 D [40494.953410@1]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:51:08.587     0     0 W         : [40494.953437@1]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:08.587     0     0 D [40494.953559@1]  0: vh264_set_params active_buf_spec_num 14 dec_dpb_size 3 collocate_buf_num 6
+06-07 14:51:08.592   468 25040 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 2 lines
+06-07 14:51:08.627     0     0 W         : [40494.991398@0]  vmh264 reset
+06-07 14:51:08.627     0     0 D [40494.991411@0]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:51:08.627     0     0 W         : [40494.991438@0]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:08.627     0     0 D [40494.991521@0]  0: vh264_set_params active_buf_spec_num 14 dec_dpb_size 3 collocate_buf_num 6
+06-07 14:51:08.631     0     0 W         : [40494.995110@1]  vmh264 reset
+06-07 14:51:08.631     0     0 D [40494.995121@1]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:51:08.631     0     0 W         : [40494.995149@1]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:08.631     0     0 D [40494.995231@1]  0: vh264_set_params active_buf_spec_num 14 dec_dpb_size 3 collocate_buf_num 6
+06-07 14:51:08.633   468 25043 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 2 lines
+06-07 14:51:08.651     0     0 I [40495.015256@2]  [283]: release decoder ffffff80475b8000
+06-07 14:51:08.651     0     0 W         : [40495.016713@1]  vmh264 reset
+06-07 14:51:08.651     0     0 D [40495.016725@1]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:51:08.651     0     0 W         : [40495.016752@1]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:08.651     0     0 D [40495.016832@1]  0: vh264_set_params active_buf_spec_num 14 dec_dpb_size 3 collocate_buf_num 6
+06-07 14:51:08.659     0     0 D [40495.022395@0]  0: vh264_stop
+06-07 14:51:08.671 24437 24993 D MediaCodec: flushMediametrics
+06-07 14:51:08.685 24437 24993 D AudioTrack: stop(210): called with 0 frames delivered
+06-07 14:51:08.705   365   562 E BufferQueueProducer: [SurfaceView - com.iptv.player/com.iptv.player.ui.player.PlayerActivity#1](id:16d0000033e,api:0,p:-1,c:365) disconnect: not connected (req=1)
+06-07 14:51:08.725 24437 24437 D PlaybackLog: [VLC] play forceSoftware=false passthrough=false
+06-07 14:51:08.732 24437 24437 I chatty  : uid=10078(com.iptv.player) identical 1 line
+06-07 14:51:09.293   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:51:09.305   565  1629 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:51:09.426 24437 25054 E VLC     : [f52e2150/61de] libvlc window: request 1 not implemented
+06-07 14:51:09.427 24437 25054 E VLC     : [f518ed70/61de] libvlc vout display: can't get Subtitles Surface
+06-07 14:51:09.427 24437 25054 E VLC     : [f52e2150/61de] libvlc window: request 1 not implemented
+06-07 14:51:09.441 24437 25054 E VLC     : [f52e2150/61de] libvlc window: request 0 not implemented
+06-07 14:51:09.441 24437 25054 E VLC     : [f52e2150/61de] libvlc window: request 0 not implemented
+06-07 14:51:09.442 24437 25054 E VLC     : [f52e2150/61de] libvlc window: request 1 not implemented
+06-07 14:51:09.454 24437 25053 D AudioTrack: set(): streamType -1, sampleRate 48000, format 0x1, channelMask 0x3, frameCount 8200, flags #0, notificationFrames 0, sessionId 0, transferType 3, uid -1, pid -1
+06-07 14:51:09.457 24437 25058 I OMXClient: IOmx service obtained
+06-07 14:51:09.458   468  6193 I chatty  : uid=1046(mediacodec) HwBinder:468_6 expire 57 lines
+06-07 14:51:09.459     0     0 I [40495.825360@2]  resman: 171 appname:OMX-168, type=0
+06-07 14:51:09.461 24437 25057 D MediaCodec: flushMediametrics
+06-07 14:51:09.461 24437 25057 I MediaCodec: [OMX.amlogic.avc.decoder.awesome2] setting surface generation to 25023502
+06-07 14:51:09.462 24437 25058 I AmAVUtils: AmAVUtils::getComponentRole isEncoder :0 mime:video/avc 
+06-07 14:51:09.462 24437 25058 I MediaVendorExt: AmAVUtils::getComponentRole isEncoder :0 mime:video/avc 
+06-07 14:51:09.463 24437 25053 W AudioTrack: Use of stream types is deprecated for operations other than volume control
+06-07 14:51:09.463 24437 25053 W AudioTrack: See the documentation of AudioTrack() for what to use instead with android.media.AudioAttributes to qualify your playback use case
+06-07 14:51:09.464   468 17284 I chatty  : uid=1046(mediacodec) HwBinder:468_8 expire 35 lines
+06-07 14:51:09.466   468   468 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 2 lines
+06-07 14:51:09.467   468  3948 I chatty  : uid=1046(mediacodec) HwBinder:468_5 expire 50 lines
+06-07 14:51:09.469 24437 25058 I AmAVUtils: AmAVUtils::isAudioExtendFormat input = video/avc
+06-07 14:51:09.469 24437 25058 I AmAVUtils: AmAVUtils::isExtendFormat input = video/avc
+06-07 14:51:09.470   468 17284 I chatty  : uid=1046(mediacodec) HwBinder:468_8 expire 124 lines
+06-07 14:51:09.481   468 25059 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 55 lines
+06-07 14:51:09.482   468   468 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 2 lines
+06-07 14:51:09.485 24437 25058 W ACodec  : [OMX.amlogic.avc.decoder.awesome2] setting nBufferCountActual to 15 failed: -1010
+06-07 14:51:09.498   468 25062 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 16 lines
+06-07 14:51:09.499     0     0 I [40495.865225@1]  [284]: vcodec_dec decoder ffffff80475b8000
+06-07 14:51:09.499     0     0 I [40495.865310@1]  [284]: release decoder ffffff80475b8000
+06-07 14:51:09.503     0     0 I [40495.865805@1]  [285]: vcodec_dec decoder ffffff8008b24000
+06-07 14:51:09.503     0     0 I         : [40495.866499@1]  vdec_init, dev_name:ammvdec_h264_v4l, vdec_type=VDEC_TYPE_FRAME_BLOCK, format: 2
+06-07 14:51:09.503     0     0 D [40495.867236@1]  0: pdata->config=parm_v4l_codec_enable:1;mh264_double_write_mode:16;parm_v4l_buffer_margin:5;parm_v4l_canvas_mem_mode:0;parm_v4l_canvas_mem_endian:0;parm_v4l_low_latency_mode:0;parm_v4l_metadata_config_flag:49154;
+06-07 14:51:09.503     0     0 D         : [40495.867288@1]  ammvdec_h264_mmu_init tvp = 0x0 mmu_enable 0
+06-07 14:51:09.503     0     0 D         : [40495.867292@1]  decoder_bmmu_box_alloc_box, tvp_flags = 0
+06-07 14:51:09.503     0     0 D [40495.867758@1]  0: ammvdec_h264_probe mmu_enable 0 double_write_mode 0x10
+06-07 14:51:09.511     0     0 D [40495.873555@1]  0: ammvdec_h264 mem-addr=0,buff_offset=55410000,buf_start=55400000
+06-07 14:51:09.511     0     0 W         : [40495.873714@1]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:09.511     0     0 I         : [40495.874430@1]  [TEE], the fw (h264_multi) will be loaded...
+06-07 14:51:09.511     0     0 D         : [40495.874471@1]  vh264_init, phy_addr=48fb3000 vaddr=000000002f0db613
+06-07 14:51:09.511     0     0 D         : [40495.876174@3]  vdec_init, vf_provider_name = vdec.h264.00, b 0
+06-07 14:51:09.513   468 25067 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 23 lines
+06-07 14:51:09.514   468 25068 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 8 lines
+06-07 14:51:09.543 24437 25054 E VLC     : [f52e2150/61de] libvlc window: request 1 not implemented
+06-07 14:51:09.595     0     0 I [40495.879423@1]  [285]: H264 Instance >> ffffffc011ed9000
+06-07 14:51:09.600   468 17284 I chatty  : uid=1046(mediacodec) HwBinder:468_8 expire 40 lines
+06-07 14:51:09.600   468  3948 I chatty  : uid=1046(mediacodec) HwBinder:468_5 expire 61 lines
+06-07 14:51:09.601   468 25059 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 82 lines
+06-07 14:51:09.602   468   468 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 1 line
+06-07 14:51:09.605 24437 25058 W ACodec  : [OMX.amlogic.avc.decoder.awesome2] setting nBufferCountActual to 16 failed: -1010
+06-07 14:51:09.615   468 25062 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 42 lines
+06-07 14:51:09.615   468 25067 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 19 lines
+06-07 14:51:09.627     0     0 D [40495.992258@1]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:51:09.651     0     0 I [40496.014666@0]  [285]: H264 set HDR infos
+06-07 14:51:09.661   468  6193 I chatty  : uid=1046(mediacodec) HwBinder:468_6 expire 36 lines
+06-07 14:51:09.720 24437 25064 E VLC     : [e9099720/61e8] libvlc decoder: output: 17 unknown, 1920x1080 stride 1920 1080, crop 0 0 0 0
+06-07 14:51:09.729   365  1145 E BufferQueueProducer: [SurfaceView - com.iptv.player/com.iptv.player.ui.player.PlayerActivity#0](id:16d0000033f,api:0,p:-1,c:365) disconnect: not connected (req=1)
+06-07 14:51:09.730 24437 25054 E VLC     : [f52e2150/61de] libvlc window: request 1 not implemented
+06-07 14:51:09.731 24437 25054 E VLC     : [f518ed70/61de] libvlc vout display: can't get Subtitles Surface
+06-07 14:51:09.731 24437 25054 E VLC     : [f52e2150/61de] libvlc window: request 1 not implemented
+06-07 14:51:09.743 24437 25054 E VLC     : [f52e2150/61de] libvlc window: request 0 not implemented
+06-07 14:51:09.743 24437 25054 E VLC     : [f52e2150/61de] libvlc window: request 0 not implemented
+06-07 14:51:09.743 24437 25054 E VLC     : [f52e2150/61de] libvlc window: request 1 not implemented
+06-07 14:51:09.750 24437 25054 E VLC     : [f52e2150/61de] libvlc window: request 1 not implemented
+06-07 14:51:10.730 24437 25054 E VLC     : [f52e2150/61de] libvlc window: request 3 not implemented
+06-07 14:51:10.832 24437 25061 W AudioTrack: restartIfDisabled(211): releaseBuffer() track 0xc17477b0 disabled due to previous underrun, restarting
+06-07 14:51:11.362  1233  1233 W ThreadPoolForeg: type=1400 audit(0.0:4423): avc: denied { write } for name="traced_producer" dev="tmpfs" ino=14648 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:traced_producer_socket:s0 tclass=sock_file permissive=0 app=com.google.android.gms
+06-07 14:51:12.182  1113  1113 W ThreadPoolForeg: type=1400 audit(0.0:4424): avc: denied { write } for name="traced_producer" dev="tmpfs" ino=14648 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:traced_producer_socket:s0 tclass=sock_file permissive=0 app=com.google.android.gms
+06-07 14:51:12.305   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:51:12.326   565  1629 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:51:13.554 24437 24437 D PlaybackLog: [Controller] play mode=VLC decoder=AUTO start=VLC_HW
+06-07 14:51:13.740   565   630 D InputDispatcher: Waiting to send key to Window{1190900 u0 com.iptv.player/com.iptv.player.ui.player.PlayerActivity} because there are unprocessed events that may cause focus to change
+06-07 14:51:14.246   565   630 W InputDispatcher: Dispatching key to Window{1190900 u0 com.iptv.player/com.iptv.player.ui.player.PlayerActivity} even though there are other unprocessed events
+06-07 14:51:15.319   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:51:15.334   565  1629 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:51:15.729   565   630 D InputDispatcher: Waiting to send key to Window{1190900 u0 com.iptv.player/com.iptv.player.ui.player.PlayerActivity} because there are unprocessed events that may cause focus to change
+06-07 14:51:15.909 24437 25052 E VLC     : [e9099720/61dc] libvlc decoder: dequeue_in timeout: no input available for 2secs
+06-07 14:51:15.910 24437 25064 E NdkMediaCodec: sf error code: -38
+06-07 14:51:15.929   468 25059 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 68 lines
+06-07 14:51:15.929   468 25062 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 7 lines
+06-07 14:51:15.929   468 25067 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 58 lines
+06-07 14:51:15.935     0     0 W         : [40502.301570@3]  vmh264 reset
+06-07 14:51:15.935     0     0 D [40502.301586@3]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:51:15.935     0     0 W         : [40502.301612@3]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:15.935     0     0 D [40502.301686@3]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:51:15.947     0     0 W         : [40502.311344@2]  vmh264 reset
+06-07 14:51:15.947     0     0 D [40502.311362@2]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:51:15.947     0     0 W         : [40502.311400@2]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:15.947     0     0 D [40502.311533@2]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:51:15.952   468 25075 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 2 lines
+06-07 14:51:15.983     0     0 W         : [40502.347842@2]  vmh264 reset
+06-07 14:51:15.983     0     0 D [40502.347855@2]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:51:15.983     0     0 W         : [40502.347882@2]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:15.984     0     0 D [40502.347958@2]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:51:15.991     0     0 W         : [40502.355398@0]  vmh264 reset
+06-07 14:51:15.991     0     0 D [40502.355418@0]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:51:15.991     0     0 W         : [40502.355456@0]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:15.991     0     0 D [40502.355591@0]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:51:15.997   468 25078 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 2 lines
+06-07 14:51:16.019     0     0 I [40502.383407@3]  [285]: release decoder ffffff8008b24000
+06-07 14:51:16.019     0     0 W         : [40502.383556@0]  vmh264 reset
+06-07 14:51:16.019     0     0 D [40502.383572@0]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:51:16.019     0     0 W         : [40502.383603@0]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:16.019     0     0 D [40502.383696@0]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:51:16.023     0     0 D [40502.389373@1]  0: vh264_stop
+06-07 14:51:16.035   468 17284 I chatty  : uid=1046(mediacodec) HwBinder:468_8 expire 97 lines
+06-07 14:51:16.038 24437 25044 D MediaCodec: flushMediametrics
+06-07 14:51:16.044 24437 25044 D AudioTrack: stop(211): called with 0 frames delivered
+06-07 14:51:16.067   365  1145 E BufferQueueProducer: [SurfaceView - com.iptv.player/com.iptv.player.ui.player.PlayerActivity#0](id:16d0000033f,api:0,p:-1,c:365) disconnect: not connected (req=1)
+06-07 14:51:16.088 24437 24437 D PlaybackLog: [VLC] play forceSoftware=false passthrough=false
+06-07 14:51:16.094   565   630 I InputDispatcher: 1190900 com.iptv.player/com.iptv.player.ui.player.PlayerActivity (server) spent 2541ms processing KeyEvent
+06-07 14:51:16.108   565   630 D InputDispatcher: Waiting to send key to Window{1190900 u0 com.iptv.player/com.iptv.player.ui.player.PlayerActivity} because there are unprocessed events that may cause focus to change
+06-07 14:51:16.110 24437 24437 D PlaybackLog: [Controller] play mode=VLC decoder=AUTO start=VLC_HW
+06-07 14:51:16.113 24437 25079 E VLC     : [f4d52e80/61f7] libvlc stream: HTTP connection failure
+06-07 14:51:16.133 24437 24437 D PlaybackLog: [VLC] play forceSoftware=false passthrough=false
+06-07 14:51:16.559 24437 25090 D AudioTrack: set(): streamType -1, sampleRate 48000, format 0x1, channelMask 0x3, frameCount 8200, flags #0, notificationFrames 0, sessionId 0, transferType 3, uid -1, pid -1
+06-07 14:51:16.567 24437 25090 W AudioTrack: Use of stream types is deprecated for operations other than volume control
+06-07 14:51:16.567 24437 25090 W AudioTrack: See the documentation of AudioTrack() for what to use instead with android.media.AudioAttributes to qualify your playback use case
+06-07 14:51:16.579 24437 25093 E VLC     : [f52f0130/6205] libvlc window: request 1 not implemented
+06-07 14:51:16.580 24437 25093 E VLC     : [c14c1f30/6205] libvlc vout display: can't get Subtitles Surface
+06-07 14:51:16.580 24437 25093 E VLC     : [f52f0130/6205] libvlc window: request 1 not implemented
+06-07 14:51:16.591 24437 25093 E VLC     : [f52f0130/6205] libvlc window: request 0 not implemented
+06-07 14:51:16.591 24437 25093 E VLC     : [f52f0130/6205] libvlc window: request 0 not implemented
+06-07 14:51:16.591 24437 25093 E VLC     : [f52f0130/6205] libvlc window: request 1 not implemented
+06-07 14:51:16.607 24437 25096 I OMXClient: IOmx service obtained
+06-07 14:51:16.610   468   468 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 2 lines
+06-07 14:51:16.611 24437 25095 D MediaCodec: flushMediametrics
+06-07 14:51:16.611 24437 25095 I MediaCodec: [OMX.amlogic.avc.decoder.awesome2] setting surface generation to 25023503
+06-07 14:51:16.611 24437 25096 I AmAVUtils: AmAVUtils::getComponentRole isEncoder :0 mime:video/avc 
+06-07 14:51:16.611 24437 25096 I MediaVendorExt: AmAVUtils::getComponentRole isEncoder :0 mime:video/avc 
+06-07 14:51:16.612     0     0 I [40502.975109@3]  resman: 172 appname:OMX-169, type=0
+06-07 14:51:16.616 24437 25096 I AmAVUtils: AmAVUtils::isAudioExtendFormat input = video/avc
+06-07 14:51:16.617 24437 25096 I AmAVUtils: AmAVUtils::isExtendFormat input = video/avc
+06-07 14:51:16.617   468 17284 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1088 nBufferCountMin:3
+06-07 14:51:16.617   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.617   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=0 (4k-osd)
+06-07 14:51:16.617   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.617   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=1 (video-trickmode)
+06-07 14:51:16.617   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.617   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=2 (unstable-pts)
+06-07 14:51:16.617   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.617   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=3 (is-mvc)
+06-07 14:51:16.617   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.617   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=4 (is-flv)
+06-07 14:51:16.617   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.617   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=5 (dvconfig-box)
+06-07 14:51:16.617   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.618   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 14:51:16.618   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.618   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 14:51:16.618   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.618   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=7 (nrdp)
+06-07 14:51:16.618   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.618   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=8 (low-latency)
+06-07 14:51:16.618   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.618   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=9 (save-mem)
+06-07 14:51:16.618   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.618   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=10 (videoLayer)
+06-07 14:51:16.618   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.618   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=11 (renderByOmx)
+06-07 14:51:16.619   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.619   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=12 (passthoughMode)
+06-07 14:51:16.619   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.619   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=13 (VideoQos)
+06-07 14:51:16.619   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.619   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=14 (rotation-angle)
+06-07 14:51:16.619   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.619   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=15 (McodecReport)
+06-07 14:51:16.619   468 17284 D OmxVideoDecoder: mMcodecReport=0 mPeer.get=-377456800
+06-07 14:51:16.619   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.619   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=16 (START.low-latency)
+06-07 14:51:16.619   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.619   468 17284 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:16.619   468 17284 V OmxVideoDecoder: nWidth=1920,nHeight=1088, nMinbufs=0
+06-07 14:51:16.620   468 17284 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1088 nBufferCountMin:10
+06-07 14:51:16.620   468 17284 D OmxVideoDecoder: getConfig 2745 0x700000f
+06-07 14:51:16.620   468 17284 D OmxVideoDecoder: getConfig 2748 nIndex 0x700000f
+06-07 14:51:16.620   468 17284 I AmlogicVideoDecoderAwesome2: [162]"getAndroidNativeBufferCrop [1920 x 1088] \n"
+06-07 14:51:16.620   468 17284 D OmxVideoDecoder: getConfig OMX_IndexConfigCommonOutputCrop pRect->nWidth=1920, pRect->nHeight=1088
+06-07 14:51:16.620   468 17284 D OmxVideoDecoder: setConfig 2887 0x7f00000c
+06-07 14:51:16.620   468 17284 D OmxVideoDecoder: getConfig 2745 0x7f00000c
+06-07 14:51:16.620   468 17284 D OmxVideoDecoder: getConfig 2745 0x7f00000c
+06-07 14:51:16.620   468 17284 E OMXNodeInstance: getConfig(0xe9704634:amlogic.avc.decoder.awesome2, ??(0x7f00000c)) ERROR: UnsupportedSetting(0x80001019)
+06-07 14:51:16.620   468 17284 D OmxVideoDecoder: getConfig 2745 0x7f000009
+06-07 14:51:16.620   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.620   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=0 (4k-osd)
+06-07 14:51:16.621   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.621   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=1 (video-trickmode)
+06-07 14:51:16.621   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.621   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=2 (unstable-pts)
+06-07 14:51:16.621   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.621   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=3 (is-mvc)
+06-07 14:51:16.621   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.621   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=4 (is-flv)
+06-07 14:51:16.621   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.621   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=5 (dvconfig-box)
+06-07 14:51:16.621   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.621   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 14:51:16.622   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.622   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 14:51:16.622   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.622   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=7 (nrdp)
+06-07 14:51:16.622   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.622   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=8 (low-latency)
+06-07 14:51:16.622   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.622   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=9 (save-mem)
+06-07 14:51:16.622   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.622   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=10 (videoLayer)
+06-07 14:51:16.622   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.622   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=11 (renderByOmx)
+06-07 14:51:16.623   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.623   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=12 (passthoughMode)
+06-07 14:51:16.623   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.623   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=13 (VideoQos)
+06-07 14:51:16.623   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.623   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=14 (rotation-angle)
+06-07 14:51:16.623   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.623   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=15 (McodecReport)
+06-07 14:51:16.623   468 17284 D OmxVideoDecoder: mMcodecReport=0 mPeer.get=-377456800
+06-07 14:51:16.623   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.623   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=16 (START.low-latency)
+06-07 14:51:16.623   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.624   468 25097 I OmxComponent: OMX_CommandStateSet 850 Cmd 0 nParam1 0x2
+06-07 14:51:16.624   468 25097 I OmxComponent: OMX-169 STATE_SET:   OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.624   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.624   468 17284 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1088 nBufferCountMin:3
+06-07 14:51:16.625   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.626   468   468 W HwBinder:468_8: type=1400 audit(0.0:4427): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-07 14:51:16.626   468   468 W HwBinder:468_8: type=1400 audit(0.0:4428): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-07 14:51:16.626   468 25097 I chatty  : uid=1046(mediacodec) omx@1.0-service expire 1 line
+06-07 14:51:16.626   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.626   468 17284 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:16.626   468 17284 V OmxVideoDecoder: nWidth=1920,nHeight=1088, nMinbufs=0
+06-07 14:51:16.626   468 17284 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1088 nBufferCountMin:10
+06-07 14:51:16.627   468 17284 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:16.627   468 17284 V OmxVideoDecoder: nWidth=1920,nHeight=1088, nMinbufs=0
+06-07 14:51:16.627   468 17284 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1088 nBufferCountMin:10
+06-07 14:51:16.627   468 17284 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.AndroidNativeBufferConsumerUsage"
+06-07 14:51:16.627   468 17284 D OmxVideoDecoder: setParameter 1500 0x7f00000b
+06-07 14:51:16.627   468 17284 D OmxVideoDecoder: OMX_GoogleAndroidIndexAndroidNativeBufferConsumerUsage 0x100
+06-07 14:51:16.627   468 17284 D OmxVideoDecoder: Use OSD layer if don't use HWC.
+06-07 14:51:16.627   468 17284 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.getAndroidNativeBufferUsage"
+06-07 14:51:16.627   468 17284 D OmxVideoDecoder: Get NativeBufferUsage 0xc00200
+06-07 14:51:16.627   468 17284 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-07 14:51:16.627   468 17284 W OmxVideoDecoder: 4kosd set output error, newBufferCount 15 > 14
+06-07 14:51:16.627   468 17284 E OMXNodeInstance: setParameter(0xe9704634:amlogic.avc.decoder.awesome2, ParamPortDefinition(0x2000001)) ERROR: UnsupportedSetting(0x80001019)
+06-07 14:51:16.627 24437 25096 W ACodec  : [OMX.amlogic.avc.decoder.awesome2] setting nBufferCountActual to 15 failed: -1010
+06-07 14:51:16.627   468 17284 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-07 14:51:16.627   468 17284 D OmxVideoDecoder: media.omx.display_mode=3
+06-07 14:51:16.627   468 17284 D OmxVideoDecoder: mjpeg vc1 wmv wmv3 force display_mode=3
+06-07 14:51:16.627   468 17284 D OmxVideoDecoder: choose mVideoUsedByOmx=0, mVideoUsedByThis=0, mAmVideoUsed=0
+06-07 14:51:16.627   468 17284 D OmxVideoDecoder: choose mDisplayMode=0
+06-07 14:51:16.628   468 17284 E libc    : Access denied finding property "media.omx.width"
+06-07 14:51:16.628   468 17284 E libc    : Access denied finding property "media.omx.height"
+06-07 14:51:16.628   468 17284 D OmxVideoDecoder: mMustOsdDisplay is true
+06-07 14:51:16.628   468 17284 D OmxVideoDecoder: setParameter nPortIndex 1 nFrameWidth 1920 nFrameHeight 1088 nSliceHeight 1088
+06-07 14:51:16.628   468 17284 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:16.628   468 17284 V OmxVideoDecoder: nWidth=1920,nHeight=1088, nMinbufs=0
+06-07 14:51:16.628   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.628   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.629   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.629   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.629   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.629   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.629   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.629   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.629   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.629   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.629   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.630   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.630   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.630   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.630   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.630   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.630   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.630   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.630   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.631   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.631   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.631   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.631   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.631   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.631   468  6193 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.632   468  6193 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.632   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.632   468 25097 V AmlogicVideoDecoderAwesome2: [162]acquireResources:411 >
+06-07 14:51:16.632   468 25097 D AmlogicVideoDecoderAwesome2: [162]"setUp mDurationUs = 0 videoDefine.xFramerate = 0"
+06-07 14:51:16.632   468 25097 V debugSetup: media.omx.dumpRecv is disabled
+06-07 14:51:16.632   468 25097 V debugSetup: media.omx.dumpCodec is disabled
+06-07 14:51:16.632   468 25097 E AmlogicVideoDecoderAwesome2: setUp(): 1126 mOwner->isGameMode()=0
+06-07 14:51:16.632   468 25097 D AmlogicVideoDecoderAwesome2: [162]"vendor.media.omx.gamemode is not set used def=0\n"
+06-07 14:51:16.632   468 25097 I AmlogicVideoDecoderAwesome2: [162]"setUp width 1920, height 1088\n"
+06-07 14:51:16.632   468 25097 D AmlogicVideoDecoderAwesome2: [162]"vendor.media.omx2.dw is not set used def=16\n"
+06-07 14:51:16.632   468 25097 D AmlogicVideoDecoderAwesome2: [162]"vendor.media.omx2.margin is not set used def=5\n"
+06-07 14:51:16.632   468 25097 I AmlogicVideoDecoderAwesome2: [162]"mIsSurfacTexture 1, mDoubleWriteMode 16, default_margin:5 \n"
+06-07 14:51:16.632   468 25097 D AmlogicVideoDecoderAwesome2: [162]"codecInit"
+06-07 14:51:16.632   468 25097 V AmlogicVideoDecoderAwesome2: [162]"codecInit avc\n"
+06-07 14:51:16.632   468 25097 D VideoDecWraper: initialize:mime:video/avc
+06-07 14:51:16.633   468 25097 I AmVideoDec: [0] "initialize mime video/avc secureMode is 0\n"
+06-07 14:51:16.634   468 25099 I VDA     : VideoCodecProfileToV4L2PixFmt profile a
+06-07 14:51:16.634   468 25099 I VDA     : V4L2_PIX_FMT_H264
+06-07 14:51:16.635     0     0 I [40503.000971@0]  [286]: vcodec_dec decoder ffffff8008b24000
+06-07 14:51:16.635     0     0 I [40503.001047@0]  [286]: release decoder ffffff8008b24000
+06-07 14:51:16.635     0     0 I [40503.001397@0]  [287]: vcodec_dec decoder ffffff80475b8000
+06-07 14:51:16.643     0     0 I         : [40503.002245@0]  vdec_init, dev_name:ammvdec_h264_v4l, vdec_type=VDEC_TYPE_FRAME_BLOCK, format: 2
+06-07 14:51:16.643     0     0 D [40503.003168@0]  0: pdata->config=parm_v4l_codec_enable:1;mh264_double_write_mode:16;parm_v4l_buffer_margin:5;parm_v4l_canvas_mem_mode:0;parm_v4l_canvas_mem_endian:0;parm_v4l_low_latency_mode:0;parm_v4l_metadata_config_flag:49154;
+06-07 14:51:16.643     0     0 D         : [40503.003221@0]  ammvdec_h264_mmu_init tvp = 0x0 mmu_enable 0
+06-07 14:51:16.643     0     0 D         : [40503.003226@0]  decoder_bmmu_box_alloc_box, tvp_flags = 0
+06-07 14:51:16.643     0     0 D [40503.003818@0]  0: ammvdec_h264_probe mmu_enable 0 double_write_mode 0x10
+06-07 14:51:16.647     0     0 D [40503.013310@3]  0: ammvdec_h264 mem-addr=0,buff_offset=55410000,buf_start=55400000
+06-07 14:51:16.651     0     0 W         : [40503.013859@3]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:16.651     0     0 I         : [40503.014056@3]  [TEE], the fw (h264_multi) will be loaded...
+06-07 14:51:16.651     0     0 D         : [40503.014088@3]  vh264_init, phy_addr=455a000 vaddr=0000000074bdce40
+06-07 14:51:16.655     0     0 D         : [40503.019874@3]  vdec_init, vf_provider_name = vdec.h264.00, b 0
+06-07 14:51:16.657   468 25097 D AmlogicVideoDecoderAwesome2: [162]"codecInit done"
+06-07 14:51:16.657   468 25097 D AmlogicVideoDecoderAwesome2: [162]"mOutWidth is 1920 mOutHeight is 1088 mFlvFlag=0 mOutBufferCount is 14"
+06-07 14:51:16.658   468 25097 D AmlogicVideoDecoderAwesome2: [162]"mOutBufferCount =14 mDecOutWidth 1920 mDecOutHeight 1088\n"
+06-07 14:51:16.658   468 25097 D AmlogicVideoDecoderAwesome2: [162]"mIsNativeBuffers =1\n"
+06-07 14:51:16.658   468 25097 D AmlogicVideoDecoderAwesome2: [162]"setUp mOutPortChanged=0\n"
+06-07 14:51:16.658   468 25097 I OmxComponent: STATE_DONE:  OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.658   468 25104 I VDA     : vendor.media.omx2.in_buffer set = 5
+06-07 14:51:16.658   468 25097 I OmxComponent: OMX_CommandStateSet 850 Cmd 0 nParam1 0x3
+06-07 14:51:16.658   468 25097 I OmxComponent: OMX-169 STATE_SET:   OMX_StateIdle => OMX_StateExecuting : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.658   468 25097 V AmlogicVideoDecoderAwesome2: [162]prepare:312 >
+06-07 14:51:16.658   468 25097 V AmlogicVideoDecoderAwesome2: [162]start:325 >
+06-07 14:51:16.659   468 25097 D AmlogicVideoDecoderAwesome2: [162]"mVideo start\n"
+06-07 14:51:16.659   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateIdle => OMX_StateExecuting : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.659   468 25097 I OmxComponent: STATE_DONE:  OMX_StateIdle => OMX_StateExecuting : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:16.659   468 25105 V OMX_WorkerPeer: vendor/amlogic/common/omx/omx_framework/WorkerPeer.cpp:runWorkerStatic:155 --------------------
+06-07 14:51:16.659   468 25105 V OMX_WorkerPeer: vendor/amlogic/common/omx/omx_framework/WorkerPeer.cpp:runWorker:161 --------------------
+06-07 14:51:16.662   468 25105 V AmlogicVideoDecoderAwesome2: [162]"doCodecSpec csd_len=84\n"
+06-07 14:51:16.662   468 25105 V AmlogicVideoDecoderAwesome2: [162]"CodecSpec_highline\n"
+06-07 14:51:16.665   468 25105 V AmlogicVideoDecoderAwesome2: [162]"doCodecSpec csd_len=8\n"
+06-07 14:51:16.684   468 25105 I AmlogicVideoDecoderAwesome2: [162]"check_stream_info mInPutFrameCount 3\n"
+06-07 14:51:16.684   468 25105 D AmlogicVideoDecoderAwesome2: [162]"=7, =1920, =1088, =0, =0, =7811623067, =7811583067, =7811783067, =100961, =3797, =27924"
+06-07 14:51:16.692 24437 25093 E VLC     : [f52f0130/6205] libvlc window: request 1 not implemented
+06-07 14:51:16.697   468 17284 I chatty  : uid=1046(mediacodec) HwBinder:468_8 identical 1 line
+06-07 14:51:16.735     0     0 I [40503.023785@1]  [287]: H264 Instance >> ffffffc011f6f000
+06-07 14:51:16.738   468 25104 V android.hardware.media.omx@1.0-service: [0607/145116.738377:VERBOSE1:v4l2_video_decode_accelerator.cc(2563)] CheckInterlaced(): 
+06-07 14:51:16.738   468 25104 V android.hardware.media.omx@1.0-service: [0607/145116.738482:VERBOSE1:v4l2_video_decode_accelerator.cc(2581)] NotifyEvent(): 
+06-07 14:51:16.738   468 25104 D AmlogicVideoDecoderAwesome2: NotifyEvent:event:1
+06-07 14:51:16.738   468 25104 D AmlogicVideoDecoderAwesome2: is interlaced
+06-07 14:51:16.738   468 25099 D AmlogicVideoDecoderAwesome2: [162]"ProvidePictureBuffers minNumBuffers:15, size(1920x1080) alignsize(1920x1088)"
+06-07 14:51:16.738   468 25099 D AmlogicVideoDecoderAwesome2: [162]"================OMX_EventPortSettingsChanged: 0xe9807760, dw_realloc 0"
+06-07 14:51:16.738   468 25099 D AmlogicVideoDecoderAwesome2: [162]"width 1920:1920, height 1088:1080, buffer count 11:15\n"
+06-07 14:51:16.738   468 25104 I VDA     : [0] "decoder_state_ = kDecoding wait -> decoding in decode buffer task"
+06-07 14:51:16.739   468  6193 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:16.739   468  6193 V OmxVideoDecoder: nWidth=1920,nHeight=1080, nMinbufs=11
+06-07 14:51:16.739   468  6193 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1080 nBufferCountMin:11
+06-07 14:51:16.739   468  6193 D OmxVideoDecoder: getConfig 2745 0x700000f
+06-07 14:51:16.739   468  6193 D OmxVideoDecoder: getConfig 2748 nIndex 0x700000f
+06-07 14:51:16.739   468  6193 I AmlogicVideoDecoderAwesome2: [162]"getAndroidNativeBufferCrop [1920 x 1080] \n"
+06-07 14:51:16.739   468  6193 D OmxVideoDecoder: getConfig OMX_IndexConfigCommonOutputCrop pRect->nWidth=1920, pRect->nHeight=1080
+06-07 14:51:16.739   468  6193 D OmxVideoDecoder: setConfig 2887 0x7f00000c
+06-07 14:51:16.740   468  6193 D OmxVideoDecoder: getConfig 2745 0x7f00000c
+06-07 14:51:16.740   468  6193 D OmxVideoDecoder: getConfig 2745 0x7f00000c
+06-07 14:51:16.740   468  6193 E OMXNodeInstance: getConfig(0xe9704634:amlogic.avc.decoder.awesome2, ??(0x7f00000c)) ERROR: UnsupportedSetting(0x80001019)
+06-07 14:51:16.740   468  6193 D OmxVideoDecoder: getConfig 2745 0x7f000009
+06-07 14:51:16.740   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.740   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=0 (4k-osd)
+06-07 14:51:16.740   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.740   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=1 (video-trickmode)
+06-07 14:51:16.740   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.740   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=2 (unstable-pts)
+06-07 14:51:16.741   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.741   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=3 (is-mvc)
+06-07 14:51:16.741   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.741   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=4 (is-flv)
+06-07 14:51:16.741   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.741   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=5 (dvconfig-box)
+06-07 14:51:16.741   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.741   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 14:51:16.742   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.742   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 14:51:16.742   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.742   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=7 (nrdp)
+06-07 14:51:16.742   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.742   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=8 (low-latency)
+06-07 14:51:16.742   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.742   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=9 (save-mem)
+06-07 14:51:16.743   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.743   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=10 (videoLayer)
+06-07 14:51:16.743   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.743   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=11 (renderByOmx)
+06-07 14:51:16.743   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.743   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=12 (passthoughMode)
+06-07 14:51:16.743   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.743   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=13 (VideoQos)
+06-07 14:51:16.743   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.743   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=14 (rotation-angle)
+06-07 14:51:16.743   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.743   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=15 (McodecReport)
+06-07 14:51:16.743   468 17284 D OmxVideoDecoder: mMcodecReport=0 mPeer.get=-377456800
+06-07 14:51:16.743   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.743   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=16 (START.low-latency)
+06-07 14:51:16.744   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:16.744   468 25097 I OmxComponent: OMX_CommandPortDisable 850 Cmd 0x2 nParam1 0x1
+06-07 14:51:16.744   468 25097 V AmlogicVideoDecoderAwesome2: [162]disablePort:1065 >
+06-07 14:51:16.744   468 25097 D AmlogicVideoDecoderAwesome2: [162]"disablePort output"
+06-07 14:51:16.744   468 25097 V AmlogicVideoDecoderAwesome2: [162]flushOutput:986 >
+06-07 14:51:16.744   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:0 0xeb2c0cd0\n"
+06-07 14:51:16.744   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:1 0xeb2c07f0\n"
+06-07 14:51:16.744   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:2 0xeb2c1ab0\n"
+06-07 14:51:16.744   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:3 0xeb2c0f70\n"
+06-07 14:51:16.744   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:4 0xeb2c1930\n"
+06-07 14:51:16.744   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:5 0xeb2c1690\n"
+06-07 14:51:16.744   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:6 0xeb2c0070\n"
+06-07 14:51:16.744   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:7 0xeb2c23b0\n"
+06-07 14:51:16.744   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:8 0xeb2c1270\n"
+06-07 14:51:16.744   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:9 0xeb2c0bb0\n"
+06-07 14:51:16.744   468 25097 V AmlogicVideoDecoderAwesome2: [162]flushOutput:1061 >
+06-07 14:51:16.746   468   468 W HwBinder:468_6: type=1400 audit(0.0:4429): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-07 14:51:16.746   468   468 W HwBinder:468_6: type=1400 audit(0.0:4430): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-07 14:51:16.747   468 25105 D AmlogicVideoDecoderAwesome2: set mEstimateDurationUs to mDurationUs = 40000
+06-07 14:51:16.747   468 25097 I OmxComponent: OMX_CommandPortEnable 850 Cmd 0x3 nParam1 0x1
+06-07 14:51:16.747   468 25097 V AmlogicVideoDecoderAwesome2: [162]enablePort:1079 >
+06-07 14:51:16.747   468 25097 D AmlogicVideoDecoderAwesome2: [162]"enablePort output"
+06-07 14:51:16.747   468 25097 D AmlogicVideoDecoderAwesome2: [162]"enablePort: output buffer:mWidth:1920, mHeight:1080,mOutBufferCount=14"
+06-07 14:51:16.747   468 25097 D AmlogicVideoDecoderAwesome2: [162]"enablePort: minbufNum:11, actualbufNum=15 nBufferCountMin:11 nBufferCountActual:14"
+06-07 14:51:16.748   468 25097 D AmlogicVideoDecoderAwesome2: [162]"enablePort output"
+06-07 14:51:16.748   468 17284 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:16.748   468 17284 V OmxVideoDecoder: nWidth=1920,nHeight=1080, nMinbufs=11
+06-07 14:51:16.748   468 17284 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1080 nBufferCountMin:11
+06-07 14:51:16.748   468  6193 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:16.748   468  6193 V OmxVideoDecoder: nWidth=1920,nHeight=1080, nMinbufs=11
+06-07 14:51:16.748   468  6193 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1080 nBufferCountMin:11
+06-07 14:51:16.748   468  6193 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.AndroidNativeBufferConsumerUsage"
+06-07 14:51:16.749   468  6193 D OmxVideoDecoder: setParameter 1500 0x7f00000b
+06-07 14:51:16.749   468  6193 D OmxVideoDecoder: OMX_GoogleAndroidIndexAndroidNativeBufferConsumerUsage 0x100
+06-07 14:51:16.749   468 17284 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.getAndroidNativeBufferUsage"
+06-07 14:51:16.749   468 17284 D OmxVideoDecoder: Get NativeBufferUsage 0xc00200
+06-07 14:51:16.749   468  6193 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-07 14:51:16.749   468  6193 W OmxVideoDecoder: 4kosd set output error, newBufferCount 16 > 15
+06-07 14:51:16.749   468  6193 E OMXNodeInstance: setParameter(0xe9704634:amlogic.avc.decoder.awesome2, ParamPortDefinition(0x2000001)) ERROR: UnsupportedSetting(0x80001019)
+06-07 14:51:16.749 24437 25096 W ACodec  : [OMX.amlogic.avc.decoder.awesome2] setting nBufferCountActual to 16 failed: -1010
+06-07 14:51:16.749   468  6193 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-07 14:51:16.749   468  6193 D OmxVideoDecoder: media.omx.display_mode=3
+06-07 14:51:16.749   468  6193 D OmxVideoDecoder: mjpeg vc1 wmv wmv3 force display_mode=3
+06-07 14:51:16.749   468  6193 D OmxVideoDecoder: choose mVideoUsedByOmx=0, mVideoUsedByThis=0, mAmVideoUsed=0
+06-07 14:51:16.749   468  6193 D OmxVideoDecoder: choose mDisplayMode=0
+06-07 14:51:16.749   468  6193 E libc    : Access denied finding property "media.omx.width"
+06-07 14:51:16.750   468  6193 E libc    : Access denied finding property "media.omx.height"
+06-07 14:51:16.750   468  6193 D OmxVideoDecoder: mMustOsdDisplay is true
+06-07 14:51:16.750   468  6193 D OmxVideoDecoder: setParameter nPortIndex 1 nFrameWidth 1920 nFrameHeight 1080 nSliceHeight 1080
+06-07 14:51:16.750   468  6193 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:16.750   468  6193 V OmxVideoDecoder: nWidth=1920,nHeight=1080, nMinbufs=11
+06-07 14:51:16.750   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.750   468 17284 I chatty  : uid=1046(mediacodec) HwBinder:468_8 identical 1 line
+06-07 14:51:16.751   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.752   468  6193 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.752   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.755   468 17284 I chatty  : uid=1046(mediacodec) HwBinder:468_8 identical 1 line
+06-07 14:51:16.756   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.756   468  6193 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.757   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.758   468 17284 I chatty  : uid=1046(mediacodec) HwBinder:468_8 identical 5 lines
+06-07 14:51:16.758   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:16.762   468 25097 D AmlogicVideoDecoderAwesome2: [162]"======setOutputBufsNum==for port changed=====:15"
+06-07 14:51:16.762   468 25097 D AmlogicVideoDecoderAwesome2: [162]"======setOutputBuf, line 1261=======:0, 0x0, fd:28"
+06-07 14:51:16.767   468 25097 D AmlogicVideoDecoderAwesome2: [162]"======setOutputBuf, line 1261=======:1, 0x0, fd:33"
+06-07 14:51:16.776   468 25097 D AmlogicVideoDecoderAwesome2: [162]"======setOutputBuf, line 1261=======:2, 0x0, fd:38"
+06-07 14:51:16.781     0     0 D [40503.138259@1]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:51:16.784   468 25097 D AmlogicVideoDecoderAwesome2: [162]"======setOutputBuf, line 1261=======:3, 0x0, fd:43"
+06-07 14:51:16.789     0     0 I [40503.152544@0]  [287]: H264 set HDR infos
+06-07 14:51:16.791   468 25097 D AmlogicVideoDecoderAwesome2: [162]"======setOutputBuf, line 1261=======:4, 0x0, fd:48"
+06-07 14:51:16.794   468 25097 D AmlogicVideoDecoderAwesome2: [162]"======setOutputBuf, line 1261=======:5, 0x0, fd:53"
+06-07 14:51:16.799   468 25097 D AmlogicVideoDecoderAwesome2: [162]"======setOutputBuf, line 1261=======:6, 0x0, fd:58"
+06-07 14:51:16.809   468 25097 D AmlogicVideoDecoderAwesome2: [162]"======setOutputBuf, line 1261=======:7, 0x0, fd:63"
+06-07 14:51:16.815   468 25097 D AmlogicVideoDecoderAwesome2: [162]"======setOutputBuf, line 1261=======:8, 0x0, fd:68"
+06-07 14:51:16.825   468 25097 D AmlogicVideoDecoderAwesome2: [162]"======setOutputBuf, line 1261=======:9, 0x0, fd:73"
+06-07 14:51:16.830   468 25097 D AmlogicVideoDecoderAwesome2: [162]"======setOutputBuf, line 1261=======:10, 0x0, fd:79"
+06-07 14:51:16.840 24437 25101 E VLC     : [e909f5a0/620d] libvlc decoder: output: 17 unknown, 1920x1080 stride 1920 1088, crop 0 0 0 0
+06-07 14:51:16.850   365   562 E BufferQueueProducer: [SurfaceView - com.iptv.player/com.iptv.player.ui.player.PlayerActivity#0](id:16d00000341,api:0,p:-1,c:365) disconnect: not connected (req=1)
+06-07 14:51:16.850 24437 25093 E VLC     : [f52f0130/6205] libvlc window: request 1 not implemented
+06-07 14:51:16.850 24437 25093 E VLC     : [c14c1f30/6205] libvlc vout display: can't get Subtitles Surface
+06-07 14:51:16.850 24437 25093 E VLC     : [f52f0130/6205] libvlc window: request 1 not implemented
+06-07 14:51:16.861 24437 25093 E VLC     : [f52f0130/6205] libvlc window: request 0 not implemented
+06-07 14:51:16.862 24437 25093 E VLC     : [f52f0130/6205] libvlc window: request 0 not implemented
+06-07 14:51:16.872 24437 25093 E VLC     : [f52f0130/6205] libvlc window: request 1 not implemented
+06-07 14:51:16.872 24437 25093 E VLC     : [f52f0130/6205] libvlc window: request 1 not implemented
+06-07 14:51:16.872   468 25097 D AmlogicVideoDecoderAwesome2: [162]"======setOutputBuf, line 1261=======:11, 0x0, fd:84"
+06-07 14:51:16.919   468 25097 D AmlogicVideoDecoderAwesome2: [162]"======setOutputBuf, line 1261=======:12, 0x0, fd:89"
+06-07 14:51:17.861 24437 25093 E VLC     : [f52f0130/6205] libvlc window: request 3 not implemented
+06-07 14:51:18.333   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:51:18.348   565  1629 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:51:21.104 24437 24437 D PlaybackLog: [Controller] play mode=VLC decoder=AUTO start=VLC_HW
+06-07 14:51:21.301   565   630 D InputDispatcher: Waiting to send key to Window{1190900 u0 com.iptv.player/com.iptv.player.ui.player.PlayerActivity} because there are unprocessed events that may cause focus to change
+06-07 14:51:21.344   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:51:21.361   565  1629 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:51:21.802   565   630 W InputDispatcher: Dispatching key to Window{1190900 u0 com.iptv.player/com.iptv.player.ui.player.PlayerActivity} even though there are other unprocessed events
+06-07 14:51:21.806 24437 25089 E VLC     : [e909f5a0/6201] libvlc decoder: dequeue_in timeout: no input available for 2secs
+06-07 14:51:21.806 24437 25101 E NdkMediaCodec: sf error code: -38
+06-07 14:51:21.807   468 25097 I OmxComponent: OMX_CommandFlush 850 Cmd 0x1 nParam1 0xffffffff
+06-07 14:51:21.807   468 25097 I OmxComponent: OMX.amlogic.avc.decoder.awesome2: flush input
+06-07 14:51:21.807   468 25097 V AmlogicVideoDecoderAwesome2: [162]flushInput:944 >
+06-07 14:51:21.807   468 25097 V OMX_WorkerPeer: vendor/amlogic/common/omx/omx_framework/WorkerPeer.cpp:flushInput:57 --------------------
+06-07 14:51:21.807   468 25097 V AmlogicVideoDecoderAwesome2: [162]pause:317 >
+06-07 14:51:21.827   468 25097 V AmlogicVideoDecoderAwesome2: [162]reset:364 >
+06-07 14:51:21.827   468 25097 D AmlogicVideoDecoderAwesome2: [162]"reset_1"
+06-07 14:51:21.831     0     0 W         : [40508.196247@0]  vmh264 reset
+06-07 14:51:21.831     0     0 D [40508.196280@0]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:51:21.831     0     0 W         : [40508.196332@0]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:21.831     0     0 D [40508.196532@0]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:51:21.843     0     0 W         : [40508.207993@1]  vmh264 reset
+06-07 14:51:21.843     0     0 D [40508.208004@1]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:51:21.843     0     0 W         : [40508.208030@1]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:21.843     0     0 D [40508.208104@1]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:51:21.845   468 25099 V AmlogicVideoDecoderAwesome2: [162]NotifyResetDone:1938 >
+06-07 14:51:21.845   468 25097 D AmlogicVideoDecoderAwesome2: [162]"reset_2"
+06-07 14:51:21.845   468 25097 V AmlogicVideoDecoderAwesome2: [162]start:325 >
+06-07 14:51:21.845   468 25097 D AmlogicVideoDecoderAwesome2: [162]"mVideo start\n"
+06-07 14:51:21.845   468 25097 V AmlogicVideoDecoderAwesome2: [162]flushInput:983 >
+06-07 14:51:21.845   468 25110 V OMX_WorkerPeer: vendor/amlogic/common/omx/omx_framework/WorkerPeer.cpp:runWorkerStatic:155 --------------------
+06-07 14:51:21.845   468 25110 V OMX_WorkerPeer: vendor/amlogic/common/omx/omx_framework/WorkerPeer.cpp:runWorker:161 --------------------
+06-07 14:51:21.845   468 25097 I OmxComponent: OMX.amlogic.avc.decoder.awesome2: flush output
+06-07 14:51:21.846   468 25097 V AmlogicVideoDecoderAwesome2: [162]flushOutput:986 >
+06-07 14:51:21.846   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:0 0xeb2c1bd0\n"
+06-07 14:51:21.846   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:3 0xeb2c0cd0\n"
+06-07 14:51:21.846   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:4 0xeb2c07f0\n"
+06-07 14:51:21.846   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:5 0xeb2c1ab0\n"
+06-07 14:51:21.846   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:6 0xeb2c0f70\n"
+06-07 14:51:21.846   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:7 0xeb2c0310\n"
+06-07 14:51:21.846   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:8 0xeb2c1930\n"
+06-07 14:51:21.846   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:9 0xeb2c1690\n"
+06-07 14:51:21.846   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:10 0xeb2c1270\n"
+06-07 14:51:21.846   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:11 0xeb2c0550\n"
+06-07 14:51:21.846   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:12 0xeb2c23b0\n"
+06-07 14:51:21.846   468 25097 V AmlogicVideoDecoderAwesome2: [162]flushOutput:1061 >
+06-07 14:51:21.848   468 25097 I OmxComponent: OMX_CommandStateSet 850 Cmd 0 nParam1 0x2
+06-07 14:51:21.848   468 25097 I OmxComponent: OMX-169 STATE_SET:   OMX_StateExecuting => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:21.848   468 25097 I OmxComponent: OMX.amlogic.avc.decoder.awesome2: flush input
+06-07 14:51:21.848   468 25097 V AmlogicVideoDecoderAwesome2: [162]flushInput:944 >
+06-07 14:51:21.848   468 25097 V OMX_WorkerPeer: vendor/amlogic/common/omx/omx_framework/WorkerPeer.cpp:flushInput:57 --------------------
+06-07 14:51:21.848   468 25097 V AmlogicVideoDecoderAwesome2: [162]pause:317 >
+06-07 14:51:21.848   468 25097 V AmlogicVideoDecoderAwesome2: [162]reset:364 >
+06-07 14:51:21.848   468 25097 D AmlogicVideoDecoderAwesome2: [162]"reset_1"
+06-07 14:51:21.875     0     0 W         : [40508.241462@3]  vmh264 reset
+06-07 14:51:21.875     0     0 D [40508.241475@3]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:51:21.875     0     0 W         : [40508.241501@3]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:21.875     0     0 D [40508.241615@3]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:51:21.879     0     0 W         : [40508.245351@1]  vmh264 reset
+06-07 14:51:21.879     0     0 D [40508.245362@1]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:51:21.879     0     0 W         : [40508.245388@1]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:21.879     0     0 D [40508.245463@1]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:51:21.883   468 25099 V AmlogicVideoDecoderAwesome2: [162]NotifyResetDone:1938 >
+06-07 14:51:21.883   468 25097 D AmlogicVideoDecoderAwesome2: [162]"reset_2"
+06-07 14:51:21.883   468 25097 V AmlogicVideoDecoderAwesome2: [162]start:325 >
+06-07 14:51:21.883   468 25097 D AmlogicVideoDecoderAwesome2: [162]"mVideo start\n"
+06-07 14:51:21.883   468 25097 V AmlogicVideoDecoderAwesome2: [162]flushInput:983 >
+06-07 14:51:21.883   468 25113 V OMX_WorkerPeer: vendor/amlogic/common/omx/omx_framework/WorkerPeer.cpp:runWorkerStatic:155 --------------------
+06-07 14:51:21.883   468 25097 I OmxComponent: OMX.amlogic.avc.decoder.awesome2: flush output
+06-07 14:51:21.884   468 25097 V AmlogicVideoDecoderAwesome2: [162]flushOutput:986 >
+06-07 14:51:21.884   468 25113 V OMX_WorkerPeer: vendor/amlogic/common/omx/omx_framework/WorkerPeer.cpp:runWorker:161 --------------------
+06-07 14:51:21.884   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:0 0xeb2c1bd0\n"
+06-07 14:51:21.884   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:3 0xeb2c0cd0\n"
+06-07 14:51:21.884   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:4 0xeb2c07f0\n"
+06-07 14:51:21.884   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:5 0xeb2c1ab0\n"
+06-07 14:51:21.884   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:6 0xeb2c0f70\n"
+06-07 14:51:21.884   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:7 0xeb2c0310\n"
+06-07 14:51:21.884   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:8 0xeb2c1930\n"
+06-07 14:51:21.884   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:9 0xeb2c1690\n"
+06-07 14:51:21.884   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:10 0xeb2c1270\n"
+06-07 14:51:21.884   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:11 0xeb2c0550\n"
+06-07 14:51:21.884   468 25097 D AmlogicVideoDecoderAwesome2: [162]"__flushOutput__fillBufferDone:12 0xeb2c23b0\n"
+06-07 14:51:21.884   468 25097 V AmlogicVideoDecoderAwesome2: [162]flushOutput:1061 >
+06-07 14:51:21.884   468 25097 D AmlogicVideoDecoderAwesome2: [162]"mVideo stop\n"
+06-07 14:51:21.884   468 25097 V AmlogicVideoDecoderAwesome2: [162]stop:350 >
+06-07 14:51:21.884   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateExecuting => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:21.885   468 25097 I OmxComponent: STATE_DONE:  OMX_StateExecuting => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:21.885   468 25097 I OmxComponent: OMX_CommandStateSet 850 Cmd 0 nParam1 0x1
+06-07 14:51:21.885   468 25097 I OmxComponent: OMX-169 STATE_SET:   OMX_StateIdle => OMX_StateLoaded : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:21.885   468 25097 V AmlogicVideoDecoderAwesome2: [162]releaseResources:425 >
+06-07 14:51:21.885   468 25097 V AmlogicVideoDecoderAwesome2: [162]tearDown:769 >
+06-07 14:51:21.885   468 25097 V AmlogicVideoDecoderAwesome2: [162]tearDown:1471 >
+06-07 14:51:21.885   468 25097 V AmlogicVideoDecoderAwesome2: [162]initializeState_l:1519 >
+06-07 14:51:21.899     0     0 I [40508.264798@1]  [287]: release decoder ffffff80475b8000
+06-07 14:51:21.899     0     0 W         : [40508.264906@1]  vmh264 reset
+06-07 14:51:21.899     0     0 D [40508.264918@1]  0: h264_reset_bufmgr_v4l frame count 1 to skip 0
+06-07 14:51:21.899     0     0 W         : [40508.264944@1]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:21.899     0     0 D [40508.265016@1]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:51:21.905   468 25097 D OmxResManage: Release fd = 11
+06-07 14:51:21.905   468 25097 I OmxComponent: OMX-169 STATE_TRANS: OMX_StateIdle => OMX_StateLoaded : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:21.905   468 25097 I OmxComponent: STATE_DONE:  OMX_StateIdle => OMX_StateLoaded : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:21.907     0     0 D [40508.269443@0]  0: vh264_stop
+06-07 14:51:21.917   468  6193 D OmxComponentManagerImpl: DecreaseEntryNumByName pEntry->mNum=1, pEntry->mMaxNum:9,componentName:OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:21.917   468  6193 I omx_core: OMX_freeHandle_num_= 0
+06-07 14:51:21.917   468  6193 D OmxVideoDecoder: ~OmxVideoDecoder===pSidebandWindow:0x0
+06-07 14:51:21.917   468  6193 D OmxComponent: ~OmxComponent 281 : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:21.917   468  6193 I AmlogicVideoDecoderAwesome2: [162]"~AmlogicVideoDecoderAwesome2"
+06-07 14:51:21.917   468  6193 D AmlogicVideoDecoderAwesome2: [162]"~AmlogicVideoDecoder2"
+06-07 14:51:21.918   468  6193 D AmlogicVideoDecoderAwesome2: [162]"~AmlogicVideoDecoder2, mOmxInstancenum 0"
+06-07 14:51:21.919   468  6193 D OmxResManage: ~ResManWrapper fd = 11
+06-07 14:51:21.920 24437 25081 D MediaCodec: flushMediametrics
+06-07 14:51:21.927 24437 25081 D AudioTrack: stop(212): called with 0 frames delivered
+06-07 14:51:21.946   365   562 E BufferQueueProducer: [SurfaceView - com.iptv.player/com.iptv.player.ui.player.PlayerActivity#0](id:16d00000341,api:0,p:-1,c:365) disconnect: not connected (req=1)
+06-07 14:51:21.970 24437 24437 D PlaybackLog: [VLC] play forceSoftware=false passthrough=false
+06-07 14:51:21.975 24437 24437 I chatty  : uid=10078(com.iptv.player) identical 3 lines
+06-07 14:51:22.953 24437 25123 D AudioTrack: set(): streamType -1, sampleRate 48000, format 0x1, channelMask 0x3, frameCount 8200, flags #0, notificationFrames 0, sessionId 0, transferType 3, uid -1, pid -1
+06-07 14:51:22.964 24437 25123 W AudioTrack: Use of stream types is deprecated for operations other than volume control
+06-07 14:51:22.964 24437 25123 W AudioTrack: See the documentation of AudioTrack() for what to use instead with android.media.AudioAttributes to qualify your playback use case
+06-07 14:51:22.973 24437 25126 E VLC     : [c7389430/6226] libvlc window: request 1 not implemented
+06-07 14:51:22.974 24437 25126 E VLC     : [f51bb500/6226] libvlc vout display: can't get Subtitles Surface
+06-07 14:51:22.974 24437 25126 E VLC     : [c7389430/6226] libvlc window: request 1 not implemented
+06-07 14:51:22.990 24437 25126 E VLC     : [c7389430/6226] libvlc window: request 0 not implemented
+06-07 14:51:22.990 24437 25126 E VLC     : [c7389430/6226] libvlc window: request 0 not implemented
+06-07 14:51:22.990 24437 25126 E VLC     : [c7389430/6226] libvlc window: request 1 not implemented
+06-07 14:51:23.001 24437 25129 I OMXClient: IOmx service obtained
+06-07 14:51:23.001   468  6193 I OMXMaster: makeComponentInstance(OMX.amlogic.avc.decoder.awesome2) in android.hardwar process
+06-07 14:51:23.001   468  6193 D OmxComponentManagerImpl: support frame mode
+06-07 14:51:23.001   468  6193 D OmxComponentManagerImpl: use dv frame mode
+06-07 14:51:23.001   468  6193 D OmxComponentManagerImpl: support avs frame mode
+06-07 14:51:23.001   468  6193 D OmxComponentManagerImpl: format support multi-instance
+06-07 14:51:23.001   468  6193 D OmxComponentManagerImpl: getEntryByName_2_num=0, componentName:OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.001   468  6193 V AmlogicVideoDecoderAwesome2: [162]AmlogicVideoDecoder2:111 >
+06-07 14:51:23.001   468  6193 V AmlogicVideoDecoderAwesome2: [162]initializeState_l:1519 >
+06-07 14:51:23.001   468  6193 D AmlogicVideoDecoderAwesome2: [162]"vendor.media.omx.latency is not set used def=1.000000\n"
+06-07 14:51:23.001   468  6193 D AmlogicVideoDecoderAwesome2: [162]"vendor.media.omx.frame_numlatency is not set used def=10\n"
+06-07 14:51:23.001   468  6193 D AmlogicVideoDecoderAwesome2: [163]"AmlogicVideoDecoder2, mOmxInstancenum 1, mOmxInstanceID 163"
+06-07 14:51:23.001   468  6193 D AmlogicVideoDecoderAwesome2: [163]"vendor.omx2.blkmode is not set used def=0\n"
+06-07 14:51:23.001   468  6193 D AmlogicVideoDecoderAwesome2: [163]"vendor.omx2.maxalloc is not set used def=1\n"
+06-07 14:51:23.001   468  6193 I AmlogicVideoDecoderAwesome2: [163]"default use NV21"
+06-07 14:51:23.002   468  6193 W OmxLogConf: Can not read property media.omx.log_levels, using 0
+06-07 14:51:23.002   468  6193 D OmxResManage: ResManWrapper OMX-170 init, fd = 11
+06-07 14:51:23.002   468  6193 D AmlogicVideoDecoderAwesome2: [163]"vendor.media.omx2.out_buffer1 is not set used def=10\n"
+06-07 14:51:23.002   468  6193 D AmlogicVideoDecoderAwesome2: [163]"out buf:10"
+06-07 14:51:23.002   468  6193 D AmlogicVideoDecoderAwesome2: [163]"vendor.media.omx2.dw is not set used def=0\n"
+06-07 14:51:23.002   468  6193 D OmxVideoDecoder: setInputCoding OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.002   468  6193 D OmxVideoDecoder: mIsLinux49=0, mIsLinux54=1, major=5, minor=4
+06-07 14:51:23.002   468  6193 D OmxVideoDecoder: multi dec exist
+06-07 14:51:23.002   468  6193 D OmxVideoDecoder: use dv frame mode
+06-07 14:51:23.002   468  6193 D OmxVideoDecoder: avs multi dec exist
+06-07 14:51:23.002   468  6193 D OmxVideoDecoder: Use frame mode for multidec.
+06-07 14:51:23.002   468  6193 D OmxVideoDecoder: Use min out buffer size
+06-07 14:51:23.002   468  6193 D OmxVideoDecoder: mSupportPiPVideo = 1
+06-07 14:51:23.002   468  6193 D OmxVideoDecoder: mMustOsdDisplay 0, mAmVideoUsed=0, mSupportPiPVideo=1, mPipVideoUsed=0, mVideoUsedByOmx=0
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT: OMX.amlogic.avc.decoder.awesome2 : Vendor extensions supported (17)
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT:    vendor.4k-osd{{ enable : Int32 },  }
+06-07 14:51:23.003     0     0 I [40509.368812@0]  resman: 173 appname:OMX-170, type=0
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT:    vendor.video-trickmode{{ enable : Int32 },  }
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT:    vendor.unstable-pts{{ enable : Int32 },  }
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT:    vendor.is-mvc{{ enable : Int32 },  }
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT:    vendor.is-flv{{ nContainIndex : Int32 },  }
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT:    vendor.dvconfig-box{{ disable : Int32 },  }
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT:    vendor.profile-level{{ n-profile : Int32 },  { n-level : Int32 },  }
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT:    vendor.nrdp{{ video-peek-in-tunnel : Int32 },  }
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT:    vendor.low-latency{{ enable : Int32 },  }
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT:    vendor.save-mem{{ enable : Int32 },  }
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT:    vendor.videoLayer{{ type : Int32 },  }
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT:    vendor.renderByOmx{{ enable : Int32 },  }
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT:    vendor.passthoughMode{{ video-filter-id : Int32 },  }
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT:    vendor.VideoQos{{ info : String },  }
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT:    vendor.rotation-angle{{ angle : Int32 },  }
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT:    vendor.McodecReport{{ info : String },  }
+06-07 14:51:23.003   468  6193 D OMX-VENDOR-EXT:    vendor.START.low-latency{{ enable : Int32 },  }
+06-07 14:51:23.003   468  6193 D OmxVideoDecoder: video type 7 support v4l2, use omx2
+06-07 14:51:23.003   468  6193 D OmxComponentManagerImpl: IncreaseEntryNumByName pEntry->mNum=0, pEntry->mMaxNum:9,componentName:OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.003   468  6193 I omx_core: OMX_getHandle_num=1
+06-07 14:51:23.003   468  6193 D OmxComponent: mApkName=media.codec
+06-07 14:51:23.006   468   468 W HwBinder:468_6: type=1400 audit(0.0:4431): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-07 14:51:23.006   468   468 W HwBinder:468_6: type=1400 audit(0.0:4432): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-07 14:51:23.006 24437 25128 D MediaCodec: flushMediametrics
+06-07 14:51:23.006 24437 25128 I MediaCodec: [OMX.amlogic.avc.decoder.awesome2] setting surface generation to 25023504
+06-07 14:51:23.006 24437 25129 I AmAVUtils: AmAVUtils::getComponentRole isEncoder :0 mime:video/avc 
+06-07 14:51:23.006 24437 25129 I MediaVendorExt: AmAVUtils::getComponentRole isEncoder :0 mime:video/avc 
+06-07 14:51:23.006   468  6193 D OmxVideoDecoder: setParameter 1500 0x1000017
+06-07 14:51:23.006   468  6193 D OmxVideoDecoder: setInputCoding video_decoder.avc
+06-07 14:51:23.007   468  6193 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.enableAndroidNativeBuffers"
+06-07 14:51:23.007   468  6193 D OmxVideoDecoder: setParameter 1500 0x7f000000
+06-07 14:51:23.007   468  6193 V OmxVideoDecoder: setParameter 2083 EnableNativeBuffers 1
+06-07 14:51:23.007   468  6193 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:23.007   468  6193 V OmxVideoDecoder: nWidth=640,nHeight=480, nMinbufs=0
+06-07 14:51:23.007   468  6193 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.allocateNativeHandle"
+06-07 14:51:23.007   468  6193 D OmxVideoDecoder: setParameter 1500 0x7f00000a
+06-07 14:51:23.007   468  6193 E OMXNodeInstance: setParameter(0xe9704634:amlogic.avc.decoder.awesome2, OMX.google.android.index.allocateNativeHandle(0x7f00000a): Output:1 en=0) ERROR: UnsupportedSetting(0x80001019)
+06-07 14:51:23.007   468  6193 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.storeANWBufferInMetadata"
+06-07 14:51:23.007   468  6193 D OmxVideoDecoder: setParameter 1500 0x7f00000d
+06-07 14:51:23.007   468  6193 D OmxVideoDecoder: setParameter 2103 OMX_GoogleAndroidStoreANWBufferInMetadata
+06-07 14:51:23.007   468  6193 V OmxVideoDecoder: mUseStoreANWBufferInMetadata=1
+06-07 14:51:23.007   468 17284 E OMXNodeInstance: getParameter(0xe9704634:amlogic.avc.decoder.awesome2, ??(0x6f600011)) ERROR: UnsupportedIndex(0x8000101a)
+06-07 14:51:23.007   468 17284 D OmxVideoDecoder: setParameter 1500 0x6000001
+06-07 14:51:23.007   468 17284 D OmxVideoDecoder: setParameter nPortIndex 0 CompFmt 0x7 ColorFmt 0
+06-07 14:51:23.008   468 17284 D OmxVideoDecoder: setParameter 1500 0x6000001
+06-07 14:51:23.008   468 17284 D OmxVideoDecoder: setParameter nPortIndex 1 CompFmt 0 ColorFmt 0x11
+06-07 14:51:23.008   468  6193 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 640, height 480 nBufferCountMin:3
+06-07 14:51:23.009   468  6193 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-07 14:51:23.009   468  6193 D OmxVideoDecoder: setParameter nPortIndex 0 nFrameWidth 1920 nFrameHeight 1088 nSliceHeight 16
+06-07 14:51:23.009   468  6193 D OmxVideoDecoder: 4K file codec mm set mVideoClass changed to 2
+06-07 14:51:23.009   468  6193 E OmxVideoDecoder:  reset input buffer:2088960
+06-07 14:51:23.009   468 17284 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:23.009   468 17284 V OmxVideoDecoder: nWidth=640,nHeight=480, nMinbufs=0
+06-07 14:51:23.009   468 17284 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 640, height 480 nBufferCountMin:10
+06-07 14:51:23.009   468  6193 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-07 14:51:23.009   468  6193 D OmxVideoDecoder: media.omx.display_mode=3
+06-07 14:51:23.009   468  6193 D OmxVideoDecoder: mjpeg vc1 wmv wmv3 force display_mode=3
+06-07 14:51:23.009   468  6193 D OmxVideoDecoder: choose mVideoUsedByOmx=0, mVideoUsedByThis=0, mAmVideoUsed=0
+06-07 14:51:23.009   468  6193 D OmxVideoDecoder: mDisplayMode = DISPLAY_MODE_V4LVIDEO
+06-07 14:51:23.009   468  6193 D OmxVideoDecoder: choose mDisplayMode=3
+06-07 14:51:23.009   468  6193 E libc    : Access denied finding property "media.omx.width"
+06-07 14:51:23.009   468  6193 E libc    : Access denied finding property "media.omx.height"
+06-07 14:51:23.009   468  6193 D OmxVideoDecoder: setParameter nPortIndex 1 nFrameWidth 1920 nFrameHeight 1088 nSliceHeight 1088
+06-07 14:51:23.010   468  6193 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:23.010   468  6193 V OmxVideoDecoder: nWidth=1920,nHeight=1088, nMinbufs=0
+06-07 14:51:23.010   468  6193 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.describeColorAspects"
+06-07 14:51:23.010   468 17284 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.storeMetaDataInBuffers"
+06-07 14:51:23.010   468 17284 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.storeANWBufferInMetadata"
+06-07 14:51:23.010   468 17284 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.prepareForAdaptivePlayback"
+06-07 14:51:23.010   468 17284 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.configureVideoTunnelMode"
+06-07 14:51:23.010   468 17284 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.useAndroidNativeBuffer2"
+06-07 14:51:23.010   468 17284 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.useAndroidNativeBuffer"
+06-07 14:51:23.010   468 17284 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.enableAndroidNativeBuffers"
+06-07 14:51:23.010   468 17284 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.allocateNativeHandle"
+06-07 14:51:23.010   468 17284 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.getAndroidNativeBufferUsage"
+06-07 14:51:23.010   468 17284 D OmxVideoDecoder: setConfig 2887 0x7f00000c
+06-07 14:51:23.010   468  6193 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.describeHDRStaticInfo"
+06-07 14:51:23.010   468  6193 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.describeHDR10PlusInfo"
+06-07 14:51:23.011   468  6193 D OmxVideoDecoder: setConfig 2887 0x7f000009
+06-07 14:51:23.011   468  6193 D OmxVideoDecoder: HDRStaticInfo: R=0 0; G=0 0; B=0 0; W=0 0; MaxDisplayLuminance:0, MinDisplayLuminance=0, mMaxContentLightLevel=0, MaxContentLightLevel=0
+06-07 14:51:23.011   468  6193 D OmxVideoDecoder: HDRStaticInfo: all parmeter is 0, set mHasHDRStaticInfo to false
+06-07 14:51:23.011 24437 25129 I AmAVUtils: AmAVUtils::isAudioExtendFormat input = video/avc
+06-07 14:51:23.011 24437 25129 I AmAVUtils: AmAVUtils::isExtendFormat input = video/avc
+06-07 14:51:23.011   468  6193 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1088 nBufferCountMin:3
+06-07 14:51:23.011   468 17284 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1088 nBufferCountMin:3
+06-07 14:51:23.011   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.011   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=0 (4k-osd)
+06-07 14:51:23.011   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.011   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=1 (video-trickmode)
+06-07 14:51:23.012   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.012   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=2 (unstable-pts)
+06-07 14:51:23.012   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.012   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=3 (is-mvc)
+06-07 14:51:23.012   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.012   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=4 (is-flv)
+06-07 14:51:23.012   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.012   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=5 (dvconfig-box)
+06-07 14:51:23.012   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.012   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 14:51:23.012   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.012   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 14:51:23.012   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.012   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=7 (nrdp)
+06-07 14:51:23.013   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.013   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=8 (low-latency)
+06-07 14:51:23.013   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.013   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=9 (save-mem)
+06-07 14:51:23.013   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.013   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=10 (videoLayer)
+06-07 14:51:23.013   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.013   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=11 (renderByOmx)
+06-07 14:51:23.013   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.013   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=12 (passthoughMode)
+06-07 14:51:23.013   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.013   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=13 (VideoQos)
+06-07 14:51:23.013   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.013   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=14 (rotation-angle)
+06-07 14:51:23.013   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.013   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=15 (McodecReport)
+06-07 14:51:23.014   468  3948 D OmxVideoDecoder: mMcodecReport=0 mPeer.get=-377456800
+06-07 14:51:23.014   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.014   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=16 (START.low-latency)
+06-07 14:51:23.014   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.014   468  3948 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:23.014   468  3948 V OmxVideoDecoder: nWidth=1920,nHeight=1088, nMinbufs=0
+06-07 14:51:23.014   468  3948 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1088 nBufferCountMin:10
+06-07 14:51:23.014   468  3948 D OmxVideoDecoder: getConfig 2745 0x700000f
+06-07 14:51:23.015   468  3948 D OmxVideoDecoder: getConfig 2748 nIndex 0x700000f
+06-07 14:51:23.015   468  3948 I AmlogicVideoDecoderAwesome2: [163]"getAndroidNativeBufferCrop [1920 x 1088] \n"
+06-07 14:51:23.015   468  3948 D OmxVideoDecoder: getConfig OMX_IndexConfigCommonOutputCrop pRect->nWidth=1920, pRect->nHeight=1088
+06-07 14:51:23.015   468  3948 D OmxVideoDecoder: setConfig 2887 0x7f00000c
+06-07 14:51:23.015   468  3948 D OmxVideoDecoder: getConfig 2745 0x7f00000c
+06-07 14:51:23.015   468  3948 D OmxVideoDecoder: getConfig 2745 0x7f00000c
+06-07 14:51:23.015   468  3948 E OMXNodeInstance: getConfig(0xe9704634:amlogic.avc.decoder.awesome2, ??(0x7f00000c)) ERROR: UnsupportedSetting(0x80001019)
+06-07 14:51:23.015   468  3948 D OmxVideoDecoder: getConfig 2745 0x7f000009
+06-07 14:51:23.015   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.015   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=0 (4k-osd)
+06-07 14:51:23.015   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.015   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=1 (video-trickmode)
+06-07 14:51:23.016   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.016   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=2 (unstable-pts)
+06-07 14:51:23.016   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.016   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=3 (is-mvc)
+06-07 14:51:23.016   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.016   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=4 (is-flv)
+06-07 14:51:23.016   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.016   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=5 (dvconfig-box)
+06-07 14:51:23.016   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.016   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 14:51:23.016   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.016   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 14:51:23.016   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.016   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=7 (nrdp)
+06-07 14:51:23.016   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.016   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=8 (low-latency)
+06-07 14:51:23.016   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.016   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=9 (save-mem)
+06-07 14:51:23.016   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.016   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=10 (videoLayer)
+06-07 14:51:23.017   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.017   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=11 (renderByOmx)
+06-07 14:51:23.017   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.017   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=12 (passthoughMode)
+06-07 14:51:23.017   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.017   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=13 (VideoQos)
+06-07 14:51:23.017   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.017   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=14 (rotation-angle)
+06-07 14:51:23.017   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.017   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=15 (McodecReport)
+06-07 14:51:23.017   468  3948 D OmxVideoDecoder: mMcodecReport=0 mPeer.get=-377456800
+06-07 14:51:23.018   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.018   468  3948 V OmxVideoDecoder: VendorExt: getConfig: index=16 (START.low-latency)
+06-07 14:51:23.018   468  3948 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.018   468 25130 I OmxComponent: OMX_CommandStateSet 850 Cmd 0 nParam1 0x2
+06-07 14:51:23.018   468 25130 I OmxComponent: OMX-170 STATE_SET:   OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.018   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.018   468  3948 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1088 nBufferCountMin:3
+06-07 14:51:23.020   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.021   468 25130 I chatty  : uid=1046(mediacodec) ecoder.awesome2 identical 1 line
+06-07 14:51:23.021   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.021   468  6193 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:23.021   468  6193 V OmxVideoDecoder: nWidth=1920,nHeight=1088, nMinbufs=0
+06-07 14:51:23.021   468  6193 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1088 nBufferCountMin:10
+06-07 14:51:23.022   468   468 W HwBinder:468_5: type=1400 audit(0.0:4433): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-07 14:51:23.022   468   468 W HwBinder:468_5: type=1400 audit(0.0:4434): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-07 14:51:23.022   468  6193 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:23.022   468  6193 V OmxVideoDecoder: nWidth=1920,nHeight=1088, nMinbufs=0
+06-07 14:51:23.022   468  6193 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1088 nBufferCountMin:10
+06-07 14:51:23.022   468  6193 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.AndroidNativeBufferConsumerUsage"
+06-07 14:51:23.022   468  6193 D OmxVideoDecoder: setParameter 1500 0x7f00000b
+06-07 14:51:23.022   468  6193 D OmxVideoDecoder: OMX_GoogleAndroidIndexAndroidNativeBufferConsumerUsage 0x100
+06-07 14:51:23.022   468  6193 D OmxVideoDecoder: Use OSD layer if don't use HWC.
+06-07 14:51:23.022   468  3948 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.getAndroidNativeBufferUsage"
+06-07 14:51:23.022   468  3948 D OmxVideoDecoder: Get NativeBufferUsage 0xc00200
+06-07 14:51:23.022   468  3948 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-07 14:51:23.022   468  3948 W OmxVideoDecoder: 4kosd set output error, newBufferCount 15 > 14
+06-07 14:51:23.022   468  3948 E OMXNodeInstance: setParameter(0xe9704634:amlogic.avc.decoder.awesome2, ParamPortDefinition(0x2000001)) ERROR: UnsupportedSetting(0x80001019)
+06-07 14:51:23.022 24437 25129 W ACodec  : [OMX.amlogic.avc.decoder.awesome2] setting nBufferCountActual to 15 failed: -1010
+06-07 14:51:23.023   468  3948 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-07 14:51:23.023   468  3948 D OmxVideoDecoder: media.omx.display_mode=3
+06-07 14:51:23.023   468  3948 D OmxVideoDecoder: mjpeg vc1 wmv wmv3 force display_mode=3
+06-07 14:51:23.023   468  3948 D OmxVideoDecoder: choose mVideoUsedByOmx=0, mVideoUsedByThis=0, mAmVideoUsed=0
+06-07 14:51:23.023   468  3948 D OmxVideoDecoder: choose mDisplayMode=0
+06-07 14:51:23.023   468  3948 E libc    : Access denied finding property "media.omx.width"
+06-07 14:51:23.023   468  3948 E libc    : Access denied finding property "media.omx.height"
+06-07 14:51:23.023   468  3948 D OmxVideoDecoder: mMustOsdDisplay is true
+06-07 14:51:23.023   468  3948 D OmxVideoDecoder: setParameter nPortIndex 1 nFrameWidth 1920 nFrameHeight 1088 nSliceHeight 1088
+06-07 14:51:23.023   468  3948 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:23.023   468  3948 V OmxVideoDecoder: nWidth=1920,nHeight=1088, nMinbufs=0
+06-07 14:51:23.024   468  3948 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.024   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.024   468  3948 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.024   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.024   468  3948 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.024   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.025   468  6193 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.025   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.025   468  6193 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.025   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.025   468  6193 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.025   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.026   468  6193 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.026   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.026   468  3948 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.026   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.026   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.026   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.027   468  6193 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.027   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.027   468  6193 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.027   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.027   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.027   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.028   468 17284 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.028   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.028   468  6193 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.028   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.028   468 25130 V AmlogicVideoDecoderAwesome2: [163]acquireResources:411 >
+06-07 14:51:23.028   468 25130 D AmlogicVideoDecoderAwesome2: [163]"setUp mDurationUs = 0 videoDefine.xFramerate = 0"
+06-07 14:51:23.028   468 25130 V debugSetup: media.omx.dumpRecv is disabled
+06-07 14:51:23.028   468 25130 V debugSetup: media.omx.dumpCodec is disabled
+06-07 14:51:23.028   468 25130 E AmlogicVideoDecoderAwesome2: setUp(): 1126 mOwner->isGameMode()=0
+06-07 14:51:23.028   468 25130 D AmlogicVideoDecoderAwesome2: [163]"vendor.media.omx.gamemode is not set used def=0\n"
+06-07 14:51:23.028   468 25130 I AmlogicVideoDecoderAwesome2: [163]"setUp width 1920, height 1088\n"
+06-07 14:51:23.028   468 25130 D AmlogicVideoDecoderAwesome2: [163]"vendor.media.omx2.dw is not set used def=16\n"
+06-07 14:51:23.028   468 25130 D AmlogicVideoDecoderAwesome2: [163]"vendor.media.omx2.margin is not set used def=5\n"
+06-07 14:51:23.028   468 25130 I AmlogicVideoDecoderAwesome2: [163]"mIsSurfacTexture 1, mDoubleWriteMode 16, default_margin:5 \n"
+06-07 14:51:23.028   468 25130 D AmlogicVideoDecoderAwesome2: [163]"codecInit"
+06-07 14:51:23.028   468 25130 V AmlogicVideoDecoderAwesome2: [163]"codecInit avc\n"
+06-07 14:51:23.029   468 25130 D VideoDecWraper: initialize:mime:video/avc
+06-07 14:51:23.029   468 25130 I AmVideoDec: [0] "initialize mime video/avc secureMode is 0\n"
+06-07 14:51:23.029   468 25132 I VDA     : VideoCodecProfileToV4L2PixFmt profile a
+06-07 14:51:23.030   468 25132 I VDA     : V4L2_PIX_FMT_H264
+06-07 14:51:23.031     0     0 I [40509.396905@3]  [288]: vcodec_dec decoder ffffff80102d0000
+06-07 14:51:23.031     0     0 I [40509.397031@3]  [288]: release decoder ffffff80102d0000
+06-07 14:51:23.031     0     0 I [40509.397452@3]  [289]: vcodec_dec decoder ffffff8008b24000
+06-07 14:51:23.035     0     0 I         : [40509.398167@3]  vdec_init, dev_name:ammvdec_h264_v4l, vdec_type=VDEC_TYPE_FRAME_BLOCK, format: 2
+06-07 14:51:23.035     0     0 D [40509.398897@3]  0: pdata->config=parm_v4l_codec_enable:1;mh264_double_write_mode:16;parm_v4l_buffer_margin:5;parm_v4l_canvas_mem_mode:0;parm_v4l_canvas_mem_endian:0;parm_v4l_low_latency_mode:0;parm_v4l_metadata_config_flag:49154;
+06-07 14:51:23.035     0     0 D         : [40509.398951@3]  ammvdec_h264_mmu_init tvp = 0x0 mmu_enable 0
+06-07 14:51:23.035     0     0 D         : [40509.398955@3]  decoder_bmmu_box_alloc_box, tvp_flags = 0
+06-07 14:51:23.035     0     0 D [40509.399411@3]  0: ammvdec_h264_probe mmu_enable 0 double_write_mode 0x10
+06-07 14:51:23.035     0     0 D [40509.400419@3]  0: ammvdec_h264 mem-addr=0,buff_offset=55410000,buf_start=55400000
+06-07 14:51:23.035     0     0 W         : [40509.400573@3]  H264 sysinfo: 1920x1088 duration=3200, pts_outside=1
+06-07 14:51:23.035     0     0 I         : [40509.400665@3]  [TEE], the fw (h264_multi) will be loaded...
+06-07 14:51:23.035     0     0 D         : [40509.400690@3]  vh264_init, phy_addr=ca26000 vaddr=000000002f0db613
+06-07 14:51:23.041     0     0 D         : [40509.402303@3]  vdec_init, vf_provider_name = vdec.h264.00, b 0
+06-07 14:51:23.044   468 25130 D AmlogicVideoDecoderAwesome2: [163]"codecInit done"
+06-07 14:51:23.044   468 25130 D AmlogicVideoDecoderAwesome2: [163]"mOutWidth is 1920 mOutHeight is 1088 mFlvFlag=0 mOutBufferCount is 14"
+06-07 14:51:23.044   468 25130 D AmlogicVideoDecoderAwesome2: [163]"mOutBufferCount =14 mDecOutWidth 1920 mDecOutHeight 1088\n"
+06-07 14:51:23.044   468 25130 D AmlogicVideoDecoderAwesome2: [163]"mIsNativeBuffers =1\n"
+06-07 14:51:23.044   468 25130 D AmlogicVideoDecoderAwesome2: [163]"setUp mOutPortChanged=0\n"
+06-07 14:51:23.044   468 25130 I OmxComponent: STATE_DONE:  OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.044   468 25137 I VDA     : vendor.media.omx2.in_buffer set = 5
+06-07 14:51:23.046   468 25130 I OmxComponent: OMX_CommandStateSet 850 Cmd 0 nParam1 0x3
+06-07 14:51:23.046   468 25130 I OmxComponent: OMX-170 STATE_SET:   OMX_StateIdle => OMX_StateExecuting : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.046   468 25130 V AmlogicVideoDecoderAwesome2: [163]prepare:312 >
+06-07 14:51:23.046   468 25130 V AmlogicVideoDecoderAwesome2: [163]start:325 >
+06-07 14:51:23.046   468 25130 D AmlogicVideoDecoderAwesome2: [163]"mVideo start\n"
+06-07 14:51:23.046   468 25130 I OmxComponent: OMX-170 STATE_TRANS: OMX_StateIdle => OMX_StateExecuting : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.046   468 25130 I OmxComponent: STATE_DONE:  OMX_StateIdle => OMX_StateExecuting : OMX.amlogic.avc.decoder.awesome2
+06-07 14:51:23.046   468 25138 V OMX_WorkerPeer: vendor/amlogic/common/omx/omx_framework/WorkerPeer.cpp:runWorkerStatic:155 --------------------
+06-07 14:51:23.046   468 25138 V OMX_WorkerPeer: vendor/amlogic/common/omx/omx_framework/WorkerPeer.cpp:runWorker:161 --------------------
+06-07 14:51:23.049   468 25138 V AmlogicVideoDecoderAwesome2: [163]"doCodecSpec csd_len=84\n"
+06-07 14:51:23.050   468 25138 V AmlogicVideoDecoderAwesome2: [163]"CodecSpec_highline\n"
+06-07 14:51:23.052   468 25138 V AmlogicVideoDecoderAwesome2: [163]"doCodecSpec csd_len=8\n"
+06-07 14:51:23.059     0     0 I [40509.410516@1]  [289]: H264 Instance >> ffffffc011ed9000
+06-07 14:51:23.059     0     0 E [40509.422783@1]  selinux: SELinux:  Could not stat /sys/devices/platform/vdec/ammvdec_h264_v4l.0/waiting_for_supplier: No such file or directory.
+06-07 14:51:23.064   468  6193 I chatty  : uid=1046(mediacodec) HwBinder:468_6 identical 2 lines
+06-07 14:51:23.076   468 25138 I AmlogicVideoDecoderAwesome2: [163]"check_stream_info mInPutFrameCount 3\n"
+06-07 14:51:23.076   468 25138 D AmlogicVideoDecoderAwesome2: [163]"=7, =1920, =1088, =0, =0, =7844726689, =7844846689, =7844766689, =252022, =43599, =8494"
+06-07 14:51:23.083   468 17284 I chatty  : uid=1046(mediacodec) HwBinder:468_8 identical 1 line
+06-07 14:51:23.090 24437 25126 E VLC     : [c7389430/6226] libvlc window: request 1 not implemented
+06-07 14:51:23.130   468 25137 V android.hardware.media.omx@1.0-service: [0607/145123.129978:VERBOSE1:v4l2_video_decode_accelerator.cc(2563)] CheckInterlaced(): 
+06-07 14:51:23.130   468 25137 V android.hardware.media.omx@1.0-service: [0607/145123.130076:VERBOSE1:v4l2_video_decode_accelerator.cc(2581)] NotifyEvent(): 
+06-07 14:51:23.130   468 25137 D AmlogicVideoDecoderAwesome2: NotifyEvent:event:1
+06-07 14:51:23.130   468 25137 D AmlogicVideoDecoderAwesome2: is interlaced
+06-07 14:51:23.130   468 25132 D AmlogicVideoDecoderAwesome2: [163]"ProvidePictureBuffers minNumBuffers:15, size(1920x1080) alignsize(1920x1088)"
+06-07 14:51:23.130   468 25132 D AmlogicVideoDecoderAwesome2: [163]"================OMX_EventPortSettingsChanged: 0xe9807760, dw_realloc 0"
+06-07 14:51:23.130   468 25132 D AmlogicVideoDecoderAwesome2: [163]"width 1920:1920, height 1088:1080, buffer count 11:15\n"
+06-07 14:51:23.130   468 25137 I VDA     : [0] "decoder_state_ = kDecoding wait -> decoding in decode buffer task"
+06-07 14:51:23.130   468 17284 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:23.130   468 17284 V OmxVideoDecoder: nWidth=1920,nHeight=1080, nMinbufs=11
+06-07 14:51:23.130   468 17284 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1080 nBufferCountMin:11
+06-07 14:51:23.131   468  6193 D OmxVideoDecoder: getConfig 2745 0x700000f
+06-07 14:51:23.131   468  6193 D OmxVideoDecoder: getConfig 2748 nIndex 0x700000f
+06-07 14:51:23.131   468  6193 I AmlogicVideoDecoderAwesome2: [163]"getAndroidNativeBufferCrop [1920 x 1080] \n"
+06-07 14:51:23.131   468  6193 D OmxVideoDecoder: getConfig OMX_IndexConfigCommonOutputCrop pRect->nWidth=1920, pRect->nHeight=1080
+06-07 14:51:23.131   468  6193 D OmxVideoDecoder: setConfig 2887 0x7f00000c
+06-07 14:51:23.131   468  6193 D OmxVideoDecoder: getConfig 2745 0x7f00000c
+06-07 14:51:23.131   468  6193 D OmxVideoDecoder: getConfig 2745 0x7f00000c
+06-07 14:51:23.131   468  6193 E OMXNodeInstance: getConfig(0xe9704634:amlogic.avc.decoder.awesome2, ??(0x7f00000c)) ERROR: UnsupportedSetting(0x80001019)
+06-07 14:51:23.132   468  6193 D OmxVideoDecoder: getConfig 2745 0x7f000009
+06-07 14:51:23.132   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.132   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=0 (4k-osd)
+06-07 14:51:23.132   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.132   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=1 (video-trickmode)
+06-07 14:51:23.132   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.132   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=2 (unstable-pts)
+06-07 14:51:23.132   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.132   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=3 (is-mvc)
+06-07 14:51:23.132   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.132   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=4 (is-flv)
+06-07 14:51:23.132   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.132   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=5 (dvconfig-box)
+06-07 14:51:23.132   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.132   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 14:51:23.132   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.132   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 14:51:23.132   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.133   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=7 (nrdp)
+06-07 14:51:23.133   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.133   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=8 (low-latency)
+06-07 14:51:23.133   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.133   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=9 (save-mem)
+06-07 14:51:23.133   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.133   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=10 (videoLayer)
+06-07 14:51:23.133   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.133   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=11 (renderByOmx)
+06-07 14:51:23.133   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.133   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=12 (passthoughMode)
+06-07 14:51:23.133   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.133   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=13 (VideoQos)
+06-07 14:51:23.133   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.133   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=14 (rotation-angle)
+06-07 14:51:23.133   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.133   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=15 (McodecReport)
+06-07 14:51:23.133   468  6193 D OmxVideoDecoder: mMcodecReport=0 mPeer.get=-377456800
+06-07 14:51:23.134   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.134   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=16 (START.low-latency)
+06-07 14:51:23.134   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 14:51:23.134   468 25130 I OmxComponent: OMX_CommandPortDisable 850 Cmd 0x2 nParam1 0x1
+06-07 14:51:23.134   468 25130 V AmlogicVideoDecoderAwesome2: [163]disablePort:1065 >
+06-07 14:51:23.134   468 25130 D AmlogicVideoDecoderAwesome2: [163]"disablePort output"
+06-07 14:51:23.134   468 25130 V AmlogicVideoDecoderAwesome2: [163]flushOutput:986 >
+06-07 14:51:23.134   468 25130 D AmlogicVideoDecoderAwesome2: [163]"__flushOutput__fillBufferDone:0 0xeb2c0970\n"
+06-07 14:51:23.134   468 25130 D AmlogicVideoDecoderAwesome2: [163]"__flushOutput__fillBufferDone:1 0xeb2c0310\n"
+06-07 14:51:23.134   468 25130 D AmlogicVideoDecoderAwesome2: [163]"__flushOutput__fillBufferDone:2 0xeb2c06d0\n"
+06-07 14:51:23.134   468 25130 D AmlogicVideoDecoderAwesome2: [163]"__flushOutput__fillBufferDone:3 0xeb2c0d90\n"
+06-07 14:51:23.134   468 25130 D AmlogicVideoDecoderAwesome2: [163]"__flushOutput__fillBufferDone:4 0xeb2c0bb0\n"
+06-07 14:51:23.134   468 25130 D AmlogicVideoDecoderAwesome2: [163]"__flushOutput__fillBufferDone:5 0xeb2c1930\n"
+06-07 14:51:23.134   468 25130 D AmlogicVideoDecoderAwesome2: [163]"__flushOutput__fillBufferDone:6 0xeb2c2590\n"
+06-07 14:51:23.134   468 25130 D AmlogicVideoDecoderAwesome2: [163]"__flushOutput__fillBufferDone:7 0xeb2c1270\n"
+06-07 14:51:23.134   468 25130 D AmlogicVideoDecoderAwesome2: [163]"__flushOutput__fillBufferDone:8 0xeb2c04f0\n"
+06-07 14:51:23.134   468 25130 D AmlogicVideoDecoderAwesome2: [163]"__flushOutput__fillBufferDone:9 0xeb2c1cf0\n"
+06-07 14:51:23.134   468 25130 V AmlogicVideoDecoderAwesome2: [163]flushOutput:1061 >
+06-07 14:51:23.137   468 25138 D AmlogicVideoDecoderAwesome2: set mEstimateDurationUs to mDurationUs = 40000
+06-07 14:51:23.138   468   468 W HwBinder:468_2: type=1400 audit(0.0:4435): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-07 14:51:23.138   468   468 W HwBinder:468_2: type=1400 audit(0.0:4436): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-07 14:51:23.138   468 25130 I OmxComponent: OMX_CommandPortEnable 850 Cmd 0x3 nParam1 0x1
+06-07 14:51:23.138   468 25130 V AmlogicVideoDecoderAwesome2: [163]enablePort:1079 >
+06-07 14:51:23.138   468  3948 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:23.138   468 25130 D AmlogicVideoDecoderAwesome2: [163]"enablePort output"
+06-07 14:51:23.138   468  3948 V OmxVideoDecoder: nWidth=1920,nHeight=1080, nMinbufs=11
+06-07 14:51:23.138   468 25130 D AmlogicVideoDecoderAwesome2: [163]"enablePort: output buffer:mWidth:1920, mHeight:1080,mOutBufferCount=14"
+06-07 14:51:23.138   468  3948 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1080 nBufferCountMin:11
+06-07 14:51:23.138   468 25130 D AmlogicVideoDecoderAwesome2: [163]"enablePort: minbufNum:11, actualbufNum=15 nBufferCountMin:11 nBufferCountActual:14"
+06-07 14:51:23.138   468 25130 D AmlogicVideoDecoderAwesome2: [163]"enablePort output"
+06-07 14:51:23.139   468  3948 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:23.139   468  3948 V OmxVideoDecoder: nWidth=1920,nHeight=1080, nMinbufs=11
+06-07 14:51:23.139   468  3948 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1080 nBufferCountMin:11
+06-07 14:51:23.140   468   515 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.AndroidNativeBufferConsumerUsage"
+06-07 14:51:23.140   468   515 D OmxVideoDecoder: setParameter 1500 0x7f00000b
+06-07 14:51:23.140   468   515 D OmxVideoDecoder: OMX_GoogleAndroidIndexAndroidNativeBufferConsumerUsage 0x100
+06-07 14:51:23.140   468   515 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.getAndroidNativeBufferUsage"
+06-07 14:51:23.140   468   515 D OmxVideoDecoder: Get NativeBufferUsage 0xc00200
+06-07 14:51:23.140   468   515 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-07 14:51:23.140   468   515 W OmxVideoDecoder: 4kosd set output error, newBufferCount 16 > 15
+06-07 14:51:23.140   468   515 E OMXNodeInstance: setParameter(0xe9704634:amlogic.avc.decoder.awesome2, ParamPortDefinition(0x2000001)) ERROR: UnsupportedSetting(0x80001019)
+06-07 14:51:23.140 24437 25129 W ACodec  : [OMX.amlogic.avc.decoder.awesome2] setting nBufferCountActual to 16 failed: -1010
+06-07 14:51:23.140   468   515 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-07 14:51:23.141   468   515 D OmxVideoDecoder: media.omx.display_mode=3
+06-07 14:51:23.141   468   515 D OmxVideoDecoder: mjpeg vc1 wmv wmv3 force display_mode=3
+06-07 14:51:23.141   468   515 D OmxVideoDecoder: choose mVideoUsedByOmx=0, mVideoUsedByThis=0, mAmVideoUsed=0
+06-07 14:51:23.141   468   515 D OmxVideoDecoder: choose mDisplayMode=0
+06-07 14:51:23.141   468   515 E libc    : Access denied finding property "media.omx.width"
+06-07 14:51:23.141   468   515 E libc    : Access denied finding property "media.omx.height"
+06-07 14:51:23.141   468   515 D OmxVideoDecoder: mMustOsdDisplay is true
+06-07 14:51:23.141   468   515 D OmxVideoDecoder: setParameter nPortIndex 1 nFrameWidth 1920 nFrameHeight 1080 nSliceHeight 1080
+06-07 14:51:23.141   468   515 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-07 14:51:23.141   468   515 V OmxVideoDecoder: nWidth=1920,nHeight=1080, nMinbufs=11
+06-07 14:51:23.141   468  3948 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.142   468  3948 I chatty  : uid=1046(mediacodec) HwBinder:468_5 identical 2 lines
+06-07 14:51:23.142   468  3948 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.143   468   515 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.145   468   515 I chatty  : uid=1046(mediacodec) HwBinder:468_2 identical 9 lines
+06-07 14:51:23.146   468   515 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-07 14:51:23.150   468 25130 D AmlogicVideoDecoderAwesome2: [163]"======setOutputBufsNum==for port changed=====:15"
+06-07 14:51:23.150   468 25130 D AmlogicVideoDecoderAwesome2: [163]"======setOutputBuf, line 1261=======:0, 0x0, fd:28"
+06-07 14:51:23.155   468 25130 D AmlogicVideoDecoderAwesome2: [163]"======setOutputBuf, line 1261=======:1, 0x0, fd:33"
+06-07 14:51:23.163   468 25130 D AmlogicVideoDecoderAwesome2: [163]"======setOutputBuf, line 1261=======:2, 0x0, fd:38"
+06-07 14:51:23.165     0     0 D [40509.525759@1]  0: vh264_set_params active_buf_spec_num 8 dec_dpb_size 5 collocate_buf_num 8
+06-07 14:51:23.168   468 25130 D AmlogicVideoDecoderAwesome2: [163]"======setOutputBuf, line 1261=======:3, 0x0, fd:43"
+06-07 14:51:23.172     0     0 I [40509.537341@0]  [289]: H264 set HDR infos
+06-07 14:51:23.172   468 25130 D AmlogicVideoDecoderAwesome2: [163]"======setOutputBuf, line 1261=======:4, 0x0, fd:48"
+06-07 14:51:23.187   468 25130 D AmlogicVideoDecoderAwesome2: [163]"======setOutputBuf, line 1261=======:5, 0x0, fd:53"
+06-07 14:51:23.192   468 25130 D AmlogicVideoDecoderAwesome2: [163]"======setOutputBuf, line 1261=======:6, 0x0, fd:58"
+06-07 14:51:23.194 24437 25135 E VLC     : [e9092100/622f] libvlc decoder: output: 17 unknown, 1920x1080 stride 1920 1088, crop 0 0 0 0
+06-07 14:51:23.198   468 25130 D AmlogicVideoDecoderAwesome2: [163]"======setOutputBuf, line 1261=======:7, 0x0, fd:64"
+06-07 14:51:23.206   365   405 E BufferQueueProducer: [SurfaceView - com.iptv.player/com.iptv.player.ui.player.PlayerActivity#1](id:16d00000342,api:0,p:-1,c:365) disconnect: not connected (req=1)
+06-07 14:51:23.207 24437 25126 E VLC     : [c7389430/6226] libvlc window: request 1 not implemented
+06-07 14:51:23.207 24437 25126 E VLC     : [f51bb500/6226] libvlc vout display: can't get Subtitles Surface
+06-07 14:51:23.208 24437 25126 E VLC     : [c7389430/6226] libvlc window: request 1 not implemented
+06-07 14:51:23.211   468 25130 D AmlogicVideoDecoderAwesome2: [163]"======setOutputBuf, line 1261=======:8, 0x0, fd:69"
+06-07 14:51:23.225 24437 25126 E VLC     : [c7389430/6226] libvlc window: request 0 not implemented
+06-07 14:51:23.225 24437 25126 E VLC     : [c7389430/6226] libvlc window: request 0 not implemented
+06-07 14:51:23.230   468 25130 D AmlogicVideoDecoderAwesome2: [163]"======setOutputBuf, line 1261=======:9, 0x0, fd:74"
+06-07 14:51:23.238   468 25130 D AmlogicVideoDecoderAwesome2: [163]"======setOutputBuf, line 1261=======:10, 0x0, fd:79"
+06-07 14:51:23.242 24437 25126 E VLC     : [c7389430/6226] libvlc window: request 1 not implemented
+06-07 14:51:23.385   468 25130 D AmlogicVideoDecoderAwesome2: [163]"======setOutputBuf, line 1261=======:11, 0x0, fd:84"
+06-07 14:51:24.145   468 25130 D AmlogicVideoDecoderAwesome2: [163]"======setOutputBuf, line 1261=======:12, 0x0, fd:89"
+06-07 14:51:24.222 24437 25126 E VLC     : [c7389430/6226] libvlc window: request 3 not implemented
+06-07 14:51:24.360   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:51:24.378   565  1845 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:51:24.385   565  1845 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:51:27.379   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:51:27.393   565   800 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-07 14:51:28.262 24437 25122 E VLC     : [e9092100/6222] libvlc decoder: dequeue_in timeout: no input available for 2secs
+06-07 14:51:30.392   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-07 14:51:30.409   565  1845 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission

@@ -7,7 +7,7 @@
 - [Source-only import discipline](source-only-import-discipline.md) — can't compile locally; add explicit cross-package imports as you go; CI kspDebugKotlin "Compilation error" usually = a missing import.
 - [IPTV catalog scaling](iptv-catalog-scaling.md) — Movies/Series paged + FTS4; Live stays full in-memory (number-zap); FTS lockstep must run in withTransaction.
 - [Content freshness on relaunch](content-freshness-on-relaunch.md) — cold start force-resyncs already-opened (loaded=1) VOD/Series categories so new titles appear; run sweep before the unforced prefetch to avoid double fetch.
-- [Android TV green-screen (Amlogic underlay)](android-green-screen-vlc-texture.md) — SurfaceView NOT TextureView (both engines); keep direct rendering ON (`--no-*-dr` REINTRODUCES green); deinterlace ONLY on SW path (filter can't touch opaque HW buffers → stall); RV32 chroma.
+- [Android TV green-screen/frozen video (Amlogic)](android-green-screen-vlc-texture.md) — match known-good v1.0.1 libVLC opts: SurfaceView; direct rendering OFF (`--no-mediacodec-dr`+`--no-omxil-dr`); NO `--android-display-chroma=RV32` & NO HW deinterlace (both froze it: `output: 17 unknown`+`dequeue_in timeout`).
 - [Android TV density normalization](android-tv-density-normalization.md) — UI zoomed/tiny across all pages = box mis-reports densityDpi; lock Configuration.densityDpi to DESIGN_WIDTH_DP (now 1120dp); raising that width = denser UI (more columns/rows).
 - [Cache-first detail screens](cache-first-detail-screens.md) — VOD/Series detail must render Room cache first then refresh network in bg; provider detail APIs can take ~20s.
 - [D-pad focus after ListAdapter diff](recyclerview-focus-after-diff.md) — requestFocus in submitList commit callback+post; and NEVER notifyDataSetChanged from a focus listener (kills D-pad focus) — use payloaded notifyItemChanged.
@@ -16,7 +16,7 @@
 - [Player unit tests](player-unit-tests.md) — single-connection tests are pure-JVM via scheduler/engineFactory/coordinator seams; no Android SDK locally, they run only in CI.
 - [ExoPlayer→libVLC fallback for undecodable audio](player-engine-fallback.md) — Exo can play mute with no error (MP2/AC-3); force onError so VLC takes over.
 - [Dashboard keyless weather + signal](dashboard-keyless-weather.md) — real weather via IP geolocation + Open-Meteo, NO key/location perm; Wi-Fi RSSI needs ACCESS_WIFI_STATE + runCatching.
-- [Exo→VLC smart fallback](exo-vlc-smart-fallback.md) — live ladder EXO→VLC_HW→VLC_SW; green→SW, silent-audio (debounced, READY-gated)→HW; PCM by default, RV32+TextureView clears green.
+- [Exo→VLC smart fallback](exo-vlc-smart-fallback.md) — live ladder EXO→VLC_HW→VLC_SW; green→SW, silent-audio (debounced, READY-gated)→HW; PCM by default; video display rules live in the Amlogic green-screen note (SurfaceView, DR off, no RV32).
 - [TV list move-mode reorder](tv-list-move-mode.md) — D-pad drag-to-reorder: trap ALL dpad nav in dispatchKeyEvent while moving; badge needs targeted notifyItemChanged on enter/exit (submitList diff skips it).
 - [Player known-good baseline](player-known-good-baseline.md) — v1.0.1 (c8e9eac) is the user's regression-free player; reverting needs EXTRA_CATEGORY_ID kept + PlayerScheduler/VodPlaybackCoordinator(+tests) deleted; sacrifices later player fixes.
 - [In-app YouTube trailers](inapp-youtube-trailers.md) — WebView IFrame player (no Play-services); id-detect must require a YouTube host; guard WebView-missing + onError with external watch?v= fallback.

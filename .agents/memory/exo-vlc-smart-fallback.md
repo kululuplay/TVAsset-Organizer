@@ -34,10 +34,14 @@ libVLC's software path is the only safety net.
 
 ## Surface / VLC rules (critical — see android-green-screen-vlc-texture.md)
 - BOTH engines output to **SurfaceView**, never TextureView (Amlogic underlay).
-- Keep direct rendering ON (do NOT add `--no-*-dr`).
-- Auto-deinterlace (`--deinterlace=-1`, mode yadif / bob on software).
-- RV32 display chroma. `:no-spdif` (PCM) when passthrough off. `--avcodec-hw=none`
-  + `setHWDecoderEnabled(false,false)` when forcing software.
+- Direct rendering **OFF** (`--no-mediacodec-dr` + `--no-omxil-dr`) — matches the
+  known-good v1.0.1 baseline. DR-on froze the Amlogic display path.
+- **No** `--android-display-chroma=RV32` — forcing it caused `output: 17 unknown`
+  + `dequeue_in timeout` (frozen video). The baseline never set a display chroma.
+- **No** deinterlace on the HW path; only `--deinterlace=1` + bob when forcing
+  software (raw frames).
+- `:no-spdif` (PCM) when passthrough off (audio-only, unrelated to the freeze).
+  `--avcodec-hw=none` + `setHWDecoderEnabled(false,false)` when forcing software.
 
 **How to apply:** keep ExoPlayerEngine/VlcPlayerEngine ctors and PlayerController
 stage logic in sync. PlayerController's new ctor params (decoderMode,
