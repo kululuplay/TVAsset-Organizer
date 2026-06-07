@@ -193,7 +193,10 @@ class PlayerController(
                 // Hardware video greened: the hw H.264 decoder is the culprit, so
                 // skip VLC's hardware path and go straight to software.
                 Reason.VIDEO -> if (softwareAllowed) Stage.VLC_SW else Stage.VLC_HW
-                // Video is fine; let libVLC software-decode the audio codec.
+                // Video is fine; let libVLC HARDWARE-decode the video and software-
+                // decode the audio codec. (Software video here removes the green on
+                // the EXO -> VLC swap but stutters on 1080p, so we keep hardware and
+                // recommend PlayerMode.VLC for the affected channels instead.)
                 Reason.AUDIO, Reason.ERROR -> Stage.VLC_HW
             }
             Stage.VLC_HW -> if (softwareAllowed) Stage.VLC_SW else null

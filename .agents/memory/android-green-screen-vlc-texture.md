@@ -62,10 +62,25 @@ SurfaceView) and creates the next engine's SurfaceView + starts playback in the
 SAME synchronous pass; the old surface tears down ASYNC on the render thread, so
 the Amlogic compositor shows a green frame on the freshly-added surface. Direct-VLC
 works because the container started empty (no prior SurfaceView to tear down).
-**Fix:** in `PlayerController.startEngine`, when SWAPPING engines (a previous engine
-existed) defer creating the new engine by a short delay (~250ms) so the old surface
-is destroyed first; first-ever start stays synchronous. Do NOT switch VLC to
-TextureView for this — TextureView greens the working direct-VLC path on this box.
+**What's been learned (the swap, not just timing):**
+- A ~250ms delay between releasing the old engine's SurfaceView and creating the
+  new one (`PlayerController.startEngine`, only when swapping) helps but is NOT a
+  guaranteed cure.
+- Critical clue: SOFTWARE video after the same swap NEVER greens, but it STUTTERS
+  on 1080p (too heavy for this box). HARDWARE after the swap greens. So the real
+  culprit is the Amlogic HW video decoder being handed a freshly-swapped surface
+  right after ExoPlayer used the same OMX decoder — a decoder/surface handoff
+  conflict, not pure timing. Green is NOT auto-detectable (no signal reaches
+  onError), so you cannot drive a runtime HW->SW green fallback for it.
+- Therefore neither auto path is good: HW-after-swap = green, SW = stutter.
+- The clean cure that keeps HARDWARE and avoids green is to AVOID THE SWAP:
+  `PlayerMode.VLC` starts directly on `VLC_HW` (no ExoPlayer first) -> no swap,
+  hardware decode, no green, no stutter (confirmed by the user's clean direct-VLC
+  log). Recommend VLC player mode for these channels; an option is to make AUTO
+  start on VLC_HW instead of ExoPlayer (tradeoff: loses Exo-first benefits).
+- Do NOT route the EXO `--AUDIO-->` fallback to VLC_SW (tried it: removes green but
+  causes 1080p stutter). Do NOT switch VLC to TextureView — TextureView greens the
+  working direct-VLC path on this box.
 
 **How to apply:** Live = `VlcPlayerEngine.kt` + `ExoPlayerEngine.kt`
 (+`view_exo_player.xml`); VOD = `VodPlayerActivity.kt` (own libVLC instance, same
