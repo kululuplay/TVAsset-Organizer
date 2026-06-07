@@ -39,6 +39,20 @@ options on top of it. When in doubt, restore the baseline decode/display config:
    via EncounteredError, but a freeze with NO error (the opaque-DR stall here) does
    NOT trip it — so the options above are the real fix, not the ladder.
 
+## Diagnostic signal (how to read the logcat)
+The single fastest tell in `E VLC: libvlc decoder: output: …`:
+- `output: 17 unknown` = BROKEN — VLC got an opaque/unrecognized buffer (the
+  DR-on or forced-chroma drift). Always followed by `dequeue_in timeout: no input
+  available for 2secs` and frozen video.
+- `output: 21 Biplanar 4:2:0 Y/UV, 1920x1080` = HEALTHY — VLC recognizes the NV12
+  output and renders it. Confirmed working on the Amlogic box after restoring the
+  v1.0.1 options.
+`E VLC: libvlc window: request 0/1/3 not implemented` is BENIGN noise — it appears
+in the known-good baseline too; do NOT chase it. Repeated `[Controller] play` =
+the USER zapping channels, NOT an auto-restart loop (the controller logs that line
+only from `play()`, called solely on channel select; `dequeue_in timeout` is a VLC
+internal that never reaches the controller's onError, so it cannot trigger retry).
+
 **How to apply:** Live = `VlcPlayerEngine.kt` + `ExoPlayerEngine.kt`
 (+`view_exo_player.xml`); VOD = `VodPlayerActivity.kt` (own libVLC instance, same
 rules). If green/freeze is reported again, diff the current libVLC options against
