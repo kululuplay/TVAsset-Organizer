@@ -62,7 +62,7 @@ enum class PlayerMode {
 
     companion object {
         fun fromName(value: String?): PlayerMode =
-            entries.firstOrNull { it.name == value } ?: VLC
+            entries.firstOrNull { it.name == value } ?: AUTO
     }
 }
 
@@ -81,7 +81,7 @@ enum class DecoderMode {
 
     companion object {
         fun fromName(value: String?): DecoderMode =
-            entries.firstOrNull { it.name == value } ?: AUTO
+            entries.firstOrNull { it.name == value } ?: SOFTWARE
     }
 }
 
