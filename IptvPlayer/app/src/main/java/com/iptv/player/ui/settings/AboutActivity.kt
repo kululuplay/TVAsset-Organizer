@@ -46,6 +46,14 @@ class AboutActivity : BaseActivity() {
     private var downloadJob: Job? = null
     private var activeCall: Call? = null
 
+    /**
+     * Set when we arrived from the launch-time prompt (EXTRA_AUTO_CHECK). It makes
+     * the screen start the download automatically as soon as the check confirms an
+     * update, so the user does not have to press "Update now" a second time. Reset
+     * once consumed so later manual checks keep the explicit button flow.
+     */
+    private var autoDownload = false
+
     companion object {
         /** When passed as true, the screen runs the update check immediately on open. */
         const val EXTRA_AUTO_CHECK = "extra_auto_check"
@@ -61,9 +69,11 @@ class AboutActivity : BaseActivity() {
         binding.btnUpdateNow.setOnClickListener { startUpdate() }
         binding.btnCancelUpdate.setOnClickListener { cancelDownload() }
 
-        // Arrived from the launch-time prompt: run the check straight away so the
-        // user lands on a focused "Update now" button.
+        // Arrived from the launch-time prompt: run the check straight away and,
+        // once it confirms an update, start the download automatically so the user
+        // does not have to press "Update now" again.
         if (intent.getBooleanExtra(EXTRA_AUTO_CHECK, false)) {
+            autoDownload = true
             checkForUpdate()
         }
     }
@@ -85,6 +95,12 @@ class AboutActivity : BaseActivity() {
                         getString(R.string.about_update_available, result.info.versionName)
                     binding.btnUpdateNow.visibility = View.VISIBLE
                     binding.btnUpdateNow.requestFocus()
+                    // Came from the launch prompt: kick off the download right away
+                    // so the user does not have to confirm a second time.
+                    if (autoDownload) {
+                        autoDownload = false
+                        startUpdate()
+                    }
                 }
                 UpdateResult.UpToDate -> {
                     pendingUpdate = null
