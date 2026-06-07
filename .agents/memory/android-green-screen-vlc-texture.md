@@ -53,6 +53,20 @@ the USER zapping channels, NOT an auto-restart loop (the controller logs that li
 only from `play()`, called solely on channel select; `dequeue_in timeout` is a VLC
 internal that never reaches the controller's onError, so it cannot trigger retry).
 
+## Engine-handoff green (different cause than the DR/chroma green)
+Symptom: green ONLY on channels that fall back EXO -> VLC (e.g. MP2/AC-3 audio the
+ExoPlayer can't decode), while channels that start directly on VLC are fine — and
+the VLC log shows a perfectly HEALTHY decode (`output: 21 Biplanar`, audio plays).
+Cause: SurfaceView swap race. The controller releases one engine (removes its
+SurfaceView) and creates the next engine's SurfaceView + starts playback in the
+SAME synchronous pass; the old surface tears down ASYNC on the render thread, so
+the Amlogic compositor shows a green frame on the freshly-added surface. Direct-VLC
+works because the container started empty (no prior SurfaceView to tear down).
+**Fix:** in `PlayerController.startEngine`, when SWAPPING engines (a previous engine
+existed) defer creating the new engine by a short delay (~250ms) so the old surface
+is destroyed first; first-ever start stays synchronous. Do NOT switch VLC to
+TextureView for this — TextureView greens the working direct-VLC path on this box.
+
 **How to apply:** Live = `VlcPlayerEngine.kt` + `ExoPlayerEngine.kt`
 (+`view_exo_player.xml`); VOD = `VodPlayerActivity.kt` (own libVLC instance, same
 rules). If green/freeze is reported again, diff the current libVLC options against

@@ -1,0 +1,303 @@
+06-07 15:41:45.912 26336 26336 D PlaybackLog: [Controller] play mode=VLC decoder=AUTO start=VLC_HW
+06-07 15:41:45.928 26336 26336 D PlaybackLog: [VLC] play forceSoftware=false passthrough=false
+06-07 15:41:47.360 26336 27514 I OMXClient: IOmx service obtained
+06-07 15:41:47.360   468   515 I OMXMaster: makeComponentInstance(OMX.amlogic.avc.decoder.awesome2) in android.hardwar process
+06-07 15:41:47.361   468   515 D OmxComponentManagerImpl: support frame mode
+06-07 15:41:47.361   468   515 D OmxComponentManagerImpl: use dv frame mode
+06-07 15:41:47.361   468   515 D OmxComponentManagerImpl: support avs frame mode
+06-07 15:41:47.361   468   515 D OmxComponentManagerImpl: format support multi-instance
+06-07 15:41:47.361   468   515 D OmxComponentManagerImpl: getEntryByName_2_num=0, componentName:OMX.amlogic.avc.decoder.awesome2
+06-07 15:41:47.362   468   515 V AmlogicVideoDecoderAwesome2: [201]AmlogicVideoDecoder2:111 >
+06-07 15:41:47.362   468   515 V AmlogicVideoDecoderAwesome2: [201]initializeState_l:1519 >
+06-07 15:41:47.362   468   515 D AmlogicVideoDecoderAwesome2: [201]"vendor.media.omx.latency is not set used def=1.000000\n"
+06-07 15:41:47.362   468   515 D AmlogicVideoDecoderAwesome2: [201]"vendor.media.omx.frame_numlatency is not set used def=10\n"
+06-07 15:41:47.362   468   515 D AmlogicVideoDecoderAwesome2: [202]"AmlogicVideoDecoder2, mOmxInstancenum 1, mOmxInstanceID 202"
+06-07 15:41:47.362   468   515 D AmlogicVideoDecoderAwesome2: [202]"vendor.omx2.blkmode is not set used def=0\n"
+06-07 15:41:47.362   468   515 D AmlogicVideoDecoderAwesome2: [202]"vendor.omx2.maxalloc is not set used def=1\n"
+06-07 15:41:47.362   468   515 I AmlogicVideoDecoderAwesome2: [202]"default use NV21"
+06-07 15:41:47.363   468   515 W OmxLogConf: Can not read property media.omx.log_levels, using 0
+06-07 15:41:47.363   468   515 D OmxResManage: ResManWrapper OMX-209 init, fd = 11
+06-07 15:41:47.363   468   515 D AmlogicVideoDecoderAwesome2: [202]"vendor.media.omx2.out_buffer1 is not set used def=10\n"
+06-07 15:41:47.363   468   515 D AmlogicVideoDecoderAwesome2: [202]"out buf:10"
+06-07 15:41:47.363   468   515 D AmlogicVideoDecoderAwesome2: [202]"vendor.media.omx2.dw is not set used def=0\n"
+06-07 15:41:47.363   468   515 D OmxVideoDecoder: setInputCoding OMX.amlogic.avc.decoder.awesome2
+06-07 15:41:47.363   468   515 D OmxVideoDecoder: mIsLinux49=0, mIsLinux54=1, major=5, minor=4
+06-07 15:41:47.363   468   515 D OmxVideoDecoder: multi dec exist
+06-07 15:41:47.363   468   515 D OmxVideoDecoder: use dv frame mode
+06-07 15:41:47.363   468   515 D OmxVideoDecoder: avs multi dec exist
+06-07 15:41:47.363   468   515 D OmxVideoDecoder: Use frame mode for multidec.
+06-07 15:41:47.363   468   515 D OmxVideoDecoder: Use min out buffer size
+06-07 15:41:47.363   468   515 D OmxVideoDecoder: mSupportPiPVideo = 1
+06-07 15:41:47.364   468   515 D OmxVideoDecoder: mMustOsdDisplay 0, mAmVideoUsed=0, mSupportPiPVideo=1, mPipVideoUsed=0, mVideoUsedByOmx=0
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT: OMX.amlogic.avc.decoder.awesome2 : Vendor extensions supported (17)
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT:    vendor.4k-osd{{ enable : Int32 },  }
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT:    vendor.video-trickmode{{ enable : Int32 },  }
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT:    vendor.unstable-pts{{ enable : Int32 },  }
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT:    vendor.is-mvc{{ enable : Int32 },  }
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT:    vendor.is-flv{{ nContainIndex : Int32 },  }
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT:    vendor.dvconfig-box{{ disable : Int32 },  }
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT:    vendor.profile-level{{ n-profile : Int32 },  { n-level : Int32 },  }
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT:    vendor.nrdp{{ video-peek-in-tunnel : Int32 },  }
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT:    vendor.low-latency{{ enable : Int32 },  }
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT:    vendor.save-mem{{ enable : Int32 },  }
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT:    vendor.videoLayer{{ type : Int32 },  }
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT:    vendor.renderByOmx{{ enable : Int32 },  }
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT:    vendor.passthoughMode{{ video-filter-id : Int32 },  }
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT:    vendor.VideoQos{{ info : String },  }
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT:    vendor.rotation-angle{{ angle : Int32 },  }
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT:    vendor.McodecReport{{ info : String },  }
+06-07 15:41:47.364   468   515 D OMX-VENDOR-EXT:    vendor.START.low-latency{{ enable : Int32 },  }
+06-07 15:41:47.364   468   515 D OmxVideoDecoder: video type 7 support v4l2, use omx2
+06-07 15:41:47.364   468   515 D OmxComponentManagerImpl: IncreaseEntryNumByName pEntry->mNum=0, pEntry->mMaxNum:9,componentName:OMX.amlogic.avc.decoder.awesome2
+06-07 15:41:47.364   468   515 I omx_core: OMX_getHandle_num=1
+06-07 15:41:47.364   468   515 D OmxComponent: mApkName=media.codec
+06-07 15:41:47.366   468   468 W HwBinder:468_2: type=1400 audit(0.0:4852): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-07 15:41:47.366   468   468 W HwBinder:468_2: type=1400 audit(0.0:4853): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-07 15:41:47.366 26336 27513 D MediaCodec: flushMediametrics
+06-07 15:41:47.367     0     0 I [43533.729726@3]  resman: 212 appname:OMX-209, type=0
+06-07 15:41:47.367   468   515 D OmxVideoDecoder: setParameter 1500 0x1000017
+06-07 15:41:47.367   468   515 D OmxVideoDecoder: setInputCoding video_decoder.avc
+06-07 15:41:47.367   468   515 D OmxVideoDecoder: setParameter 1500 0x6000001
+06-07 15:41:47.367   468   515 D OmxVideoDecoder: setParameter nPortIndex 0 CompFmt 0x7 ColorFmt 0
+06-07 15:41:47.368   468 17284 D OmxVideoDecoder: setParameter 1500 0x6000001
+06-07 15:41:47.368   468 17284 D OmxVideoDecoder: setParameter nPortIndex 1 CompFmt 0 ColorFmt 0x15
+06-07 15:41:47.368   468 17284 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 640, height 480 nBufferCountMin:3
+06-07 15:41:47.368   468 17284 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-07 15:41:47.368   468 17284 D OmxVideoDecoder: setParameter nPortIndex 0 nFrameWidth 0 nFrameHeight 0 nSliceHeight 16
+06-07 15:41:47.368   468   515 V OmxVideoDecoder: updatePort mUseNativeBuffers 0
+06-07 15:41:47.368   468   515 V OmxVideoDecoder: omx2 non-native nWidth=640,nHeight=480, nMinbufs=0
+06-07 15:41:47.368   468   515 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 640, height 480 nBufferCountMin:10
+06-07 15:41:47.368   468   515 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-07 15:41:47.369   468   515 D OmxVideoDecoder: mDecoderWidthFromExtractor is 0, set to 1920
+06-07 15:41:47.369   468   515 D OmxVideoDecoder: mDecoderHeightFromExtractor is 0, set to 1088
+06-07 15:41:47.369   468   515 D OmxVideoDecoder: media.omx.display_mode=3
+06-07 15:41:47.369   468   515 D OmxVideoDecoder: mjpeg vc1 wmv wmv3 force display_mode=3
+06-07 15:41:47.369   468   515 D OmxVideoDecoder: choose mVideoUsedByOmx=0, mVideoUsedByThis=0, mAmVideoUsed=0
+06-07 15:41:47.369   468   515 D OmxVideoDecoder: choose mDisplayMode=0
+06-07 15:41:47.369   468   515 E libc    : Access denied finding property "media.omx.width"
+06-07 15:41:47.369   468   515 E libc    : Access denied finding property "media.omx.height"
+06-07 15:41:47.369   468   515 D OmxVideoDecoder: setParameter nPortIndex 1 nFrameWidth 1920 nFrameHeight 1088 nSliceHeight 1088
+06-07 15:41:47.369   468   515 V OmxVideoDecoder: updatePort mUseNativeBuffers 0
+06-07 15:41:47.369   468   515 V OmxVideoDecoder: omx2 non-native nWidth=1920,nHeight=1088, nMinbufs=0
+06-07 15:41:47.369   468   515 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.describeColorAspects"
+06-07 15:41:47.369   468   515 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.storeMetaDataInBuffers"
+06-07 15:41:47.369   468   515 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.storeANWBufferInMetadata"
+06-07 15:41:47.369   468   515 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.prepareForAdaptivePlayback"
+06-07 15:41:47.369   468   515 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.configureVideoTunnelMode"
+06-07 15:41:47.369   468   515 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.useAndroidNativeBuffer2"
+06-07 15:41:47.370   468   515 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.useAndroidNativeBuffer"
+06-07 15:41:47.370   468   515 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.enableAndroidNativeBuffers"
+06-07 15:41:47.370   468   515 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.allocateNativeHandle"
+06-07 15:41:47.370   468   515 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.getAndroidNativeBufferUsage"
+06-07 15:41:47.370   468   515 D OmxVideoDecoder: setConfig 2887 0x7f00000c
+06-07 15:41:47.370   468   515 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.describeHDRStaticInfo"
+06-07 15:41:47.370   468   515 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.describeHDR10PlusInfo"
+06-07 15:41:47.370   468   515 D OmxVideoDecoder: setConfig 2887 0x7f000009
+06-07 15:41:47.370   468   515 D OmxVideoDecoder: HDRStaticInfo: R=0 0; G=0 0; B=0 0; W=0 0; MaxDisplayLuminance:0, MinDisplayLuminance=0, mMaxContentLightLevel=0, MaxContentLightLevel=0
+06-07 15:41:47.370   468   515 D OmxVideoDecoder: HDRStaticInfo: all parmeter is 0, set mHasHDRStaticInfo to false
+06-07 15:41:47.370   468   515 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 0, height 0 nBufferCountMin:3
+06-07 15:41:47.370   468   515 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 0, height 0 nBufferCountMin:3
+06-07 15:41:47.370   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.370   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=0 (4k-osd)
+06-07 15:41:47.370   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.370   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=1 (video-trickmode)
+06-07 15:41:47.370   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.370   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=2 (unstable-pts)
+06-07 15:41:47.371   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.371   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=3 (is-mvc)
+06-07 15:41:47.371   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.371   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=4 (is-flv)
+06-07 15:41:47.371   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.371   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=5 (dvconfig-box)
+06-07 15:41:47.371   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.371   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 15:41:47.371   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.371   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 15:41:47.371   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.371   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=7 (nrdp)
+06-07 15:41:47.371   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.371   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=8 (low-latency)
+06-07 15:41:47.371   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.371   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=9 (save-mem)
+06-07 15:41:47.371   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.372   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=10 (videoLayer)
+06-07 15:41:47.372   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.372   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=11 (renderByOmx)
+06-07 15:41:47.372   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.372   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=12 (passthoughMode)
+06-07 15:41:47.372   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.372   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=13 (VideoQos)
+06-07 15:41:47.372   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.372   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=14 (rotation-angle)
+06-07 15:41:47.372   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.372   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=15 (McodecReport)
+06-07 15:41:47.372   468   515 D OmxVideoDecoder: mMcodecReport=0 mPeer.get=-377460784
+06-07 15:41:47.372   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.372   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=16 (START.low-latency)
+06-07 15:41:47.372   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.372   468   515 V OmxVideoDecoder: updatePort mUseNativeBuffers 0
+06-07 15:41:47.372   468   515 V OmxVideoDecoder: omx2 non-native nWidth=1920,nHeight=1088, nMinbufs=0
+06-07 15:41:47.372   468   515 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1088 nBufferCountMin:10
+06-07 15:41:47.372   468   515 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.describeColorFormat"
+06-07 15:41:47.373   468   515 V OmxVideoDecoder: updatePort mUseNativeBuffers 0
+06-07 15:41:47.373   468   515 V OmxVideoDecoder: omx2 non-native nWidth=1920,nHeight=1088, nMinbufs=0
+06-07 15:41:47.373   468   515 D OmxVideoDecoder: getConfig 2745 0x700000f
+06-07 15:41:47.373   468   515 D OmxVideoDecoder: getConfig 2748 nIndex 0x700000f
+06-07 15:41:47.373   468   515 I AmlogicVideoDecoderAwesome2: [202]"getAndroidNativeBufferCrop [1920 x 1088] \n"
+06-07 15:41:47.373   468   515 D OmxVideoDecoder: getConfig OMX_IndexConfigCommonOutputCrop pRect->nWidth=1920, pRect->nHeight=1088
+06-07 15:41:47.373   468   515 D OmxVideoDecoder: setConfig 2887 0x7f00000c
+06-07 15:41:47.373   468   515 D OmxVideoDecoder: getConfig 2745 0x7f00000c
+06-07 15:41:47.373   468   515 D OmxVideoDecoder: getConfig 2745 0x7f000009
+06-07 15:41:47.373   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.373   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=0 (4k-osd)
+06-07 15:41:47.373   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.373   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=1 (video-trickmode)
+06-07 15:41:47.373   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.373   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=2 (unstable-pts)
+06-07 15:41:47.373   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.373   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=3 (is-mvc)
+06-07 15:41:47.374   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.374   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=4 (is-flv)
+06-07 15:41:47.374   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.374   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=5 (dvconfig-box)
+06-07 15:41:47.374   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.374   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 15:41:47.374   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.374   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 15:41:47.374   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.374   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=7 (nrdp)
+06-07 15:41:47.374   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.374   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=8 (low-latency)
+06-07 15:41:47.374   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.374   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=9 (save-mem)
+06-07 15:41:47.374   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.374   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=10 (videoLayer)
+06-07 15:41:47.375   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.375   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=11 (renderByOmx)
+06-07 15:41:47.375   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.375   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=12 (passthoughMode)
+06-07 15:41:47.375   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.375   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=13 (VideoQos)
+06-07 15:41:47.375   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.375   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=14 (rotation-angle)
+06-07 15:41:47.375   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.375   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=15 (McodecReport)
+06-07 15:41:47.375   468 17284 D OmxVideoDecoder: mMcodecReport=0 mPeer.get=-377460784
+06-07 15:41:47.376   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.376   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=16 (START.low-latency)
+06-07 15:41:47.376   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.376   468 27515 I OmxComponent: OMX_CommandStateSet 850 Cmd 0 nParam1 0x2
+06-07 15:41:47.376   468 27515 I OmxComponent: OMX-209 STATE_SET:   OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 15:41:47.376   468 27515 I OmxComponent: OMX-209 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 15:41:47.377   468 17284 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 0, height 0 nBufferCountMin:3
+06-07 15:41:47.378   468 27515 I OmxComponent: OMX-209 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 15:41:47.379   468 27515 I chatty  : uid=1046(mediacodec) ecoder.awesome2 identical 1 line
+06-07 15:41:47.380   468 27515 I OmxComponent: OMX-209 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 15:41:47.380   468 17284 V OmxVideoDecoder: updatePort mUseNativeBuffers 0
+06-07 15:41:47.380   468 17284 V OmxVideoDecoder: omx2 non-native nWidth=1920,nHeight=1088, nMinbufs=0
+06-07 15:41:47.380   468 17284 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1088 nBufferCountMin:10
+06-07 15:41:47.381   468 27515 I OmxComponent: OMX-209 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 15:41:47.387   468 27515 I chatty  : uid=1046(mediacodec) ecoder.awesome2 identical 8 lines
+06-07 15:41:47.387   468 27515 I OmxComponent: OMX-209 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 15:41:47.387   468 27515 V AmlogicVideoDecoderAwesome2: [202]acquireResources:411 >
+06-07 15:41:47.387   468 27515 D AmlogicVideoDecoderAwesome2: [202]"setUp mDurationUs = 0 videoDefine.xFramerate = 0"
+06-07 15:41:47.388   468 27515 V debugSetup: media.omx.dumpRecv is disabled
+06-07 15:41:47.388   468 27515 V debugSetup: media.omx.dumpCodec is disabled
+06-07 15:41:47.388   468 27515 E AmlogicVideoDecoderAwesome2: setUp(): 1126 mOwner->isGameMode()=0
+06-07 15:41:47.388   468 27515 D AmlogicVideoDecoderAwesome2: [202]"vendor.media.omx.gamemode is not set used def=0\n"
+06-07 15:41:47.388   468 27515 I AmlogicVideoDecoderAwesome2: [202]"setUp width 0, height 0\n"
+06-07 15:41:47.388   468 27515 D AmlogicVideoDecoderAwesome2: [202]"vendor.media.omx2.dw is not set used def=16\n"
+06-07 15:41:47.388   468 27515 D AmlogicVideoDecoderAwesome2: [202]"vendor.media.omx2.margin is not set used def=5\n"
+06-07 15:41:47.388   468 27515 I AmlogicVideoDecoderAwesome2: [202]"mIsSurfacTexture 0, mDoubleWriteMode 16, default_margin:5 \n"
+06-07 15:41:47.388   468 27515 D AmlogicVideoDecoderAwesome2: [202]"codecInit"
+06-07 15:41:47.388   468 27515 V AmlogicVideoDecoderAwesome2: [202]"codecInit avc\n"
+06-07 15:41:47.408   468 27515 D AmlogicVideoDecoderAwesome2: [202]"codecInit done"
+06-07 15:41:47.408   468 27515 D AmlogicVideoDecoderAwesome2: [202]"mOutWidth is 1920 mOutHeight is 1088 mFlvFlag=0 mOutBufferCount is 10"
+06-07 15:41:47.408   468 27515 D AmlogicVideoDecoderAwesome2: [202]"mOutBufferCount =10 mDecOutWidth 1920 mDecOutHeight 1088\n"
+06-07 15:41:47.408   468 27515 D AmlogicVideoDecoderAwesome2: [202]"mIsNativeBuffers =0\n"
+06-07 15:41:47.408   468 27515 D AmlogicVideoDecoderAwesome2: [202]"setUp mOutPortChanged=0\n"
+06-07 15:41:47.408   468 27515 D AmlogicVideoDecoderAwesome2: [202]"use nv12\n"
+06-07 15:41:47.408   468 27515 I OmxComponent: STATE_DONE:  OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.avc.decoder.awesome2
+06-07 15:41:47.409   468 27515 I OmxComponent: OMX_CommandStateSet 850 Cmd 0 nParam1 0x3
+06-07 15:41:47.409   468 27515 I OmxComponent: OMX-209 STATE_SET:   OMX_StateIdle => OMX_StateExecuting : OMX.amlogic.avc.decoder.awesome2
+06-07 15:41:47.409   468 27515 V AmlogicVideoDecoderAwesome2: [202]prepare:312 >
+06-07 15:41:47.409   468 27515 I AmlogicVideoDecoderAwesome2: [202]"AllocDmaBuffers uvm mDecOutWidth:1920 mDecOutHeight:1088, 1920x1088"
+06-07 15:41:47.411   468 27523 I VDA     : vendor.media.omx2.in_buffer set = 5
+06-07 15:41:47.436   468 27515 V AmlogicVideoDecoderAwesome2: [202]start:325 >
+06-07 15:41:47.436   468 27515 D AmlogicVideoDecoderAwesome2: [202]"mVideo start\n"
+06-07 15:41:47.436   468 27515 I OmxComponent: OMX-209 STATE_TRANS: OMX_StateIdle => OMX_StateExecuting : OMX.amlogic.avc.decoder.awesome2
+06-07 15:41:47.436   468 27515 I OmxComponent: STATE_DONE:  OMX_StateIdle => OMX_StateExecuting : OMX.amlogic.avc.decoder.awesome2
+06-07 15:41:47.438   468 27525 V OMX_WorkerPeer: vendor/amlogic/common/omx/omx_framework/WorkerPeer.cpp:runWorkerStatic:155 --------------------
+06-07 15:41:47.438   468 27525 V OMX_WorkerPeer: vendor/amlogic/common/omx/omx_framework/WorkerPeer.cpp:runWorker:161 --------------------
+06-07 15:41:47.440   468 27525 V AmlogicVideoDecoderAwesome2: [202]"doCodecSpec csd_len=45\n"
+06-07 15:41:47.440   468 27525 V AmlogicVideoDecoderAwesome2: [202]"CodecSpec_highline\n"
+06-07 15:41:47.440   468 27525 V AmlogicVideoDecoderAwesome2: [202]"doCodecSpec csd_len=8\n"
+06-07 15:41:47.452   468 27525 I AmlogicVideoDecoderAwesome2: [202]"check_stream_info mInPutFrameCount 3\n"
+06-07 15:41:47.452   468 27525 D AmlogicVideoDecoderAwesome2: [202]"=7, =1920, =1088, =0, =0, =10839005623, =10839025623, =10839325623, =146718, =54915, =98001"
+06-07 15:41:47.507   468 27525 D AmlogicVideoDecoderAwesome2: set mEstimateDurationUs to mDurationUs = 20000
+06-07 15:41:47.507   468 27523 V android.hardware.media.omx@1.0-service: [0607/154147.507175:VERBOSE1:v4l2_video_decode_accelerator.cc(2563)] CheckInterlaced(): 
+06-07 15:41:47.507   468 27523 V android.hardware.media.omx@1.0-service: [0607/154147.507306:VERBOSE1:v4l2_video_decode_accelerator.cc(2581)] NotifyEvent(): 
+06-07 15:41:47.507   468 27523 D AmlogicVideoDecoderAwesome2: NotifyEvent:event:1
+06-07 15:41:47.507   468 27523 D AmlogicVideoDecoderAwesome2: is interlaced
+06-07 15:41:47.507   468 27517 D AmlogicVideoDecoderAwesome2: [202]"ProvidePictureBuffers minNumBuffers:15, size(1920x1080) alignsize(1920x1088)"
+06-07 15:41:47.507   468 27517 I AmlogicVideoDecoderAwesome2: [202]"===========port change, re alloc dma buffer,mDecOutWidth:1920 width:1920=============\n"
+06-07 15:41:47.507   468 27517 V AmlogicVideoDecoderAwesome2: [202]FreeDmaBuffers:697 >
+06-07 15:41:47.508   468 27517 I AmlogicVideoDecoderAwesome2: [202]"AllocDmaBuffers uvm mDecOutWidth:1920 mDecOutHeight:1088, 1920x1088"
+06-07 15:41:47.567   468   515 V OmxVideoDecoder: updatePort mUseNativeBuffers 0
+06-07 15:41:47.567   468   515 V OmxVideoDecoder: omx2 non-native nWidth=1920,nHeight=1080, nMinbufs=0
+06-07 15:41:47.567   468   515 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.avc.decoder.awesome2, width 1920, height 1080 nBufferCountMin:10
+06-07 15:41:47.568   468 17284 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.describeColorFormat"
+06-07 15:41:47.568   468 17284 V OmxVideoDecoder: updatePort mUseNativeBuffers 0
+06-07 15:41:47.568   468 17284 V OmxVideoDecoder: omx2 non-native nWidth=1920,nHeight=1080, nMinbufs=0
+06-07 15:41:47.568   468   515 D OmxVideoDecoder: getConfig 2745 0x700000f
+06-07 15:41:47.568   468   515 D OmxVideoDecoder: getConfig 2748 nIndex 0x700000f
+06-07 15:41:47.568   468   515 I AmlogicVideoDecoderAwesome2: [202]"getAndroidNativeBufferCrop [1920 x 1080] \n"
+06-07 15:41:47.568   468   515 D OmxVideoDecoder: getConfig OMX_IndexConfigCommonOutputCrop pRect->nWidth=1920, pRect->nHeight=1080
+06-07 15:41:47.568   468 17284 D OmxVideoDecoder: setConfig 2887 0x7f00000c
+06-07 15:41:47.569   468   515 D OmxVideoDecoder: getConfig 2745 0x7f00000c
+06-07 15:41:47.569   468   515 D OmxVideoDecoder: getConfig 2745 0x7f000009
+06-07 15:41:47.569   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.569   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=0 (4k-osd)
+06-07 15:41:47.569   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.569   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=1 (video-trickmode)
+06-07 15:41:47.569   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.570   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=2 (unstable-pts)
+06-07 15:41:47.570   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.570   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=3 (is-mvc)
+06-07 15:41:47.570   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.570   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=4 (is-flv)
+06-07 15:41:47.571   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.571   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=5 (dvconfig-box)
+06-07 15:41:47.571   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.571   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 15:41:47.571   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.571   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-07 15:41:47.571   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.571   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=7 (nrdp)
+06-07 15:41:47.572   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.572   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=8 (low-latency)
+06-07 15:41:47.572   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.572   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=9 (save-mem)
+06-07 15:41:47.572   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.572   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=10 (videoLayer)
+06-07 15:41:47.572   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.572   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=11 (renderByOmx)
+06-07 15:41:47.572   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.572   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=12 (passthoughMode)
+06-07 15:41:47.573   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.573   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=13 (VideoQos)
+06-07 15:41:47.573   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.573   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=14 (rotation-angle)
+06-07 15:41:47.573   468   515 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.573   468   515 V OmxVideoDecoder: VendorExt: getConfig: index=15 (McodecReport)
+06-07 15:41:47.573   468   515 D OmxVideoDecoder: mMcodecReport=0 mPeer.get=-377460784
+06-07 15:41:47.573   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.573   468 17284 V OmxVideoDecoder: VendorExt: getConfig: index=16 (START.low-latency)
+06-07 15:41:47.573   468 17284 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-07 15:41:47.687 26336 27519 E VLC     : [e9098a00/6b7f] libvlc decoder: output: 21 Biplanar 4:2:0 Y/UV, 1920x1080 stride 1920 1088, crop 0 0 0 0
+06-07 15:41:47.704 26336 27529 E VLC     : [c2722930/6b89] libvlc window: request 1 not implemented
+06-07 15:41:47.723 26336 27529 E VLC     : [c2722930/6b89] libvlc window: request 0 not implemented
+06-07 15:41:47.723 26336 27529 E VLC     : [c2722930/6b89] libvlc window: request 0 not implemented
+06-07 15:41:47.723 26336 27529 E VLC     : [c2722930/6b89] libvlc window: request 1 not implemented
+06-07 15:41:47.756 26336 27529 E VLC     : [c2722930/6b89] libvlc window: request 1 not implemented
+06-07 15:41:49.531 26336 27529 E VLC     : [c2722930/6b89] libvlc window: request 3 not implemented

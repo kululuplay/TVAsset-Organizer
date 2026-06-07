@@ -55,6 +55,9 @@ class PlayerController(
     private var stage = Stage.EXO
     private val triedStages = mutableSetOf<Stage>()
     private var retryCount = 0
+    // Bumped on every (re)start so a delayed engine creation that has been
+    // superseded becomes a no-op. Guards the SurfaceView-swap handoff gap.
+    private var startGeneration = 0
 
     private var audioDelayMs = 0L
     private var subtitleDelayMs = 0L
@@ -104,17 +107,45 @@ class PlayerController(
     }
 
     private fun startEngine(useVlc: Boolean, forceSoftware: Boolean) {
+        // True when we are SWAPPING engines (fallback/stage change), as opposed to
+        // the very first start where the container is already empty.
+        val swapping = engine != null
+        // Invalidate any create that is still pending from an earlier call. A stale
+        // failure callback from the just-released engine can re-enter this method
+        // during the swap gap (that path does NOT clear the handler), so a token
+        // check stops a second, overlapping engine from being created.
+        val generation = ++startGeneration
         releaseEngine()
-        val newEngine: PlayerEngine =
-            if (useVlc) VlcPlayerEngine(context, forceSoftware, allowPassthrough)
-            else ExoPlayerEngine(context, allowPassthrough)
-        newEngine.bind(container)
-        newEngine.setListener(engineListener)
-        engine = newEngine
-        // Re-apply any user delay offsets to the (new) engine.
-        newEngine.setAudioDelayMs(audioDelayMs)
-        newEngine.setSubtitleDelayMs(subtitleDelayMs)
-        currentUrl?.let { newEngine.play(it) }
+
+        val create = Runnable {
+            if (generation != startGeneration) return@Runnable
+            val newEngine: PlayerEngine =
+                if (useVlc) VlcPlayerEngine(context, forceSoftware, allowPassthrough)
+                else ExoPlayerEngine(context, allowPassthrough)
+            newEngine.bind(container)
+            newEngine.setListener(engineListener)
+            engine = newEngine
+            // Re-apply any user delay offsets to the (new) engine.
+            newEngine.setAudioDelayMs(audioDelayMs)
+            newEngine.setSubtitleDelayMs(subtitleDelayMs)
+            currentUrl?.let { newEngine.play(it) }
+        }
+
+        if (swapping) {
+            // SurfaceView handoff fix. releaseEngine() removed the previous
+            // engine's SurfaceView, but a SurfaceView's underlying surface is torn
+            // down ASYNCHRONOUSLY on the render thread. Adding the next engine's
+            // SurfaceView and starting playback in the SAME synchronous pass races
+            // that teardown: the Amlogic compositor then shows a GREEN frame on the
+            // freshly-added surface even though the new engine decodes perfectly
+            // (libVLC logs a healthy "output: 21 Biplanar"). This is exactly why
+            // green only hit channels that fell back EXO -> VLC (e.g. MP2 audio),
+            // never channels that started directly on VLC (empty container). Deferring
+            // the new engine until the old surface has been destroyed clears it.
+            mainHandler.postDelayed(create, ENGINE_SWAP_DELAY_MS)
+        } else {
+            create.run()
+        }
     }
 
     private val engineListener = object : PlayerListener {
@@ -188,5 +219,15 @@ class PlayerController(
     private fun post(action: () -> Unit) {
         if (Looper.myLooper() == Looper.getMainLooper()) action()
         else mainHandler.post(action)
+    }
+
+    private companion object {
+        /**
+         * Gap between releasing one engine's SurfaceView and creating the next
+         * one's, so the old surface can be destroyed first. Without it, the
+         * Amlogic compositor shows a green frame on the freshly-added surface
+         * during a fallback (e.g. EXO -> VLC). Short enough to stay snappy.
+         */
+        private const val ENGINE_SWAP_DELAY_MS = 250L
     }
 }
