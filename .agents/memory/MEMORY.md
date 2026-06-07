@@ -16,6 +16,7 @@
 - [Player unit tests](player-unit-tests.md) — single-connection tests are pure-JVM via scheduler/engineFactory/coordinator seams; no Android SDK locally, they run only in CI.
 - [ExoPlayer→libVLC fallback for undecodable audio](player-engine-fallback.md) — Exo can play mute with no error (MP2/AC-3); force onError so VLC takes over.
 - [Dashboard keyless weather + signal](dashboard-keyless-weather.md) — real weather via IP geolocation + Open-Meteo, NO key/location perm; Wi-Fi RSSI needs ACCESS_WIFI_STATE + runCatching.
+- [In-app YouTube trailers](inapp-youtube-trailers.md) — WebView IFrame player (no Play-services); id-detect must require a YouTube host; guard WebView-missing + onError with external watch?v= fallback.
 - [Paging refresh focus scroll](paging-refresh-focus-scroll.md) — TV grid must NOT scrollToPosition(0) on Paging refresh-settle while it hasFocus; lazy Room writes invalidate the source and steal focus mid-scroll.
 - [EPG id matching](epg-id-matching.md) — normalize epg ids (trim+lowercase) on store AND query; name fallback via in-memory XMLTV display-name index (no Room table: destructive migration); parseTime must handle glued ±HHMM offsets.
 - [Launch dialog priority & chaining](launch-dialog-priority.md) — expiry check runs before update prompt; chain via onNoPrompt so only one shows; expired notice is non-cancelable.

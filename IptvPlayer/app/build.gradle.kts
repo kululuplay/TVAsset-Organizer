@@ -146,6 +146,9 @@ dependencies {
     implementation("androidx.media3:media3-common:1.4.1")
     // libVLC = fallback engine (broadest codec coverage: DTS/AC3/EAC3/etc.).
     implementation("org.videolan.android:libvlc-all:3.5.1")
+    // In-app YouTube trailer playback (WebView IFrame player; no Play-services /
+    // YouTube app required, works on plain Android TV boxes).
+    implementation("com.pierfrancescosoffritti.androidyoutubeplayer:core:12.1.0")
 
     // --- Unit tests (pure JVM; no emulator / Robolectric) ---
     testImplementation("junit:junit:4.13.2")

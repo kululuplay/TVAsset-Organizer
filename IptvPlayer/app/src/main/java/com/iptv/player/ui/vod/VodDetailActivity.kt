@@ -2,12 +2,11 @@
  * VodDetailActivity.kt
  * Movie detail screen: a full-bleed backdrop hero with title, star rating, year,
  * duration, genres, plot and a circular cast row. Play resumes when a saved
- * position exists; Trailer opens externally; the heart toggles favorite state.
+ * position exists; Trailer plays in-app (TrailerActivity); the heart toggles favorite.
  */
 package com.iptv.player.ui.vod
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
@@ -24,6 +23,7 @@ import com.iptv.player.ui.common.CastAdapter
 import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.RatingStars
 import com.iptv.player.ui.player.VodPlayerActivity
+import com.iptv.player.ui.trailer.TrailerActivity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -195,10 +195,9 @@ class VodDetailActivity : BaseActivity() {
 
     private fun openTrailer() {
         val url = current?.trailerUrl ?: return
-        runCatching {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        }.onFailure {
-            Toast.makeText(this, R.string.error_unknown, Toast.LENGTH_SHORT).show()
-        }
+        startActivity(Intent(this, TrailerActivity::class.java).apply {
+            putExtra(TrailerActivity.EXTRA_TRAILER_URL, url)
+            putExtra(TrailerActivity.EXTRA_TITLE, current?.name)
+        })
     }
 }

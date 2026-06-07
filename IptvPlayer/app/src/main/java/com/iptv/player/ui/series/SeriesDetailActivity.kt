@@ -8,7 +8,6 @@
 package com.iptv.player.ui.series
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
@@ -28,6 +27,7 @@ import com.iptv.player.ui.common.CastAdapter
 import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.RatingStars
 import com.iptv.player.ui.player.VodPlayerActivity
+import com.iptv.player.ui.trailer.TrailerActivity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -294,10 +294,9 @@ class SeriesDetailActivity : BaseActivity() {
 
     private fun openTrailer() {
         val url = seriesTrailer ?: return
-        runCatching {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        }.onFailure {
-            Toast.makeText(this, R.string.error_unknown, Toast.LENGTH_SHORT).show()
-        }
+        startActivity(Intent(this, TrailerActivity::class.java).apply {
+            putExtra(TrailerActivity.EXTRA_TRAILER_URL, url)
+            putExtra(TrailerActivity.EXTRA_TITLE, seriesName)
+        })
     }
 }

@@ -86,6 +86,13 @@
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
             android:screenOrientation="landscape" />
 
+        <!-- In-app trailer player (YouTube IFrame in a WebView). -->
+        <activity
+            android:name=".ui.trailer.TrailerActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
+            android:screenOrientation="landscape" />
+
         <!-- EPG / TV guide. -->
         <activity
             android:name=".ui.guide.GuideActivity"
