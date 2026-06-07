@@ -1,0 +1,19 @@
+CRITICAL green-screen diagnosis from a REAL device log. The device is an Amlogic SoC Android TV stick (decoder: OMX.amlogic.avc.decoder.awesome2). Real-device logcat shows the exact root causes — fix them. This is NOT reproducible on the emulator because the emulator uses software decode.
+Evidence from the log:
+
+Hardware decoder OMX.amlogic.avc.decoder.awesome2 initializes and runs.
+The stream is INTERLACED (AmlogicVideoDecoderAwesome2: is interlaced), 1920x1088 (1080i).
+libVLC reports the green-screen cause: repeated E VLC: libvlc window: request 0/1/3 not implemented — the libVLC Android video-output window handler (IVLCVout / AWindow) is not properly wired, so the Amlogic hardware video plane cannot be positioned/shown → green/blank surface while audio plays.
+Audio in this capture is correct: AudioTrack format 0x1 (PCM_16_BIT) channelMask 0x3 (stereo), passthrough=false. So the passthrough fix is working for this stream.
+
+FIX — libVLC video output on Amlogic (green screen):
+
+Amlogic renders hardware-decoded video on a separate UNDERLAY video plane below the app surface. The video view MUST be a SurfaceView (NEVER TextureView — TextureView cannot display the Amlogic underlay plane and guarantees green/black). Ensure the SurfaceView is at the bottom of the z-order with a transparent/punch-through background, and nothing opaque is drawn over the video region.
+Wire the libVLC window handler correctly. The libvlc window: request not implemented errors mean IVLCVout window callbacks aren't handled. Use libVLC's VLCVideoLayout with MediaPlayer.attachViews(videoLayout, displayManager, subtitles, useTextureView=false) so the AWindow handler is fully set up — do NOT hand-attach a bare surface that ignores window/resize requests. Attach exactly once (no double attach) and detach in onPause/onStop.
+Handle interlaced content: enable libVLC deinterlace for interlaced streams (e.g. set deinterlace mode/filter, try --deinterlace=1 --deinterlace-mode=yadif or bob). 1080i on Amlogic hardware often green-screens without proper deinterlace handling.
+Set display chroma / vout options to match the Amlogic NV12 output (libVLC reports Biplanar 4:2:0 Y/UV): try forcing --android-display-chroma RV32 (fallback RV16) and verify the android_display/mediacodec vout actually renders.
+Automatic software fallback: if after start the hardware path produces no visible frames within a short timeout (green/blank), automatically restart that stream with software decoding (:codec=avcodec, disable MediaCodec for that media). Per-stream, automatic. NOTE: 1080i50 high-bitrate software decode is heavy on Amlogic — keep buffering stable.
+
+FIX — verify the no-audio (EAC3/AAC) channels separately: the captured stream had working PCM stereo audio, so capture a NEW log specifically on an EAC3 and an AAC channel that have NO sound, and confirm passthrough=false and that an AudioTrack with format 0x1 (PCM) is actually created and fed. If AudioTrack is created but silent, check channel layout downmix and audio output module; if no AudioTrack is created, the audio decoder failed — force software audio decode for that codec.
+ExoPlayer/Media3 equivalent: for the same Amlogic device, use SurfaceView output, setEnableDecoderFallback(true), disable video tunneling, and add the FFmpeg audio extension so AC3/EAC3/MP2/DTS decode to PCM (stock Amlogic MediaCodec audio decoders for these are often missing).
+ACCEPTANCE (on the real Amlogic stick): the previously green channels (AC3+H264 1080i and MP2+H264 1080i) must show real video with no green screen and no libvlc window: request not implemented spam; interlaced content must be deinterlaced cleanly; audio stays PCM stereo.

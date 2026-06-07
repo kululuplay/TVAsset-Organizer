@@ -1,17 +1,41 @@
 ---
-name: Android TV green-screen / doubled-image on libVLC
-description: How libVLC video output is set up to avoid green screen and doubled/ghosted image on low-end Android TV sticks.
+name: Android TV green-screen on libVLC + ExoPlayer (Amlogic underlay)
+description: Surface type, direct rendering, and deinterlace rules that keep hardware video visible (no green screen) on Amlogic Android TV sticks.
 ---
 
-On some Android TV panels/sticks libVLC showed a solid green picture (audio fine) and/or a doubled/ghosted image on Live TV and VOD.
+Real-device logcat on an Amlogic stick (OMX.amlogic.avc.decoder.awesome2)
+pinned the green-screen root causes. The decoder runs fine and audio is correct
+PCM stereo, but `E VLC: libvlc window: request 0/1/3 not implemented` spams and
+the picture is green/blank. Cause = the hardware video is composited on a
+dedicated UNDERLAY plane and the surface/window handler was wrong.
 
-Current rule (this REVERSES the earlier "--no-mediacodec-dr / --no-omxil-dr + no-frame-drop" decision — that combination REINTRODUCED green screen on the user's actual hardware):
+Rules (all confirmed convergent — new Amlogic logcat AND earlier user A/B):
 
-1. **Single video surface only.** Attach with `mp.attachViews(layout, null, /*subtitles=*/false, /*useTextureView=*/false)` — a plain SurfaceView, no TextureView, no separate subtitle surface. Two surfaces (TextureView + HW decode, or an extra subtitle surface) caused the doubled image. This part has held across every revision.
-2. **Use the known-good v1.0.0 (commit 57e9100) decode options, NOT the direct-rendering ones.** Instance: `--clock-jitter=0`, `--clock-synchro=0`, `--avcodec-hw=any`, `--avcodec-skiploopfilter=all`, `--avcodec-fast`. Per-stream: `setHWDecoderEnabled(true, /*force=*/true)` + `:clock-jitter=0` + `:clock-synchro=0`. Buffer `network/live-caching=3000`. Do NOT add `--no-mediacodec-dr` / `--no-omxil-dr` / `--no-drop-late-frames` / `--no-skip-frames` — on this box they bring the green screen back.
-3. **Per-stream hardware→software fallback stays as a safety net.** Each stream starts hardware-auto; on `EncounteredError`, or `Playing` with no `Vout` within ~6s, restart the same stream once forcing software (`setHWDecoderEnabled(false,false)` + `:avcodec-hw=none`), posted off the VLC event thread. Only after SW also fails is onError surfaced. This is additive and does not change the HW decode path that matters for green screen.
-4. **Surface lifecycle.** Guard attach with `viewsAttached`; detach on pause/onStop, re-attach on resume/onStart so navigating Live↔VOD never leaves a stale double-attached surface.
+1. **SurfaceView, never TextureView.** Both engines must output to a SurfaceView.
+   - libVLC: `mp.attachViews(layout, null, subtitles, /*useTextureView=*/false)`.
+   - ExoPlayer: `view_exo_player.xml` `app:surface_type="surface_view"`.
+   A TextureView cannot show the Amlogic underlay plane → guaranteed green/black
+   with working audio.
+2. **Keep direct rendering ON.** Do NOT add `--no-mediacodec-dr` / `--no-omxil-dr`
+   (nor `--no-drop-late-frames`/`--no-skip-frames`). DR-off copies frames out of
+   the decoder, which fights the underlay and REINTRODUCES green (A/B-confirmed
+   on the user's hardware; the known-good v1.0.0 never had these).
+3. **Deinterlace interlaced (1080i) feeds.** `--deinterlace=1` +
+   `--deinterlace-mode=yadif` (use `bob` on the forced-software path — 1080i50
+   software decode is heavy). Amlogic HW green-screens on interlaced without it.
+4. **RV32 display chroma** (`--android-display-chroma=RV32`, fallback RV16) to
+   match the NV12/biplanar output.
+5. **Per-stream HW→SW fallback is the safety net only.** It catches a stuck
+   decoder (no first frame / EncounteredError), NOT a green-but-present frame —
+   so the surface/DR/deinterlace choices above are the real fix.
 
-**Why:** The user repeatedly confirmed v1.0.0 (57e9100) played cleanly and that the "direct-rendering off / no frame drop" tuning kept the green screen. The watchdog can detect "no video output" but NOT a green-but-present frame, so the decode-option choice (step 2) is the real fix; the SW fallback (step 3) only covers true HW-decode failures. Trust the user's known-good build over the theory that `--no-*-dr` is the universal green-screen fix.
+**Why:** green-but-present frames are invisible to any watchdog; the surface type
++ DR + deinterlace are what actually make the underlay render. Pixel-sampling
+green detection is impossible on a SurfaceView (can't getBitmap), so it was
+removed — the SurfaceView fix removes the need for it.
 
-**How to apply:** Live engine = `VlcPlayerEngine.kt`. Keep single-connection (stop-before-start), track selection, and the lifecycle/fallback machinery — they are orthogonal to the decode path. If green screen is ever reported again, re-verify these options match 57e9100 before adding anything new; re-tune one option at a time. ExoPlayer path still uses `app:surface_type=texture_view` (unchanged).
+**How to apply:** Live = `VlcPlayerEngine.kt` + `ExoPlayerEngine.kt`
+(+`view_exo_player.xml`); VOD = `VodPlayerActivity.kt` (own libVLC instance, same
+rules). If green is reported again, re-verify surface type first, then that no
+`--no-*-dr` crept back, then deinterlace. Re-tune one option at a time.
+ExoPlayer FFmpeg audio extension is NOT available here (no Maven prebuilt).

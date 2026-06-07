@@ -10,18 +10,18 @@
  *   - When the device has no decoder for an audio codec (e.g. AC-3/E-AC-3/MP2),
  *     the audio track ends up unsupported/unselected -> onAudioUnavailable so the
  *     controller can fall back to libVLC (software PCM decode).
- *   - When the hardware H.264 decoder reports "playing" but the surface is a
- *     green/blank frame (1080p@50fps high-bitrate), a sampled TextureView frame
- *     (or a missing first frame) triggers onVideoInvalid -> software fallback.
+ *   - Video uses a SurfaceView (required: Amlogic and most TV SoCs composite
+ *     hardware-decoded frames on an underlay plane a TextureView cannot show,
+ *     which is the real green-screen cause). Decoder fallback + disabled
+ *     tunneling guard the decode path; if no first frame arrives after READY
+ *     the decoder is stuck -> onVideoInvalid -> libVLC software fallback.
  */
 package com.iptv.player.player
 
 import android.content.Context
-import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.view.LayoutInflater
-import android.view.TextureView
 import android.view.ViewGroup
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -117,9 +117,6 @@ class ExoPlayerEngine(
 
             override fun onRenderedFirstFrame() {
                 firstFrameRendered = true
-                // Give the decoder a beat to settle, then sample the surface for
-                // the tell-tale solid-green hardware-decode failure.
-                handler.postDelayed({ checkVideoFrame() }, GREEN_CHECK_DELAY_MS)
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -128,9 +125,9 @@ class ExoPlayerEngine(
             }
         })
 
-        // Inflated from XML so the surface is a TextureView (app:surface_type),
-        // which avoids the green-screen-with-audio overlay bug seen with the
-        // default SurfaceView on some Android TV panels AND lets us sample frames.
+        // Inflated from XML with a SurfaceView surface (app:surface_type): the
+        // only surface type that can show the hardware-decoded underlay plane on
+        // Amlogic/most TV SoCs without greening out.
         val view = (LayoutInflater.from(context)
             .inflate(R.layout.view_exo_player, container, false) as PlayerView).apply {
             this.player = exo
@@ -210,37 +207,6 @@ class ExoPlayerEngine(
         }, NO_FRAME_TIMEOUT_MS)
     }
 
-    private fun checkVideoFrame() {
-        if (videoReported) return
-        val texture = playerView?.videoSurfaceView as? TextureView ?: return
-        val bmp = runCatching { texture.getBitmap(SAMPLE_DIM, SAMPLE_DIM) }.getOrNull() ?: return
-        val green = isMostlyGreen(bmp)
-        bmp.recycle()
-        if (green) {
-            videoReported = true
-            PlaybackLog.log(context, engineName, "green/blank frame detected -> fallback")
-            listener?.onVideoInvalid()
-        }
-    }
-
-    /** True when (almost) every sampled pixel is the solid-green decoder error. */
-    private fun isMostlyGreen(bmp: Bitmap): Boolean {
-        val w = bmp.width
-        val h = bmp.height
-        if (w == 0 || h == 0) return false
-        val pixels = IntArray(w * h)
-        bmp.getPixels(pixels, 0, w, 0, 0, w, h)
-        var greenish = 0
-        for (p in pixels) {
-            val r = (p shr 16) and 0xFF
-            val g = (p shr 8) and 0xFF
-            val b = p and 0xFF
-            // Classic decoder green: strong green, weak red/blue.
-            if (g > 120 && r < 90 && b < 90) greenish++
-        }
-        return greenish >= pixels.size * 0.9f
-    }
-
     override fun play(url: String) {
         val exo = player ?: return
         resetHealth()
@@ -277,11 +243,7 @@ class ExoPlayerEngine(
     companion object {
         /** Debounce after a track change before judging audio as unselected. */
         private const val AUDIO_CHECK_DELAY_MS = 1200L
-        /** Wait after the first frame before sampling for the green failure. */
-        private const val GREEN_CHECK_DELAY_MS = 1500L
         /** If no frame renders this long after READY, treat video as failed. */
         private const val NO_FRAME_TIMEOUT_MS = 6000L
-        /** Sampled frame size (tiny — we only need a colour signal). */
-        private const val SAMPLE_DIM = 24
     }
 }

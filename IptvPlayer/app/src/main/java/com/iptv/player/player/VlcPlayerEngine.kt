@@ -8,9 +8,12 @@
  * Real-stick fixes:
  *   - Audio: AudioTrack output, SPDIF/passthrough OFF by default (:no-spdif) so
  *     everything is decoded to PCM stereo any HDMI sink accepts.
- *   - Video: explicit display chroma (RV32) + no hardware direct-rendering to
- *     resolve the green color-format mismatch; TextureView output (confirmed on
- *     real devices to clear the green-frame-with-audio bug on live streams).
+ *   - Video: SurfaceView output via VLCVideoLayout + attachViews (useTextureView
+ *     = false) so libVLC's AWindow handler is fully wired and the Amlogic-style
+ *     hardware underlay video plane can actually be shown. TextureView CANNOT
+ *     display that underlay and guarantees a green frame on real sticks.
+ *   - Deinterlace enabled (interlaced 1080i feeds green-screen on Amlogic HW
+ *     without it); explicit RV32 display chroma + no hardware direct-rendering.
  *   - forceSoftware: disable MediaCodec entirely for streams where the hardware
  *     decoder produced a green/blank frame.
  */
@@ -60,15 +63,20 @@ class VlcPlayerEngine(
             "--clock-synchro=0",
             // Hardware decode unless we've been told to force software.
             if (forceSoftware) "--avcodec-hw=none" else "--avcodec-hw=any",
-            // Disable hardware "direct rendering": several Android TV panels show
-            // a solid green picture (audio fine) when the MediaCodec/OMX decoder
-            // pushes frames straight to the surface. Copying frames out first
-            // keeps hardware decode but renders correctly.
-            "--no-mediacodec-dr",
-            "--no-omxil-dr",
+            // NOTE: do NOT disable direct rendering (--no-mediacodec-dr /
+            // --no-omxil-dr). On Amlogic the hardware decoder draws onto a
+            // dedicated underlay video plane; copying frames out (DR off) fights
+            // that path and REINTRODUCES the green screen (A/B-confirmed on the
+            // user's real hardware). Keep DR on + SurfaceView output instead.
             // Resolve the color-format mismatch behind the green frame by asking
             // for a known-good 32-bit display chroma.
             "--android-display-chroma=RV32",
+            // Many live SD/HD IPTV feeds are interlaced (1080i); Amlogic hardware
+            // often green-screens on interlaced content unless we deinterlace.
+            // -1 = auto: only kicks in for interlaced streams, leaves progressive
+            // untouched. yadif = quality (hardware path), bob = cheap (software).
+            "--deinterlace=-1",
+            "--deinterlace-mode=${if (forceSoftware) "bob" else "yadif"}",
             // Cut decode load so cheap TV boxes keep up: skip the deblocking
             // loop filter and allow fast (slightly looser) decoding.
             "--avcodec-skiploopfilter=all",
@@ -94,10 +102,12 @@ class VlcPlayerEngine(
             )
         }
         container.addView(layout)
-        // useTextureView = true: routes frames through the GPU, which clears the
-        // green-frame-with-audio bug on live streams on several real TV panels.
-        // (false = no subtitle surface yet; added with the subtitle feature.)
-        mp.attachViews(layout, null, false, true)
+        // attachViews fully wires libVLC's AWindow/IVLCVout handler (fixes the
+        // "libvlc window: request not implemented" green-screen spam). 4th arg
+        // useTextureView = false: SurfaceView is REQUIRED to show the Amlogic
+        // hardware underlay video plane — a TextureView always greens out.
+        // (3rd arg false = no subtitle surface yet; added with subtitles.)
+        mp.attachViews(layout, null, false, false)
 
         mp.setEventListener { event ->
             when (event.type) {
@@ -141,6 +151,9 @@ class VlcPlayerEngine(
             addOption(":clock-synchro=0")
             if (forceSoftware) addOption(":avcodec-hw=none")
             if (!allowPassthrough) addOption(":no-spdif")
+            // Auto-deinterlace interlaced (1080i) feeds at the stream level too.
+            addOption(":deinterlace=-1")
+            addOption(":deinterlace-mode=${if (forceSoftware) "bob" else "yadif"}")
             // Auto-reconnect dropped HTTP connections instead of erroring out.
             addOption(":http-reconnect")
             // Per-stream User-Agent override (covers HTTP(S) playlist + segments).

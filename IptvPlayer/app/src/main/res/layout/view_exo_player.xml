@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- ExoPlayer surface. Rendered through a TextureView (not the default
-     SurfaceView) because several Android TV panels show a solid green frame with
-     a hardware-overlay SurfaceView while audio plays fine. A TextureView routes
-     frames through the GPU and avoids that overlay/color path. -->
+<!-- ExoPlayer surface. Rendered through a SurfaceView (the default) because
+     hardware-decoded video on Amlogic (and most Android TV) SoCs is composited
+     on a dedicated UNDERLAY video plane below the app surface. A TextureView
+     CANNOT display that underlay and guarantees a green/black frame with audio
+     on real sticks, so SurfaceView is required. -->
 <androidx.media3.ui.PlayerView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    app:surface_type="texture_view"
+    app:surface_type="surface_view"
     app:use_controller="false"
     app:resize_mode="fit" />

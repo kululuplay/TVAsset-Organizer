@@ -248,16 +248,20 @@ class VodPlayerActivity : BaseActivity() {
             "--network-caching=$CACHING_MS",
             "--file-caching=$CACHING_MS",
             "--avcodec-hw=any",
-            // Disable hardware direct rendering — prevents the green-screen-with-
-            // audio bug on TV panels whose surface can't take decoder frames raw.
-            "--no-mediacodec-dr",
-            "--no-omxil-dr",
+            // Do NOT disable direct rendering: on Amlogic the HW decoder draws on
+            // an underlay plane; DR-off copies frames out and reintroduces the
+            // green screen. Keep DR on + SurfaceView output.
             // Known-good 32-bit display chroma resolves the green color-format
             // mismatch some panels show on high-bitrate 1080p H.264.
             "--android-display-chroma=RV32",
             // Decode audio to PCM (no SPDIF/passthrough) so AC-3/E-AC-3/DTS are
             // always audible on plain HDMI sinks.
             "--no-spdif",
+            // Auto-deinterlace interlaced sources cleanly (prevents green/combing
+            // on Amlogic hardware decode of 1080i content); -1 leaves progressive
+            // movies untouched.
+            "--deinterlace=-1",
+            "--deinterlace-mode=yadif",
             "--http-reconnect",
             "--http-user-agent=${AppInfo.USER_AGENT}"
         )
@@ -272,10 +276,10 @@ class VodPlayerActivity : BaseActivity() {
             )
         }
         binding.videoContainer.addView(layout)
-        // 3rd true = render embedded subtitles; 4th true = TextureView output,
-        // which routes frames through the GPU and clears the green-frame bug on
-        // several real TV panels.
-        mp.attachViews(layout, null, true, true)
+        // 3rd true = render embedded subtitles; 4th false = SurfaceView output,
+        // REQUIRED to show the Amlogic hardware underlay video plane (TextureView
+        // always greens out on real sticks).
+        mp.attachViews(layout, null, true, false)
 
         mp.setEventListener { event ->
             when (event.type) {
