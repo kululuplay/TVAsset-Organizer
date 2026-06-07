@@ -33,6 +33,7 @@ import com.iptv.player.databinding.ActivitySettingsBinding
 import com.iptv.player.ui.account.AccountActivity
 import com.iptv.player.ui.content.ContentManagerActivity
 import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.ui.common.PinPromptDialog
 import com.iptv.player.ui.diagnostics.DiagnosticsActivity
 import com.iptv.player.ui.login.LoginActivity
 import com.iptv.player.ui.profiles.ProfilesActivity
@@ -106,7 +107,23 @@ class SettingsActivity : BaseActivity() {
         addNavRow(c, getString(R.string.settings_tmdb), Panel.TMDB)
 
         lockAdultSwitch = addToggleRow(c, getString(R.string.settings_lock_adult)) { checked ->
-            viewModel.setLockAdult(checked)
+            if (checked) {
+                // Enabling the lock is a direct action.
+                viewModel.setLockAdult(true)
+            } else {
+                // Disabling the lock requires the PIN. The switch is bound to the
+                // persisted lockAdult flow (see observe()), so it stays visually ON
+                // until the PIN is confirmed; on cancel/wrong PIN nothing changes.
+                lifecycleScope.launch {
+                    val pin = ServiceLocator.settings.getPin()
+                    PinPromptDialog.show(
+                        context = this@SettingsActivity,
+                        expectedPin = pin,
+                        onSuccess = { viewModel.setLockAdult(false) },
+                        onCancel = { lockAdultSwitch?.isChecked = true }
+                    )
+                }
+            }
         }
 
         addActionRow(c, getString(R.string.settings_profiles)) {
