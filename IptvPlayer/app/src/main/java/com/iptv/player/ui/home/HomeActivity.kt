@@ -119,6 +119,34 @@ class HomeActivity : BaseActivity() {
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
         zap.handleKeyDown(keyCode) || super.onKeyDown(keyCode, event)
 
+    /**
+     * D-pad shortcuts that mirror the 2-pane drill-down:
+     *   - LEFT while in the channel list (and focus is on it) returns to the
+     *     category list, same as Back.
+     *   - RIGHT while on the category list drills into that category's channels,
+     *     same as OK/click.
+     * Handled here (before the focus search) so LEFT/RIGHT don't just bounce
+     * around inside the lists. Other keys fall through to normal handling.
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT ->
+                    if (inChannelView && binding.channelList.hasFocus()) {
+                        showCategories()
+                        return true
+                    }
+                KeyEvent.KEYCODE_DPAD_RIGHT ->
+                    if (!inChannelView && binding.categoryList.hasFocus()) {
+                        categoryAdapter.currentList
+                            .firstOrNull { it.id == lastSelectedCategoryId }
+                            ?.let { drillIntoCategory(it); return true }
+                    }
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         // Back from the channel list returns to the category list, matching the
@@ -139,17 +167,7 @@ class HomeActivity : BaseActivity() {
                     viewModel.selectCategory(it.id)
                 }
             },
-            onClicked = { category ->
-                // Locked (adult) categories require the PIN before drilling in.
-                if (category.isAdult() && category.id !in unlockedCategories) {
-                    PinLockHelper.guard(this, isAdult = true) {
-                        unlockedCategories.add(category.id)
-                        enterChannelView()
-                    }
-                } else {
-                    enterChannelView()
-                }
-            }
+            onClicked = { category -> drillIntoCategory(category) }
         )
         binding.categoryList.layoutManager = LinearLayoutManager(this)
         binding.categoryList.adapter = categoryAdapter
@@ -278,6 +296,21 @@ class HomeActivity : BaseActivity() {
         nowNextJob?.cancel()
         epgAdapter.submitList(emptyList())
         binding.epgEmpty.visibility = View.GONE
+    }
+
+    /**
+     * Drills into a category from the category list, prompting for the PIN first
+     * on locked (adult) categories. Shared by OK/click and the RIGHT-arrow shortcut.
+     */
+    private fun drillIntoCategory(category: com.iptv.player.data.model.Category) {
+        if (category.isAdult() && category.id !in unlockedCategories) {
+            PinLockHelper.guard(this, isAdult = true) {
+                unlockedCategories.add(category.id)
+                enterChannelView()
+            }
+        } else {
+            enterChannelView()
+        }
     }
 
     /** Drills from the category list into its channel list. */
