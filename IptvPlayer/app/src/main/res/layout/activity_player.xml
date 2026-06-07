@@ -40,22 +40,22 @@
     <!-- Zapping / info overlay -->
     <LinearLayout
         android:id="@+id/infoOverlay"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
+        android:layout_gravity="bottom|start"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:background="@drawable/bg_overlay"
         android:layout_margin="@dimen/safe_area_v"
-        android:padding="@dimen/space_m"
+        android:padding="@dimen/space_s"
         android:visibility="gone">
 
         <ImageView
             android:id="@+id/overlayLogo"
-            android:layout_width="72dp"
-            android:layout_height="72dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:scaleType="fitCenter"
-            android:layout_marginEnd="@dimen/space_m"
+            android:layout_marginEnd="@dimen/space_s"
             android:contentDescription="@string/now_playing" />
 
         <TextView
@@ -63,16 +63,16 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="@color/brand_pink"
-            android:textSize="@dimen/text_big_title"
+            android:textSize="@dimen/text_title"
             android:textStyle="bold"
-            android:minWidth="56dp"
+            android:minWidth="40dp"
             android:gravity="center"
-            android:layout_marginEnd="@dimen/space_m" />
+            android:layout_marginEnd="@dimen/space_s" />
 
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:maxWidth="520dp"
             android:orientation="vertical">
 
             <TextView
@@ -80,7 +80,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_title"
+                android:textSize="@dimen/text_body"
                 android:textStyle="bold"
                 android:maxLines="1"
                 android:ellipsize="end" />
@@ -90,7 +90,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_caption"
+                android:textSize="@dimen/text_small"
                 android:layout_marginTop="@dimen/space_xs" />
 
             <TextView
@@ -98,10 +98,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_body"
+                android:textSize="@dimen/text_small"
                 android:maxLines="1"
                 android:ellipsize="end"
-                android:layout_marginTop="@dimen/space_s"
+                android:layout_marginTop="@dimen/space_xs"
                 android:visibility="gone" />
 
             <!-- How far we are into the current programme. -->
@@ -109,10 +109,10 @@
                 android:id="@+id/epgProgress"
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
-                android:layout_height="6dp"
+                android:layout_height="4dp"
                 android:max="100"
                 android:progressDrawable="@drawable/progress_now"
-                android:layout_marginTop="@dimen/space_s"
+                android:layout_marginTop="@dimen/space_xs"
                 android:visibility="gone" />
 
             <!-- Start time · time left · end time. -->
@@ -130,7 +130,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="@color/text_secondary"
-                    android:textSize="@dimen/text_caption" />
+                    android:textSize="@dimen/text_small" />
 
                 <TextView
                     android:id="@+id/overlayRemain"
@@ -140,14 +140,14 @@
                     android:gravity="center"
                     android:textColor="@color/brand_pink"
                     android:textStyle="bold"
-                    android:textSize="@dimen/text_caption" />
+                    android:textSize="@dimen/text_small" />
 
                 <TextView
                     android:id="@+id/overlayEnd"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="@color/text_secondary"
-                    android:textSize="@dimen/text_caption" />
+                    android:textSize="@dimen/text_small" />
             </LinearLayout>
 
             <TextView
@@ -155,10 +155,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_caption"
+                android:textSize="@dimen/text_small"
                 android:maxLines="1"
                 android:ellipsize="end"
-                android:layout_marginTop="@dimen/space_s"
+                android:layout_marginTop="@dimen/space_xs"
                 android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
