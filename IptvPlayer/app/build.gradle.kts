@@ -14,8 +14,8 @@ android {
         applicationId = "com.iptv.player"
         minSdk = 21
         targetSdk = 34
-        versionCode = 12
-        versionName = "1.0.9"
+        versionCode = 13
+        versionName = "1.1.0"
 
         // Limit native ABIs to keep APK small and cover common TV/stick chipsets.
         ndk {
