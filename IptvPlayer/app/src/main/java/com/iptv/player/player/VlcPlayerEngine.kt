@@ -71,12 +71,6 @@ class VlcPlayerEngine(
             // Resolve the color-format mismatch behind the green frame by asking
             // for a known-good 32-bit display chroma.
             "--android-display-chroma=RV32",
-            // Many live SD/HD IPTV feeds are interlaced (1080i); Amlogic hardware
-            // often green-screens on interlaced content unless we deinterlace.
-            // -1 = auto: only kicks in for interlaced streams, leaves progressive
-            // untouched. yadif = quality (hardware path), bob = cheap (software).
-            "--deinterlace=-1",
-            "--deinterlace-mode=${if (forceSoftware) "bob" else "yadif"}",
             // Cut decode load so cheap TV boxes keep up: skip the deblocking
             // loop filter and allow fast (slightly looser) decoding.
             "--avcodec-skiploopfilter=all",
@@ -89,6 +83,16 @@ class VlcPlayerEngine(
         // Default = decode audio to PCM (no passthrough). Disable SPDIF so AC-3/
         // E-AC-3/DTS are software-decoded to stereo PCM that any HDMI sink plays.
         if (!allowPassthrough) options.add("--no-spdif")
+        // Deinterlace ONLY on the software path. On the hardware path the Amlogic
+        // decoder outputs OPAQUE MediaCodec buffers (VLC logs "output: 17 unknown")
+        // and deinterlaces interlaced (1080i) content natively on its underlay
+        // plane; a software deinterlace filter cannot touch opaque buffers, so it
+        // stalls the pipeline ("dequeue_in timeout: no input available") = frozen
+        // video. Forced-software decode produces raw I420 that bob CAN deinterlace.
+        if (forceSoftware) {
+            options.add("--deinterlace=1")
+            options.add("--deinterlace-mode=bob")
+        }
 
         val vlc = LibVLC(context, options)
         // Belt-and-braces: also set it on the instance (name + http UA).
@@ -151,9 +155,12 @@ class VlcPlayerEngine(
             addOption(":clock-synchro=0")
             if (forceSoftware) addOption(":avcodec-hw=none")
             if (!allowPassthrough) addOption(":no-spdif")
-            // Auto-deinterlace interlaced (1080i) feeds at the stream level too.
-            addOption(":deinterlace=-1")
-            addOption(":deinterlace-mode=${if (forceSoftware) "bob" else "yadif"}")
+            // Software-path deinterlace only (opaque HW buffers can't be filtered
+            // and the Amlogic HW decoder deinterlaces 1080i natively).
+            if (forceSoftware) {
+                addOption(":deinterlace=1")
+                addOption(":deinterlace-mode=bob")
+            }
             // Auto-reconnect dropped HTTP connections instead of erroring out.
             addOption(":http-reconnect")
             // Per-stream User-Agent override (covers HTTP(S) playlist + segments).

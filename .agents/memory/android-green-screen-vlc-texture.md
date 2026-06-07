@@ -20,9 +20,15 @@ Rules (all confirmed convergent — new Amlogic logcat AND earlier user A/B):
    (nor `--no-drop-late-frames`/`--no-skip-frames`). DR-off copies frames out of
    the decoder, which fights the underlay and REINTRODUCES green (A/B-confirmed
    on the user's hardware; the known-good v1.0.0 never had these).
-3. **Deinterlace interlaced (1080i) feeds.** `--deinterlace=1` +
-   `--deinterlace-mode=yadif` (use `bob` on the forced-software path — 1080i50
-   software decode is heavy). Amlogic HW green-screens on interlaced without it.
+3. **Deinterlace ONLY on the software path — never on hardware.** The HW decoder
+   outputs OPAQUE MediaCodec buffers (VLC logs `output: 17 unknown`) and the
+   Amlogic chip deinterlaces 1080i natively on the underlay. A software
+   deinterlace filter (yadif/bob) CANNOT touch opaque buffers, so the output
+   side jams, buffers aren't recycled, and the decoder stalls
+   (`libvlc decoder: dequeue_in timeout: no input available for 2secs`) = frozen
+   video. Only add `--deinterlace=1`/`:deinterlace=1` + `bob` when `forceSoftware`
+   (raw I420). Do NOT add `--deinterlace=-1` on the HW path "just in case" — the
+   filter is still inserted and breaks opaque output.
 4. **RV32 display chroma** (`--android-display-chroma=RV32`, fallback RV16) to
    match the NV12/biplanar output.
 5. **Per-stream HW→SW fallback is the safety net only.** It catches a stuck

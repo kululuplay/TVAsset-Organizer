@@ -257,11 +257,10 @@ class VodPlayerActivity : BaseActivity() {
             // Decode audio to PCM (no SPDIF/passthrough) so AC-3/E-AC-3/DTS are
             // always audible on plain HDMI sinks.
             "--no-spdif",
-            // Auto-deinterlace interlaced sources cleanly (prevents green/combing
-            // on Amlogic hardware decode of 1080i content); -1 leaves progressive
-            // movies untouched.
-            "--deinterlace=-1",
-            "--deinterlace-mode=yadif",
+            // NO software deinterlace on the hardware path: the Amlogic decoder
+            // outputs opaque MediaCodec buffers that a deinterlace filter cannot
+            // touch — it stalls the pipeline (frozen video). The HW decoder
+            // deinterlaces natively, and VOD movies are almost always progressive.
             "--http-reconnect",
             "--http-user-agent=${AppInfo.USER_AGENT}"
         )
