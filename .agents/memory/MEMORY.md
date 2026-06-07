@@ -16,6 +16,7 @@
 - [Player unit tests](player-unit-tests.md) — single-connection tests are pure-JVM via scheduler/engineFactory/coordinator seams; no Android SDK locally, they run only in CI.
 - [ExoPlayer→libVLC fallback for undecodable audio](player-engine-fallback.md) — Exo can play mute with no error (MP2/AC-3); force onError so VLC takes over.
 - [Dashboard keyless weather + signal](dashboard-keyless-weather.md) — real weather via IP geolocation + Open-Meteo, NO key/location perm; Wi-Fi RSSI needs ACCESS_WIFI_STATE + runCatching.
+- [Exo→VLC smart fallback](exo-vlc-smart-fallback.md) — live ladder EXO→VLC_HW→VLC_SW; green→SW, silent-audio (debounced, READY-gated)→HW; PCM by default, RV32+TextureView clears green.
 - [TV list move-mode reorder](tv-list-move-mode.md) — D-pad drag-to-reorder: trap ALL dpad nav in dispatchKeyEvent while moving; badge needs targeted notifyItemChanged on enter/exit (submitList diff skips it).
 - [Player known-good baseline](player-known-good-baseline.md) — v1.0.1 (c8e9eac) is the user's regression-free player; reverting needs EXTRA_CATEGORY_ID kept + PlayerScheduler/VodPlaybackCoordinator(+tests) deleted; sacrifices later player fixes.
 - [In-app YouTube trailers](inapp-youtube-trailers.md) — WebView IFrame player (no Play-services); id-detect must require a YouTube host; guard WebView-missing + onError with external watch?v= fallback.

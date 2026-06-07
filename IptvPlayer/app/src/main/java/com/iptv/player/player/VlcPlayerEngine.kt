@@ -1,20 +1,37 @@
 /*
  * VlcPlayerEngine.kt
- * Fallback playback backend using libVLC. Chosen when ExoPlayer can't handle a
- * codec/container (e.g. DTS/AC3/EAC3 in TS, AVI). Hardware decoding is enabled
- * but libVLC itself falls back to software decode when hardware fails.
+ * Software-capable playback backend using libVLC. Used as the automatic fallback
+ * when ExoPlayer greens out (hardware H.264 failure) or can't decode an audio
+ * codec (AC-3/E-AC-3/MP2/DTS). libVLC decodes everything in software to PCM, so
+ * it is the safety net that guarantees both picture and sound on weak sticks.
+ *
+ * Real-stick fixes:
+ *   - Audio: AudioTrack output, SPDIF/passthrough OFF by default (:no-spdif) so
+ *     everything is decoded to PCM stereo any HDMI sink accepts.
+ *   - Video: explicit display chroma (RV32) + no hardware direct-rendering to
+ *     resolve the green color-format mismatch; TextureView output (confirmed on
+ *     real devices to clear the green-frame-with-audio bug on live streams).
+ *   - forceSoftware: disable MediaCodec entirely for streams where the hardware
+ *     decoder produced a green/blank frame.
  */
 package com.iptv.player.player
 
 import android.content.Context
 import android.view.ViewGroup
 import com.iptv.player.util.AppInfo
+import com.iptv.player.util.PlaybackLog
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.util.VLCVideoLayout
 
-class VlcPlayerEngine(private val context: Context) : PlayerEngine {
+class VlcPlayerEngine(
+    private val context: Context,
+    /** When true, MediaCodec is disabled and decoding is pure software. */
+    private val forceSoftware: Boolean = false,
+    /** When false (default) audio is decoded to PCM; true allows SPDIF passthrough. */
+    private val allowPassthrough: Boolean = false
+) : PlayerEngine {
 
     override val engineName: String = "VLC"
 
@@ -41,15 +58,17 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
             // jitter/synchro guards stops VLC from stalling to "catch up".
             "--clock-jitter=0",
             "--clock-synchro=0",
-            // Keep playback real-time: let VLC drop late frames (the defaults)
-            // rather than rendering every frame and lagging further behind.
-            "--avcodec-hw=any",
+            // Hardware decode unless we've been told to force software.
+            if (forceSoftware) "--avcodec-hw=none" else "--avcodec-hw=any",
             // Disable hardware "direct rendering": several Android TV panels show
             // a solid green picture (audio fine) when the MediaCodec/OMX decoder
             // pushes frames straight to the surface. Copying frames out first
             // keeps hardware decode but renders correctly.
             "--no-mediacodec-dr",
             "--no-omxil-dr",
+            // Resolve the color-format mismatch behind the green frame by asking
+            // for a known-good 32-bit display chroma.
+            "--android-display-chroma=RV32",
             // Cut decode load so cheap TV boxes keep up: skip the deblocking
             // loop filter and allow fast (slightly looser) decoding.
             "--avcodec-skiploopfilter=all",
@@ -59,6 +78,10 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
             // Report KULULUPLAY instead of the default "VLC/3.0.x LibVLC/3.0.x".
             "--http-user-agent=${AppInfo.USER_AGENT}"
         )
+        // Default = decode audio to PCM (no passthrough). Disable SPDIF so AC-3/
+        // E-AC-3/DTS are software-decoded to stereo PCM that any HDMI sink plays.
+        if (!allowPassthrough) options.add("--no-spdif")
+
         val vlc = LibVLC(context, options)
         // Belt-and-braces: also set it on the instance (name + http UA).
         vlc.setUserAgent(AppInfo.USER_AGENT, AppInfo.USER_AGENT)
@@ -71,8 +94,10 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
             )
         }
         container.addView(layout)
-        // false = no subtitle surface yet (added with subtitle feature later).
-        mp.attachViews(layout, null, false, false)
+        // useTextureView = true: routes frames through the GPU, which clears the
+        // green-frame-with-audio bug on live streams on several real TV panels.
+        // (false = no subtitle surface yet; added with the subtitle feature.)
+        mp.attachViews(layout, null, false, true)
 
         mp.setEventListener { event ->
             when (event.type) {
@@ -90,7 +115,10 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
                     listener?.onPlaying()
                 }
                 MediaPlayer.Event.EndReached -> listener?.onEnded()
-                MediaPlayer.Event.EncounteredError -> listener?.onError("VLC error")
+                MediaPlayer.Event.EncounteredError -> {
+                    PlaybackLog.log(context, engineName, "EncounteredError (forceSoftware=$forceSoftware)")
+                    listener?.onError("VLC error")
+                }
             }
         }
 
@@ -102,14 +130,17 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
     override fun play(url: String) {
         val vlc = libVlc ?: return
         val mp = mediaPlayer ?: return
+        PlaybackLog.log(context, engineName, "play forceSoftware=$forceSoftware passthrough=$allowPassthrough")
         val media = Media(vlc, android.net.Uri.parse(url)).apply {
-            // Prefer hardware decoding; libVLC degrades to software on failure.
-            setHWDecoderEnabled(true, true)
+            // Hardware decoding unless software was forced (then both off).
+            setHWDecoderEnabled(!forceSoftware, !forceSoftware)
             // Mirror the instance buffer/jitter tuning at the stream level.
             addOption(":network-caching=$NETWORK_CACHING_MS")
             addOption(":live-caching=$NETWORK_CACHING_MS")
             addOption(":clock-jitter=0")
             addOption(":clock-synchro=0")
+            if (forceSoftware) addOption(":avcodec-hw=none")
+            if (!allowPassthrough) addOption(":no-spdif")
             // Auto-reconnect dropped HTTP connections instead of erroring out.
             addOption(":http-reconnect")
             // Per-stream User-Agent override (covers HTTP(S) playlist + segments).

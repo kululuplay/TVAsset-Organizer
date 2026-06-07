@@ -48,4 +48,19 @@ interface PlayerListener {
     fun onEnded() {}
     /** A fatal playback error. The controller may trigger fallback/retry. */
     fun onError(message: String?) {}
+
+    /**
+     * The media has an audio track but this engine can't decode/output it, so
+     * playback is silent even though video may be fine (e.g. AC-3/E-AC-3/MP2 with
+     * no MediaCodec audio decoder and passthrough disabled). The controller falls
+     * back to libVLC, which decodes these in software to PCM.
+     */
+    fun onAudioUnavailable() {}
+
+    /**
+     * Video is reporting "playing" but the surface is a green/blank/invalid frame
+     * (the classic 1080p@50fps high-bitrate H.264 hardware-decoder failure). The
+     * controller falls back to a software decode path.
+     */
+    fun onVideoInvalid() {}
 }

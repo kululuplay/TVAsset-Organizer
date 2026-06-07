@@ -252,6 +252,12 @@ class VodPlayerActivity : BaseActivity() {
             // audio bug on TV panels whose surface can't take decoder frames raw.
             "--no-mediacodec-dr",
             "--no-omxil-dr",
+            // Known-good 32-bit display chroma resolves the green color-format
+            // mismatch some panels show on high-bitrate 1080p H.264.
+            "--android-display-chroma=RV32",
+            // Decode audio to PCM (no SPDIF/passthrough) so AC-3/E-AC-3/DTS are
+            // always audible on plain HDMI sinks.
+            "--no-spdif",
             "--http-reconnect",
             "--http-user-agent=${AppInfo.USER_AGENT}"
         )
@@ -266,8 +272,10 @@ class VodPlayerActivity : BaseActivity() {
             )
         }
         binding.videoContainer.addView(layout)
-        // true = render embedded subtitles onto the video surface.
-        mp.attachViews(layout, null, true, false)
+        // 3rd true = render embedded subtitles; 4th true = TextureView output,
+        // which routes frames through the GPU and clears the green-frame bug on
+        // several real TV panels.
+        mp.attachViews(layout, null, true, true)
 
         mp.setEventListener { event ->
             when (event.type) {

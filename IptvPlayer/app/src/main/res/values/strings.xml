@@ -121,6 +121,13 @@
     <string name="settings_player_auto">Auto (recommended)</string>
     <string name="settings_player_exo">ExoPlayer</string>
     <string name="settings_player_vlc">VLC</string>
+    <string name="settings_decoder_mode">Decoder</string>
+    <string name="settings_decoder_auto">Auto (hardware + software fallback)</string>
+    <string name="settings_decoder_hardware">Hardware only</string>
+    <string name="settings_decoder_software">Software only</string>
+    <string name="settings_audio_passthrough">Audio passthrough (for AV receivers)</string>
+    <string name="settings_share_playback_log">Share playback log</string>
+    <string name="settings_playback_log_empty">No playback log yet</string>
     <string name="settings_language">Language</string>
     <string name="settings_general">General</string>
     <string name="settings_account">Account</string>

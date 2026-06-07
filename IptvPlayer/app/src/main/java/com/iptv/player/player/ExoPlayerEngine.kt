@@ -2,15 +2,32 @@
  * ExoPlayerEngine.kt
  * Primary playback backend using AndroidX Media3 (ExoPlayer). Handles HLS/DASH/
  * progressive automatically. Tuned for fast live startup with small buffers.
+ *
+ * Real-stick hardening (emulator hides these because it decodes in software):
+ *   - Audio is forced to PCM (passthrough disabled by default) so AC-3/E-AC-3/
+ *     AAC always produce sound; tunneling is disabled (a common green/black
+ *     frame cause on cheap sticks).
+ *   - When the device has no decoder for an audio codec (e.g. AC-3/E-AC-3/MP2),
+ *     the audio track ends up unsupported/unselected -> onAudioUnavailable so the
+ *     controller can fall back to libVLC (software PCM decode).
+ *   - When the hardware H.264 decoder reports "playing" but the surface is a
+ *     green/blank frame (1080p@50fps high-bitrate), a sampled TextureView frame
+ *     (or a missing first frame) triggers onVideoInvalid -> software fallback.
  */
 package com.iptv.player.player
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.os.Handler
+import android.os.Looper
 import android.view.LayoutInflater
+import android.view.TextureView
 import android.view.ViewGroup
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -19,17 +36,37 @@ import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
 import com.iptv.player.R
 import com.iptv.player.util.AppInfo
+import com.iptv.player.util.PlaybackLog
 
-class ExoPlayerEngine(private val context: Context) : PlayerEngine {
+class ExoPlayerEngine(
+    private val context: Context,
+    /** When false (default) audio is decoded to PCM; true allows HDMI passthrough. */
+    private val allowPassthrough: Boolean = false
+) : PlayerEngine {
 
     override val engineName: String = "ExoPlayer"
 
     private var player: ExoPlayer? = null
     private var playerView: PlayerView? = null
     private var listener: PlayerListener? = null
+
+    private val handler = Handler(Looper.getMainLooper())
+    // Per-stream health flags so each detection fires at most once.
+    private var firstFrameRendered = false
+    private var videoReported = false
+    private var audioReported = false
+
+    // Track selection can momentarily report no selected audio while the
+    // selector settles, so re-read once playback is READY and stable before
+    // declaring the stream silent. Avoids false libVLC fallbacks.
+    private val audioCheckRunnable = Runnable {
+        val p = player ?: return@Runnable
+        if (p.playbackState == Player.STATE_READY) checkAudioSupported(p.currentTracks)
+    }
 
     override fun bind(container: ViewGroup) {
         // Small buffers => quick channel zap on live streams.
@@ -49,8 +86,15 @@ class ExoPlayerEngine(private val context: Context) : PlayerEngine {
             .setAllowCrossProtocolRedirects(true)
         val mediaSourceFactory = DefaultMediaSourceFactory(httpDataSourceFactory)
 
+        // Explicitly disable video tunneling — it commonly causes green/black
+        // frames on cheap Android TV sticks.
+        val trackSelector = DefaultTrackSelector(context).apply {
+            setParameters(buildUponParameters().setTunnelingEnabled(false))
+        }
+
         val exo = ExoPlayer.Builder(context, buildRenderersFactory())
             .setMediaSourceFactory(mediaSourceFactory)
+            .setTrackSelector(trackSelector)
             .setLoadControl(loadControl)
             .build()
 
@@ -58,19 +102,35 @@ class ExoPlayerEngine(private val context: Context) : PlayerEngine {
             override fun onPlaybackStateChanged(state: Int) {
                 when (state) {
                     Player.STATE_BUFFERING -> listener?.onBuffering()
-                    Player.STATE_READY -> listener?.onPlaying()
+                    Player.STATE_READY -> {
+                        listener?.onPlaying()
+                        scheduleNoFrameCheck()
+                    }
                     Player.STATE_ENDED -> listener?.onEnded()
                 }
             }
 
+            override fun onTracksChanged(tracks: Tracks) {
+                handler.removeCallbacks(audioCheckRunnable)
+                handler.postDelayed(audioCheckRunnable, AUDIO_CHECK_DELAY_MS)
+            }
+
+            override fun onRenderedFirstFrame() {
+                firstFrameRendered = true
+                // Give the decoder a beat to settle, then sample the surface for
+                // the tell-tale solid-green hardware-decode failure.
+                handler.postDelayed({ checkVideoFrame() }, GREEN_CHECK_DELAY_MS)
+            }
+
             override fun onPlayerError(error: PlaybackException) {
+                PlaybackLog.log(context, engineName, "onPlayerError ${error.errorCodeName}")
                 listener?.onError(error.errorCodeName)
             }
         })
 
         // Inflated from XML so the surface is a TextureView (app:surface_type),
         // which avoids the green-screen-with-audio overlay bug seen with the
-        // default SurfaceView on some Android TV panels.
+        // default SurfaceView on some Android TV panels AND lets us sample frames.
         val view = (LayoutInflater.from(context)
             .inflate(R.layout.view_exo_player, container, false) as PlayerView).apply {
             this.player = exo
@@ -82,16 +142,15 @@ class ExoPlayerEngine(private val context: Context) : PlayerEngine {
     }
 
     /**
-     * Renderers tuned so Dolby Digital (AC-3) / Dolby Digital Plus (E-AC-3) play
-     * with sound on every device. Many Android TV boxes advertise Dolby
-     * passthrough over HDMI even when nothing downstream can decode it, so
-     * ExoPlayer hands the bitstream off and you get a picture but silence — and
-     * because that is not an error, the libVLC fallback never kicks in.
+     * Renderers tuned so audio always reaches the speakers. Many Android TV boxes
+     * advertise Dolby/DTS passthrough over HDMI even when nothing downstream can
+     * decode it, so ExoPlayer hands the bitstream off and you get a picture but
+     * silence — and because that is not an error, no fallback ever kicks in.
      *
      * Forcing [AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES] (stereo PCM only)
-     * disables passthrough, so E-AC-3 is decoded to PCM on-device and audible.
-     * If the device has no Dolby decoder at all, ExoPlayer raises a real error
-     * and the controller falls back to libVLC (software E-AC-3 decode).
+     * disables passthrough, so audio is decoded to PCM on-device and audible.
+     * [setEnableDecoderFallback] lets Exo drop to another (software) decoder
+     * instead of leaving a green/blank surface.
      */
     private fun buildRenderersFactory(): DefaultRenderersFactory =
         object : DefaultRenderersFactory(context) {
@@ -99,19 +158,103 @@ class ExoPlayerEngine(private val context: Context) : PlayerEngine {
                 context: Context,
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean
-            ): AudioSink =
-                DefaultAudioSink.Builder(context)
-                    .setAudioCapabilities(AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
+            ): AudioSink {
+                val builder = DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                    .build()
+                // Default = force PCM (no passthrough). Only honour device
+                // passthrough capabilities when the user opts in.
+                if (!allowPassthrough) {
+                    builder.setAudioCapabilities(AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
+                }
+                return builder.build()
+            }
         }.setEnableDecoderFallback(true)
+
+    /**
+     * If the media carries an audio track but none could be selected (the codec
+     * has no on-device decoder and passthrough is off), playback will be silent.
+     * Report it so the controller can fall back to libVLC's software decoder.
+     */
+    private fun checkAudioSupported(tracks: Tracks) {
+        if (audioReported) return
+        var hasAudio = false
+        var audioSelected = false
+        for (group in tracks.groups) {
+            if (group.type == C.TRACK_TYPE_AUDIO) {
+                hasAudio = true
+                if (group.isSelected) audioSelected = true
+            }
+        }
+        if (hasAudio && !audioSelected) {
+            audioReported = true
+            PlaybackLog.log(
+                context,
+                engineName,
+                "audio track present but unsupported/unselected -> fallback " +
+                    "(state=${player?.playbackState}, groups=${tracks.groups.size})"
+            )
+            listener?.onAudioUnavailable()
+        }
+    }
+
+    private fun scheduleNoFrameCheck() {
+        handler.postDelayed({
+            // Reached READY with a video track but never rendered a frame =>
+            // decoder is stuck (often the green/blank failure with no error).
+            if (!videoReported && !firstFrameRendered && player?.videoFormat != null) {
+                videoReported = true
+                PlaybackLog.log(context, engineName, "no first frame for video track -> fallback")
+                listener?.onVideoInvalid()
+            }
+        }, NO_FRAME_TIMEOUT_MS)
+    }
+
+    private fun checkVideoFrame() {
+        if (videoReported) return
+        val texture = playerView?.videoSurfaceView as? TextureView ?: return
+        val bmp = runCatching { texture.getBitmap(SAMPLE_DIM, SAMPLE_DIM) }.getOrNull() ?: return
+        val green = isMostlyGreen(bmp)
+        bmp.recycle()
+        if (green) {
+            videoReported = true
+            PlaybackLog.log(context, engineName, "green/blank frame detected -> fallback")
+            listener?.onVideoInvalid()
+        }
+    }
+
+    /** True when (almost) every sampled pixel is the solid-green decoder error. */
+    private fun isMostlyGreen(bmp: Bitmap): Boolean {
+        val w = bmp.width
+        val h = bmp.height
+        if (w == 0 || h == 0) return false
+        val pixels = IntArray(w * h)
+        bmp.getPixels(pixels, 0, w, 0, 0, w, h)
+        var greenish = 0
+        for (p in pixels) {
+            val r = (p shr 16) and 0xFF
+            val g = (p shr 8) and 0xFF
+            val b = p and 0xFF
+            // Classic decoder green: strong green, weak red/blue.
+            if (g > 120 && r < 90 && b < 90) greenish++
+        }
+        return greenish >= pixels.size * 0.9f
+    }
 
     override fun play(url: String) {
         val exo = player ?: return
+        resetHealth()
+        PlaybackLog.log(context, engineName, "play passthrough=$allowPassthrough")
         exo.setMediaItem(MediaItem.fromUri(url))
         exo.playWhenReady = true
         exo.prepare()
+    }
+
+    private fun resetHealth() {
+        handler.removeCallbacksAndMessages(null)
+        firstFrameRendered = false
+        videoReported = false
+        audioReported = false
     }
 
     override fun pause() { player?.playWhenReady = false }
@@ -119,6 +262,7 @@ class ExoPlayerEngine(private val context: Context) : PlayerEngine {
     override fun stop() { player?.stop() }
 
     override fun release() {
+        handler.removeCallbacksAndMessages(null)
         player?.release()
         player = null
         playerView?.player = null
@@ -128,5 +272,16 @@ class ExoPlayerEngine(private val context: Context) : PlayerEngine {
 
     override fun setListener(listener: PlayerListener?) {
         this.listener = listener
+    }
+
+    companion object {
+        /** Debounce after a track change before judging audio as unselected. */
+        private const val AUDIO_CHECK_DELAY_MS = 1200L
+        /** Wait after the first frame before sampling for the green failure. */
+        private const val GREEN_CHECK_DELAY_MS = 1500L
+        /** If no frame renders this long after READY, treat video as failed. */
+        private const val NO_FRAME_TIMEOUT_MS = 6000L
+        /** Sampled frame size (tiny — we only need a colour signal). */
+        private const val SAMPLE_DIM = 24
     }
 }

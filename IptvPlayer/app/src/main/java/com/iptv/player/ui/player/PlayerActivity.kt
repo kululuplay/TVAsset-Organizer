@@ -82,6 +82,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
                 context = this@PlayerActivity,
                 container = binding.videoContainer,
                 mode = mode,
+                decoderMode = viewModel.decoderMode(),
+                allowPassthrough = viewModel.audioPassthrough(),
                 callback = this@PlayerActivity
             )
             val channel = viewModel.resolveChannel(channelId)

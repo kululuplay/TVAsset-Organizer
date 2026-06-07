@@ -21,10 +21,12 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
+import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.prefs.SettingsStore
 import com.iptv.player.databinding.ActivitySettingsBinding
@@ -35,6 +37,7 @@ import com.iptv.player.ui.diagnostics.DiagnosticsActivity
 import com.iptv.player.ui.login.LoginActivity
 import com.iptv.player.ui.profiles.ProfilesActivity
 import com.iptv.player.util.LocaleManager
+import com.iptv.player.util.PlaybackLog
 import com.iptv.player.work.SyncScheduler
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -61,6 +64,8 @@ class SettingsActivity : BaseActivity() {
     private var autoSyncIntervalValue: TextView? = null
     private val languageRows = linkedMapOf<String, View>()
     private val playerRows = linkedMapOf<PlayerMode, View>()
+    private var decoderModeValue: TextView? = null
+    private var passthroughSwitch: SwitchCompat? = null
 
     private var autoSyncEnabled = false
     private var autoSyncHours = 12
@@ -275,6 +280,27 @@ class SettingsActivity : BaseActivity() {
             c.addView(row)
             playerRows[mode] = row
         }
+
+        // Decoder strategy (Auto / Hardware / Software) for the green-screen fix.
+        val decoderRow = inflateMaster(c, getString(R.string.settings_decoder_mode))
+        decoderModeValue = decoderRow.findViewById<TextView>(R.id.mValue)
+            .also { it.visibility = View.VISIBLE }
+        decoderRow.setOnClickListener { showDecoderModeDialog() }
+        c.addView(decoderRow)
+
+        // Audio passthrough toggle (default OFF = decode to PCM for sound).
+        val passthroughRow = inflateMaster(c, getString(R.string.settings_audio_passthrough))
+        passthroughSwitch = passthroughRow.findViewById<SwitchCompat>(R.id.mSwitch)
+            .also { it.visibility = View.VISIBLE }
+        passthroughRow.setOnClickListener {
+            viewModel.setAudioPassthrough(!passthroughSwitch!!.isChecked)
+        }
+        c.addView(passthroughRow)
+
+        // Share the on-device playback diagnostics log (green/no-audio causes).
+        val logRow = inflateMaster(c, getString(R.string.settings_share_playback_log))
+        logRow.setOnClickListener { sharePlaybackLog() }
+        c.addView(logRow)
     }
 
     private fun buildTimePanel() {
@@ -485,6 +511,12 @@ class SettingsActivity : BaseActivity() {
             }
         }
         lifecycleScope.launch {
+            viewModel.decoderMode.collectLatest { decoderModeValue?.text = decoderModeLabel(it) }
+        }
+        lifecycleScope.launch {
+            viewModel.audioPassthrough.collectLatest { passthroughSwitch?.isChecked = it }
+        }
+        lifecycleScope.launch {
             viewModel.tmdbKey.collectLatest {
                 if (!binding.tmdbInput.isFocused) binding.tmdbInput.setText(it)
             }
@@ -548,4 +580,40 @@ class SettingsActivity : BaseActivity() {
             PlayerMode.VLC -> R.string.settings_player_vlc
         }
     )
+
+    private fun decoderModeLabel(mode: DecoderMode): String = getString(
+        when (mode) {
+            DecoderMode.AUTO -> R.string.settings_decoder_auto
+            DecoderMode.HARDWARE -> R.string.settings_decoder_hardware
+            DecoderMode.SOFTWARE -> R.string.settings_decoder_software
+        }
+    )
+
+    private fun showDecoderModeDialog() {
+        val modes = listOf(DecoderMode.AUTO, DecoderMode.HARDWARE, DecoderMode.SOFTWARE)
+        val labels = modes.map { decoderModeLabel(it) }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings_decoder_mode)
+            .setItems(labels) { _, which -> viewModel.setDecoderMode(modes[which]) }
+            .show()
+    }
+
+    private fun sharePlaybackLog() {
+        val file = PlaybackLog.file(this)
+        if (file == null || !file.exists()) {
+            Toast.makeText(this, R.string.settings_playback_log_empty, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching {
+            startActivity(Intent.createChooser(send, getString(R.string.settings_share_playback_log)))
+        }.onFailure {
+            Toast.makeText(this, R.string.settings_playback_log_empty, Toast.LENGTH_SHORT).show()
+        }
+    }
 }

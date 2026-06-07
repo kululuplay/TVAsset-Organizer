@@ -66,6 +66,25 @@ enum class PlayerMode {
     }
 }
 
+/**
+ * How aggressively to use the hardware decoder versus software (libVLC). In AUTO
+ * the player starts on hardware and automatically drops a stream to software
+ * decode when it greens / blanks or errors. Exposed in Settings.
+ */
+enum class DecoderMode {
+    /** Hardware first, automatic software fallback on green/blank or failure. */
+    AUTO,
+    /** Always use the hardware decoder (no software fallback). */
+    HARDWARE,
+    /** Always decode in software (libVLC) — most compatible, heaviest on weak sticks. */
+    SOFTWARE;
+
+    companion object {
+        fun fromName(value: String?): DecoderMode =
+            entries.firstOrNull { it.name == value } ?: AUTO
+    }
+}
+
 /** Stored connection profile (one active source at a time for this milestone). */
 data class SourceConfig(
     val type: SourceType,

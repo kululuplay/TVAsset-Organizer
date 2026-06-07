@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.ContentType
+import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -28,6 +29,10 @@ class PlayerViewModel : ViewModel() {
     }
 
     suspend fun playerMode(): PlayerMode = settings.playerMode.first()
+
+    suspend fun decoderMode(): DecoderMode = settings.getDecoderMode()
+
+    suspend fun audioPassthrough(): Boolean = settings.getAudioPassthrough()
 
     suspend fun resolveChannel(channelId: String): Channel? {
         if (playlist.isEmpty()) loadPlaylist()
