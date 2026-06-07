@@ -74,10 +74,12 @@ works because the container started empty (no prior SurfaceView to tear down).
   onError), so you cannot drive a runtime HW->SW green fallback for it.
 - Therefore neither auto path is good: HW-after-swap = green, SW = stutter.
 - The clean cure that keeps HARDWARE and avoids green is to AVOID THE SWAP:
-  `PlayerMode.VLC` starts directly on `VLC_HW` (no ExoPlayer first) -> no swap,
-  hardware decode, no green, no stutter (confirmed by the user's clean direct-VLC
-  log). Recommend VLC player mode for these channels; an option is to make AUTO
-  start on VLC_HW instead of ExoPlayer (tradeoff: loses Exo-first benefits).
+  start directly on `VLC_HW` (no ExoPlayer first) -> no swap, hardware decode, no
+  green, no stutter (confirmed by the user's clean direct-VLC log). So AUTO mode
+  starts on libVLC hardware (only the explicit ExoPlayer player mode starts on Exo);
+  AUTO still falls back VLC_HW -> VLC_SW on a real failure. **Why:** ExoPlayer-first
+  forces the green-prone swap on the very channels that need libVLC anyway. Tradeoff
+  the user accepted: ExoPlayer is no longer the first engine in AUTO.
 - Do NOT route the EXO `--AUDIO-->` fallback to VLC_SW (tried it: removes green but
   causes 1080p stutter). Do NOT switch VLC to TextureView — TextureView greens the
   working direct-VLC path on this box.

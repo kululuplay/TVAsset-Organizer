@@ -94,8 +94,15 @@ class PlayerController(
     /** First stage to try, given the engine choice and decoder strategy. */
     private fun initialStage(): Stage = when {
         decoderMode == DecoderMode.SOFTWARE -> Stage.VLC_SW
-        mode == PlayerMode.VLC -> Stage.VLC_HW
-        else -> Stage.EXO // AUTO or EXOPLAYER both start on ExoPlayer
+        // AUTO and VLC both start directly on libVLC hardware. Starting on
+        // ExoPlayer and then falling back to libVLC (e.g. for MP2/AC-3 audio Exo
+        // can't decode) forces an EXO -> VLC SurfaceView swap, after which the
+        // Amlogic HW video decoder paints a GREEN frame on the fresh surface.
+        // Software video avoids the green but stutters on 1080p, so the only path
+        // that is both green-free AND smooth is to never swap: begin on VLC_HW.
+        // ExoPlayer is used only when the user explicitly selects it.
+        mode == PlayerMode.EXOPLAYER -> Stage.EXO
+        else -> Stage.VLC_HW
     }
 
     private fun startStage(target: Stage) {
