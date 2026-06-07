@@ -1,0 +1,44 @@
+CRITICAL — the app uses BOTH a libVLC player AND an ExoPlayer/Media3 player, and BOTH are broken on real Android TV sticks (they work on the emulator only). Fix BOTH engines completely. This is the classic emulator(software-decode) vs real-stick(hardware MediaCodec) divergence. Diagnose against the confirmed reproduction data and fix every case.
+CONFIRMED REPRODUCTION DATA (real stick):
+
+GREEN SCREEN, audio OK: ac3 + h264 1920x1080 @50fps 9.64 Mbps, mp2 + h264 1920x1080 @50fps 10.31 Mbps
+VIDEO OK, NO AUDIO: eac3 + h264 1920x1080 6.11 Mbps, aac + h264 1920x1080 8.58 Mbps
+Two distinct root causes: (A) hardware H.264 decoder fails or outputs a wrong color format on 1080p@50fps high-bitrate streams → green frame; (B) audio is being sent as passthrough/SPDIF bitstream instead of decoded to PCM → no sound. Even AAC has no audio, which proves the AUDIO OUTPUT PATH is broken, not codec support.
+
+
+PART 1 — libVLC FIXES
+1A. Audio (no-sound fix): Force software audio decode to PCM; do not passthrough.
+
+Set audio output to AudioTrack, disable SPDIF (:no-spdif), and do NOT enable Dolby/DTS/HDMI passthrough by default.
+Let libVLC decode AC3 / EAC3 / MP2 / AAC / DTS in software and output PCM (stereo downmix) that any HDMI sink accepts.
+Add a Settings toggle "Audio passthrough (for AV receivers)" — default OFF (PCM).
+
+1B. Video (green-screen fix): Single SurfaceView (never TextureView), attached exactly once (no double attach / no two surfaces).
+
+Hardware decoding = automatic, WITH automatic software-decode fallback: if the hardware decoder errors, or produces no real frame / a green-or-blank surface within a short timeout after start, restart that stream with software decoding (force avcodec, disable MediaCodec for that media). Per-stream, automatic, no user action.
+Set display chroma explicitly to resolve the color-format mismatch (try --android-display-chroma RV32, fall back RV16).
+Expose decoder mode in Settings: Auto / Hardware / Software.
+
+
+PART 2 — ExoPlayer / Media3 FIXES
+2A. Audio (no-sound fix):
+
+The no-audio on EAC3/AC3 (and even AAC) means audio is being routed as a passthrough/encoded bitstream the stick can't emit. Configure the audio renderer to decode to PCM instead of passthrough.
+Build the DefaultRenderersFactory / DefaultAudioSink so that tunneling and encoded audio passthrough are DISABLED by default (do not enable setEnableAudioTrackPlaybackParams/offload/passthrough). Force PCM decode for AC3/EAC3 via the appropriate decoder (enable the FFmpeg audio extension / ffmpeg-decoder so AC3, EAC3, MP2, DTS decode in software to PCM, since stock MediaCodec audio decoders for these are often absent on cheap sticks).
+If the FFmpeg audio renderer extension is needed for AC3/EAC3/MP2/DTS, add it and set renderer extension mode to prefer extension decoders for audio.
+Add the same "Audio passthrough" Settings toggle, default OFF.
+
+2B. Video (green-screen fix):
+
+Use SurfaceView output (not TextureView) on the PlayerView.
+Handle MediaCodec decoder init/decode failures: enable setEnableDecoderFallback(true) on DefaultRenderersFactory so Exo falls back to another (software) decoder instead of leaving a green/blank surface.
+For 1080p@50fps high-bitrate H.264 that the hardware decoder can't handle, fall back to a software H.264 decoder (FFmpeg video extension or androidx.media3 software decoder) automatically.
+Disable video tunneling by default (tunneling commonly causes green/black frames on cheap sticks).
+Listen to Player.Listener.onPlayerError / onVideoSizeChanged and detect a stuck/green state, then retry with decoder fallback / software path.
+
+
+PART 3 — SHARED REQUIREMENTS (both engines)
+3A. Unified fallback policy: For each stream, attempt hardware first; on decode failure OR detected green/blank video OR missing audio, automatically retry that stream with software decode (video and/or audio) — without user interaction and without killing the single connection improperly (full stop→release→restart, one connection at a time).
+3B. Don't trust the emulator: All verification must be on a real stick. Add on-device libVLC logging (libVLC log + Media.Stats) and ExoPlayer AnalyticsListener/EventLogger output, captured to a file the user can send, so the green-screen and no-audio causes are confirmable from real-device logs.
+3C. Performance caution: Software-decoding 1080p@50fps high-bitrate H.264 is heavy on the weakest sticks — keep buffering stable so the software fallback plays without stutter, and prefer hardware whenever it actually produces valid frames+audio.
+3D. ACCEPTANCE TEST (must pass on a real stick, both players): All four sample streams play with BOTH video AND audio — the AC3 and MP2 1080p50 streams show real video (no green screen), and the EAC3 and AAC streams have audible sound. Verify by switching between the two player engines in Settings and confirming each engine passes all four.
