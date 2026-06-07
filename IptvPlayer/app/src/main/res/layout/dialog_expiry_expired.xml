@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launch-time "subscription expired" hard notice. Brand badge + title, a clear
+     message that no content can be watched, the expiry date, and a single primary
+     acknowledge button. D-pad focusable for TV. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="520dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_dialog"
+    android:gravity="center_horizontal"
+    android:padding="@dimen/space_l">
+
+    <ImageView
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:background="@drawable/bg_logo_badge"
+        android:padding="20dp"
+        android:src="@drawable/ic_clock"
+        android:contentDescription="@null"
+        android:tint="@color/danger" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_m"
+        android:text="@string/expiry_expired_title"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_title"
+        android:textStyle="bold"
+        android:gravity="center" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_m"
+        android:text="@string/expiry_expired_message"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_body"
+        android:gravity="center"
+        android:lineSpacingMultiplier="1.15" />
+
+    <TextView
+        android:id="@+id/expiredDate"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_s"
+        android:textColor="@color/danger"
+        android:textSize="@dimen/text_body"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:visibility="gone"
+        tools:text="Expired on 1 January 2026"
+        xmlns:tools="http://schemas.android.com/tools" />
+
+    <TextView
+        android:id="@+id/expiredOkButton"
+        android:layout_width="220dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_l"
+        android:background="@drawable/bg_button_primary"
+        android:focusable="true"
+        android:gravity="center"
+        android:paddingHorizontal="@dimen/space_l"
+        android:paddingVertical="@dimen/space_m"
+        android:text="@string/action_ok"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_body"
+        android:textStyle="bold" />
+</LinearLayout>

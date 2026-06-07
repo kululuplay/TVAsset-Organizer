@@ -61,10 +61,10 @@ class DashboardActivity : BaseActivity() {
         // Land on the Live hero so the remote has an obvious starting point.
         binding.tileLive.root.requestFocus()
 
-        // Quietly check for a newer build once per session and offer to update.
-        // If no update prompt shows, fall back to the subscription-expiry reminder
-        // so the two launch dialogs never overlap.
-        UpdatePrompt.maybeShow(this) { ExpiryWarningPrompt.maybeShow(this) }
+        // Subscription state takes priority: an expired account must always see
+        // its notice at launch, even when an update is available. If no expiry
+        // dialog is due, fall back to the update prompt so the two never overlap.
+        ExpiryWarningPrompt.maybeShow(this) { UpdatePrompt.maybeShow(this) }
     }
 
     override fun onResume() {

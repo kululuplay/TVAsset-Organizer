@@ -210,4 +210,8 @@
     <string name="expiry_warning_title">Subscription expiring soon</string>
     <string name="expiry_warning_message">Your subscription expires in 5 days or less. To avoid interruption to your streams, please renew in advance with your IPTV provider.</string>
     <string name="expiry_warning_dont_show">Don\'t show again</string>
+    <!-- Subscription already expired (hard block, shown at launch) -->
+    <string name="expiry_expired_title">Your subscription has expired</string>
+    <string name="expiry_expired_message">Your subscription period has ended, so you can no longer watch any content. To continue watching, please renew your subscription with your IPTV provider.</string>
+    <string name="expiry_expired_date">Expired on %1$s</string>
 </resources>
