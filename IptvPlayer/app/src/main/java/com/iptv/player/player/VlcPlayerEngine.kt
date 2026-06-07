@@ -69,31 +69,24 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
     }
 
     override fun bind(container: ViewGroup) {
-        // Conservative, known-good live playback set. An earlier "tuning" pass
-        // added decode shortcuts (--avcodec-skiploopfilter=all / --avcodec-fast)
-        // and disabled the clock jitter/synchro guards; together they produced
-        // green/blocky frames and stuttering on weaker Android TV hardware, so
-        // they are intentionally NOT used here. Re-tune one option at a time.
+        // Known-good v1.0.0 (commit 57e9100) playback set. This is the exact
+        // decode configuration that played cleanly on the user's Android TV
+        // hardware; the later "no-direct-rendering" / no-frame-drop variants
+        // reintroduced the green screen on that box, so we restore these.
         val options = arrayListOf(
-            // Low-latency-but-stable live buffer: small enough to keep zapping
-            // responsive, big enough to ride out normal network jitter.
+            // Bigger live buffer soaks up network hiccups before they freeze.
             "--network-caching=$NETWORK_CACHING_MS",
             "--live-caching=$NETWORK_CACHING_MS",
-            // Decode and render every frame in order — no frame dropping/skipping
-            // and full deblocking. This is the pre-regression behavior that
-            // played cleanly, without green artifacts or visible corruption.
-            "--no-drop-late-frames",
-            "--no-skip-frames",
-            // Hardware decode, automatic: libVLC picks MediaCodec when usable and
-            // degrades to software on its own; our watchdog adds a per-stream
-            // software restart on top for panels that fail silently.
+            // Many IPTV TS streams carry irregular PCR/timestamps; disabling the
+            // jitter/synchro guards stops VLC from stalling to "catch up".
+            "--clock-jitter=0",
+            "--clock-synchro=0",
+            // Hardware decode (libVLC degrades to software on its own).
             "--avcodec-hw=any",
-            // Disable hardware "direct rendering": several Android TV panels show
-            // a solid green picture (audio fine) when the MediaCodec/OMX decoder
-            // pushes frames straight to the surface. Copying frames out first
-            // keeps hardware decode but renders correctly on a plain SurfaceView.
-            "--no-mediacodec-dr",
-            "--no-omxil-dr",
+            // Cut decode load so cheap TV boxes keep up: skip the deblocking
+            // loop filter and allow fast (slightly looser) decoding.
+            "--avcodec-skiploopfilter=all",
+            "--avcodec-fast",
             // Auto-reconnect when an HTTP segment/stream connection drops.
             "--http-reconnect",
             // Report KULULUPLAY instead of the default "VLC/3.0.x LibVLC/3.0.x".
@@ -177,12 +170,15 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
                     setHWDecoderEnabled(false, false)
                     addOption(":avcodec-hw=none")
                 } else {
-                    // Hardware decode, automatic (libVLC may fall back internally).
-                    setHWDecoderEnabled(true, false)
+                    // Prefer hardware decoding; libVLC degrades to software on
+                    // failure. Matches the known-good v1.0.0 (57e9100) behavior.
+                    setHWDecoderEnabled(true, true)
                 }
-                // Mirror the instance buffer settings at the stream level.
+                // Mirror the instance buffer/jitter tuning at the stream level.
                 addOption(":network-caching=$NETWORK_CACHING_MS")
                 addOption(":live-caching=$NETWORK_CACHING_MS")
+                addOption(":clock-jitter=0")
+                addOption(":clock-synchro=0")
                 // Auto-reconnect dropped HTTP connections instead of erroring out.
                 addOption(":http-reconnect")
                 // Per-stream User-Agent override (HTTP(S) playlist + segments).
@@ -347,11 +343,11 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
 
     companion object {
         /**
-         * Live/network buffer in ms. Kept low (~1.5 s) so channel zapping stays
-         * responsive while still riding out normal IPTV jitter; combined with
-         * --http-reconnect this auto-recovers from brief drops without stalling.
+         * Live/network buffer in ms. Restored to the known-good v1.0.0 (57e9100)
+         * value: a larger buffer trades a little extra zap/startup latency for far
+         * fewer stalls and freezes on jittery IPTV connections.
          */
-        private const val NETWORK_CACHING_MS = 1500
+        private const val NETWORK_CACHING_MS = 3000
 
         /**
          * How long after the Playing event we wait for a video surface before
