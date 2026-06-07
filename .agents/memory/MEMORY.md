@@ -23,3 +23,4 @@
 - [Paging refresh focus scroll](paging-refresh-focus-scroll.md) — TV grid must NOT scrollToPosition(0) on Paging refresh-settle while it hasFocus; lazy Room writes invalidate the source and steal focus mid-scroll.
 - [EPG id matching](epg-id-matching.md) — normalize epg ids (trim+lowercase) on store AND query; name fallback via in-memory XMLTV display-name index (no Room table: destructive migration); parseTime must handle glued ±HHMM offsets.
 - [Launch dialog priority & chaining](launch-dialog-priority.md) — expiry check runs before update prompt; chain via onNoPrompt so only one shows; expired notice is non-cancelable.
+- [VOD vs live playback paths](vod-vs-live-playback-paths.md) — VOD (VodPlayerActivity) & live TV (PlayerController/VlcPlayerEngine) are separate libVLC setups; mirror decode/anti-stutter tuning on both or one stutters.

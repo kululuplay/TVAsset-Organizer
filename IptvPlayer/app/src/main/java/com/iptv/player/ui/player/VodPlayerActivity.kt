@@ -26,6 +26,7 @@ import com.iptv.player.R
 import com.iptv.player.cast.CastController
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.AspectRatio
+import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.ResumeKind
 import com.iptv.player.data.model.ResumeMeta
 import com.iptv.player.databinding.ActivityVodPlayerBinding
@@ -84,6 +85,10 @@ class VodPlayerActivity : BaseActivity() {
 
     private var aspect: AspectRatio = AspectRatio.ORIGINAL
     private var userSeeking = false
+
+    // Mirrors live TV: when the global Decoder setting is SOFTWARE we disable
+    // MediaCodec and decode everything in software (matches PlayerController).
+    private var forceSoftware = false
 
     // Position to jump to once playback actually starts (resume support). VLC only
     // accepts a seek after the first Playing event, so we defer it until then.
@@ -242,25 +247,61 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     private fun initPlayer() {
-        // VOD tuning: a moderate buffer for smooth start-up and seeking, hardware
-        // decode where possible, auto-reconnect, and our branded User-Agent.
+        // Read the global Decoder + aspect settings BEFORE building libVLC so VOD
+        // honours the same Decoder choice as live TV (PlayerController). With the
+        // default Decoder = SOFTWARE this decodes movies/series in software too.
+        lifecycleScope.launch {
+            forceSoftware = settings.getDecoderMode() == DecoderMode.SOFTWARE
+            aspect = settings.aspectRatio.first()
+            buildPlayer()
+            val saved = resumeId?.let { repo.getResume(it) } ?: 0L
+            when {
+                saved <= 0L -> preparePlayback(0L)
+                // From the Continue Watching rail the user already chose to resume.
+                autoResume -> preparePlayback(saved)
+                else -> promptResume(saved)
+            }
+        }
+    }
+
+    private fun buildPlayer() {
+        // Mirror live TV (VlcPlayerEngine): the same anti-stutter decode tuning so
+        // movies/series play as smoothly as channels. clock-jitter/synchro off stops
+        // VLC stalling to "catch up" on irregular timestamps; skiploopfilter + fast
+        // cut decode load on weak boxes; HW unless the Decoder setting forces SW.
         val options = arrayListOf(
             "--network-caching=$CACHING_MS",
             "--file-caching=$CACHING_MS",
-            "--avcodec-hw=any",
+            // Irregular PCR/timestamps make VLC stall to resync; disabling the
+            // jitter/synchro guards is the main fix for stutter.
+            "--clock-jitter=0",
+            "--clock-synchro=0",
+            // Hardware decode unless the user's Decoder setting forces software.
+            if (forceSoftware) "--avcodec-hw=none" else "--avcodec-hw=any",
             // Disable MediaCodec/OMX direct rendering (known-good v1.0.1 baseline):
             // VLC renders decoded frames via the android_display vout onto the
             // SurfaceView. The opaque DR path + a forced RV32 display chroma froze
             // playback on this Amlogic box ("output: 17 unknown" + "dequeue_in
-            // timeout"). No deinterlace and no display-chroma override here.
+            // timeout"). No display-chroma override here.
             "--no-mediacodec-dr",
             "--no-omxil-dr",
+            // Cut decode load so cheap TV boxes keep up: skip the deblocking loop
+            // filter and allow fast (slightly looser) decoding.
+            "--avcodec-skiploopfilter=all",
+            "--avcodec-fast",
             // Decode audio to PCM (no SPDIF/passthrough) so AC-3/E-AC-3/DTS are
             // always audible on plain HDMI sinks.
             "--no-spdif",
             "--http-reconnect",
             "--http-user-agent=${AppInfo.USER_AGENT}"
         )
+        // Software-path deinterlace only: opaque HW buffers can't be filtered and
+        // the Amlogic HW decoder deinterlaces natively; software decode emits raw
+        // frames that bob CAN deinterlace.
+        if (forceSoftware) {
+            options.add("--deinterlace=1")
+            options.add("--deinterlace-mode=bob")
+        }
         val vlc = LibVLC(this, options)
         vlc.setUserAgent(AppInfo.USER_AGENT, AppInfo.USER_AGENT)
         val mp = MediaPlayer(vlc)
@@ -334,17 +375,6 @@ class VodPlayerActivity : BaseActivity() {
         libVlc = vlc
         mediaPlayer = mp
         videoLayout = layout
-
-        lifecycleScope.launch {
-            aspect = settings.aspectRatio.first()
-            val saved = resumeId?.let { repo.getResume(it) } ?: 0L
-            when {
-                saved <= 0L -> preparePlayback(0L)
-                // From the Continue Watching rail the user already chose to resume.
-                autoResume -> preparePlayback(saved)
-                else -> promptResume(saved)
-            }
-        }
     }
 
     private fun promptResume(positionMs: Long) {
@@ -362,9 +392,19 @@ class VodPlayerActivity : BaseActivity() {
         val url = streamUrl ?: return
         pendingSeekMs = positionMs
         val media = Media(vlc, android.net.Uri.parse(url)).apply {
-            setHWDecoderEnabled(true, true)
+            // Hardware decoding unless the global Decoder setting forces software
+            // (mirrors VlcPlayerEngine on the live TV path).
+            setHWDecoderEnabled(!forceSoftware, !forceSoftware)
             addOption(":network-caching=$CACHING_MS")
             addOption(":file-caching=$CACHING_MS")
+            addOption(":clock-jitter=0")
+            addOption(":clock-synchro=0")
+            if (forceSoftware) addOption(":avcodec-hw=none")
+            addOption(":no-spdif")
+            if (forceSoftware) {
+                addOption(":deinterlace=1")
+                addOption(":deinterlace-mode=bob")
+            }
             addOption(":http-reconnect")
             addOption(":http-user-agent=${AppInfo.USER_AGENT}")
         }
