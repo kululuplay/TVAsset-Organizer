@@ -11,7 +11,6 @@ import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.PlayerMode
-import com.iptv.player.ui.home.HomeViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -20,41 +19,18 @@ class PlayerViewModel : ViewModel() {
     private val repo = ServiceLocator.repository
     private val settings = ServiceLocator.settings
 
-    /** Flat list of channels used for up/down zapping (scoped to the source category). */
+    /** Flat list of live channels used for up/down zapping. */
     private var playlist: List<Channel> = emptyList()
     private var currentIndex: Int = -1
 
-    /**
-     * Loads the zapping playlist for the category the player was opened from, so
-     * up/down stays within that filtered list (e.g. Favorites) instead of jumping
-     * to the next channel in the global list. A null category means "all live".
-     */
-    suspend fun loadPlaylist(categoryId: String?) {
-        playlist = when (categoryId) {
-            null -> repo.observeChannels(ContentType.LIVE)
-            HomeViewModel.CAT_FAVORITES -> repo.observeFavorites()
-            HomeViewModel.CAT_RECENT -> repo.observeRecent()
-            else -> repo.observeChannelsByCategory(ContentType.LIVE, categoryId)
-        }.first()
+    suspend fun loadPlaylist() {
+        playlist = repo.observeChannels(ContentType.LIVE).first()
     }
 
     suspend fun playerMode(): PlayerMode = settings.playerMode.first()
 
-    // ---- Preferred audio / subtitle track ------------------------------
-
-    suspend fun preferredAudioToken(): String? = settings.getPreferredAudioTrack()
-    suspend fun preferredSubtitleToken(): String? = settings.getPreferredSubtitleTrack()
-
-    fun savePreferredAudio(token: String) {
-        viewModelScope.launch { settings.setPreferredAudioTrack(token) }
-    }
-
-    fun savePreferredSubtitle(token: String) {
-        viewModelScope.launch { settings.setPreferredSubtitleTrack(token) }
-    }
-
-    suspend fun resolveChannel(channelId: String, categoryId: String?): Channel? {
-        if (playlist.isEmpty()) loadPlaylist(categoryId)
+    suspend fun resolveChannel(channelId: String): Channel? {
+        if (playlist.isEmpty()) loadPlaylist()
         currentIndex = playlist.indexOfFirst { it.id == channelId }
         return repo.getChannel(channelId)?.also { markWatched(channelId) }
     }

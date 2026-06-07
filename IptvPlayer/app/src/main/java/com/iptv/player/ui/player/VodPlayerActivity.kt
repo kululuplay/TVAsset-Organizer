@@ -13,7 +13,6 @@
  */
 package com.iptv.player.ui.player
 
-import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -31,9 +30,7 @@ import com.iptv.player.data.model.ResumeKind
 import com.iptv.player.data.model.ResumeMeta
 import com.iptv.player.databinding.ActivityVodPlayerBinding
 import com.iptv.player.ui.common.BaseActivity
-import com.iptv.player.ui.common.PlayerScreenGuard
 import com.iptv.player.ui.common.SleepTimer
-import com.iptv.player.ui.dashboard.DashboardActivity
 import com.iptv.player.util.AppInfo
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -61,10 +58,8 @@ class VodPlayerActivity : BaseActivity() {
         const val EXTRA_AUTO_RESUME = "extra_auto_resume"
         private const val SKIP_MS = 10_000L
         private const val SAVE_INTERVAL_MS = 10_000L
-        // VOD buffer (ms): larger than live so start-up and seeking stay smooth on
-        // jittery connections without breaking the buffer. --http-reconnect keeps
-        // a dropped connection recovering over long movies.
-        private const val CACHING_MS = 4000
+        // Buffer (ms) for smooth start-up and seeking on jittery connections.
+        private const val CACHING_MS = 1500
         // How long the "languages / subtitles available" banner stays visible.
         private const val TRACK_HINT_MS = 4500L
         // Debounce after track-detection events before evaluating the hint, so we
@@ -72,9 +67,6 @@ class VodPlayerActivity : BaseActivity() {
         private const val TRACK_HINT_DEBOUNCE_MS = 1200L
         // Auto-hide the on-screen controls after this much inactivity.
         private const val CONTROLS_TIMEOUT_MS = 5000L
-        // How long after playback starts we wait for a video surface before
-        // assuming hardware decode failed silently and restarting in software.
-        private const val VOUT_TIMEOUT_MS = 6000L
     }
 
     private lateinit var binding: ActivityVodPlayerBinding
@@ -97,48 +89,6 @@ class VodPlayerActivity : BaseActivity() {
     // accepts a seek after the first Playing event, so we defer it until then.
     private var pendingSeekMs = 0L
 
-    // Per-stream decode state: each stream starts at hardware-auto and falls back
-    // to software decode once if it errors or produces no video surface.
-    private var softwareDecode = false
-    private var sawVout = false
-    private var viewsAttached = false
-
-    // Single-connection state. [transitionLock] serializes every start/stop so a
-    // restart can never open a second connection before the first is closed.
-    // The background-release / foreground-reacquire ordering lives in
-    // [playbackCoordinator] (a pure, unit-tested state machine): on background we
-    // release the stream entirely (close the socket) and remember the position so
-    // the foreground can re-acquire from exactly where we left off.
-    private val transitionLock = Any()
-    private val playbackCoordinator = VodPlaybackCoordinator(
-        object : VodPlaybackCoordinator.Actions {
-            override fun persistResume() = this@VodPlayerActivity.persistResume()
-            override fun currentPositionMs(): Long =
-                mediaPlayer?.time?.coerceAtLeast(0L) ?: 0L
-
-            override fun stopStream() {
-                synchronized(transitionLock) {
-                    mediaPlayer?.stop()
-                    detachVideoViews()
-                }
-            }
-
-            override fun startPlayback(positionMs: Long) {
-                // A returning foreground always restarts at hardware-auto decode.
-                softwareDecode = false
-                this@VodPlayerActivity.startPlayback(positionMs)
-            }
-
-            override fun attachViews() = attachVideoViews()
-            override fun detachViews() = detachVideoViews()
-        }
-    )
-    private val voutWatchdog = Runnable {
-        // Playback started but no video surface ever appeared: hardware decode
-        // produced audio only (or a blank/green frame). Retry in software.
-        if (!sawVout && !softwareDecode) restartSoftware()
-    }
-
     // Show the multi-language / subtitle hint at most once per playback session.
     private var trackHintShown = false
     private val trackHintRunnable = Runnable { showTrackHintIfAvailable() }
@@ -149,7 +99,6 @@ class VodPlayerActivity : BaseActivity() {
     private val hideControlsRunnable = Runnable { setControlsVisible(false) }
 
     private val sleepTimer = SleepTimer { finish() }
-    private val screenGuard = PlayerScreenGuard(this) { teardownAndGoHome() }
     private val castController by lazy {
         CastController(this) {
             val url = streamUrl ?: return@CastController null
@@ -204,8 +153,6 @@ class VodPlayerActivity : BaseActivity() {
         }
 
         setupControls()
-        // Listen for a real device screen-off (remote Power OFF) to tear down.
-        screenGuard.register()
         initPlayer()
         // Controls start visible; auto-hide them after a few idle seconds.
         scheduleHideControls()
@@ -300,9 +247,6 @@ class VodPlayerActivity : BaseActivity() {
         val options = arrayListOf(
             "--network-caching=$CACHING_MS",
             "--file-caching=$CACHING_MS",
-            // Hardware decode, automatic: libVLC picks MediaCodec when usable and
-            // degrades to software on its own; the watchdog below adds a
-            // per-stream software restart for panels that fail silently.
             "--avcodec-hw=any",
             // Disable hardware direct rendering — prevents the green-screen-with-
             // audio bug on TV panels whose surface can't take decoder frames raw.
@@ -322,13 +266,8 @@ class VodPlayerActivity : BaseActivity() {
             )
         }
         binding.videoContainer.addView(layout)
-        libVlc = vlc
-        mediaPlayer = mp
-        videoLayout = layout
-        // Single video surface only: a plain SurfaceView with no separate
-        // subtitle surface (subtitles are blended onto the video surface). A
-        // second surface caused the doubled/ghosted image on low-end TV sticks.
-        attachVideoViews()
+        // true = render embedded subtitles onto the video surface.
+        mp.attachViews(layout, null, true, false)
 
         mp.setEventListener { event ->
             when (event.type) {
@@ -340,8 +279,6 @@ class VodPlayerActivity : BaseActivity() {
                     binding.bufferingIndicator.visibility = View.GONE
                     binding.playPauseButton.setImageResource(R.drawable.ic_pause)
                     binding.playPauseButton.contentDescription = getString(R.string.player_pause)
-                    // Hold the screen on only while actually playing.
-                    screenGuard.keepScreenOn(true)
                     // Restart the idle timer once real playback begins.
                     scheduleHideControls()
                     // Apply the deferred resume seek once, now that VLC is ready.
@@ -357,18 +294,6 @@ class VodPlayerActivity : BaseActivity() {
                         handler.removeCallbacks(trackHintRunnable)
                         handler.postDelayed(trackHintRunnable, TRACK_HINT_DEBOUNCE_MS)
                     }
-                    // Watch for a missing video surface (hardware decode produced
-                    // audio only / a blank frame) while on the hardware attempt.
-                    if (!softwareDecode) {
-                        handler.removeCallbacks(voutWatchdog)
-                        handler.postDelayed(voutWatchdog, VOUT_TIMEOUT_MS)
-                    }
-                }
-                MediaPlayer.Event.Vout -> {
-                    if (event.voutCount > 0) {
-                        sawVout = true
-                        handler.removeCallbacks(voutWatchdog)
-                    }
                 }
                 MediaPlayer.Event.ESAdded -> {
                     // Each elementary stream (audio/subtitle) detected resets the
@@ -381,33 +306,26 @@ class VodPlayerActivity : BaseActivity() {
                 MediaPlayer.Event.Paused -> {
                     binding.playPauseButton.setImageResource(R.drawable.ic_play)
                     binding.playPauseButton.contentDescription = getString(R.string.detail_play)
-                    // Paused: let the device sleep normally again.
-                    screenGuard.keepScreenOn(false)
                 }
                 MediaPlayer.Event.Stopped -> {
                     binding.playPauseButton.setImageResource(R.drawable.ic_play)
                     binding.playPauseButton.contentDescription = getString(R.string.detail_play)
-                    screenGuard.keepScreenOn(false)
                 }
                 MediaPlayer.Event.EndReached -> {
                     binding.playPauseButton.setImageResource(R.drawable.ic_play)
                     binding.playPauseButton.contentDescription = getString(R.string.detail_play)
-                    screenGuard.keepScreenOn(false)
                     persistResume()
                 }
                 MediaPlayer.Event.EncounteredError -> {
-                    // Hardware decode error: silently retry the same stream in
-                    // software once before surfacing the failure to the user.
-                    // Posted off the VLC event thread before touching the player.
-                    if (!softwareDecode) {
-                        handler.post { restartSoftware() }
-                    } else {
-                        binding.bufferingIndicator.visibility = View.GONE
-                    }
+                    binding.bufferingIndicator.visibility = View.GONE
                 }
                 MediaPlayer.Event.LengthChanged -> updateDuration()
             }
         }
+
+        libVlc = vlc
+        mediaPlayer = mp
+        videoLayout = layout
 
         lifecycleScope.launch {
             aspect = settings.aspectRatio.first()
@@ -431,75 +349,21 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     private fun preparePlayback(positionMs: Long) {
-        // A fresh stream always starts at hardware-auto.
-        softwareDecode = false
-        startPlayback(positionMs)
-    }
-
-    private fun startPlayback(positionMs: Long) {
-        synchronized(transitionLock) {
-            val vlc = libVlc ?: return
-            val mp = mediaPlayer ?: return
-            val url = streamUrl ?: return
-            handler.removeCallbacks(voutWatchdog)
-            sawVout = false
-            // Single-connection contract: close any existing stream before opening
-            // the next so only one VOD connection is ever held (a software-decode
-            // restart or a returning foreground must not stack a second socket).
-            mp.stop()
-            // The surface is detached on background; re-attach before playing.
-            attachVideoViews()
-            pendingSeekMs = positionMs
-            val media = Media(vlc, android.net.Uri.parse(url)).apply {
-                if (softwareDecode) {
-                    // Force pure software decode for this restart.
-                    setHWDecoderEnabled(false, false)
-                    addOption(":avcodec-hw=none")
-                } else {
-                    // Hardware decode, automatic (libVLC may fall back internally).
-                    setHWDecoderEnabled(true, false)
-                }
-                addOption(":network-caching=$CACHING_MS")
-                addOption(":file-caching=$CACHING_MS")
-                addOption(":http-reconnect")
-                addOption(":http-user-agent=${AppInfo.USER_AGENT}")
-            }
-            mp.media = media
-            media.release()
-            mp.play()
-            playbackCoordinator.markPlaybackStarted()
-            startTimers()
-        }
-    }
-
-    /**
-     * Restart the current stream in software decode after a hardware-decode
-     * error or a missing video surface. Resumes from roughly where we were so
-     * the switch is invisible to the viewer.
-     */
-    private fun restartSoftware() {
-        if (softwareDecode) return
-        softwareDecode = true
-        val resumeAt = (mediaPlayer?.time ?: 0L).coerceAtLeast(pendingSeekMs)
-        startPlayback(resumeAt)
-    }
-
-    // ---- Video surface lifecycle ---------------------------------------
-
-    private fun attachVideoViews() {
-        if (viewsAttached) return
+        val vlc = libVlc ?: return
         val mp = mediaPlayer ?: return
-        val layout = videoLayout ?: return
-        // 3rd arg false = no separate subtitle surface; 4th arg false = plain
-        // SurfaceView (not TextureView). One video surface only.
-        mp.attachViews(layout, null, false, false)
-        viewsAttached = true
-    }
-
-    private fun detachVideoViews() {
-        if (!viewsAttached) return
-        mediaPlayer?.detachViews()
-        viewsAttached = false
+        val url = streamUrl ?: return
+        pendingSeekMs = positionMs
+        val media = Media(vlc, android.net.Uri.parse(url)).apply {
+            setHWDecoderEnabled(true, true)
+            addOption(":network-caching=$CACHING_MS")
+            addOption(":file-caching=$CACHING_MS")
+            addOption(":http-reconnect")
+            addOption(":http-user-agent=${AppInfo.USER_AGENT}")
+        }
+        mp.media = media
+        media.release()
+        mp.play()
+        startTimers()
     }
 
     private fun startTimers() {
@@ -714,62 +578,26 @@ class VodPlayerActivity : BaseActivity() {
 
     // ---- Lifecycle ------------------------------------------------------
 
-    override fun onStart() {
-        super.onStart()
-        // Re-acquire a backgrounded stream (from where we left off) or, on the
-        // first foreground / nothing-to-resume, just (re)attach the surface.
-        playbackCoordinator.onStart()
-    }
-
     override fun onStop() {
         super.onStop()
+        persistResume()
         handler.removeCallbacks(progressRunnable)
         handler.removeCallbacks(saveRunnable)
-        handler.removeCallbacks(voutWatchdog)
-        // Fully release the connection on background (close the socket) rather
-        // than pausing, which would keep the single subscription slot busy; the
-        // coordinator records the position so onStart can resume from it.
-        playbackCoordinator.onStop()
-        // Not in the foreground anymore: don't keep the screen awake.
-        screenGuard.keepScreenOn(false)
-    }
-
-    /**
-     * Invoked on a real device screen-off (remote Power OFF). Saves the resume
-     * position, fully releases the player so the single stream connection closes,
-     * then returns to the home screen so power-on lands cleanly on Home.
-     */
-    private fun teardownAndGoHome() {
-        persistResume()
-        screenGuard.keepScreenOn(false)
-        releasePlayer()
-        val intent = Intent(this, DashboardActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        startActivity(intent)
-        finish()
-    }
-
-    /** Fully tears down libVLC. Safe to call more than once. */
-    private fun releasePlayer() {
-        handler.removeCallbacksAndMessages(null)
-        mediaPlayer?.setEventListener(null)
-        mediaPlayer?.stop()
-        detachVideoViews()
-        mediaPlayer?.release()
-        libVlc?.release()
-        mediaPlayer = null
-        libVlc = null
-        videoLayout = null
+        mediaPlayer?.pause()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         sleepTimer.release()
-        screenGuard.unregister()
         castController.detach()
-        releasePlayer()
+        handler.removeCallbacksAndMessages(null)
+        mediaPlayer?.setEventListener(null)
+        mediaPlayer?.stop()
+        mediaPlayer?.detachViews()
+        mediaPlayer?.release()
+        libVlc?.release()
+        mediaPlayer = null
+        libVlc = null
+        videoLayout = null
     }
 }

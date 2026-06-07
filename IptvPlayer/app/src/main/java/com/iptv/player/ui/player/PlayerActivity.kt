@@ -9,7 +9,6 @@
  */
 package com.iptv.player.ui.player
 
-import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -27,12 +26,9 @@ import com.iptv.player.data.model.NowNext
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.databinding.ActivityPlayerBinding
 import com.iptv.player.player.PlayerController
-import com.iptv.player.player.PlayerEngine
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
-import com.iptv.player.ui.common.PlayerScreenGuard
 import com.iptv.player.ui.common.SleepTimer
-import com.iptv.player.ui.dashboard.DashboardActivity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -40,11 +36,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     companion object {
         const val EXTRA_CHANNEL_ID = "extra_channel_id"
-
-        /**
-         * Optional source category id (e.g. HomeViewModel.CAT_FAVORITES) so up/down
-         * zapping cycles within the list the channel was opened from. Null = all live.
-         */
+        // Kept for caller compatibility (Home/Favorites pass a category to scope
+        // channel zapping); this restored player zaps the full live list and
+        // simply ignores the extra.
         const val EXTRA_CATEGORY_ID = "extra_category_id"
         private const val OVERLAY_TIMEOUT = 4000L
         private const val LONG_PRESS_MS = 600L
@@ -62,7 +56,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     private var epgJob: Job? = null
 
     private val sleepTimer = SleepTimer { finish() }
-    private val screenGuard = PlayerScreenGuard(this) { teardownAndGoHome() }
     private val castController by lazy {
         CastController(this) {
             val channel = currentChannel ?: return@CastController null
@@ -76,15 +69,12 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         setContentView(binding.root)
 
         castController.attach()
-        // Listen for a real device screen-off (remote Power OFF) to tear down.
-        screenGuard.register()
 
         val channelId = intent.getStringExtra(EXTRA_CHANNEL_ID)
         if (channelId == null) {
             finish()
             return
         }
-        val categoryId = intent.getStringExtra(EXTRA_CATEGORY_ID)
 
         lifecycleScope.launch {
             val mode: PlayerMode = viewModel.playerMode()
@@ -92,11 +82,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
                 context = this@PlayerActivity,
                 container = binding.videoContainer,
                 mode = mode,
-                callback = this@PlayerActivity,
-                initialAudioToken = viewModel.preferredAudioToken(),
-                initialSubtitleToken = viewModel.preferredSubtitleToken()
+                callback = this@PlayerActivity
             )
-            val channel = viewModel.resolveChannel(channelId, categoryId)
+            val channel = viewModel.resolveChannel(channelId)
             if (channel == null) {
                 Toast.makeText(this@PlayerActivity, R.string.error_unknown, Toast.LENGTH_SHORT).show()
                 finish()
@@ -109,9 +97,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     private fun startChannel(channel: Channel) {
         currentChannel = channel
         controller.play(channel.streamUrl)
-        // Hold the screen on for the whole live session (buffering / reconnects
-        // included). The flag is dropped when the user leaves or playback stops.
-        screenGuard.keepScreenOn(true)
         showOverlay(channel)
     }
 
@@ -185,17 +170,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         labels.add(getString(R.string.sleep_timer))
         actions.add { showSleepDialog() }
 
-        if (::controller.isInitialized) {
-            if (controller.availableAudioTracks().size > 1) {
-                labels.add(getString(R.string.audio_track))
-                actions.add { showTrackDialog(audio = true) }
-            }
-            if (controller.availableSubtitleTracks().isNotEmpty()) {
-                labels.add(getString(R.string.subtitle_track))
-                actions.add { showTrackDialog(audio = false) }
-            }
-        }
-
         if (::controller.isInitialized && controller.supportsDelay) {
             labels.add(getString(R.string.audio_delay))
             actions.add { showDelayDialog(audio = true) }
@@ -231,45 +205,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             val msg = if (min == 0) getString(R.string.sleep_timer_off)
             else getString(R.string.sleep_timer_set, min)
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    /**
-     * Lets the user pick an audio or subtitle track. The choice is applied to the
-     * current stream and persisted so it is re-applied to later streams / sessions.
-     * For subtitles a localized "Off" entry is prepended (the engines only return
-     * real tracks).
-     */
-    private fun showTrackDialog(audio: Boolean) {
-        if (!::controller.isInitialized) return
-        val tracks = if (audio) controller.availableAudioTracks()
-        else controller.availableSubtitleTracks()
-
-        val tokens = mutableListOf<String>()
-        val options = mutableListOf<PlayerDialogs.Option>()
-
-        if (!audio) {
-            val offSelected = controller.preferredSubtitleToken == PlayerEngine.SUBTITLE_OFF ||
-                tracks.none { it.selected }
-            tokens.add(PlayerEngine.SUBTITLE_OFF)
-            options.add(PlayerDialogs.Option(getString(R.string.subtitles_off), offSelected))
-        }
-
-        tracks.forEach { track ->
-            tokens.add(track.token)
-            options.add(PlayerDialogs.Option(track.label, track.selected))
-        }
-
-        val titleRes = if (audio) R.string.audio_track else R.string.subtitle_track
-        PlayerDialogs.showOptions(this, getString(titleRes), options) { which ->
-            val token = tokens[which]
-            if (audio) {
-                controller.selectAudioTrack(token)
-                viewModel.savePreferredAudio(token)
-            } else {
-                controller.selectSubtitleTrack(token)
-                viewModel.savePreferredSubtitle(token)
-            }
         }
     }
 
@@ -379,74 +314,39 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     // ---- Controller callbacks ------------------------------------------
 
     override fun onBuffering() {
-        binding.bufferingLabel.setText(R.string.buffering)
         binding.bufferingIndicator.visibility = View.VISIBLE
     }
 
     override fun onPlaying(engineName: String) {
-        binding.bufferingLabel.setText(R.string.buffering)
         binding.bufferingIndicator.visibility = View.GONE
     }
 
     override fun onRetrying(attempt: Int) {
-        // Show an explicit "reconnecting…" state instead of the plain spinner so the
-        // user knows the stream dropped and we're recovering it.
-        binding.bufferingLabel.text = getString(R.string.reconnecting, attempt)
         binding.bufferingIndicator.visibility = View.VISIBLE
+        Toast.makeText(this, R.string.error_stream_not_responding, Toast.LENGTH_SHORT).show()
     }
 
     override fun onFatalError() {
         binding.bufferingIndicator.visibility = View.GONE
-        // Nothing is playing; let the device sleep normally again.
-        screenGuard.keepScreenOn(false)
         Toast.makeText(this, R.string.error_cannot_connect, Toast.LENGTH_LONG).show()
-    }
-
-    // ---- Power-off teardown --------------------------------------------
-
-    /**
-     * Invoked on a real device screen-off (remote Power OFF). Fully release the
-     * player so the single stream connection closes, then return to the home
-     * screen so power-on lands cleanly on Home instead of a dead player.
-     */
-    private fun teardownAndGoHome() {
-        screenGuard.keepScreenOn(false)
-        if (::controller.isInitialized) controller.release()
-        val intent = Intent(this, DashboardActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        startActivity(intent)
-        finish()
     }
 
     // ---- Lifecycle ------------------------------------------------------
 
     override fun onStop() {
         super.onStop()
-        // Fully release the stream on background (close the socket) so the single
-        // subscription slot frees immediately — pausing would keep it occupied.
-        if (::controller.isInitialized) controller.releaseStream()
-        // Not in the foreground anymore: don't keep the screen awake.
-        screenGuard.keepScreenOn(false)
+        if (::controller.isInitialized) controller.pause()
     }
 
     override fun onStart() {
         super.onStart()
-        if (::controller.isInitialized) {
-            // Re-open the stream we released when returning to the foreground.
-            controller.reacquireStream()
-            // Returning to an active session: hold the screen on again.
-            if (currentChannel != null) screenGuard.keepScreenOn(true)
-        }
+        if (::controller.isInitialized) controller.resume()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         epgJob?.cancel()
         sleepTimer.release()
-        screenGuard.unregister()
         castController.detach()
         overlayHandler.removeCallbacksAndMessages(null)
         if (::controller.isInitialized) controller.release()
