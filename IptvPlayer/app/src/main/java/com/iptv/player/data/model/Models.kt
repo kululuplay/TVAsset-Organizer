@@ -42,6 +42,12 @@ data class ManagedChannel(
     val isFavorite: Boolean = false
 )
 
+/** A category paired with its manager state (hidden flag) for the content editor. */
+data class ManagedCategory(
+    val category: Category,
+    val hidden: Boolean
+)
+
 enum class ContentType { LIVE, VOD, SERIES }
 
 /** Where the channel list came from. Stored so we can refresh on next launch. */

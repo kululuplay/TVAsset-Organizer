@@ -14,7 +14,7 @@
 
     <!-- Kanal yöneticisi -->
     <string name="channel_manager_title">Kanalları yönet</string>
-    <string name="channel_manager_hint">Kanalları gizle, sırala ve favorile.</string>
+    <string name="channel_manager_hint">Göster/gizle için OK · taşımak için basılı tut · favori için ▶</string>
     <string name="channel_manager_show">Göster</string>
     <string name="channel_manager_hide">Gizle</string>
     <string name="channel_manager_hidden">Gizli</string>
@@ -22,6 +22,27 @@
     <string name="channel_manager_move_down">Aşağı taşı</string>
     <string name="channel_manager_favorite">Favorilere ekle</string>
     <string name="channel_manager_unfavorite">Favorilerden çıkar</string>
+
+    <!-- İçerik yöneticisi (merkez + kategori / kanal düzenleyiciler) -->
+    <string name="settings_content_manager">İçerik yöneticisi</string>
+    <string name="settings_content_manager_hint">Kategori ve kanalları gizle ve sırala</string>
+    <string name="content_manager_title">İçerik yöneticisi</string>
+    <string name="content_manager_hint">Nelerin, hangi sırada görüneceğini seçin.</string>
+    <string name="content_manager_live">Canlı TV</string>
+    <string name="content_manager_live_hint">Kategoriler ve kanallar</string>
+    <string name="content_manager_movies">Filmler</string>
+    <string name="content_manager_movies_hint">Film kategorileri</string>
+    <string name="content_manager_series">Diziler</string>
+    <string name="content_manager_series_hint">Dizi kategorileri</string>
+    <string name="category_manager_title_live">Canlı TV kategorileri</string>
+    <string name="category_manager_title_movies">Film kategorileri</string>
+    <string name="category_manager_title_series">Dizi kategorileri</string>
+    <string name="category_manager_hint_live">Göster/gizle için OK · taşımak için basılı tut · kanallar için ▶</string>
+    <string name="category_manager_hint">Göster/gizle için OK · taşımak için basılı tut</string>
+    <string name="category_manager_empty">Henüz kategori yok.</string>
+    <string name="manager_summary">%1$d gösteriliyor · %2$d gizli</string>
+    <string name="manager_moving">Taşınıyor</string>
+    <string name="manager_reset">Sıralamayı sıfırla</string>
 
     <!-- Ayarlar: içerik / eşitleme -->
     <string name="settings_content">İçerik</string>

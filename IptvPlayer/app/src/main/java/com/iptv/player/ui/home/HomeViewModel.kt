@@ -35,17 +35,20 @@ class HomeViewModel : ViewModel() {
         const val CAT_RECENT = "__recent__"
     }
 
-    /** Categories with Favorites + Recent pinned to the top, each with a count. */
+    /**
+     * Categories with Favorites + Recent pinned to the top, each with a count.
+     * Hidden categories are filtered out and the user's custom order applied
+     * (see the Content Manager); the synthetic groups always stay on top.
+     */
     val categories: StateFlow<List<Category>> =
         combine(
-            repo.observeCategories(ContentType.LIVE),
-            repo.observeFavorites(),
-            repo.observeCategoryCounts(ContentType.LIVE)
-        ) { cats, favs, counts ->
+            repo.observeVisibleCategories(ContentType.LIVE),
+            repo.observeFavorites()
+        ) { cats, favs ->
             buildList {
                 add(Category(CAT_FAVORITES, "Favorites", ContentType.LIVE, count = favs.size))
                 add(Category(CAT_RECENT, "Recently Watched", ContentType.LIVE))
-                addAll(cats.map { it.copy(count = counts[it.id]) })
+                addAll(cats)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

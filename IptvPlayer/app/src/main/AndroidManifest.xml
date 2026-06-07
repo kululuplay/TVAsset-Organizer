@@ -169,6 +169,18 @@
             android:exported="false"
             android:screenOrientation="landscape" />
 
+        <!-- Content manager hub (Live / Movies / Series). -->
+        <activity
+            android:name=".ui.content.ContentManagerActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <!-- Category manager (hide / reorder categories per content type). -->
+        <activity
+            android:name=".ui.content.CategoryManagerActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
         <!-- Channel manager (hide / reorder / favorites). -->
         <activity
             android:name=".ui.channels.ChannelManagerActivity"

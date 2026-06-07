@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -46,22 +47,23 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
     // catalog is never downloaded at once. The category rail comes from the
     // category cache, which the splash prefetch fills right after login.
 
-    /** Categories with a "Recently added" entry pinned to the top, each with a count. */
+    /**
+     * Categories with a "Recently added" entry pinned to the top, each with a
+     * count. Hidden categories are filtered out and the user's custom order
+     * applied (see the Content Manager).
+     */
     val categories: StateFlow<List<Category>> =
-        combine(
-            repo.observeVodCategories(),
-            repo.observeVodCategoryCounts()
-        ) { cats, counts ->
+        repo.observeVisibleCategories(ContentType.VOD).map { cats ->
             buildList {
                 add(
                     Category(
                         CAT_ALL,
                         getApplication<Application>().getString(R.string.cat_recently_added),
                         ContentType.VOD,
-                        count = counts.values.sum().coerceAtMost(RECENT_LIMIT)
+                        count = cats.sumOf { it.count ?: 0 }.coerceAtMost(RECENT_LIMIT)
                     )
                 )
-                addAll(cats.map { it.copy(count = counts[it.id]) })
+                addAll(cats)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

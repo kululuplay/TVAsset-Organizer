@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Channel editor row: number + name, a favourite star, a "moving" badge and a
-     "hidden" badge. Focusable for D-pad; children duplicateParentState so they
-     recolor with the focused row. -->
+<!-- Category editor row: name + count, a "hidden" badge, a "moving" badge and
+     a trailing chevron (Live only, to drill into channels). Focusable for D-pad;
+     children duplicateParentState so they recolor with the focused row. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:minHeight="@dimen/settings_row_min_h"
@@ -17,21 +16,10 @@
     android:layout_marginBottom="@dimen/space_s">
 
     <TextView
-        android:id="@+id/mcNumber"
-        android:layout_width="48dp"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:duplicateParentState="true"
-        android:textColor="@color/settings_row_text"
-        android:alpha="0.7"
-        android:textSize="@dimen/text_caption" />
-
-    <TextView
         android:id="@+id/mcName"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:layout_marginStart="@dimen/space_s"
         android:duplicateParentState="true"
         android:textColor="@color/settings_row_text"
         android:textSize="@dimen/text_body"
@@ -39,16 +27,15 @@
         android:maxLines="1"
         android:ellipsize="end" />
 
-    <ImageView
-        android:id="@+id/mcFavorite"
-        android:layout_width="20dp"
-        android:layout_height="20dp"
+    <TextView
+        android:id="@+id/mcCount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
         android:layout_marginStart="@dimen/space_s"
         android:duplicateParentState="true"
-        android:contentDescription="@null"
-        android:src="@drawable/ic_check"
-        app:tint="@color/success"
-        android:visibility="gone" />
+        android:textColor="@color/settings_row_text"
+        android:alpha="0.7"
+        android:textSize="@dimen/text_caption" />
 
     <TextView
         android:id="@+id/mcMoving"
@@ -70,4 +57,16 @@
         android:textSize="@dimen/text_caption"
         android:layout_marginStart="@dimen/space_s"
         android:visibility="gone" />
+
+    <ImageView
+        android:id="@+id/mcArrow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/space_s"
+        android:duplicateParentState="true"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_arrow_right"
+        app:tint="@color/settings_row_text"
+        android:visibility="gone"
+        xmlns:app="http://schemas.android.com/apk/res-auto" />
 </LinearLayout>

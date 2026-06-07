@@ -29,7 +29,7 @@ import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.prefs.SettingsStore
 import com.iptv.player.databinding.ActivitySettingsBinding
 import com.iptv.player.ui.account.AccountActivity
-import com.iptv.player.ui.channels.ChannelManagerActivity
+import com.iptv.player.ui.content.ContentManagerActivity
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.diagnostics.DiagnosticsActivity
 import com.iptv.player.ui.login.LoginActivity
@@ -95,7 +95,7 @@ class SettingsActivity : BaseActivity() {
         val first = addNavRow(c, getString(R.string.settings_general_info), Panel.GENERAL)
         addNavRow(c, getString(R.string.settings_language), Panel.LANGUAGE)
         addNavRow(c, getString(R.string.settings_parental_pin), Panel.PIN)
-        addNavRow(c, getString(R.string.settings_channel_manager), Panel.CATEGORIES)
+        addNavRow(c, getString(R.string.settings_content_manager), Panel.CATEGORIES)
         addNavRow(c, getString(R.string.settings_player_mode), Panel.PLAYER)
         addNavRow(c, getString(R.string.settings_time_sync), Panel.TIME)
         addNavRow(c, getString(R.string.settings_tmdb), Panel.TMDB)
@@ -303,12 +303,12 @@ class SettingsActivity : BaseActivity() {
     private fun buildCategoriesPanel() {
         val c = binding.categoriesContainer
         val row = LayoutInflater.from(this).inflate(R.layout.item_settings_choice, c, false)
-        row.findViewById<TextView>(R.id.cTitle).text = getString(R.string.channel_manager_title)
+        row.findViewById<TextView>(R.id.cTitle).text = getString(R.string.content_manager_title)
         val icon = row.findViewById<ImageView>(R.id.cIcon)
         icon.setImageResource(R.drawable.ic_arrow_right)
         icon.imageTintList = ContextCompat.getColorStateList(this, R.color.settings_row_text)
         icon.visibility = View.VISIBLE
-        row.setOnClickListener { startActivity(Intent(this, ChannelManagerActivity::class.java)) }
+        row.setOnClickListener { startActivity(Intent(this, ContentManagerActivity::class.java)) }
         c.addView(row)
     }
 

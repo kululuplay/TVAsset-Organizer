@@ -14,8 +14,10 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.iptv.player.data.model.AspectRatio
+import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.model.SourceConfig
 import com.iptv.player.data.model.SourceType
@@ -51,6 +53,14 @@ class SettingsStore(private val context: Context) {
         val PREF_AUDIO_TRACK = stringPreferencesKey("pref_audio_track")
         val PREF_SUBTITLE_TRACK = stringPreferencesKey("pref_subtitle_track")
         val EXPIRY_WARN_SUPPRESSED = longPreferencesKey("expiry_warn_suppressed")
+
+        // Content Manager: per-content-type hidden categories + custom order.
+        val HIDDEN_CATS_LIVE = stringSetPreferencesKey("hidden_cats_live")
+        val HIDDEN_CATS_VOD = stringSetPreferencesKey("hidden_cats_vod")
+        val HIDDEN_CATS_SERIES = stringSetPreferencesKey("hidden_cats_series")
+        val CAT_ORDER_LIVE = stringPreferencesKey("cat_order_live")
+        val CAT_ORDER_VOD = stringPreferencesKey("cat_order_vod")
+        val CAT_ORDER_SERIES = stringPreferencesKey("cat_order_series")
     }
 
     // ---- Routing flags --------------------------------------------------
@@ -253,6 +263,46 @@ class SettingsStore(private val context: Context) {
             prefs.remove(Keys.M3U_URL)
         }
     }
+
+    // ---- Content Manager: category hide / custom order ------------------
+    // Stored in DataStore (NOT Room) so they survive playlist/EPG refreshes
+    // without touching the destructive-migration database. Category order is a
+    // single newline-joined id list; hidden is a string set of category ids.
+
+    private fun hiddenKey(type: ContentType) = when (type) {
+        ContentType.LIVE -> Keys.HIDDEN_CATS_LIVE
+        ContentType.VOD -> Keys.HIDDEN_CATS_VOD
+        ContentType.SERIES -> Keys.HIDDEN_CATS_SERIES
+    }
+
+    private fun orderKey(type: ContentType) = when (type) {
+        ContentType.LIVE -> Keys.CAT_ORDER_LIVE
+        ContentType.VOD -> Keys.CAT_ORDER_VOD
+        ContentType.SERIES -> Keys.CAT_ORDER_SERIES
+    }
+
+    /** Category ids the user has hidden for [type]. */
+    fun hiddenCategories(type: ContentType): Flow<Set<String>> =
+        context.dataStore.data.map { it[hiddenKey(type)] ?: emptySet() }
+
+    suspend fun setCategoryHidden(type: ContentType, categoryId: String, hidden: Boolean) =
+        context.dataStore.edit { prefs ->
+            val current = prefs[hiddenKey(type)]?.toMutableSet() ?: mutableSetOf()
+            if (hidden) current.add(categoryId) else current.remove(categoryId)
+            prefs[hiddenKey(type)] = current
+        }
+
+    /** User's custom category order for [type] (empty = source/default order). */
+    fun categoryOrder(type: ContentType): Flow<List<String>> =
+        context.dataStore.data.map { prefs ->
+            prefs[orderKey(type)]?.split('\n')?.filter { it.isNotEmpty() } ?: emptyList()
+        }
+
+    suspend fun setCategoryOrder(type: ContentType, orderedIds: List<String>) =
+        context.dataStore.edit { it[orderKey(type)] = orderedIds.joinToString("\n") }
+
+    suspend fun resetCategoryOrder(type: ContentType) =
+        context.dataStore.edit { it.remove(orderKey(type)) }
 
     companion object {
         /** Default parental PIN used until the user sets their own. */

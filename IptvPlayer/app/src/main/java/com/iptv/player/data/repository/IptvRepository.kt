@@ -42,6 +42,7 @@ import com.iptv.player.data.model.FavoriteKind
 import com.iptv.player.data.model.Episode
 import com.iptv.player.data.model.ResumeKind
 import com.iptv.player.data.model.ResumeMeta
+import com.iptv.player.data.model.ManagedCategory
 import com.iptv.player.data.model.ManagedChannel
 import com.iptv.player.data.model.NowNext
 import com.iptv.player.data.model.Profile
@@ -176,20 +177,88 @@ class IptvRepository(
         channelDao.observeByType(ContentType.LIVE.name)
             .map { list -> list.map { it.toModel() }.filter { it.catchupDays > 0 } }
 
-    /** All channels of a type (including hidden) plus their manager state. */
-    fun observeManagedChannels(type: ContentType): Flow<List<ManagedChannel>> =
+    /**
+     * Channels of a type (including hidden) plus their manager state, in the
+     * user's custom order. When [categoryId] is set, only that category's
+     * channels are returned (used by the per-category channel editor).
+     */
+    fun observeManagedChannels(
+        type: ContentType,
+        categoryId: String? = null
+    ): Flow<List<ManagedChannel>> =
         combine(
             channelDao.observeForManagement(type.name),
             favoriteDao.observeFavoriteChannels()
         ) { rows, favorites ->
             val favoriteIds = favorites.map { it.id }.toHashSet()
-            rows.map {
-                ManagedChannel(
-                    channel = it.channel.toModel(),
-                    hidden = it.hidden,
-                    isFavorite = it.channel.id in favoriteIds
-                )
-            }
+            rows.asSequence()
+                .filter { categoryId == null || it.channel.categoryId == categoryId }
+                .map {
+                    ManagedChannel(
+                        channel = it.channel.toModel(),
+                        hidden = it.hidden,
+                        isFavorite = it.channel.id in favoriteIds
+                    )
+                }
+                .toList()
+        }
+
+    // ---- Managed / visible categories (Content Manager) -----------------
+
+    /** Raw category list for [type] in source/default order (no user prefs). */
+    private fun rawCategories(type: ContentType): Flow<List<Category>> = when (type) {
+        ContentType.LIVE -> observeCategories(ContentType.LIVE)
+        ContentType.VOD -> observeVodCategories()
+        ContentType.SERIES -> observeSeriesCategories()
+    }
+
+    /** Per-category content counts for [type]. */
+    private fun categoryCounts(type: ContentType): Flow<Map<String, Int>> = when (type) {
+        ContentType.LIVE -> observeCategoryCounts(ContentType.LIVE)
+        ContentType.VOD -> observeVodCategoryCounts()
+        ContentType.SERIES -> observeSeriesCategoryCounts()
+    }
+
+    /**
+     * Reorders [cats] by the user's saved id [order]: ids present in the saved
+     * order come first (in that order); any category not yet in the saved order
+     * (e.g. newly added by the provider) keeps its default position at the end.
+     */
+    private fun applyCategoryOrder(cats: List<Category>, order: List<String>): List<Category> {
+        if (order.isEmpty()) return cats
+        val rank = order.withIndex().associate { (i, id) -> id to i }
+        val (known, unknown) = cats.partition { it.id in rank }
+        return known.sortedBy { rank[it.id]!! } + unknown
+    }
+
+    /**
+     * All categories for [type] (incl. hidden) with their hidden flag + count,
+     * in the user's custom order — drives the Content Manager editor.
+     */
+    fun observeManagedCategories(type: ContentType): Flow<List<ManagedCategory>> =
+        combine(
+            rawCategories(type),
+            categoryCounts(type),
+            settings.hiddenCategories(type),
+            settings.categoryOrder(type)
+        ) { cats, counts, hidden, order ->
+            val withCounts = cats.map { it.copy(count = counts[it.id]) }
+            applyCategoryOrder(withCounts, order).map { ManagedCategory(it, it.id in hidden) }
+        }
+
+    /**
+     * Visible categories for [type]: hidden categories removed and the user's
+     * custom order applied — used by the Live/Movies/Series browse rails.
+     */
+    fun observeVisibleCategories(type: ContentType): Flow<List<Category>> =
+        combine(
+            rawCategories(type),
+            categoryCounts(type),
+            settings.hiddenCategories(type),
+            settings.categoryOrder(type)
+        ) { cats, counts, hidden, order ->
+            val visible = cats.filter { it.id !in hidden }.map { it.copy(count = counts[it.id]) }
+            applyCategoryOrder(visible, order)
         }
 
     // ---- Channel overrides (hide / custom order) ------------------------

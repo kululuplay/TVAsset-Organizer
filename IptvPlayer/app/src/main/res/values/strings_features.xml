@@ -15,7 +15,7 @@
 
     <!-- Channel manager -->
     <string name="channel_manager_title">Manage channels</string>
-    <string name="channel_manager_hint">Hide, reorder and favourite your channels.</string>
+    <string name="channel_manager_hint">OK to show/hide · hold to move · ▶ to favourite</string>
     <string name="channel_manager_show">Show</string>
     <string name="channel_manager_hide">Hide</string>
     <string name="channel_manager_hidden">Hidden</string>
@@ -23,6 +23,27 @@
     <string name="channel_manager_move_down">Move down</string>
     <string name="channel_manager_favorite">Add to favourites</string>
     <string name="channel_manager_unfavorite">Remove from favourites</string>
+
+    <!-- Content manager (hub + category / channel editors) -->
+    <string name="settings_content_manager">Content manager</string>
+    <string name="settings_content_manager_hint">Hide and reorder categories and channels</string>
+    <string name="content_manager_title">Content manager</string>
+    <string name="content_manager_hint">Choose what appears and in what order.</string>
+    <string name="content_manager_live">Live TV</string>
+    <string name="content_manager_live_hint">Categories and channels</string>
+    <string name="content_manager_movies">Movies</string>
+    <string name="content_manager_movies_hint">Movie categories</string>
+    <string name="content_manager_series">Series</string>
+    <string name="content_manager_series_hint">Series categories</string>
+    <string name="category_manager_title_live">Live TV categories</string>
+    <string name="category_manager_title_movies">Movie categories</string>
+    <string name="category_manager_title_series">Series categories</string>
+    <string name="category_manager_hint_live">OK to show/hide · hold to move · ▶ for channels</string>
+    <string name="category_manager_hint">OK to show/hide · hold to move</string>
+    <string name="category_manager_empty">No categories yet.</string>
+    <string name="manager_summary">%1$d shown · %2$d hidden</string>
+    <string name="manager_moving">Moving</string>
+    <string name="manager_reset">Reset order</string>
 
     <!-- Settings: content / sync -->
     <string name="settings_content">Content</string>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Channel editor: a single scrolling list of live channels. Click a row to
-     show/hide or reorder it. -->
+<!-- Channel editor: header (title + summary) above a scrolling list of live
+     channels. OK shows/hides a row; hold to enter move mode; ▶ favourites. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -10,12 +10,21 @@
     android:paddingVertical="@dimen/safe_area_v">
 
     <TextView
+        android:id="@+id/cmTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/channel_manager_title"
         android:textColor="@color/text_primary"
         android:textSize="@dimen/text_title"
         android:textStyle="bold"
+        android:layout_marginBottom="@dimen/space_xs" />
+
+    <TextView
+        android:id="@+id/cmSummary"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_caption"
         android:layout_marginBottom="@dimen/space_xs" />
 
     <TextView
