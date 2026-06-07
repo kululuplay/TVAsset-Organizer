@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="nav_playlists">Afspeellijsten</string>
     <string name="nav_favorites">Favorieten</string>
-    <string name="nav_account">Account</string>
     <string name="action_search">Zoeken</string>
     <string name="action_refresh">Vernieuwen</string>
     <string name="action_exit">Afsluiten</string>

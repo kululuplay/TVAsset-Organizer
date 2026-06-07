@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Dashboard launcher -->
-    <string name="nav_playlists">Playlists</string>
     <string name="nav_favorites">Favorites</string>
-    <string name="nav_account">Account</string>
     <string name="action_search">Search</string>
     <string name="action_refresh">Refresh</string>
     <string name="action_exit">Exit</string>
@@ -17,8 +15,6 @@
     <!-- Modern dashboard -->
     <string name="dash_prompt_title">What would you like to watch?</string>
     <string name="dash_prompt_subtitle">Use the arrow keys to browse, press OK to open.</string>
-    <string name="dash_newly_added">Newly added</string>
-    <string name="dash_new_badge">NEW</string>
     <string name="dash_select_hint">Select · OK</string>
     <string name="dash_sub_live">Channels &amp; sports</string>
     <string name="dash_sub_movies">Films on demand</string>
@@ -26,9 +22,7 @@
     <string name="dash_sub_settings">Preferences</string>
     <string name="dash_sub_favorites">Your saved picks</string>
     <string name="dash_sub_continue">Resume watching</string>
-    <string name="dash_sub_playlists">Manage sources</string>
     <string name="dash_sub_search">Find anything</string>
-    <string name="dash_sub_account">Profile &amp; service</string>
 
     <!-- Weather pill -->
     <string name="weather_unavailable">Weather unavailable</string>

@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="nav_playlists">Oynatma Listeleri</string>
     <string name="nav_favorites">Favoriler</string>
-    <string name="nav_account">Hesap</string>
     <string name="action_search">Ara</string>
     <string name="action_refresh">Yenile</string>
     <string name="action_exit">Çıkış</string>
@@ -16,8 +14,6 @@
     <!-- Modern dashboard -->
     <string name="dash_prompt_title">Ne izlemek istersiniz?</string>
     <string name="dash_prompt_subtitle">Gezinmek için yön tuşlarını, açmak için OK tuşunu kullanın.</string>
-    <string name="dash_newly_added">Yeni eklenenler</string>
-    <string name="dash_new_badge">YENİ</string>
     <string name="dash_select_hint">Seç · OK</string>
     <string name="dash_sub_live">Kanallar &amp; spor</string>
     <string name="dash_sub_movies">Talep üzerine filmler</string>
@@ -25,9 +21,7 @@
     <string name="dash_sub_settings">Tercihler</string>
     <string name="dash_sub_favorites">Kaydettikleriniz</string>
     <string name="dash_sub_continue">İzlemeye devam et</string>
-    <string name="dash_sub_playlists">Kaynakları yönet</string>
     <string name="dash_sub_search">Her şeyi bul</string>
-    <string name="dash_sub_account">Profil &amp; hizmet</string>
 
     <!-- Weather pill -->
     <string name="weather_unavailable">Hava durumu yok</string>

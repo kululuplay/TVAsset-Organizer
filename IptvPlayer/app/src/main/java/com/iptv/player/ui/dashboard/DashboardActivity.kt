@@ -2,43 +2,33 @@
  * DashboardActivity.kt
  * The post-login launcher home. A modern layout: a brand bar with a network-signal
  * chip, live clock/date and a real-weather pill; a centered "what to watch?" prompt;
- * two rows of gradient destination cards (Live / Movies / Series / Settings /
- * Favorites, then Continue / Playlists / Search / Account) covering every section;
- * and a "Newly added" poster rail. Fully D-pad driven; each card opens its section.
+ * and two rows of gradient destination cards (Live / Movies / Series / Settings /
+ * Favorites, then Continue / Search) covering every section. Fully D-pad driven;
+ * each card opens its section.
  */
 package com.iptv.player.ui.dashboard
 
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.view.View
 import android.widget.Toast
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.databinding.ActivityDashboardBinding
 import com.iptv.player.databinding.ItemDashboardCardBinding
-import com.iptv.player.ui.account.AccountActivity
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.favorites.FavoritesActivity
 import com.iptv.player.ui.home.HomeActivity
-import com.iptv.player.ui.profiles.ProfilesActivity
 import com.iptv.player.ui.search.SearchActivity
 import com.iptv.player.ui.series.SeriesActivity
-import com.iptv.player.ui.series.SeriesDetailActivity
 import com.iptv.player.ui.settings.SettingsActivity
 import com.iptv.player.ui.vod.VodActivity
-import com.iptv.player.ui.vod.VodDetailActivity
 import com.iptv.player.update.ExpiryWarningPrompt
 import com.iptv.player.update.UpdatePrompt
 import com.iptv.player.util.NetworkSignal
 import com.iptv.player.util.WeatherProvider
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -47,8 +37,6 @@ class DashboardActivity : BaseActivity() {
 
     private lateinit var binding: ActivityDashboardBinding
 
-    private val newAddedAdapter by lazy { NewAddedAdapter(::openDetail) }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityDashboardBinding.inflate(layoutInflater)
@@ -56,7 +44,6 @@ class DashboardActivity : BaseActivity() {
 
         wireCards()
         wireActions()
-        setupRail()
 
         // Land on the Live hero so the remote has an obvious starting point.
         binding.tileLive.root.requestFocus()
@@ -93,12 +80,8 @@ class DashboardActivity : BaseActivity() {
             R.string.section_continue_watching, R.string.dash_sub_continue) {
             open(ContinueWatchingActivity::class.java)
         }
-        configCard(binding.tilePlaylists, R.drawable.ic_playlist, R.drawable.bg_badge_playlists,
-            R.string.nav_playlists, R.string.dash_sub_playlists) { open(ProfilesActivity::class.java) }
         configCard(binding.tileSearch, R.drawable.ic_search, R.drawable.bg_badge_search,
             R.string.action_search, R.string.dash_sub_search) { open(SearchActivity::class.java) }
-        configCard(binding.tileAccount, R.drawable.ic_account, R.drawable.bg_badge_account,
-            R.string.nav_account, R.string.dash_sub_account) { open(AccountActivity::class.java) }
     }
 
     /** Fills a reusable dashboard card with its icon, badge, label and action. */
@@ -121,48 +104,6 @@ class DashboardActivity : BaseActivity() {
     private fun wireActions() {
         binding.btnExit.setOnClickListener { finishAffinity() }
         binding.btnRefresh.setOnClickListener { refresh() }
-    }
-
-    private fun setupRail() {
-        binding.newlyAddedRail.layoutManager =
-            LinearLayoutManager(this, RecyclerView.HORIZONTAL, false)
-        binding.newlyAddedRail.adapter = newAddedAdapter
-
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                combine(
-                    ServiceLocator.repository.observeRecentVod(12),
-                    ServiceLocator.repository.observeRecentSeries(12)
-                ) { vod, series ->
-                    val merged = ArrayList<NewAddedItem>(vod.size + series.size)
-                    val max = maxOf(vod.size, series.size)
-                    for (i in 0 until max) {
-                        vod.getOrNull(i)?.let {
-                            merged.add(NewAddedItem(it.id, it.name, it.posterUrl, isSeries = false))
-                        }
-                        series.getOrNull(i)?.let {
-                            merged.add(NewAddedItem(it.id, it.name, it.posterUrl, isSeries = true))
-                        }
-                    }
-                    merged.take(20)
-                }.collect { items ->
-                    newAddedAdapter.submitList(items)
-                    binding.newlyAddedSection.visibility =
-                        if (items.isEmpty()) View.GONE else View.VISIBLE
-                }
-            }
-        }
-    }
-
-    private fun openDetail(item: NewAddedItem) {
-        val intent = if (item.isSeries) {
-            Intent(this, SeriesDetailActivity::class.java)
-                .putExtra(SeriesDetailActivity.EXTRA_SERIES_ID, item.id)
-        } else {
-            Intent(this, VodDetailActivity::class.java)
-                .putExtra(VodDetailActivity.EXTRA_VOD_ID, item.id)
-        }
-        startActivity(intent)
     }
 
     private fun updateSignal() {

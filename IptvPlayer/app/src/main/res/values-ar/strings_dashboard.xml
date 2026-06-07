@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="nav_playlists">قوائم التشغيل</string>
     <string name="nav_favorites">المفضلة</string>
-    <string name="nav_account">الحساب</string>
     <string name="action_search">بحث</string>
     <string name="action_refresh">تحديث</string>
     <string name="action_exit">خروج</string>

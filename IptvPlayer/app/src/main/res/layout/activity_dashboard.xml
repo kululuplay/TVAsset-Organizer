@@ -254,54 +254,11 @@
                     android:layout_marginEnd="@dimen/space_m" />
 
                 <include
-                    android:id="@+id/tilePlaylists"
-                    layout="@layout/item_dashboard_card"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="@dimen/space_m" />
-
-                <include
                     android:id="@+id/tileSearch"
                     layout="@layout/item_dashboard_card"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="@dimen/space_m" />
-
-                <include
-                    android:id="@+id/tileAccount"
-                    layout="@layout/item_dashboard_card"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
                     android:layout_weight="1" />
-            </LinearLayout>
-
-            <!-- Newly added rail (hidden until populated) -->
-            <LinearLayout
-                android:id="@+id/newlyAddedSection"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:layout_marginTop="@dimen/space_l"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/dash_newly_added"
-                    android:textColor="@color/text_primary"
-                    android:textSize="@dimen/text_body"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="@dimen/space_s" />
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/newlyAddedRail"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:clipToPadding="false"
-                    android:nestedScrollingEnabled="false"
-                    android:focusable="false" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

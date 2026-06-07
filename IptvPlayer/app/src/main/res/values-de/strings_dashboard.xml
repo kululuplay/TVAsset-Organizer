@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="nav_playlists">Playlists</string>
     <string name="nav_favorites">Favoriten</string>
-    <string name="nav_account">Konto</string>
     <string name="action_search">Suchen</string>
     <string name="action_refresh">Aktualisieren</string>
     <string name="action_exit">Beenden</string>
@@ -16,8 +14,6 @@
     <!-- Modern dashboard -->
     <string name="dash_prompt_title">Was möchten Sie schauen?</string>
     <string name="dash_prompt_subtitle">Mit den Pfeiltasten navigieren, mit OK öffnen.</string>
-    <string name="dash_newly_added">Neu hinzugefügt</string>
-    <string name="dash_new_badge">NEU</string>
     <string name="dash_select_hint">Auswählen · OK</string>
     <string name="dash_sub_live">Sender &amp; Sport</string>
     <string name="dash_sub_movies">Filme auf Abruf</string>
@@ -25,9 +21,7 @@
     <string name="dash_sub_settings">Einstellungen</string>
     <string name="dash_sub_favorites">Ihre Favoriten</string>
     <string name="dash_sub_continue">Weiterschauen</string>
-    <string name="dash_sub_playlists">Quellen verwalten</string>
     <string name="dash_sub_search">Alles finden</string>
-    <string name="dash_sub_account">Profil &amp; Dienst</string>
 
     <!-- Weather pill -->
     <string name="weather_unavailable">Wetter nicht verfügbar</string>
