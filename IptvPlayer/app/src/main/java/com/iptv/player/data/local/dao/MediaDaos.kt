@@ -45,6 +45,10 @@ interface EpgDao {
 
     @Query("SELECT COUNT(*) FROM programs")
     suspend fun count(): Int
+
+    /** Number of cached programs for a specific (normalized) epg channel id. */
+    @Query("SELECT COUNT(*) FROM programs WHERE epgChannelId = :epgId")
+    suspend fun countFor(epgId: String): Int
 }
 
 @Dao

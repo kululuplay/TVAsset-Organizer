@@ -25,8 +25,18 @@ class SeasonAdapter(
 
     fun setSelected(seasonNumber: Int?) {
         if (selectedNumber == seasonNumber) return
+        val prev = selectedNumber
         selectedNumber = seasonNumber
-        notifyDataSetChanged()
+        // Repaint ONLY the two affected chips, via a payload so we don't rebind
+        // their focus listeners. setSelected() is driven by the focus listener
+        // (focusing a season selects it); a blanket notifyDataSetChanged() here
+        // rebinds every chip on each D-pad move, which makes the horizontal
+        // RecyclerView lose focus and snap back — the user then can't reach past
+        // the first season or two. Targeted, payloaded updates keep focus intact.
+        currentList.indexOfFirst { it.seasonNumber == prev }
+            .takeIf { it >= 0 }?.let { notifyItemChanged(it, PAYLOAD_SELECTION) }
+        currentList.indexOfFirst { it.seasonNumber == seasonNumber }
+            .takeIf { it >= 0 }?.let { notifyItemChanged(it, PAYLOAD_SELECTION) }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -37,6 +47,16 @@ class SeasonAdapter(
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         holder.bind(getItem(position))
+    }
+
+    override fun onBindViewHolder(holder: VH, position: Int, payloads: MutableList<Any>) {
+        // Selection-only update: flip the highlight without a full rebind, so the
+        // currently focused chip keeps its D-pad focus.
+        if (payloads.contains(PAYLOAD_SELECTION)) {
+            holder.itemView.isSelected = getItem(position).seasonNumber == selectedNumber
+        } else {
+            super.onBindViewHolder(holder, position, payloads)
+        }
     }
 
     inner class VH(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -53,6 +73,8 @@ class SeasonAdapter(
     }
 
     companion object {
+        private const val PAYLOAD_SELECTION = "selection"
+
         private val DIFF = object : DiffUtil.ItemCallback<Season>() {
             override fun areItemsTheSame(a: Season, b: Season) =
                 a.seriesId == b.seriesId && a.seasonNumber == b.seasonNumber

@@ -129,7 +129,12 @@ class VodActivity : BaseActivity() {
             vodAdapter.loadStateFlow
                 .distinctUntilChangedBy { it.refresh }
                 .collectLatest { state ->
-                    if (state.refresh is LoadState.NotLoading) {
+                    // Only snap to the top when the user is NOT already inside the
+                    // grid. Lazily-downloaded movies write to Room while browsing,
+                    // which invalidates the PagingSource and re-settles refresh; an
+                    // unconditional scrollToPosition(0) then yanked the grid to the
+                    // top mid-scroll and focus escaped back to the category list.
+                    if (state.refresh is LoadState.NotLoading && !binding.posterGrid.hasFocus()) {
                         binding.posterGrid.scrollToPosition(0)
                     }
                 }

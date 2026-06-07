@@ -69,18 +69,21 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
     }
 
     override fun bind(container: ViewGroup) {
-        // Tuned for smooth IPTV on Android TV: a generous network buffer to
-        // absorb jitter, plus options that keep playback real-time on weak
-        // hardware instead of accumulating delay (the main cause of stutter).
+        // Conservative, known-good live playback set. An earlier "tuning" pass
+        // added decode shortcuts (--avcodec-skiploopfilter=all / --avcodec-fast)
+        // and disabled the clock jitter/synchro guards; together they produced
+        // green/blocky frames and stuttering on weaker Android TV hardware, so
+        // they are intentionally NOT used here. Re-tune one option at a time.
         val options = arrayListOf(
             // Low-latency-but-stable live buffer: small enough to keep zapping
             // responsive, big enough to ride out normal network jitter.
             "--network-caching=$NETWORK_CACHING_MS",
             "--live-caching=$NETWORK_CACHING_MS",
-            // Many IPTV TS streams carry irregular PCR/timestamps; disabling the
-            // jitter/synchro guards stops VLC from stalling to "catch up".
-            "--clock-jitter=0",
-            "--clock-synchro=0",
+            // Decode and render every frame in order — no frame dropping/skipping
+            // and full deblocking. This is the pre-regression behavior that
+            // played cleanly, without green artifacts or visible corruption.
+            "--no-drop-late-frames",
+            "--no-skip-frames",
             // Hardware decode, automatic: libVLC picks MediaCodec when usable and
             // degrades to software on its own; our watchdog adds a per-stream
             // software restart on top for panels that fail silently.
@@ -91,10 +94,6 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
             // keeps hardware decode but renders correctly on a plain SurfaceView.
             "--no-mediacodec-dr",
             "--no-omxil-dr",
-            // Cut decode load so cheap TV boxes keep up: skip the deblocking
-            // loop filter and allow fast (slightly looser) decoding.
-            "--avcodec-skiploopfilter=all",
-            "--avcodec-fast",
             // Auto-reconnect when an HTTP segment/stream connection drops.
             "--http-reconnect",
             // Report KULULUPLAY instead of the default "VLC/3.0.x LibVLC/3.0.x".
@@ -181,11 +180,9 @@ class VlcPlayerEngine(private val context: Context) : PlayerEngine {
                     // Hardware decode, automatic (libVLC may fall back internally).
                     setHWDecoderEnabled(true, false)
                 }
-                // Mirror the instance buffer/jitter tuning at the stream level.
+                // Mirror the instance buffer settings at the stream level.
                 addOption(":network-caching=$NETWORK_CACHING_MS")
                 addOption(":live-caching=$NETWORK_CACHING_MS")
-                addOption(":clock-jitter=0")
-                addOption(":clock-synchro=0")
                 // Auto-reconnect dropped HTTP connections instead of erroring out.
                 addOption(":http-reconnect")
                 // Per-stream User-Agent override (HTTP(S) playlist + segments).

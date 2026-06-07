@@ -73,6 +73,7 @@ import retrofit2.HttpException
 import retrofit2.Retrofit
 import java.io.IOException
 import java.net.InetAddress
+import java.util.Locale
 
 class IptvRepository(
     private val db: AppDatabase,
@@ -784,6 +785,23 @@ class IptvRepository(
 
     // ---- EPG ------------------------------------------------------------
 
+    /**
+     * Display-name → normalized epg id map, built from the XMLTV <channel>
+     * entries on each [refreshEpg]. Used as a fallback when a channel's tvg-id
+     * is missing or doesn't match any program id. In-memory only (rebuilt on
+     * every guide refresh) to avoid a destructive Room schema migration.
+     */
+    @Volatile
+    private var epgNameIndex: Map<String, String> = emptyMap()
+
+    /** Lower-cased, trimmed epg id for case/space-insensitive matching. */
+    private fun normalizeEpgId(raw: String?): String? =
+        raw?.trim()?.lowercase(Locale.US)?.takeIf { it.isNotEmpty() }
+
+    /** Normalized channel display name (trim + lowercase + collapse whitespace). */
+    private fun normalizeName(raw: String?): String =
+        raw?.trim()?.lowercase(Locale.US)?.replace(Regex("\\s+"), " ").orEmpty()
+
     /** Downloads and caches the full XMLTV guide (Xtream xmltv.php). */
     suspend fun refreshEpg(config: SourceConfig): Outcome<Int> = withContext(Dispatchers.IO) {
         if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
@@ -795,11 +813,23 @@ class IptvRepository(
                 val body = resp.body ?: return@withContext Outcome.Failure(AppError.CANNOT_CONNECT)
                 val batch = ArrayList<ProgramEntity>(500)
                 var total = 0
+                val nameIndex = HashMap<String, String>()
                 epgDao.clearAll()
                 body.byteStream().use { stream ->
-                    XmltvParser.parse(stream) { p ->
+                    XmltvParser.parse(
+                        stream,
+                        onChannel = { id, displayName ->
+                            val nId = normalizeEpgId(id)
+                            val nName = normalizeName(displayName)
+                            // First display-name wins; don't let aliases overwrite it.
+                            if (nId != null && nName.isNotEmpty() && !nameIndex.containsKey(nName)) {
+                                nameIndex[nName] = nId
+                            }
+                        }
+                    ) { p ->
                         batch += ProgramEntity(
-                            epgChannelId = p.epgChannelId,
+                            // Normalize on store so lookups match case/space-insensitively.
+                            epgChannelId = normalizeEpgId(p.epgChannelId) ?: p.epgChannelId.trim(),
                             title = p.title,
                             description = p.description,
                             startMs = p.startMs,
@@ -816,6 +846,7 @@ class IptvRepository(
                 if (batch.isNotEmpty()) {
                     epgDao.insertAll(batch.toList()); total += batch.size
                 }
+                epgNameIndex = nameIndex
                 settings.setEpgUpdatedAt(System.currentTimeMillis())
                 Outcome.Success(total)
             }
@@ -912,8 +943,21 @@ class IptvRepository(
         liveOk
     }
 
-    private suspend fun resolveEpgId(channel: Channel): String? =
-        epgMappingDao.get(channel.id) ?: channel.epgChannelId
+    private suspend fun resolveEpgId(channel: Channel): String? {
+        // 1) Manual user override (EPG correction screen) always wins.
+        val override = normalizeEpgId(epgMappingDao.get(channel.id))
+        if (override != null) return override
+        // 2) The channel's own tvg-id / epg_channel_id, matched case/space-insensitively.
+        val direct = normalizeEpgId(channel.epgChannelId)
+        if (direct != null && epgDao.countFor(direct) > 0) return direct
+        // 3) Fallback: match the channel's display name against the XMLTV <channel>
+        //    display-names — covers a missing or mismatched tvg-id.
+        val byName = epgNameIndex[normalizeName(channel.name)]
+        if (byName != null && epgDao.countFor(byName) > 0) return byName
+        // 4) Last resort: the normalized direct id even if no programs are present
+        //    yet (guide may still be downloading); null when nothing to match on.
+        return direct
+    }
 
     // ---- Account info ---------------------------------------------------
 

@@ -1,0 +1,30 @@
+URGENT — fix the following four regressions/bugs in the IPTV app. Diagnose root causes and fix properly; do not paper over them.
+1. GREEN SCREEN + STUTTERING ON MANY CHANNELS (REGRESSION — fix first, top priority).
+This affects both the VLC (libVLC) player and the ExoPlayer/Media3 player. Playback used to work without stuttering. The problem started right after you changed the buffering settings — channels that previously played smoothly now stutter AND show a green screen.
+
+This is a regression caused by the recent buffering changes. Revert the buffering/caching parameters to the values that worked before the green screen appeared, then re-tune carefully and incrementally — change one parameter at a time and verify it does not reintroduce stutter or green screen.
+The green screen is a video-output / hardware-decoder issue. For libVLC: ensure video renders on a single SurfaceView (not TextureView), set hardware decoding to automatic with an automatic software-decode fallback when a green/blank frame or decode failure occurs, and make sure only ONE video surface is attached (no double attach). For ExoPlayer/Media3: ensure correct SurfaceView output and handle MediaCodec decoder init failures by falling back gracefully (do not leave a green/blank surface).
+Do not set network/live caching so low that it causes underruns/stutter, nor so high that it breaks playback. Find a stable middle value and confirm channels that broke now play cleanly with video AND audio.
+Verify on the oldest target device that the previously-working channels play smoothly again with no green screen, on both players.
+
+2. D-PAD FOCUS JUMPS BACK TO CATEGORIES WHILE BROWSING MOVIE/SERIES CONTENT.
+On the Movies/Series page, when the user selects a category and tries to scroll quickly through that category's items with the remote, the focus gets thrown back to the category list instead of staying in the content grid.
+
+Fix the focus navigation so that once focus enters the content grid, D-pad up/down/left/right moves within the grid, and focus only returns to the category list on an explicit Left press at the grid's left edge (or Back).
+Set proper nextFocus handling / focusable boundaries; prevent focus from "escaping" the RecyclerView during fast scrolling. Ensure focus memory: returning to the grid restores the last focused item.
+Verify that fast continuous scrolling through a category never bounces focus back to the categories unintentionally.
+
+3. CANNOT NAVIGATE TO ALL SEASONS OF A SERIES (focus stuck on first 1–2 seasons).
+When the user opens a series with 4–5 seasons, the focus only lets them reach the first 1–2 seasons and cannot move to the remaining seasons.
+
+Fix the season selector so D-pad navigation can reach every season regardless of count. The season list/row must be fully scrollable and focusable end-to-end (the container must scroll to keep the focused season on screen instead of stopping at the visible edge).
+Same for the episode list within each season. Ensure no fixed-height or non-scrolling container is clipping the seasons/episodes.
+Verify with a 5+ season series that every season and every episode is reachable and selectable by remote.
+
+4. EPG OFTEN NOT SHOWN ON LIVE TV CHANNELS EVEN THOUGH EPG DATA EXISTS.
+Many live channels have EPG data available but the app frequently does not display it.
+
+The most common cause is channel-to-EPG ID mismatch: fix the matching between the channel's tvg-id (from M3U/Xtream) and the EPG channel id (from XMLTV/Xtream EPG). Make matching robust — case-insensitive, trimmed, and with a fallback match by channel name when tvg-id is missing or doesn't match.
+Ensure EPG is actually parsed and stored for all channels (streaming XMLTV parser, stored in Room), and that the "now/next" query correctly selects the program whose start/end time covers the current time, using correct timezone/offset handling (a wrong UTC/local offset makes EPG look empty or wrong).
+If EPG is still loading, show a clear state; once loaded, display it without requiring a manual refresh. Make sure the manual EPG refresh and channel–EPG correction screen actually update the display.
+Verify that channels which have EPG data reliably show current and next program with correct times.
