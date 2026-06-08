@@ -227,7 +227,7 @@
 
     <!-- Erinnerung an baldigen Abo-Ablauf (wird beim Start automatisch angezeigt) -->
     <string name="expiry_warning_title">Abonnement läuft bald ab</string>
-    <string name="expiry_warning_message">Ihr Abonnement endet in 5 Tagen oder weniger. Um Unterbrechungen Ihrer Streams zu vermeiden, verlängern Sie es bitte rechtzeitig bei Ihrem IPTV-Anbieter.</string>
+    <string name="expiry_warning_message">Ihr Abonnement endet in %1$d Tag(en). Um Unterbrechungen Ihrer Streams zu vermeiden, verlängern Sie es bitte rechtzeitig bei Ihrem IPTV-Anbieter.</string>
     <string name="expiry_warning_dont_show">Nicht mehr anzeigen</string>
     <!-- Abonnement bereits abgelaufen (harte Sperre, beim Start angezeigt) -->
     <string name="expiry_expired_title">Ihr Abonnement ist abgelaufen</string>

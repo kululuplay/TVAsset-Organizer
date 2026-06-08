@@ -93,7 +93,7 @@ object ExpiryWarningPrompt {
                         return@launch
                     }
                     shownThisSession = true
-                    showWarningDialog(activity, expiryMs)
+                    showWarningDialog(activity, expiryMs, days)
                 }
                 else -> onNoPrompt?.invoke()
             }
@@ -129,12 +129,19 @@ object ExpiryWarningPrompt {
     }
 
     /** Soft "expiring soon" reminder with OK + "don't show again". */
-    private fun showWarningDialog(activity: AppCompatActivity, expiryMs: Long) {
+    private fun showWarningDialog(activity: AppCompatActivity, expiryMs: Long, days: Long) {
         val view = LayoutInflater.from(activity).inflate(R.layout.dialog_expiry_warning, null)
 
         val dialog = AlertDialog.Builder(activity, R.style.ThemeOverlay_Iptv_Dialog)
             .setView(view)
             .create()
+
+        // Show the real remaining-days count (min 1, so the final <24h window
+        // never reads "0 days") instead of the old static "5 days or less" text.
+        view.findViewById<TextView>(R.id.expiryMessage).text = activity.getString(
+            R.string.expiry_warning_message,
+            days.coerceAtLeast(1L).toInt()
+        )
 
         val okButton = view.findViewById<View>(R.id.expiryOkButton)
         okButton.setOnClickListener { dialog.dismiss() }

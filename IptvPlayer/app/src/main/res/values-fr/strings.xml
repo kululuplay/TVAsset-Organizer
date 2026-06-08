@@ -227,6 +227,6 @@
 
     <!-- Rappel d\'expiration de l\'abonnement (affiché automatiquement au lancement) -->
     <string name="expiry_warning_title">Votre abonnement expire bientôt</string>
-    <string name="expiry_warning_message">Votre abonnement expire dans 5 jours ou moins. Pour éviter toute interruption de vos flux, veuillez le renouveler à l\'avance auprès de votre fournisseur IPTV.</string>
+    <string name="expiry_warning_message">Votre abonnement expire dans %1$d jour(s). Pour éviter toute interruption de vos flux, veuillez le renouveler à l\'avance auprès de votre fournisseur IPTV.</string>
     <string name="expiry_warning_dont_show">Ne plus afficher</string>
 </resources>
