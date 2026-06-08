@@ -11,6 +11,10 @@
     <string name="dash_no_source">No active service</string>
     <string name="dash_playlist">Current Playlist: %1$s</string>
     <string name="dash_expires">Expires: %1$s</string>
+    <string name="dash_user">User: %1$s</string>
+    <string name="dash_version">Version %1$s</string>
+    <string name="dash_website" translatable="false">kululuip.tv</string>
+    <string name="dash_whatsapp" translatable="false">+447537185301</string>
 
     <!-- Modern dashboard -->
     <string name="dash_prompt_title">What would you like to watch?</string>

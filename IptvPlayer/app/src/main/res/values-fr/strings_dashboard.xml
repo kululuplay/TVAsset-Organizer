@@ -10,4 +10,6 @@
     <string name="dash_no_source">Aucun service actif</string>
     <string name="dash_playlist">Playlist actuelle : %1$s</string>
     <string name="dash_expires">Expire le : %1$s</string>
+    <string name="dash_user">Utilisateur : %1$s</string>
+    <string name="dash_version">Version %1$s</string>
 </resources>

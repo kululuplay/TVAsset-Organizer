@@ -9,8 +9,8 @@
 package com.iptv.player.ui.dashboard
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -111,7 +111,6 @@ class DashboardActivity : BaseActivity() {
     }
 
     private fun wireActions() {
-        binding.btnExit.setOnClickListener { finishAffinity() }
         binding.btnRefresh.setOnClickListener { refresh() }
     }
 
@@ -173,19 +172,28 @@ class DashboardActivity : BaseActivity() {
         }
     }
 
-    /** Shows the active source host and (when available) the account expiry. */
+    /** Shows the account username, expiry, and the app version. */
     private fun loadFooter() {
+        val version = runCatching {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: "—"
+        binding.footerVersion.text = getString(R.string.dash_version, version)
+
         lifecycleScope.launch {
             val config = ServiceLocator.settings.getSourceConfig()
             if (config == null) {
-                binding.footerSource.text = getString(R.string.dash_no_source)
+                binding.footerUser.visibility = View.VISIBLE
+                binding.footerUser.text = getString(R.string.dash_no_source)
                 binding.footerExpiry.text = ""
                 return@launch
             }
-            val raw = config.serverUrl.ifBlank { config.m3uUrl }
-            val label = runCatching { Uri.parse(raw).host }.getOrNull()
-                ?.takeIf { it.isNotBlank() } ?: raw
-            binding.footerSource.text = getString(R.string.dash_playlist, label)
+            val user = config.username
+            if (user.isBlank()) {
+                binding.footerUser.visibility = View.GONE
+            } else {
+                binding.footerUser.visibility = View.VISIBLE
+                binding.footerUser.text = getString(R.string.dash_user, user)
+            }
 
             val info = runCatching { ServiceLocator.repository.getAccountInfo(config) }
                 .getOrNull()

@@ -10,6 +10,8 @@
     <string name="dash_no_source">Etkin hizmet yok</string>
     <string name="dash_playlist">Geçerli Liste: %1$s</string>
     <string name="dash_expires">Bitiş: %1$s</string>
+    <string name="dash_user">Kullanıcı: %1$s</string>
+    <string name="dash_version">Sürüm %1$s</string>
 
     <!-- Modern dashboard -->
     <string name="dash_prompt_title">Ne izlemek istersiniz?</string>

@@ -10,4 +10,6 @@
     <string name="dash_no_source">Geen actieve dienst</string>
     <string name="dash_playlist">Huidige afspeellijst: %1$s</string>
     <string name="dash_expires">Verloopt: %1$s</string>
+    <string name="dash_user">Gebruiker: %1$s</string>
+    <string name="dash_version">Versie %1$s</string>
 </resources>

@@ -10,4 +10,6 @@
     <string name="dash_no_source">لا توجد خدمة نشطة</string>
     <string name="dash_playlist">القائمة الحالية: %1$s</string>
     <string name="dash_expires">تنتهي في: %1$s</string>
+    <string name="dash_user">المستخدم: %1$s</string>
+    <string name="dash_version">الإصدار %1$s</string>
 </resources>
