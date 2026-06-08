@@ -27,7 +27,10 @@
 package com.iptv.player.player
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.view.ViewGroup
+import java.util.concurrent.atomic.AtomicBoolean
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.PlaybackLog
 import org.videolan.libvlc.LibVLC
@@ -59,7 +62,18 @@ class VlcPlayerEngine(
     private var subtitleDelayMs = 0L
 
     // One-shot per stream so the green-prone profile check fires at most once.
-    private var greenCheckDone = false
+    // AtomicBoolean: maybeRouteByProfile() runs from BOTH the VLC native event
+    // thread (Playing/Vout/Buffering) and the main thread (delayed re-checks), so
+    // the claim must be a compare-and-set to avoid a double fallback under a race.
+    private val greenCheckDone = AtomicBoolean(false)
+
+    // Re-check scheduler. The green-prone routing keys on the track frame rate,
+    // but for live TS streams VLC often reports frameRateDen=0 (fps unknown) on
+    // the first Playing/Vout event, so a 1080p50 stream wrongly looks like a
+    // normal channel and stays on the green-prone Amlogic hardware decoder. The
+    // frame rate populates a moment later (the diagnostics overlay proves it), so
+    // we re-run the check a few times after start until fps is known.
+    private val profileHandler = Handler(Looper.getMainLooper())
 
     override fun bind(container: ViewGroup) {
         // Tuned for smooth IPTV on Android TV: a generous network buffer to
@@ -139,18 +153,28 @@ class VlcPlayerEngine(
                     // actual buffering; 100% means the stream is running, so hide
                     // the spinner — otherwise it stays on screen forever.
                     if (event.buffering < 100f) listener?.onBuffering()
-                    else listener?.onPlaying()
+                    else {
+                        listener?.onPlaying()
+                        // Long-tail safety net: each cache top-up gives another
+                        // chance to read a now-populated frame rate, in case the
+                        // delayed re-checks all fired before fps was known.
+                        maybeRouteByProfile()
+                    }
                 }
                 MediaPlayer.Event.Playing -> {
                     // VLC only accepts delays once the track is running.
                     applyDelays()
                     listener?.onPlaying()
                     maybeRouteByProfile()
+                    scheduleProfileRechecks()
                 }
                 // Video output created => track dimensions/frame rate are populated;
                 // the most reliable point to read the profile and route the bad one
                 // to software before the green frame is all the user ever sees.
-                MediaPlayer.Event.Vout -> maybeRouteByProfile()
+                MediaPlayer.Event.Vout -> {
+                    maybeRouteByProfile()
+                    scheduleProfileRechecks()
+                }
                 MediaPlayer.Event.EndReached -> listener?.onEnded()
                 MediaPlayer.Event.EncounteredError -> {
                     PlaybackLog.log(context, engineName, "EncounteredError (forceSoftware=$forceSoftware)")
@@ -181,7 +205,7 @@ class VlcPlayerEngine(
      * ~25fps interlaced 1080i — stay where they are.
      */
     private fun maybeRouteByProfile() {
-        if (greenCheckDone) return
+        if (greenCheckDone.get()) return
         val track = mediaPlayer?.currentVideoTrack ?: return
         val den = track.frameRateDen
         val fps = if (den > 0) track.frameRateNum.toFloat() / den else 0f
@@ -189,8 +213,7 @@ class VlcPlayerEngine(
 
         if (forceSoftware) {
             // 4K cannot be software-decoded in real time -> escalate to hardware.
-            if (isUhd) {
-                greenCheckDone = true
+            if (isUhd && claimRouting()) {
                 PlaybackLog.log(
                     context, engineName,
                     "UHD ${track.width}x${track.height} on software -> hardware escalation"
@@ -204,8 +227,7 @@ class VlcPlayerEngine(
         // must stay on hardware (software can't keep up with it).
         val is1080pClass = !isUhd &&
             (track.height >= GREEN_PRONE_MIN_HEIGHT || track.width >= GREEN_PRONE_MIN_WIDTH)
-        if (is1080pClass && fps >= GREEN_PRONE_MIN_FPS) {
-            greenCheckDone = true
+        if (is1080pClass && fps >= GREEN_PRONE_MIN_FPS && claimRouting()) {
             PlaybackLog.log(
                 context, engineName,
                 "green-prone HW profile ${track.width}x${track.height}@${fps}fps -> software fallback"
@@ -214,10 +236,37 @@ class VlcPlayerEngine(
         }
     }
 
+    /**
+     * One-shot claim: wins the race exactly once (compare-and-set), then drops any
+     * pending re-checks. Returns false if another thread already routed, so the
+     * caller must NOT emit a duplicate fallback.
+     */
+    private fun claimRouting(): Boolean {
+        if (!greenCheckDone.compareAndSet(false, true)) return false
+        profileHandler.removeCallbacksAndMessages(null)
+        return true
+    }
+
+    /**
+     * Re-run the profile check a few times after playback starts. The frame rate
+     * is frequently still unknown (frameRateDen=0) on the first Playing/Vout for
+     * live TS, so a single early read misses 1080p50/60 and leaves it greening on
+     * the hardware decoder. Cheap and self-cancelling: maybeRouteByProfile()
+     * returns immediately once greenCheckDone is set.
+     */
+    private fun scheduleProfileRechecks() {
+        if (greenCheckDone.get()) return
+        profileHandler.removeCallbacksAndMessages(null)
+        for (delay in PROFILE_RECHECK_DELAYS_MS) {
+            profileHandler.postDelayed({ maybeRouteByProfile() }, delay)
+        }
+    }
+
     override fun play(url: String) {
         val vlc = libVlc ?: return
         val mp = mediaPlayer ?: return
-        greenCheckDone = false
+        greenCheckDone.set(false)
+        profileHandler.removeCallbacksAndMessages(null)
         PlaybackLog.log(context, engineName, "play forceSoftware=$forceSoftware passthrough=$allowPassthrough")
         val media = Media(vlc, android.net.Uri.parse(url)).apply {
             // Hardware decoding unless software was forced (then both off).
@@ -247,9 +296,13 @@ class VlcPlayerEngine(
 
     override fun pause() { mediaPlayer?.pause() }
     override fun resume() { mediaPlayer?.play() }
-    override fun stop() { mediaPlayer?.stop() }
+    override fun stop() {
+        profileHandler.removeCallbacksAndMessages(null)
+        mediaPlayer?.stop()
+    }
 
     override fun release() {
+        profileHandler.removeCallbacksAndMessages(null)
         mediaPlayer?.setEventListener(null)
         mediaPlayer?.stop()
         mediaPlayer?.detachViews()
@@ -334,5 +387,10 @@ class VlcPlayerEngine(
         // keep up with 80–100 Mbps streams, so the hardware decoder is mandatory.
         private const val UHD_MIN_HEIGHT = 1440
         private const val UHD_MIN_WIDTH = 2560
+
+        // Delays (ms after Playing/Vout) for re-reading the track frame rate. Live
+        // TS often reports fps=0 on the first event, so we re-check until it
+        // populates; the Buffering(100%) re-check covers any longer tail.
+        private val PROFILE_RECHECK_DELAYS_MS = longArrayOf(700L, 1500L, 3000L, 5000L)
     }
 }
