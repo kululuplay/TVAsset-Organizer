@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Branded splash shown after login (and when a logged-in user opens the app)
-     while content is prefetched in the background: centered logo badge + app name
-     + tagline, an indeterminate progress bar and a status line that updates as
-     each prefetch stage runs. -->
+     while content is prefetched in the background. Cinematic aurora backdrop, a
+     glowing logo badge, the app name + tagline, and a row of pulsing loading
+     dots with a live status line. Entrance + idle animations are driven in
+     SplashActivity (views start invisible / scaled down here). -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -15,36 +16,58 @@
         android:orientation="vertical"
         android:gravity="center_horizontal">
 
+        <!-- Logo badge wrapped in a soft halo. -->
         <FrameLayout
-            android:layout_width="120dp"
-            android:layout_height="120dp"
-            android:background="@drawable/bg_logo_badge">
+            android:layout_width="240dp"
+            android:layout_height="240dp">
 
-            <ImageView
-                android:layout_width="64dp"
-                android:layout_height="64dp"
+            <View
+                android:id="@+id/logoGlow"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
                 android:layout_gravity="center"
-                android:src="@drawable/ic_kululu_logo"
-                android:contentDescription="@string/app_name" />
+                android:alpha="0"
+                android:background="@drawable/bg_splash_glow" />
+
+            <FrameLayout
+                android:id="@+id/logoBadge"
+                android:layout_width="124dp"
+                android:layout_height="124dp"
+                android:layout_gravity="center"
+                android:alpha="0"
+                android:background="@drawable/bg_logo_badge">
+
+                <ImageView
+                    android:layout_width="66dp"
+                    android:layout_height="66dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_kululu_logo"
+                    android:contentDescription="@string/app_name" />
+            </FrameLayout>
         </FrameLayout>
 
         <TextView
+            android:id="@+id/appName"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_l"
+            android:alpha="0"
             android:text="@string/app_name"
             android:textColor="@color/text_primary"
             android:textSize="@dimen/text_big_title"
             android:textStyle="bold"
-            android:letterSpacing="0.02" />
+            android:letterSpacing="0.04" />
 
         <TextView
+            android:id="@+id/tagline"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_xs"
+            android:alpha="0"
             android:text="@string/app_tagline"
             android:textColor="@color/text_secondary"
-            android:textSize="@dimen/text_caption" />
+            android:textSize="@dimen/text_caption"
+            android:letterSpacing="0.02" />
     </LinearLayout>
 
     <LinearLayout
@@ -56,21 +79,44 @@
         android:layout_marginBottom="@dimen/safe_area_v"
         android:paddingBottom="@dimen/space_xl">
 
-        <ProgressBar
-            android:id="@+id/splashProgress"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="240dp"
+        <!-- Three pulsing loading dots (animated in code). -->
+        <LinearLayout
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:indeterminate="true"
-            android:indeterminateTint="@color/accent"
-            android:layout_marginBottom="@dimen/space_m" />
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginBottom="@dimen/space_l">
+
+            <View
+                android:id="@+id/dot1"
+                android:layout_width="10dp"
+                android:layout_height="10dp"
+                android:layout_marginHorizontal="5dp"
+                android:background="@drawable/bg_splash_dot" />
+
+            <View
+                android:id="@+id/dot2"
+                android:layout_width="10dp"
+                android:layout_height="10dp"
+                android:layout_marginHorizontal="5dp"
+                android:background="@drawable/bg_splash_dot" />
+
+            <View
+                android:id="@+id/dot3"
+                android:layout_width="10dp"
+                android:layout_height="10dp"
+                android:layout_marginHorizontal="5dp"
+                android:background="@drawable/bg_splash_dot" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/splashStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:alpha="0"
             android:text="@string/splash_status_starting"
             android:textColor="@color/text_secondary"
-            android:textSize="@dimen/text_caption" />
+            android:textSize="@dimen/text_caption"
+            android:letterSpacing="0.03" />
     </LinearLayout>
 </FrameLayout>
