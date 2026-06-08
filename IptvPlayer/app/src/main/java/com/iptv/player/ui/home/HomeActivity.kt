@@ -37,7 +37,6 @@ import com.iptv.player.ui.player.PlayerActivity
 import com.iptv.player.util.NewContentNotifier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -192,8 +191,11 @@ class HomeActivity : BaseActivity() {
         binding.categoryList.adapter = categoryAdapter
 
         channelAdapter = ChannelAdapter(
+            // Press-to-preview model: navigating only refreshes the info/EPG
+            // panel (the stop-if-different guard lives in showInfo so every
+            // selection path is covered, not just row focus).
             onFocused = { showInfo(it) },
-            onClicked = { openPlayer(it) },
+            onClicked = { onChannelClicked(it) },
             onToggleFavorite = {
                 viewModel.toggleFavorite(it.id)
                 val msg = if (it.isFavorite) R.string.removed_from_favorites
@@ -258,13 +260,24 @@ class HomeActivity : BaseActivity() {
     /** The channel currently shown in the preview/info panel. */
     private var currentInfoChannel: Channel? = null
 
+    /**
+     * The channel whose live video is playing in the preview surface. Set only
+     * when the user presses OK on a channel; null means the panel is info-only.
+     * A second OK on this same channel expands to full screen.
+     */
+    private var previewingChannelId: String? = null
+
     private val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
 
     private fun showInfo(channel: Channel) {
+        // Never let the preview video keep playing a channel the info panel has
+        // moved off of; preview only survives while we stay on its own channel.
+        if (previewingChannelId != null && previewingChannelId != channel.id) {
+            stopPreview()
+        }
         currentInfoChannel = channel
         binding.catchupHint.visibility =
             if (channel.catchupDays > 0) View.VISIBLE else View.GONE
-        schedulePreview(channel)
         binding.previewNumber.text = channel.number?.toString() ?: ""
         binding.previewTitle.text = ChannelText.clean(channel.name)
         val placeholder = LogoPlaceholder.forName(this, channel.name)
@@ -394,14 +407,26 @@ class HomeActivity : BaseActivity() {
         startActivity(intent)
     }
 
-    /** Debounced live preview of the focused channel inside the preview card. */
-    private fun schedulePreview(channel: Channel) {
+    /**
+     * OK on a channel: the first press starts the in-panel live preview; a
+     * second press on the same (already previewing) channel expands to full
+     * screen. Navigating to another channel resets this (see onFocused).
+     */
+    private fun onChannelClicked(channel: Channel) {
+        if (previewingChannelId == channel.id && previewController != null) {
+            openPlayer(channel)
+        } else {
+            startPreviewFor(channel)
+        }
+    }
+
+    /** Starts the in-panel live preview for [channel] (explicit user action). */
+    private fun startPreviewFor(channel: Channel) {
+        currentInfoChannel = channel
+        previewingChannelId = channel.id
         previewJob?.cancel()
         binding.infoLogo.visibility = View.VISIBLE
-        previewJob = lifecycleScope.launch {
-            delay(700)
-            startPreview(channel)
-        }
+        previewJob = lifecycleScope.launch { startPreview(channel) }
     }
 
     private suspend fun startPreview(channel: Channel) {
@@ -442,16 +467,12 @@ class HomeActivity : BaseActivity() {
         previewJob?.cancel()
         previewController?.release()
         previewController = null
+        previewingChannelId = null
         binding.infoLogo.visibility = View.VISIBLE
     }
 
     override fun onStop() {
         super.onStop()
         stopPreview()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        currentInfoChannel?.let { schedulePreview(it) }
     }
 }
