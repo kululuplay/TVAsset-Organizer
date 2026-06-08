@@ -83,14 +83,22 @@ class VlcPlayerEngine(
     private val audioHandler = Handler(Looper.getMainLooper())
     private var audioHealAttempted = false
 
+    // libVLC's audio timestamp conversion has a fixed ~3s bound. A network/live
+    // caching above that makes the audio decoder request frames further ahead
+    // than the bound, so it drops EVERY audio frame for the first several seconds
+    // of a channel ("Timestamp conversion failed (delay 5000000 ... bound
+    // 3000000)"). Cap the VLC live buffer at the bound; larger user "Buffer size"
+    // values still apply to the ExoPlayer path, which has no such limit.
+    private val vlcCachingMs: Int = networkCachingMs.coerceAtMost(MAX_VLC_LIVE_CACHING_MS)
+
     override fun bind(container: ViewGroup) {
         // Tuned for smooth IPTV on Android TV: a generous network buffer to
         // absorb jitter, plus options that keep playback real-time on weak
         // hardware instead of accumulating delay (the main cause of stutter).
         val options = arrayListOf(
             // Bigger live buffer soaks up network hiccups before they freeze.
-            "--network-caching=$networkCachingMs",
-            "--live-caching=$networkCachingMs",
+            "--network-caching=$vlcCachingMs",
+            "--live-caching=$vlcCachingMs",
             // Many IPTV TS streams carry irregular PCR/timestamps; disabling the
             // jitter/synchro guards stops VLC from stalling to "catch up".
             "--clock-jitter=0",
@@ -349,8 +357,8 @@ class VlcPlayerEngine(
             // Hardware decoding unless software was forced (then both off).
             setHWDecoderEnabled(!forceSoftware, !forceSoftware)
             // Mirror the instance buffer/jitter tuning at the stream level.
-            addOption(":network-caching=$networkCachingMs")
-            addOption(":live-caching=$networkCachingMs")
+            addOption(":network-caching=$vlcCachingMs")
+            addOption(":live-caching=$vlcCachingMs")
             addOption(":clock-jitter=0")
             addOption(":clock-synchro=0")
             if (forceSoftware) addOption(":avcodec-hw=none")
@@ -505,5 +513,10 @@ class VlcPlayerEngine(
 
         // Delay after Playing before checking that an audio track is selected.
         private const val AUDIO_CHECK_DELAY_MS = 1500L
+
+        // libVLC's audio timestamp conversion bound (~3s). Live network/live
+        // caching must stay at or below this or the audio decoder drops frames
+        // for the first several seconds of every channel.
+        private const val MAX_VLC_LIVE_CACHING_MS = 3000
     }
 }

@@ -123,7 +123,12 @@ enum class StreamFormat(val extension: String) {
  * network/live caching and ExoPlayer's DefaultLoadControl durations.
  */
 enum class BufferMode(
-    /** libVLC --network-caching / --live-caching (ms). */
+    /**
+     * libVLC --network-caching / --live-caching (ms) AND the basis for the
+     * ExoPlayer buffer below. NOTE: the live VLC path clamps this to ~3000ms
+     * (libVLC's audio timestamp conversion bound); values above that only grow
+     * the ExoPlayer buffer, never the VLC one.
+     */
     val networkCachingMs: Int,
     /** ExoPlayer DefaultLoadControl min buffer (ms). */
     val exoMinBufferMs: Int,
