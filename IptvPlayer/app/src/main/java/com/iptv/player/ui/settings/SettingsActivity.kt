@@ -493,7 +493,12 @@ class SettingsActivity : BaseActivity() {
         binding.speedProgress.visibility = View.VISIBLE
         binding.speedResult.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
         binding.speedResult.text = formatMbps(0.0)
-        binding.speedStart.isEnabled = false
+        // Keep the button ENABLED so it retains D-pad focus while testing.
+        // Disabling the focused button makes Android move focus to the first
+        // left-rail row (General Info); that row's focus listener then switches
+        // panels and cancelSpeedTest()s -- i.e. the user gets "thrown" to General
+        // Info and the test never runs. The speedTestJob guard above already
+        // blocks a double run, so a dim + "Testing…" label is cue enough.
         binding.speedStart.alpha = 0.5f
         binding.speedStart.setText(R.string.speedtest_running)
 

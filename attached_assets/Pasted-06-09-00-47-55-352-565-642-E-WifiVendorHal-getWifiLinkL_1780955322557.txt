@@ -1,0 +1,127 @@
+06-09 00:47:55.352   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-09 00:47:55.371   565   889 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-09 00:47:55.717  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=2131428243, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:55.962   565   630 D WindowManager: Unhandled key: inputToken=android.os.BinderProxy@7d3330c, title=com.iptv.player/com.iptv.player.ui.dashboard.DashboardActivity, action=0, flags=8, keyCode=22, scanCode=106, metaState=0, repeatCount=0, policyFlags=1644167169
+06-09 00:47:56.112   565   630 D WindowManager: Unhandled key: inputToken=android.os.BinderProxy@7d3330c, title=com.iptv.player/com.iptv.player.ui.dashboard.DashboardActivity, action=1, flags=8, keyCode=22, scanCode=106, metaState=0, repeatCount=0, policyFlags=1644167168
+06-09 00:47:56.452  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=2131428240, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:56.816  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=2131428242, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:57.353   565  1505 I ActivityTaskManager: START u0 {cmp=com.iptv.player/.ui.series.SeriesActivity} from uid 10078
+06-09 00:47:57.368  1326  1567 I MitvPolicyDatabaseManager: updatePackageUsage com.iptv.player/com.iptv.player.ui.dashboard.DashboardActivity (0,1,10)
+06-09 00:47:57.398  1326  1326 D MiTv-TvService-Parent: current foreground packagename is com.iptv.player mFgClassName: com.iptv.player.ui.series.SeriesActivity
+06-09 00:47:57.545   565   590 I ActivityTaskManager: Displayed com.iptv.player/.ui.series.SeriesActivity: +190ms
+06-09 00:47:57.643  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:58.060   365   903 E BufferQueueProducer: [com.iptv.player/com.iptv.player.ui.dashboard.DashboardActivity#0](id:16d000008ef,api:0,p:-1,c:365) disconnect: not connected (req=1)
+06-09 00:47:58.258  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:58.369   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-09 00:47:58.385   565  1505 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-09 00:47:58.586   565   630 D InputDispatcher: Waiting to send key to Window{4c99070 u0 com.iptv.player/com.iptv.player.ui.series.SeriesActivity} because there are unprocessed events that may cause focus to change
+06-09 00:47:58.891   565   630 D InputDispatcher: Waiting to send key to Window{4c99070 u0 com.iptv.player/com.iptv.player.ui.series.SeriesActivity} because there are unprocessed events that may cause focus to change
+06-09 00:47:58.929  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:59.019  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:59.129  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:59.193   565   630 D InputDispatcher: Waiting to send key to Window{4c99070 u0 com.iptv.player/com.iptv.player.ui.series.SeriesActivity} because there are unprocessed events that may cause focus to change
+06-09 00:47:59.219  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:59.310  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:59.430  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:59.498   565   630 D InputDispatcher: Waiting to send key to Window{4c99070 u0 com.iptv.player/com.iptv.player.ui.series.SeriesActivity} because there are unprocessed events that may cause focus to change
+06-09 00:47:59.552  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:59.609  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:59.705  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:59.745  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:59.778  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:59.827  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:59.868  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:59.940  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:47:59.999  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+--------- beginning of crash
+06-09 00:48:00.111 21203 21203 E AndroidRuntime: FATAL EXCEPTION: main
+06-09 00:48:00.111 21203 21203 E AndroidRuntime: Process: com.iptv.player, PID: 21203
+06-09 00:48:00.111 21203 21203 E AndroidRuntime: java.lang.IndexOutOfBoundsException: Inconsistency detected. Invalid item position 8(offset:146).state:126 androidx.recyclerview.widget.RecyclerView{83dc15d VFED..... ......I. 0,0-1147,896 #7f0b02d9 app:id/posterGrid}, adapter:g4.A@8e7c680, layout:androidx.recyclerview.widget.GridLayoutManager@e23dad2, context:com.iptv.player.ui.series.SeriesActivity@27351ec
+06-09 00:48:00.112 21203 21203 E FATAL   : Uncaught exception on thread 'main'
+06-09 00:48:00.112 21203 21203 E FATAL   : java.lang.IndexOutOfBoundsException: Inconsistency detected. Invalid item position 8(offset:146).state:126 androidx.recyclerview.widget.RecyclerView{83dc15d VFED..... ......I. 0,0-1147,896 #7f0b02d9 app:id/posterGrid}, adapter:g4.A@8e7c680, layout:androidx.recyclerview.widget.GridLayoutManager@e23dad2, context:com.iptv.player.ui.series.SeriesActivity@27351ec
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at C1.h0.l(SourceFile:839)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at C1.h0.d(SourceFile:6)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at C1.I.b(SourceFile:58)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at androidx.recyclerview.widget.GridLayoutManager.f1(SourceFile:99)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at androidx.recyclerview.widget.LinearLayoutManager.U0(SourceFile:49)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at androidx.recyclerview.widget.LinearLayoutManager.l0(SourceFile:809)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at androidx.recyclerview.widget.GridLayoutManager.l0(SourceFile:45)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at androidx.recyclerview.widget.RecyclerView.p(SourceFile:412)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at androidx.recyclerview.widget.RecyclerView.o(SourceFile:64)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at androidx.recyclerview.widget.RecyclerView.onLayout(SourceFile:8)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.View.layout(View.java:22844)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.ViewGroup.layout(ViewGroup.java:6389)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.widget.FrameLayout.layoutChildren(FrameLayout.java:332)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.widget.FrameLayout.onLayout(FrameLayout.java:270)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.View.layout(View.java:22844)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.ViewGroup.layout(ViewGroup.java:6389)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.widget.LinearLayout.setChildFrame(LinearLayout.java:1829)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.widget.LinearLayout.layoutVertical(LinearLayout.java:1673)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.widget.LinearLayout.onLayout(LinearLayout.java:1582)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.View.layout(View.java:22844)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.ViewGroup.layout(ViewGroup.java:6389)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at androidx.constraintlayout.widget.ConstraintLayout.onLayout(Unknown Source:61)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.View.layout(View.java:22844)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.ViewGroup.layout(ViewGroup.java:6389)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.widget.FrameLayout.layoutChildren(FrameLayout.java:332)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.widget.FrameLayout.onLayout(FrameLayout.java:270)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.View.layout(View.java:22844)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.ViewGroup.layout(ViewGroup.java:6389)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.widget.LinearLayout.setChildFrame(LinearLayout.java:1829)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.widget.LinearLayout.layoutVertical(LinearLayout.java:1673)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.widget.LinearLayout.onLayout(LinearLayout.java:1582)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.View.layout(View.java:22844)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.ViewGroup.layout(ViewGroup.java:6389)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.widget.FrameLayout.layoutChildren(FrameLayout.java:332)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.widget.FrameLayout.onLayout(FrameLayout.java:270)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.View.layout(View.java:22844)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.ViewGroup.layout(ViewGroup.java:6389)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.widget.LinearLayout.setChildFrame(LinearLayout.java:1829)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.widget.LinearLayout.layoutVertical(LinearLayout.java:1673)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.widget.LinearLayout.onLayout(LinearLayout.java:1582)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.View.layout(View.java:22844)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.ViewGroup.layout(ViewGroup.java:6389)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.widget.FrameLayout.layoutChildren(FrameLayout.java:332)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.widget.FrameLayout.onLayout(FrameLayout.java:270)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at com.android.internal.policy.DecorView.onLayout(DecorView.java:784)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.View.layout(View.java:22844)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.ViewGroup.layout(ViewGroup.java:6389)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.ViewRootImpl.performLayout(ViewRootImpl.java:3470)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.ViewRootImpl.performTraversals(ViewRootImpl.java:2938)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.ViewRootImpl.doTraversal(ViewRootImpl.java:1952)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.ViewRootImpl$TraversalRunnable.run(ViewRootImpl.java:8184)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:972)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.Choreographer.doCallbacks(Choreographer.java:796)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.Choreographer.doFrame(Choreographer.java:731)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.view.Choreographer$FrameDisplayEventReceiver.run(Choreographer.java:957)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.os.Handler.handleCallback(Handler.java:938)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.os.Handler.dispatchMessage(Handler.java:99)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.os.Looper.loop(Looper.java:223)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at android.app.ActivityThread.main(ActivityThread.java:7656)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at java.lang.reflect.Method.invoke(Native Method)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:592)
+06-09 00:48:00.112 21203 21203 E FATAL   : 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:947)
+06-09 00:48:00.117   565 21286 I DropBoxManagerService: add tag=data_app_crash isTagEnabled=true flags=0x2
+06-09 00:48:00.117   565  1634 W ActivityTaskManager:   Force finishing activity com.iptv.player/.ui.series.SeriesActivity
+06-09 00:48:00.154   565   630 D InputDispatcher: Waiting to send key to Window{4c99070 u0 com.iptv.player/com.iptv.player.ui.series.SeriesActivity} because there are unprocessed events that may cause focus to change
+06-09 00:48:00.158   565   630 W InputDispatcher: Waiting because no window has focus but ActivityRecord{2bd01ed u0 com.iptv.player/.ui.series.SeriesActivity t369} may eventually add a window when it finishes starting up. Will wait for 5000ms
+06-09 00:48:00.249   565   579 I WindowManager: WIN DEATH: Window{4c99070 u0 com.iptv.player/com.iptv.player.ui.series.SeriesActivity}
+06-09 00:48:00.249   565   579 W InputDispatcher: Attempted to unregister already unregistered input channel '4c99070 com.iptv.player/com.iptv.player.ui.series.SeriesActivity (server)'
+06-09 00:48:00.251   565  1390 I ActivityManager: Process com.iptv.player (pid 21203) has died: fg  TOP 
+06-09 00:48:00.252   565  1505 D ConnectivityService: ConnectivityService NetworkRequestInfo binderDied(NetworkRequest [ LISTEN id=352, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VPN&FOREGROUND Uid: 10078 AdministratorUids: [] RequestorUid: 10078 RequestorPackageName: com.iptv.player] ], android.os.BinderProxy@9e0fa83)
+06-09 00:48:00.256   565   877 I WindowManager: WIN DEATH: Window{e52ce3f u0 com.iptv.player/com.iptv.player.ui.dashboard.DashboardActivity}
+06-09 00:48:00.256   565   877 W InputDispatcher: Attempted to unregister already unregistered input channel 'e52ce3f com.iptv.player/com.iptv.player.ui.dashboard.DashboardActivity (server)'
+06-09 00:48:00.294   565   592 I ActivityManager: Start proc 21290:com.iptv.player/u0a78 for top-activity {com.iptv.player/com.iptv.player.ui.dashboard.DashboardActivity}
+06-09 00:48:00.366   565   630 W InputDispatcher: Waiting because no window has focus but ActivityRecord{acba46f u0 com.iptv.player/.ui.dashboard.DashboardActivity t369} may eventually add a window when it finishes starting up. Will wait for 5000ms
+06-09 00:48:00.374  1326  1326 D MiTv-TvService-Parent: current foreground packagename is com.iptv.player mFgClassName: com.iptv.player.ui.dashboard.DashboardActivity
+06-09 00:48:00.419 21290 21290 I TetheringManager: registerTetheringEventCallback:com.iptv.player
+06-09 00:48:00.634   565   583 W ActivityTaskManager: Activity top resumed state loss timeout for ActivityRecord{2bd01ed u0 com.iptv.player/.ui.series.SeriesActivity t-1 f}}
+06-09 00:48:00.860   565   630 W InputDispatcher: Dispatching key to Window{94e4260 u0 com.iptv.player/com.iptv.player.ui.dashboard.DashboardActivity} even though there are other unprocessed events
+06-09 00:48:00.863   565   630 D InputDispatcher: Waiting to send key to Window{94e4260 u0 com.iptv.player/com.iptv.player.ui.dashboard.DashboardActivity} because there are unprocessed events that may cause focus to change
+06-09 00:48:00.874  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=2131428242, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:48:00.879  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=2131428241, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-09 00:48:00.936   565  1272 E TaskPersister: File error accessing recents directory (directory doesn't exist?).
+06-09 00:48:01.382   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-09 00:48:01.396   565   579 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-09 00:48:04.394   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-09 00:48:04.411   565   579 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission

@@ -43,3 +43,4 @@
 - [Parental gate covers metadata](parental-gate-covers-metadata.md) — PIN-gating playback isn't enough; focus/auto-preview panels leak locked category name/logo/EPG — gate the metadata render too.
 - [Fast zap + VLC silent-audio self-heal](fast-zap-and-silent-audio.md) — same-stage zaps reuse the live engine (VLC needs stop-before-play); VLC silent-audio self-heals in-engine (no EXO swap: EXO greens on Amlogic).
 - [VLC live caching 3s bound](vlc-live-caching-bound.md) — live network/live-caching >3000ms exceeds libVLC's audio timestamp conversion ceiling → drops audio at channel start; clamp VLC path to 3000, grow only Exo beyond that.
+- [Disabling a focused button steals focus](android-tv-disable-focused-button.md) — isEnabled=false on the focused view drops D-pad focus to a nav row whose focus listener navigates away; keep busy buttons enabled + guard re-entry.
