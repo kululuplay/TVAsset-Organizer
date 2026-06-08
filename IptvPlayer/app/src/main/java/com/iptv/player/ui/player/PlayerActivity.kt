@@ -53,6 +53,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         const val EXTRA_ADOPT_PREVIEW = "extra_adopt_preview"
         private const val OVERLAY_TIMEOUT = 4000L
         private const val LONG_PRESS_MS = 600L
+        // Safety cap for the preview->fullscreen black-gap cover, in case the
+        // engine never emits a fresh video-output event after the surface swap.
+        private const val HANDOFF_COVER_TIMEOUT_MS = 6000L
     }
 
     private lateinit var binding: ActivityPlayerBinding
@@ -63,6 +66,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     private lateinit var controller: PlayerController
     private var currentChannel: Channel? = null
     private val overlayHandler = Handler(Looper.getMainLooper())
+    private val handoffCoverHandler = Handler(Looper.getMainLooper())
     private var okDownTime = 0L
     private var epgJob: Job? = null
 
@@ -116,6 +120,15 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
                 // screen's surface and take ownership — no new play()/reconnect.
                 controller = adopted
                 controller.setCallback(this@PlayerActivity)
+                // The hand-off tears down and recreates the video surface, so the
+                // picture goes black for a beat (audio keeps playing) until the new
+                // surface gets its first frame. Cover that gap with the buffering
+                // indicator; onVideoResumed() clears it, with a safety timeout.
+                binding.bufferingIndicator.visibility = View.VISIBLE
+                handoffCoverHandler.postDelayed(
+                    { binding.bufferingIndicator.visibility = View.GONE },
+                    HANDOFF_COVER_TIMEOUT_MS
+                )
                 controller.rebind(binding.videoContainer)
                 currentChannel = channel
                 showOverlay(channel)
@@ -393,6 +406,12 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         binding.bufferingIndicator.visibility = View.GONE
     }
 
+    override fun onVideoResumed() {
+        // First real frame on the (re)attached surface — clear the hand-off cover.
+        handoffCoverHandler.removeCallbacksAndMessages(null)
+        binding.bufferingIndicator.visibility = View.GONE
+    }
+
     override fun onRetrying(attempt: Int) {
         binding.bufferingIndicator.visibility = View.VISIBLE
         Toast.makeText(this, R.string.error_stream_not_responding, Toast.LENGTH_SHORT).show()
@@ -421,6 +440,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         sleepTimer.release()
         castController.detach()
         overlayHandler.removeCallbacksAndMessages(null)
+        handoffCoverHandler.removeCallbacksAndMessages(null)
         statsHandler.removeCallbacksAndMessages(null)
         if (::controller.isInitialized) controller.release()
     }

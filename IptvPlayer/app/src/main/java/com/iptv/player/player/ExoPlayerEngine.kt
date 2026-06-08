@@ -129,6 +129,7 @@ class ExoPlayerEngine(
 
             override fun onRenderedFirstFrame() {
                 firstFrameRendered = true
+                listener?.onVideoOutput()
                 PlaybackLog.log(context, engineName, "onRenderedFirstFrame")
             }
 

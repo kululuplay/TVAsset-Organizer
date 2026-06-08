@@ -202,6 +202,7 @@ class VlcPlayerEngine(
                 // the most reliable point to read the profile and route the bad one
                 // to software before the green frame is all the user ever sees.
                 MediaPlayer.Event.Vout -> {
+                    listener?.onVideoOutput()
                     maybeRouteByProfile()
                     scheduleProfileRechecks()
                 }

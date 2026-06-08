@@ -80,6 +80,13 @@ data class StreamInfo(
 interface PlayerListener {
     fun onBuffering() {}
     fun onPlaying() {}
+    /**
+     * The engine has produced a real video frame on the current surface (libVLC
+     * Vout / ExoPlayer first rendered frame). Distinct from [onPlaying], which can
+     * fire on audio/cache state before any picture is visible — used to clear the
+     * black gap while a preview->fullscreen surface hand-off warms up.
+     */
+    fun onVideoOutput() {}
     fun onEnded() {}
     /** A fatal playback error. The controller may trigger fallback/retry. */
     fun onError(message: String?) {}

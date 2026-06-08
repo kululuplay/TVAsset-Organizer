@@ -67,6 +67,12 @@ class PlayerController(
     interface Callback {
         fun onBuffering()
         fun onPlaying(engineName: String)
+        /**
+         * A real video frame is now on screen. Fires on every video-output start
+         * (initial play, zap, and after a preview->fullscreen surface hand-off).
+         * Default no-op so callbacks that don't care need not implement it.
+         */
+        fun onVideoResumed() {}
         /** Emitted only after all retries + fallback are exhausted. */
         fun onFatalError()
         fun onRetrying(attempt: Int)
@@ -213,6 +219,8 @@ class PlayerController(
             retryCount = 0
             callback.onPlaying(engine?.engineName ?: "")
         }
+
+        override fun onVideoOutput() = post { callback.onVideoResumed() }
 
         override fun onError(message: String?) = post { handleFailure(Reason.ERROR) }
         override fun onAudioUnavailable() = post { handleFailure(Reason.AUDIO) }
