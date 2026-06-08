@@ -24,6 +24,7 @@ import com.iptv.player.databinding.ActivitySeriesBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.NewContentPopup
 import com.iptv.player.ui.common.PinLockHelper
+import com.iptv.player.ui.common.SafeGridLayoutManager
 import com.iptv.player.util.NewContentNotifier
 import com.iptv.player.ui.common.autoFitColumns
 import com.iptv.player.ui.common.isAdult
@@ -138,7 +139,7 @@ class SeriesActivity : BaseActivity() {
             }
         )
         seriesAdapter.progressProvider = { id -> progressMap[id] ?: 0 }
-        binding.posterGrid.layoutManager = GridLayoutManager(this, 4)
+        binding.posterGrid.layoutManager = SafeGridLayoutManager(this, 4)
         binding.posterGrid.autoFitColumns(min = 3)
         binding.posterGrid.adapter = seriesAdapter
 

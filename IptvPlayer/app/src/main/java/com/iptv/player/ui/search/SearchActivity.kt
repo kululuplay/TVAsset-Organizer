@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.databinding.ActivitySearchBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.PinLockHelper
+import com.iptv.player.ui.common.SafeGridLayoutManager
 import com.iptv.player.ui.common.autoFitColumns
 import com.iptv.player.ui.common.isAdult
 import com.iptv.player.ui.home.ChannelAdapter
@@ -83,7 +84,7 @@ class SearchActivity : BaseActivity() {
                 PinLockHelper.guard(this, isAdult = item.isAdult()) { openMovie(item.id) }
             }
         )
-        binding.movieGrid.layoutManager = GridLayoutManager(this, 2)
+        binding.movieGrid.layoutManager = SafeGridLayoutManager(this, 2)
         binding.movieGrid.autoFitColumns(min = 2)
         binding.movieGrid.adapter = movieAdapter
 
@@ -93,7 +94,7 @@ class SearchActivity : BaseActivity() {
                 PinLockHelper.guard(this, isAdult = item.isAdult()) { openSeries(item.id) }
             }
         )
-        binding.seriesGrid.layoutManager = GridLayoutManager(this, 2)
+        binding.seriesGrid.layoutManager = SafeGridLayoutManager(this, 2)
         binding.seriesGrid.autoFitColumns(min = 2)
         binding.seriesGrid.adapter = seriesAdapter
     }
