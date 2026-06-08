@@ -19,6 +19,8 @@
     <string name="wizard_step_source">Kies verbindingsmethode</string>
     <string name="wizard_step_language">Kies je taal</string>
     <string name="wizard_finish">Voltooien</string>
+    <string name="wizard_language_subtitle">Kies de taal die u wilt gebruiken.</string>
+    <string name="wizard_language_system">Systeemstandaard</string>
 
     <string name="login_title">Verbind je dienst</string>
     <string name="tab_xtream">Xtream Codes</string>

@@ -1,17 +1,20 @@
 /*
  * WizardActivity.kt
- * Lightweight first-run setup wizard. Three steps on a single screen:
+ * First-run setup wizard. Three steps on a single, cinematic split screen:
  *   0) Welcome
- *   1) Language pick (writes settings.setLanguageTag)
+ *   1) Language pick (writes settings.setLanguageTag) — a two-column grid of
+ *      native language names, the same six the app ships translations for.
  *   2) Connect prompt
  * On finish it marks settings.setWizardDone(true) and opens LoginActivity.
- * Fully D-pad driven; reuses the wizard_* strings and the house button style.
+ * Fully D-pad driven; reuses the wizard_* strings and the brand button styles.
  */
 package com.iptv.player.ui.wizard
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
+import android.widget.GridLayout
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import com.iptv.player.R
@@ -45,22 +48,25 @@ class WizardActivity : BaseActivity() {
 
     private fun buildLanguageOptions() {
         binding.languageGroup.removeAllViews()
-        // "System default" option first, then each supported language.
-        addLanguageRow("", getString(R.string.settings_player_auto))
+        // "System default" spans the full row, then each supported language sits
+        // in a tidy two-column grid (en | tr, de | fr, nl | ar).
+        addLanguageRow("", getString(R.string.wizard_language_system), span = 2)
         LocaleManager.SUPPORTED.forEach { tag ->
             addLanguageRow(tag, LocaleManager.displayName(tag))
         }
     }
 
-    private fun addLanguageRow(tag: String, label: String) {
-        val row = TextView(this).apply {
+    private fun addLanguageRow(tag: String, label: String, span: Int = 1) {
+        val chip = TextView(this).apply {
             text = label
             setTextColor(resources.getColor(R.color.text_primary))
             textSize = resources.getDimension(R.dimen.text_body) /
                 resources.displayMetrics.scaledDensity
+            gravity = Gravity.CENTER
             setBackgroundResource(R.drawable.bg_card_selectable)
             isFocusable = true
             isFocusableInTouchMode = false
+            minHeight = resources.getDimensionPixelSize(R.dimen.wizard_chip_min_height)
             val pad = resources.getDimensionPixelSize(R.dimen.space_m)
             setPadding(pad, pad, pad, pad)
             setOnClickListener {
@@ -72,14 +78,19 @@ class WizardActivity : BaseActivity() {
                 goNext()
             }
         }
-        val lp = android.widget.LinearLayout.LayoutParams(
-            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-        )
-        lp.bottomMargin = resources.getDimensionPixelSize(R.dimen.space_s)
-        row.layoutParams = lp
-        row.tag = tag
-        binding.languageGroup.addView(row)
+        // Width 0 + a column weight lets the cells share the row evenly; a
+        // span-2 weight makes the "System default" chip stretch full width.
+        val lp = GridLayout.LayoutParams().apply {
+            width = 0
+            height = GridLayout.LayoutParams.WRAP_CONTENT
+            columnSpec = GridLayout.spec(GridLayout.UNDEFINED, span, span.toFloat())
+            rowSpec = GridLayout.spec(GridLayout.UNDEFINED)
+            val m = resources.getDimensionPixelSize(R.dimen.space_xs)
+            setMargins(m, m, m, m)
+        }
+        chip.layoutParams = lp
+        chip.tag = tag
+        binding.languageGroup.addView(chip)
     }
 
     private fun highlightLanguage() {
@@ -89,9 +100,21 @@ class WizardActivity : BaseActivity() {
         }
     }
 
+    /** Lights the dot for the current step and stretches it into a pill. */
+    private fun renderDots() {
+        val dots = listOf(binding.dot0, binding.dot1, binding.dot2)
+        dots.forEachIndexed { i, dot ->
+            dot.isSelected = i == step
+            val lp = dot.layoutParams
+            lp.width = resources.getDimensionPixelSize(
+                if (i == step) R.dimen.wizard_dot_active else R.dimen.wizard_dot_inactive
+            )
+            dot.layoutParams = lp
+        }
+    }
+
     private fun render() {
-        binding.stepIndicator.text =
-            getString(R.string.wizard_step_indicator, step + 1, totalSteps)
+        renderDots()
         binding.languageScroll.visibility = View.GONE
         binding.btnBack.visibility = if (step == 0) View.INVISIBLE else View.VISIBLE
 
@@ -104,7 +127,7 @@ class WizardActivity : BaseActivity() {
             }
             1 -> {
                 binding.stepTitle.setText(R.string.wizard_step_language)
-                binding.stepSubtitle.text = ""
+                binding.stepSubtitle.setText(R.string.wizard_language_subtitle)
                 binding.languageScroll.visibility = View.VISIBLE
                 binding.btnNext.setText(R.string.wizard_next)
                 highlightLanguage()

@@ -19,6 +19,8 @@
     <string name="wizard_step_source">اختر طريقة الاتصال</string>
     <string name="wizard_step_language">اختر لغتك</string>
     <string name="wizard_finish">إنهاء</string>
+    <string name="wizard_language_subtitle">اختر اللغة التي تريد استخدامها.</string>
+    <string name="wizard_language_system">إعداد النظام</string>
 
     <string name="login_title">اتصل بخدمتك</string>
     <string name="tab_xtream">Xtream Codes</string>

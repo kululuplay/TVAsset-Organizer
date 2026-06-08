@@ -19,6 +19,8 @@
     <string name="wizard_step_source">Verbindungsart wählen</string>
     <string name="wizard_step_language">Sprache wählen</string>
     <string name="wizard_finish">Fertig</string>
+    <string name="wizard_language_subtitle">Wählen Sie die gewünschte Sprache.</string>
+    <string name="wizard_language_system">Systemstandard</string>
 
     <string name="login_title">Mit Ihrem Dienst verbinden</string>
     <string name="tab_xtream">Xtream Codes</string>

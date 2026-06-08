@@ -19,6 +19,8 @@
     <string name="wizard_step_source">Choisir le mode de connexion</string>
     <string name="wizard_step_language">Choisir votre langue</string>
     <string name="wizard_finish">Terminer</string>
+    <string name="wizard_language_subtitle">Choisissez la langue que vous souhaitez utiliser.</string>
+    <string name="wizard_language_system">Paramètre du système</string>
 
     <string name="login_title">Connectez votre service</string>
     <string name="tab_xtream">Xtream Codes</string>

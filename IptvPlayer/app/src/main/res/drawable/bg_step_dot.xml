@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wizard step progress dot. Active step gets the brand gradient pill; the
+     others stay a faint glass track so progress reads at a 10-foot glance. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="0"
+                android:startColor="@color/brand_magenta"
+                android:endColor="@color/brand_purple" />
+            <corners android:radius="3dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/glass_track" />
+            <corners android:radius="3dp" />
+        </shape>
+    </item>
+</selector>

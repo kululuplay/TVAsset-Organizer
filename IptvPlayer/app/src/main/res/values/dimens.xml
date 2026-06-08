@@ -39,6 +39,11 @@
     <dimen name="card_radius">10dp</dimen>
     <dimen name="focus_stroke">2dp</dimen>
 
+    <!-- First-run wizard. -->
+    <dimen name="wizard_chip_min_height">56dp</dimen>
+    <dimen name="wizard_dot_active">28dp</dimen>
+    <dimen name="wizard_dot_inactive">10dp</dimen>
+
     <!-- Player option-sheet row height (audio/subtitle/sleep/delay dialogs). -->
     <dimen name="dialog_option_height">56dp</dimen>
 

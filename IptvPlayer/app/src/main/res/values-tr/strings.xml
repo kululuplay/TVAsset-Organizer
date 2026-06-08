@@ -19,6 +19,8 @@
     <string name="wizard_step_source">Bağlantı yöntemini seçin</string>
     <string name="wizard_step_language">Dilinizi seçin</string>
     <string name="wizard_finish">Bitir</string>
+    <string name="wizard_language_subtitle">Kullanmak istediğiniz dili seçin.</string>
+    <string name="wizard_language_system">Sistem varsayılanı</string>
 
     <string name="login_title">Servisinize bağlanın</string>
     <string name="tab_xtream">Xtream Codes</string>

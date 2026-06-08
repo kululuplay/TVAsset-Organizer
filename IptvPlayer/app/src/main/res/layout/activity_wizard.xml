@@ -1,89 +1,193 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- First-run setup wizard. A single screen whose content swaps per step
-     (welcome -> language -> connect prompt). D-pad friendly, safe-area padded. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- First-run setup wizard, cinematic split styled to match the login screen.
+     Left: Kululu IPTV brand hero. Right: a frosted-glass card whose content
+     swaps per step (welcome -> language -> connect prompt). Fully D-pad driven,
+     safe-area padded. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@drawable/bg_login_aurora"
-    android:gravity="center"
-    android:paddingHorizontal="@dimen/safe_area_h"
-    android:paddingVertical="@dimen/safe_area_v">
-
-    <ImageView
-        android:layout_width="72dp"
-        android:layout_height="72dp"
-        android:src="@drawable/ic_tv"
-        android:layout_marginBottom="@dimen/space_m"
-        android:contentDescription="@string/app_name" />
-
-    <TextView
-        android:id="@+id/stepIndicator"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/text_muted"
-        android:textSize="@dimen/text_caption"
-        android:layout_marginBottom="@dimen/space_s" />
-
-    <TextView
-        android:id="@+id/stepTitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/text_primary"
-        android:textSize="@dimen/text_big_title"
-        android:textStyle="bold"
-        android:gravity="center"
-        android:layout_marginBottom="@dimen/space_s" />
-
-    <TextView
-        android:id="@+id/stepSubtitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/text_secondary"
-        android:textSize="@dimen/text_body"
-        android:gravity="center"
-        android:layout_marginBottom="@dimen/space_l" />
-
-    <!-- Language picker (only visible on the language step). Wrapped in a
-         ScrollView so D-pad focus can scroll to languages that fall below the
-         fold (e.g. the last entry on smaller TV screens). -->
-    <ScrollView
-        android:id="@+id/languageScroll"
-        android:layout_width="480dp"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:visibility="gone"
-        android:scrollbars="vertical"
-        android:layout_marginBottom="@dimen/space_l">
-
-        <LinearLayout
-            android:id="@+id/languageGroup"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical" />
-    </ScrollView>
+    android:background="@drawable/bg_login_aurora">
 
     <LinearLayout
-        android:layout_width="480dp"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="@dimen/safe_area_h"
+        android:paddingVertical="@dimen/safe_area_v">
 
-        <Button
-            android:id="@+id/btnBack"
-            style="@style/Widget.Iptv.Button"
+        <!-- ===== Brand hero ===== -->
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/action_back"
-            android:layout_marginEnd="@dimen/space_s"
-            android:visibility="invisible" />
+            android:layout_weight="1.05"
+            android:orientation="vertical"
+            android:layout_marginEnd="@dimen/space_xl">
 
-        <Button
-            android:id="@+id/btnNext"
-            style="@style/Widget.Iptv.Button"
+            <ImageView
+                android:layout_width="84dp"
+                android:layout_height="84dp"
+                android:background="@drawable/bg_logo_badge"
+                android:padding="16dp"
+                android:src="@drawable/ic_kululu_logo"
+                android:contentDescription="@string/app_name" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/app_name"
+                android:textColor="@color/text_primary"
+                android:textSize="48sp"
+                android:textStyle="bold"
+                android:letterSpacing="-0.02"
+                android:layout_marginTop="@dimen/space_l" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/app_tagline"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_body"
+                android:layout_marginTop="@dimen/space_s" />
+
+            <!-- Feature highlights -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="@dimen/space_xl">
+
+                <TextView
+                    style="@style/Widget.Iptv.Feature"
+                    android:text="@string/feature_live" />
+
+                <TextView
+                    style="@style/Widget.Iptv.Feature"
+                    android:layout_marginTop="@dimen/space_m"
+                    android:text="@string/feature_vod" />
+
+                <TextView
+                    style="@style/Widget.Iptv.Feature"
+                    android:layout_marginTop="@dimen/space_m"
+                    android:text="@string/feature_multi" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ===== Step card ===== -->
+        <ScrollView
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:layout_weight="1"
-            android:text="@string/wizard_next" />
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="0dp"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="@drawable/bg_glass_card"
+                    android:padding="@dimen/space_xl">
+
+                    <!-- Step progress dots -->
+                    <LinearLayout
+                        android:id="@+id/stepDots"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <View
+                            android:id="@+id/dot0"
+                            android:layout_width="@dimen/wizard_dot_inactive"
+                            android:layout_height="6dp"
+                            android:layout_marginEnd="@dimen/space_xs"
+                            android:background="@drawable/bg_step_dot" />
+
+                        <View
+                            android:id="@+id/dot1"
+                            android:layout_width="@dimen/wizard_dot_inactive"
+                            android:layout_height="6dp"
+                            android:layout_marginEnd="@dimen/space_xs"
+                            android:background="@drawable/bg_step_dot" />
+
+                        <View
+                            android:id="@+id/dot2"
+                            android:layout_width="@dimen/wizard_dot_inactive"
+                            android:layout_height="6dp"
+                            android:background="@drawable/bg_step_dot" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/stepTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_title"
+                        android:textStyle="bold"
+                        android:layout_marginTop="@dimen/space_l" />
+
+                    <TextView
+                        android:id="@+id/stepSubtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="@dimen/text_caption"
+                        android:layout_marginTop="@dimen/space_xs"
+                        android:layout_marginBottom="@dimen/space_l" />
+
+                    <!-- Language picker (only visible on the language step). A
+                         two-column grid of native language names; wrapped in a
+                         ScrollView so D-pad focus can reach entries below the
+                         fold on smaller TV panels. -->
+                    <ScrollView
+                        android:id="@+id/languageScroll"
+                        android:layout_width="match_parent"
+                        android:layout_height="360dp"
+                        android:visibility="gone"
+                        android:scrollbars="vertical"
+                        android:layout_marginBottom="@dimen/space_l">
+
+                        <GridLayout
+                            android:id="@+id/languageGroup"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:columnCount="2" />
+                    </ScrollView>
+
+                    <!-- Navigation -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/btnBack"
+                            style="@style/Widget.Iptv.Button"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/action_back"
+                            android:layout_marginEnd="@dimen/space_s"
+                            android:visibility="invisible" />
+
+                        <Button
+                            android:id="@+id/btnNext"
+                            style="@style/Widget.Iptv.Button"
+                            android:background="@drawable/bg_button_primary"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/wizard_next" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
     </LinearLayout>
-</LinearLayout>
+</FrameLayout>
