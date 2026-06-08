@@ -76,9 +76,15 @@ class VlcPlayerEngine(
             // onto an unrecognized byte-buffer format and caused the same stall.
             "--no-mediacodec-dr",
             "--no-omxil-dr",
-            // Cut decode load so cheap TV boxes keep up: skip the deblocking
-            // loop filter and allow fast (slightly looser) decoding.
-            "--avcodec-skiploopfilter=all",
+            // Cut decode load so cheap TV boxes keep up, WITHOUT wrecking image
+            // quality. "skiploopfilter=all" dropped the H.264/H.265 deblocking
+            // filter on EVERY frame, so block errors on reference frames piled up
+            // and propagated -> visible macroblocking/"rain" breakup on some live
+            // channels (audio stayed fine). "nonref" keeps deblocking on the
+            // reference frames that matter (no error build-up) and only skips it
+            // on disposable non-reference frames, so we still save CPU. This only
+            // affects the software avcodec path; the HW decoder deblocks itself.
+            "--avcodec-skiploopfilter=nonref",
             "--avcodec-fast",
             // Auto-reconnect when an HTTP segment/stream connection drops.
             "--http-reconnect",

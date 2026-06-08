@@ -24,3 +24,4 @@
 - [EPG id matching](epg-id-matching.md) — normalize epg ids (trim+lowercase) on store AND query; name fallback via in-memory XMLTV display-name index (no Room table: destructive migration); parseTime must handle glued ±HHMM offsets.
 - [Launch dialog priority & chaining](launch-dialog-priority.md) — expiry check runs before update prompt; chain via onNoPrompt so only one shows; expired notice is non-cancelable.
 - [VOD vs live playback paths](vod-vs-live-playback-paths.md) — VOD (VodPlayerActivity) & live TV (PlayerController/VlcPlayerEngine) are separate libVLC setups; mirror decode/anti-stutter tuning on both or one stutters.
+- [VLC skiploopfilter macroblocking](vlc-skiploopfilter-macroblocking.md) — avcodec-skiploopfilter=all kills the deblocking filter -> macroblocking with clean audio (SW path); use nonref; flag lives in BOTH live+VOD option sets.

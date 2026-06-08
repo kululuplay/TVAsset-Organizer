@@ -285,9 +285,12 @@ class VodPlayerActivity : BaseActivity() {
             // timeout"). No display-chroma override here.
             "--no-mediacodec-dr",
             "--no-omxil-dr",
-            // Cut decode load so cheap TV boxes keep up: skip the deblocking loop
-            // filter and allow fast (slightly looser) decoding.
-            "--avcodec-skiploopfilter=all",
+            // Cut decode load on weak boxes WITHOUT wrecking quality: "all" dropped
+            // the H.264/H.265 deblocking filter on every frame, so block errors
+            // propagated -> macroblocking/"rain" breakup with audio still fine.
+            // "nonref" keeps deblocking on reference frames (no error build-up) and
+            // only skips disposable non-reference frames. Mirrors VlcPlayerEngine.
+            "--avcodec-skiploopfilter=nonref",
             "--avcodec-fast",
             // Decode audio to PCM (no SPDIF/passthrough) so AC-3/E-AC-3/DTS are
             // always audible on plain HDMI sinks.
