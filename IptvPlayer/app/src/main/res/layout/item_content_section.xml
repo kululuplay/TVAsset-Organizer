@@ -1,63 +1,72 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Content manager hub row: leading icon + title/subtitle + trailing arrow.
-     Focusable; turns white on focus (children duplicateParentState so they
-     recolor with the row). -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Content manager hub tile, in the dashboard's editorial card language: a
+     gradient icon badge (colour set per content type in code), a title + helper
+     subtitle, and a trailing chevron. Frosted-glass surface, brand-pink focus
+     ring, and a gentle scale on focus for clear 10-foot D-pad feedback. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:minHeight="@dimen/settings_row_min_h"
-    android:orientation="horizontal"
-    android:gravity="center_vertical"
-    android:background="@drawable/bg_settings_row"
+    android:background="@drawable/bg_tile_surface"
+    android:foreground="@drawable/bg_tile_focus"
+    android:stateListAnimator="@animator/tile_focus"
     android:focusable="true"
     android:focusableInTouchMode="false"
-    android:paddingHorizontal="@dimen/space_m"
-    android:paddingVertical="@dimen/space_s"
-    android:layout_marginBottom="@dimen/space_s">
-
-    <ImageView
-        android:id="@+id/csIcon"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:duplicateParentState="true"
-        android:contentDescription="@null"
-        app:tint="@color/settings_row_text"
-        xmlns:app="http://schemas.android.com/apk/res-auto" />
+    android:clickable="true"
+    android:layout_marginBottom="@dimen/space_m">
 
     <LinearLayout
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:layout_marginStart="@dimen/space_m"
-        android:orientation="vertical">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="@dimen/space_m">
 
-        <TextView
-            android:id="@+id/csTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:duplicateParentState="true"
-            android:textColor="@color/settings_row_text"
-            android:textSize="@dimen/text_body"
-            android:textStyle="bold" />
+        <ImageView
+            android:id="@+id/csIcon"
+            android:layout_width="@dimen/badge_medium"
+            android:layout_height="@dimen/badge_medium"
+            android:background="@drawable/bg_badge_live"
+            android:padding="@dimen/space_s"
+            android:scaleType="fitCenter"
+            android:tint="@color/text_primary"
+            android:contentDescription="@null" />
 
-        <TextView
-            android:id="@+id/csSubtitle"
-            android:layout_width="match_parent"
+        <LinearLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:duplicateParentState="true"
-            android:textColor="@color/settings_row_text"
-            android:alpha="0.7"
-            android:textSize="@dimen/text_caption" />
+            android:layout_weight="1"
+            android:layout_marginStart="@dimen/space_m"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/csTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/csSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_caption"
+                android:maxLines="1"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/csArrow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_s"
+            android:src="@drawable/ic_arrow_right"
+            app:tint="@color/text_secondary"
+            android:contentDescription="@null" />
     </LinearLayout>
-
-    <ImageView
-        android:id="@+id/csArrow"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="@dimen/space_s"
-        android:duplicateParentState="true"
-        android:contentDescription="@null"
-        android:src="@drawable/ic_arrow_right"
-        app:tint="@color/settings_row_text"
-        xmlns:app="http://schemas.android.com/apk/res-auto" />
-</LinearLayout>
+</FrameLayout>

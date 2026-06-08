@@ -27,18 +27,21 @@ class ContentManagerActivity : BaseActivity() {
 
         val first = addSection(
             R.drawable.ic_tv,
+            R.drawable.bg_badge_live,
             getString(R.string.content_manager_live),
             getString(R.string.content_manager_live_hint),
             ContentType.LIVE
         )
         addSection(
             R.drawable.ic_movie,
+            R.drawable.bg_badge_movies,
             getString(R.string.content_manager_movies),
             getString(R.string.content_manager_movies_hint),
             ContentType.VOD
         )
         addSection(
             R.drawable.ic_series,
+            R.drawable.bg_badge_series,
             getString(R.string.content_manager_series),
             getString(R.string.content_manager_series_hint),
             ContentType.SERIES
@@ -49,13 +52,17 @@ class ContentManagerActivity : BaseActivity() {
 
     private fun addSection(
         iconRes: Int,
+        badgeRes: Int,
         title: String,
         subtitle: String,
         type: ContentType
     ): android.view.View {
         val row = LayoutInflater.from(this)
             .inflate(R.layout.item_content_section, binding.sectionContainer, false)
-        row.findViewById<ImageView>(R.id.csIcon).setImageResource(iconRes)
+        row.findViewById<ImageView>(R.id.csIcon).apply {
+            setImageResource(iconRes)
+            setBackgroundResource(badgeRes)
+        }
         row.findViewById<TextView>(R.id.csTitle).text = title
         row.findViewById<TextView>(R.id.csSubtitle).text = subtitle
         row.setOnClickListener {

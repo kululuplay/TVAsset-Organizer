@@ -1,34 +1,69 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Content manager hub: pick Live TV / Movies / Series to edit categories and
-     (for Live) channels. Rows are added programmatically. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+     (for Live) channels. A branded header sits above the section tiles, which are
+     added programmatically into sectionContainer. Scrollable for smaller panels. -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:background="@drawable/bg_login_aurora"
+    android:fillViewport="true"
+    android:scrollbars="none"
+    android:clipToPadding="false"
     android:paddingHorizontal="@dimen/safe_area_h"
     android:paddingVertical="@dimen/safe_area_v">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/content_manager_title"
-        android:textColor="@color/text_primary"
-        android:textSize="@dimen/text_title"
-        android:textStyle="bold"
-        android:layout_marginBottom="@dimen/space_xs" />
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/content_manager_hint"
-        android:textColor="@color/text_secondary"
-        android:textSize="@dimen/text_caption"
-        android:layout_marginBottom="@dimen/space_l" />
-
     <LinearLayout
-        android:id="@+id/sectionContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical" />
-</LinearLayout>
+        android:orientation="vertical">
+
+        <!-- Branded header: gradient badge + title + helper line. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="@dimen/space_l">
+
+            <ImageView
+                android:layout_width="@dimen/badge_medium"
+                android:layout_height="@dimen/badge_medium"
+                android:background="@drawable/bg_badge_settings"
+                android:padding="@dimen/space_s"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_sort"
+                android:tint="@color/text_primary"
+                android:contentDescription="@null" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="@dimen/space_m"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/content_manager_title"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_title"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_xs"
+                    android:text="@string/content_manager_hint"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="@dimen/text_caption" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/sectionContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </LinearLayout>
+</ScrollView>
