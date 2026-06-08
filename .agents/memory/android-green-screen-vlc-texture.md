@@ -73,9 +73,14 @@ options on top of it. When in doubt, restore the baseline decode/display config:
 
 ## Diagnostic signal (how to read the logcat)
 The single fastest tell in `E VLC: libvlc decoder: output: …`:
-- `output: 17 unknown` = BROKEN — VLC got an opaque/unrecognized buffer (the
-  DR-on or forced-chroma drift). Always followed by `dequeue_in timeout: no input
-  available for 2secs` and frozen video.
+- `output: 17 unknown` = the OPAQUE MediaCodec/HW buffer. By itself this is NORMAL,
+  not broken: on the working Amlogic HW path the decoder hands VLC an opaque buffer
+  it can't introspect, logs `output: 17`, and the Amlogic compositor still paints
+  real video on the underlay. A real field log (4K HEVC) showed `output: 17` WITH a
+  perfect picture — only the audio was missing. It is BROKEN only when **followed by
+  `dequeue_in timeout: no input available for 2secs`** (frozen video, the DR-on /
+  forced-chroma drift). NEVER diagnose green/frozen from `output: 17` alone —
+  correlate with `dequeue_in timeout` AND an actual user-visible symptom first.
 - `output: 21 Biplanar 4:2:0 Y/UV, 1920x1080` = HEALTHY — VLC recognizes the NV12
   output and renders it. Confirmed working on the Amlogic box after restoring the
   v1.0.1 options.
