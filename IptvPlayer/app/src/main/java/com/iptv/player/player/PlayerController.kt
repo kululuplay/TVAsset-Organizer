@@ -28,7 +28,7 @@ class PlayerController(
     private val context: Context,
     private val container: ViewGroup,
     private val mode: PlayerMode,
-    private val decoderMode: DecoderMode = DecoderMode.AUTO,
+    private val decoderMode: DecoderMode = DecoderMode.SOFTWARE,
     private val allowPassthrough: Boolean = false,
     private val callback: Callback
 ) {

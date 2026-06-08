@@ -25,4 +25,4 @@
 - [Launch dialog priority & chaining](launch-dialog-priority.md) — expiry check runs before update prompt; chain via onNoPrompt so only one shows; expired notice is non-cancelable.
 - [VOD vs live playback paths](vod-vs-live-playback-paths.md) — VOD (VodPlayerActivity) & live TV (PlayerController/VlcPlayerEngine) are separate libVLC setups; mirror decode/anti-stutter tuning on both or one stutters.
 - [VLC skiploopfilter macroblocking](vlc-skiploopfilter-macroblocking.md) — avcodec-skiploopfilter=all kills the deblocking filter -> macroblocking with clean audio (SW path); use nonref; flag lives in BOTH live+VOD option sets.
-- [Decoder default = AUTO](decoder-default-auto.md) — default DecoderMode is AUTO (hw-first, sw fallback); SOFTWARE-default macroblocked high-bitrate channels on weak sticks. Green watchdog gap on VLC_HW noted.
+- [Decoder default = SOFTWARE](decoder-default-auto.md) — two kinds of green: no-frame (detectable, EXO watchdog) vs wrong-chroma plane (UNDETECTABLE, Amlogic). Chroma-green forced SOFTWARE default; can't watchdog it.
