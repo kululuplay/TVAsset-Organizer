@@ -49,6 +49,15 @@
         android:layout_marginStart="@dimen/space_s" />
 
     <ImageView
+        android:id="@+id/catchupBadge"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:src="@drawable/ic_catchup"
+        android:layout_marginStart="@dimen/space_s"
+        android:visibility="gone"
+        android:contentDescription="@string/catchup_title" />
+
+    <ImageView
         android:id="@+id/favStar"
         android:layout_width="20dp"
         android:layout_height="20dp"

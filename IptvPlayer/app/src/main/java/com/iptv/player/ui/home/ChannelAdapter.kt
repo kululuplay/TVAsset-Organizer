@@ -41,11 +41,13 @@ class ChannelAdapter(
         private val name: TextView = itemView.findViewById(R.id.channelName)
         private val number: TextView = itemView.findViewById(R.id.channelNumber)
         private val favStar: ImageView = itemView.findViewById(R.id.favStar)
+        private val catchupBadge: ImageView = itemView.findViewById(R.id.catchupBadge)
 
         fun bind(channel: Channel) {
             name.text = ChannelText.clean(channel.name)
             number.text = channel.number?.toString() ?: ""
             favStar.visibility = if (channel.isFavorite) View.VISIBLE else View.GONE
+            catchupBadge.visibility = if (channel.catchupDays > 0) View.VISIBLE else View.GONE
 
             val placeholder = LogoPlaceholder.forName(itemView.context, channel.name)
             if (channel.logoUrl.isNullOrBlank()) {

@@ -21,8 +21,11 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import coil.load
 import com.iptv.player.R
+import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Channel
 import com.iptv.player.databinding.ActivityHomeBinding
+import com.iptv.player.player.PlayerController
+import com.iptv.player.ui.catchup.CatchupActivity
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.ChannelText
 import com.iptv.player.ui.common.LogoPlaceholder
@@ -33,7 +36,11 @@ import com.iptv.player.ui.common.isAdult
 import com.iptv.player.ui.player.PlayerActivity
 import com.iptv.player.util.NewContentNotifier
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -64,6 +71,12 @@ class HomeActivity : BaseActivity() {
 
     /** Adult categories the user has already unlocked this session (avoid re-prompting). */
     private val unlockedCategories = mutableSetOf<String>()
+
+    /** Live preview player bound to the preview card (one connection at a time). */
+    private var previewController: PlayerController? = null
+
+    /** Debounce job so scrolling channels doesn't thrash the single stream socket. */
+    private var previewJob: kotlinx.coroutines.Job? = null
 
     companion object {
         /** Optional category id to open on (e.g. Favorites from the dashboard). */
@@ -141,6 +154,12 @@ class HomeActivity : BaseActivity() {
                         categoryAdapter.currentList
                             .firstOrNull { it.id == lastSelectedCategoryId }
                             ?.let { drillIntoCategory(it); return true }
+                    }
+                KeyEvent.KEYCODE_GUIDE, KeyEvent.KEYCODE_PROG_RED ->
+                    // repeatCount guard: a held key must not stack-launch the browser.
+                    if (event.repeatCount == 0) {
+                        openCatchup()
+                        return true
                     }
             }
         }
@@ -243,6 +262,9 @@ class HomeActivity : BaseActivity() {
 
     private fun showInfo(channel: Channel) {
         currentInfoChannel = channel
+        binding.catchupHint.visibility =
+            if (channel.catchupDays > 0) View.VISIBLE else View.GONE
+        schedulePreview(channel)
         binding.previewNumber.text = channel.number?.toString() ?: ""
         binding.previewTitle.text = ChannelText.clean(channel.name)
         val placeholder = LogoPlaceholder.forName(this, channel.name)
@@ -288,6 +310,8 @@ class HomeActivity : BaseActivity() {
 
     private fun clearPreview() {
         currentInfoChannel = null
+        stopPreview()
+        binding.catchupHint.visibility = View.GONE
         binding.previewNumber.text = ""
         binding.previewTitle.text = ""
         binding.previewProgram.text = ""
@@ -351,11 +375,83 @@ class HomeActivity : BaseActivity() {
 
     private fun openPlayer(channel: Channel) {
         PinLockHelper.guard(this, isAdult = channel.isAdult()) {
+            // Free the preview socket before the full player connects (single-connection).
+            stopPreview()
             val intent = Intent(this, PlayerActivity::class.java).apply {
                 putExtra(PlayerActivity.EXTRA_CHANNEL_ID, channel.id)
                 putExtra(PlayerActivity.EXTRA_CATEGORY_ID, lastSelectedCategoryId)
             }
             startActivity(intent)
         }
+    }
+
+    /** Opens the catch-up/archive browser, pre-focusing the previewed channel. */
+    private fun openCatchup() {
+        val intent = Intent(this, CatchupActivity::class.java)
+        currentInfoChannel?.takeIf { it.catchupDays > 0 }?.let {
+            intent.putExtra(CatchupActivity.EXTRA_CHANNEL_ID, it.id)
+        }
+        startActivity(intent)
+    }
+
+    /** Debounced live preview of the focused channel inside the preview card. */
+    private fun schedulePreview(channel: Channel) {
+        previewJob?.cancel()
+        binding.infoLogo.visibility = View.VISIBLE
+        previewJob = lifecycleScope.launch {
+            delay(700)
+            startPreview(channel)
+        }
+    }
+
+    private suspend fun startPreview(channel: Channel) {
+        val settings = ServiceLocator.settings
+        // Read settings first (these suspend); then bail if we were cancelled
+        // meanwhile (e.g. stopPreview from openPlayer) so a stale resume can't
+        // re-open the preview socket while the full player is connecting.
+        val mode = settings.playerMode.first()
+        val decoder = settings.decoderMode.first()
+        val passthrough = settings.audioPassthrough.first()
+        val buffer = settings.bufferMode.first()
+        currentCoroutineContext().ensureActive()
+        if (previewController == null) {
+            previewController = PlayerController(
+                context = this,
+                container = binding.previewVideo,
+                mode = mode,
+                decoderMode = decoder,
+                allowPassthrough = passthrough,
+                bufferMode = buffer,
+                callback = object : PlayerController.Callback {
+                    override fun onBuffering() {}
+                    override fun onPlaying(engineName: String) {
+                        binding.infoLogo.visibility = View.GONE
+                    }
+                    override fun onFatalError() {
+                        binding.infoLogo.visibility = View.VISIBLE
+                    }
+                    override fun onRetrying(attempt: Int) {}
+                }
+            )
+        }
+        previewController?.play(channel.streamUrl)
+    }
+
+    /** Stops + releases the preview so the single stream connection is freed. */
+    private fun stopPreview() {
+        previewJob?.cancel()
+        previewController?.release()
+        previewController = null
+        binding.infoLogo.visibility = View.VISIBLE
+    }
+
+    override fun onStop() {
+        super.onStop()
+        stopPreview()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        currentInfoChannel?.let { schedulePreview(it) }
     }
 }

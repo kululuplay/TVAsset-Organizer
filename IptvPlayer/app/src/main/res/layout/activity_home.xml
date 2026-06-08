@@ -95,6 +95,13 @@
             android:focusable="true"
             android:clickable="true">
 
+            <!-- Live preview surface: the focused channel plays here while browsing.
+                 Sits behind the poster logo + caption. -->
+            <FrameLayout
+                android:id="@+id/previewVideo"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
             <ImageView
                 android:id="@+id/infoLogo"
                 android:layout_width="140dp"
@@ -102,6 +109,25 @@
                 android:layout_gravity="center"
                 android:scaleType="fitCenter"
                 android:contentDescription="@string/now_playing" />
+
+            <!-- Catch-up hint chip: shown when the focused channel has an archive. -->
+            <TextView
+                android:id="@+id/catchupHint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|end"
+                android:layout_margin="@dimen/space_m"
+                android:background="@drawable/bg_badge_catchup"
+                android:drawablePadding="@dimen/space_s"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="@dimen/space_m"
+                android:paddingVertical="@dimen/space_s"
+                android:text="@string/catchup_title"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
+                android:textStyle="bold"
+                app:drawableStartCompat="@drawable/ic_catchup"
+                android:visibility="gone" />
 
             <!-- Bottom caption: number + name + current program -->
             <LinearLayout

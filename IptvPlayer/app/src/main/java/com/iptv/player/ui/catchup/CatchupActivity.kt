@@ -41,6 +41,13 @@ class CatchupActivity : BaseActivity() {
     private var currentChannel: Channel? = null
     private var didInitialFocus = false
 
+    /** Optional channel id to pre-focus (passed from the Live TV page). */
+    private val requestedChannelId: String? by lazy { intent.getStringExtra(EXTRA_CHANNEL_ID) }
+
+    companion object {
+        const val EXTRA_CHANNEL_ID = "extra_channel_id"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityCatchupBinding.inflate(layoutInflater)
@@ -78,8 +85,15 @@ class CatchupActivity : BaseActivity() {
                     if (channels.isEmpty()) View.VISIBLE else View.GONE
                 if (!didInitialFocus && channels.isNotEmpty()) {
                     didInitialFocus = true
-                    onChannelFocused(channels.first())
-                    binding.channelList.post { binding.channelList.requestFocus() }
+                    val target = channels.firstOrNull { it.id == requestedChannelId }
+                        ?: channels.first()
+                    val idx = channels.indexOf(target).coerceAtLeast(0)
+                    onChannelFocused(target)
+                    binding.channelList.post {
+                        binding.channelList.scrollToPosition(idx)
+                        (binding.channelList.findViewHolderForAdapterPosition(idx)?.itemView
+                            ?: binding.channelList).requestFocus()
+                    }
                 }
             }
         }
