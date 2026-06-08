@@ -56,11 +56,19 @@ object ServiceLocator {
                 // flaky portal doesn't surface as an immediate failure. Sits first
                 // so the UA + logging interceptors run on every attempt.
                 .addInterceptor(RetryInterceptor())
-                // Force a single app identity on every REST / update request.
+                // Stamp the app identity on REST / update requests, but only when
+                // the caller hasn't already chosen its own User-Agent. The speed
+                // test deliberately sends a browser UA so CDN/WAF-fronted endpoints
+                // (e.g. Cloudflare) don't challenge/block the bare app UA and fail.
                 .addInterceptor { chain ->
-                    val request = chain.request().newBuilder()
-                        .header("User-Agent", AppInfo.USER_AGENT)
-                        .build()
+                    val original = chain.request()
+                    val request = if (original.header("User-Agent") == null) {
+                        original.newBuilder()
+                            .header("User-Agent", AppInfo.USER_AGENT)
+                            .build()
+                    } else {
+                        original
+                    }
                     chain.proceed(request)
                 }
                 .addInterceptor(logging)

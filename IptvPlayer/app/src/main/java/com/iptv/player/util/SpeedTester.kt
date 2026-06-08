@@ -13,24 +13,64 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.coroutineContext
 
 object SpeedTester {
 
-    // Cloudflare's keyless speed-test endpoint serves an arbitrary byte count from
-    // a global CDN, so the result reflects the customer's true line speed rather
-    // than a possibly throttled IPTV origin. The cap is large enough that even a
-    // fast line never drains it within the window; we always stop on the timer.
-    private const val DOWNLOAD_URL = "https://speed.cloudflare.com/__down?bytes=500000000"
+    // Keyless speed-test endpoints that serve an arbitrary byte count from a global
+    // CDN, so the result reflects the customer's true line speed rather than a
+    // possibly throttled IPTV origin. The cap is large enough that even a fast line
+    // never drains it within the window; we always stop on the timer. We try them
+    // in order so a single CDN being unreachable/blocked on the customer's network
+    // doesn't doom the whole test.
+    private val DOWNLOAD_URLS = listOf(
+        "https://speed.cloudflare.com/__down?bytes=500000000",
+        "https://speed.hetzner.de/1GB.bin"
+    )
+    // Some CDN/WAF front-ends (notably Cloudflare) challenge or 403 requests that
+    // carry a bare, non-browser User-Agent. Send a realistic browser UA so the
+    // download isn't blocked; ServiceLocator's UA interceptor leaves this intact
+    // because it only stamps the app identity when no UA is already set.
+    private const val BROWSER_USER_AGENT =
+        "Mozilla/5.0 (Linux; Android 10; Android TV) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     private const val DURATION_NS = 10_000_000_000L
     private const val EMIT_INTERVAL_NS = 250_000_000L
     private const val BUFFER_SIZE = 64 * 1024
 
-    suspend fun measureMbps(onProgress: (Double) -> Unit): Double = withContext(Dispatchers.IO) {
-        val client = ServiceLocator.httpClient
-        val call = client.newCall(Request.Builder().url(DOWNLOAD_URL).build())
+    // A dedicated client derived from the shared one but WITHOUT the RetryInterceptor
+    // and with a hard call timeout. The measurement window is ~10s, so retries +
+    // backoff (and the shared 20s read timeout) would only stretch a doomed attempt
+    // for minutes; capping each attempt keeps the worst-case "failed" wait bounded
+    // even when both endpoints are unreachable.
+    private val speedClient: OkHttpClient by lazy {
+        ServiceLocator.httpClient.newBuilder()
+            .apply { interceptors().removeAll { it is RetryInterceptor } }
+            .callTimeout(15, TimeUnit.SECONDS)
+            .build()
+    }
+
+    suspend fun measureMbps(onProgress: (Double) -> Unit): Double {
+        for (url in DOWNLOAD_URLS) {
+            val mbps = measureFrom(url, onProgress)
+            if (mbps >= 0) return mbps
+        }
+        return -1.0
+    }
+
+    private suspend fun measureFrom(
+        url: String,
+        onProgress: (Double) -> Unit
+    ): Double = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", BROWSER_USER_AGENT)
+            .build()
+        val call = speedClient.newCall(request)
 
         // Tie the blocking OkHttp call to the coroutine lifecycle: if the coroutine
         // is cancelled (panel switch / onPause), abort the call so a blocked read()
