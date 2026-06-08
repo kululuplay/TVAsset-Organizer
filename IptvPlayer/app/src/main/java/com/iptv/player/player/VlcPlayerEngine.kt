@@ -145,12 +145,12 @@ class VlcPlayerEngine(
                     // VLC only accepts delays once the track is running.
                     applyDelays()
                     listener?.onPlaying()
-                    maybeFlagGreenProneProfile()
+                    maybeRouteByProfile()
                 }
                 // Video output created => track dimensions/frame rate are populated;
                 // the most reliable point to read the profile and route the bad one
                 // to software before the green frame is all the user ever sees.
-                MediaPlayer.Event.Vout -> maybeFlagGreenProneProfile()
+                MediaPlayer.Event.Vout -> maybeRouteByProfile()
                 MediaPlayer.Event.EndReached -> listener?.onEnded()
                 MediaPlayer.Event.EncounteredError -> {
                     PlaybackLog.log(context, engineName, "EncounteredError (forceSoftware=$forceSoftware)")
@@ -165,22 +165,46 @@ class VlcPlayerEngine(
     }
 
     /**
-     * On the hardware path, route the one Amlogic-green-prone profile — 1080p with
-     * a high frame rate (1080p@50/60, the failing H.264 streams) — to software for
-     * THIS stream only (onVideoInvalid -> controller restarts on VLC_SW). Read once
-     * the video output exists so the track dimensions/frame rate are populated.
+     * Resolution-aware decode routing, evaluated once the video output exists (so
+     * track dimensions/frame rate are populated). Two opposite moves:
+     *
+     *  - Software path + UHD/4K (≥1440p): no TV-box CPU can software-decode 4K at
+     *    80–100 Mbps in real time, so it stutters. Escalate THIS stream to the
+     *    hardware decoder (onSoftwareTooSlow -> controller restarts on VLC_HW).
+     *  - Hardware path + the Amlogic-green-prone profile — 1080p-class at a high
+     *    frame rate (1080p@50/60 H.264) but NOT UHD — drop to software for THIS
+     *    stream only (onVideoInvalid -> controller restarts on VLC_SW). 4K is
+     *    excluded so true UHD keeps the hardware path it needs.
+     *
      * Keyed on resolution + frame rate (no codec gate: libVLC's track codec field
-     * is not safely typed across versions, and the fps>=49 + 1080p rule already
-     * isolates the failing profile). Normal channels — lower resolution, or ~25fps
-     * interlaced 1080i — stay on hardware. No-op when already forceSoftware.
+     * is not safely typed across versions). Normal channels — lower resolution, or
+     * ~25fps interlaced 1080i — stay where they are.
      */
-    private fun maybeFlagGreenProneProfile() {
-        if (forceSoftware || greenCheckDone) return
+    private fun maybeRouteByProfile() {
+        if (greenCheckDone) return
         val track = mediaPlayer?.currentVideoTrack ?: return
         val den = track.frameRateDen
         val fps = if (den > 0) track.frameRateNum.toFloat() / den else 0f
-        val is1080p = track.height >= GREEN_PRONE_MIN_HEIGHT || track.width >= GREEN_PRONE_MIN_WIDTH
-        if (is1080p && fps >= GREEN_PRONE_MIN_FPS) {
+        val isUhd = track.height >= UHD_MIN_HEIGHT || track.width >= UHD_MIN_WIDTH
+
+        if (forceSoftware) {
+            // 4K cannot be software-decoded in real time -> escalate to hardware.
+            if (isUhd) {
+                greenCheckDone = true
+                PlaybackLog.log(
+                    context, engineName,
+                    "UHD ${track.width}x${track.height} on software -> hardware escalation"
+                )
+                listener?.onSoftwareTooSlow()
+            }
+            return
+        }
+
+        // Hardware path: only the 1080p-class high-fps profile is green-prone; 4K
+        // must stay on hardware (software can't keep up with it).
+        val is1080pClass = !isUhd &&
+            (track.height >= GREEN_PRONE_MIN_HEIGHT || track.width >= GREEN_PRONE_MIN_WIDTH)
+        if (is1080pClass && fps >= GREEN_PRONE_MIN_FPS) {
             greenCheckDone = true
             PlaybackLog.log(
                 context, engineName,
@@ -305,5 +329,10 @@ class VlcPlayerEngine(
         private const val GREEN_PRONE_MIN_HEIGHT = 1080
         private const val GREEN_PRONE_MIN_WIDTH = 1920
         private const val GREEN_PRONE_MIN_FPS = 49f
+
+        // UHD/4K threshold (QHD 1440p and up). Above this, software decode can't
+        // keep up with 80–100 Mbps streams, so the hardware decoder is mandatory.
+        private const val UHD_MIN_HEIGHT = 1440
+        private const val UHD_MIN_WIDTH = 2560
     }
 }

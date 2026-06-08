@@ -83,4 +83,12 @@ interface PlayerListener {
      * controller falls back to a software decode path.
      */
     fun onVideoInvalid() {}
+
+    /**
+     * We are software-decoding but the stream is UHD/4K (≥1440p). No TV box CPU can
+     * software-decode 4K at 80–100 Mbps in real time, so playback stutters badly.
+     * The controller escalates this one stream to the hardware decoder (the only
+     * viable 4K path) — the opposite direction of the green fallback.
+     */
+    fun onSoftwareTooSlow() {}
 }

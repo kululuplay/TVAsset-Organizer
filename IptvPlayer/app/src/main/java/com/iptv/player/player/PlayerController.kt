@@ -48,7 +48,7 @@ class PlayerController(
     private enum class Stage { EXO, VLC_HW, VLC_SW }
 
     /** Why the current stage failed, so we pick the right next stage. */
-    private enum class Reason { ERROR, AUDIO, VIDEO }
+    private enum class Reason { ERROR, AUDIO, VIDEO, SOFTWARE_SLOW }
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -169,6 +169,7 @@ class PlayerController(
         override fun onError(message: String?) = post { handleFailure(Reason.ERROR) }
         override fun onAudioUnavailable() = post { handleFailure(Reason.AUDIO) }
         override fun onVideoInvalid() = post { handleFailure(Reason.VIDEO) }
+        override fun onSoftwareTooSlow() = post { handleFailure(Reason.SOFTWARE_SLOW) }
     }
 
     private fun handleFailure(reason: Reason) {
@@ -197,6 +198,12 @@ class PlayerController(
 
     /** The stage to advance to, or null when no more paths are available. */
     private fun nextStage(current: Stage, reason: Reason): Stage? {
+        // UHD/4K on software can't decode in real time -> escalate to the hardware
+        // decoder (the only viable 4K path). This is an UPGRADE, the opposite of the
+        // green/software downgrade ladder below, so it runs regardless of decoderMode.
+        if (reason == Reason.SOFTWARE_SLOW) {
+            return if (current == Stage.VLC_SW) Stage.VLC_HW else null
+        }
         val softwareAllowed = decoderMode != DecoderMode.HARDWARE
         return when (current) {
             Stage.EXO -> when (reason) {
@@ -208,6 +215,7 @@ class PlayerController(
                 // the EXO -> VLC swap but stutters on 1080p, so we keep hardware and
                 // recommend PlayerMode.VLC for the affected channels instead.)
                 Reason.AUDIO, Reason.ERROR -> Stage.VLC_HW
+                Reason.SOFTWARE_SLOW -> null
             }
             Stage.VLC_HW -> if (softwareAllowed) Stage.VLC_SW else null
             Stage.VLC_SW -> null

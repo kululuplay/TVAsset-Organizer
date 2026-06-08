@@ -62,7 +62,12 @@ class VodPlayerActivity : BaseActivity() {
         private const val SKIP_MS = 10_000L
         private const val SAVE_INTERVAL_MS = 10_000L
         // Buffer (ms) for smooth start-up and seeking on jittery connections.
-        private const val CACHING_MS = 1500
+        private const val CACHING_MS = 3000
+
+        // UHD/4K threshold (QHD 1440p+). Software decode can't keep up with 4K at
+        // 80–100 Mbps, so above this we rebuild on the hardware decoder.
+        private const val UHD_MIN_HEIGHT = 1440
+        private const val UHD_MIN_WIDTH = 2560
         // How long the "languages / subtitles available" banner stays visible.
         private const val TRACK_HINT_MS = 4500L
         // Debounce after track-detection events before evaluating the hint, so we
@@ -91,6 +96,8 @@ class VodPlayerActivity : BaseActivity() {
     // Mirrors live TV: when the global Decoder setting is SOFTWARE we disable
     // MediaCodec and decode everything in software (matches PlayerController).
     private var forceSoftware = false
+    // Set once we rebuild on hardware for a UHD/4K stream, so it happens at most once.
+    private var uhdEscalated = false
 
     // Position to jump to once playback actually starts (resume support). VLC only
     // accepts a seek after the first Playing event, so we defer it until then.
@@ -329,6 +336,9 @@ class VodPlayerActivity : BaseActivity() {
                         if (event.buffering < 100f) View.VISIBLE else View.GONE
                 }
                 MediaPlayer.Event.Playing -> {
+                    // 4K on software stutters; rebuild on hardware before doing
+                    // anything else with this (about-to-be-released) player.
+                    if (maybeEscalateForUhd()) return@setEventListener
                     binding.bufferingIndicator.visibility = View.GONE
                     binding.playPauseButton.setImageResource(R.drawable.ic_pause)
                     binding.playPauseButton.contentDescription = getString(R.string.player_pause)
@@ -420,6 +430,39 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     /**
+     * If we're software-decoding a UHD/4K stream (which no TV-box CPU can handle at
+     * 80–100 Mbps), rebuild the player on the hardware decoder and resume from the
+     * current position. Returns true when an escalation was kicked off so the caller
+     * stops touching the about-to-be-released player. Mirrors VlcPlayerEngine's
+     * software→hardware UHD escalation on the live TV path.
+     */
+    private fun maybeEscalateForUhd(): Boolean {
+        if (uhdEscalated || !forceSoftware) return false
+        val track = mediaPlayer?.currentVideoTrack ?: return false
+        if (track.height < UHD_MIN_HEIGHT && track.width < UHD_MIN_WIDTH) return false
+        uhdEscalated = true
+        val resumeAt = (mediaPlayer?.time ?: 0L).coerceAtLeast(0L)
+        handler.post { escalateToHardware(resumeAt) }
+        return true
+    }
+
+    /** Tears down the software player and rebuilds it on hardware, resuming at [resumeAt]. */
+    private fun escalateToHardware(resumeAt: Long) {
+        mediaPlayer?.setEventListener(null)
+        mediaPlayer?.stop()
+        mediaPlayer?.detachViews()
+        mediaPlayer?.release()
+        libVlc?.release()
+        mediaPlayer = null
+        libVlc = null
+        videoLayout?.let { binding.videoContainer.removeView(it) }
+        videoLayout = null
+        forceSoftware = false
+        buildPlayer()
+        preparePlayback(resumeAt)
+    }
+
+    /**
      * On playback completion: mark the finished item watched (so grid/episode
      * badges update) and, for series episodes, auto-continue with the next
      * episode — same season first, then the first episode of the next season —
@@ -476,6 +519,7 @@ class VodPlayerActivity : BaseActivity() {
         // Fresh playback session: re-evaluate the track hint and never resume.
         trackHintShown = false
         autoResume = false
+        uhdEscalated = false
         preparePlayback(0L)
         showControls()
     }
