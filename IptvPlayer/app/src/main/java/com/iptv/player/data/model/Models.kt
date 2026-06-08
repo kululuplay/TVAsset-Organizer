@@ -82,19 +82,19 @@ enum class DecoderMode {
     SOFTWARE;
 
     companion object {
-        // Default = SOFTWARE: libVLC decodes every stream on the CPU to I420,
-        // which any TV sink displays correctly. AUTO/HARDWARE start on the
-        // Amlogic hardware decoder, which on some boxes (e.g. Xiaomi Stick)
-        // paints frames in the wrong colour plane -> a GREEN picture with the
-        // audio still fine. That green is undetectable in software (libVLC
-        // reports a healthy decode, frames keep arriving, the opaque HW surface
-        // can't be read back), so there is no reliable auto-fallback for it.
-        // A green screen looks completely broken; software's only downside is
-        // possible macroblocking on heavy channels on weak sticks (already
-        // softened by avcodec-skiploopfilter=nonref + avcodec-fast). Users on
-        // low-power boxes can opt into Auto/Hardware in Settings.
+        // Default = AUTO (per user request): hardware-first with automatic
+        // software fallback on decode failure -- the lightest path on weak
+        // sticks while staying compatible. CAVEAT: on some Amlogic boxes (e.g.
+        // Xiaomi Stick) the hardware decoder paints frames in the wrong colour
+        // plane -> a GREEN picture with audio still fine, and that green is
+        // undetectable in software (libVLC reports a healthy decode, frames keep
+        // arriving, the opaque HW surface can't be read back) so there is no
+        // reliable auto-fallback for it. Users hitting a green screen can switch
+        // to Software in Settings; users wanting max performance can pick AUTO/
+        // Hardware. Software's downside is possible macroblocking on heavy
+        // channels (softened by avcodec-skiploopfilter=nonref + avcodec-fast).
         fun fromName(value: String?): DecoderMode =
-            entries.firstOrNull { it.name == value } ?: SOFTWARE
+            entries.firstOrNull { it.name == value } ?: AUTO
     }
 }
 
