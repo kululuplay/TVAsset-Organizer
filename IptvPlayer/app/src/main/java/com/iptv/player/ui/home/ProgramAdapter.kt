@@ -35,6 +35,14 @@ class ProgramAdapter : ListAdapter<Program, ProgramAdapter.VH>(DIFF) {
         holder.bind(getItem(position))
     }
 
+    /**
+     * Rebinds visible rows so the "live now" dot tracks wall-clock program
+     * boundaries. Rows aren't focusable, so a full-range rebind is safe on TV.
+     */
+    fun refreshLiveState() {
+        if (itemCount > 0) notifyItemRangeChanged(0, itemCount)
+    }
+
     inner class VH(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val dot: View = itemView.findViewById(R.id.programDot)
         private val title: TextView = itemView.findViewById(R.id.programTitle)

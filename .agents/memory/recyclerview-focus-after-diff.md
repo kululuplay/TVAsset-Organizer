@@ -28,3 +28,13 @@ affected rows with a **payload** (`notifyItemChanged(pos, PAYLOAD_SELECTION)`)
 and handle it in the 3-arg `onBindViewHolder` by flipping `itemView.isSelected`
 only — no full rebind, focus preserved. **Rule:** selection/visual-state changes
 driven by focus must be targeted + payloaded, never a blanket notify.
+
+**Sibling trap #2 — disable change animations on EVERY focusable D-pad list.**
+A list that merely re-emits the same items with changed content (e.g. live
+category counts, or the Live TV channel list re-emitting on a favorite toggle)
+runs the default `SimpleItemAnimator` change animation, which detaches+rebinds
+the focused row mid-diff → focus is lost and the screen pops back (e.g. to the
+Dashboard). Fix on each such list:
+`(list.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false`.
+**Rule:** any focusable TV RecyclerView that re-emits in place needs this — apply
+it to all sibling lists on a screen, not just the first one you noticed it on.

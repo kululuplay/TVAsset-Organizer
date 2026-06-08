@@ -23,6 +23,7 @@ import coil.load
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Channel
+import com.iptv.player.data.model.Program
 import com.iptv.player.databinding.ActivityHomeBinding
 import com.iptv.player.player.PlayerController
 import com.iptv.player.ui.catchup.CatchupActivity
@@ -37,6 +38,7 @@ import com.iptv.player.ui.player.PlayerActivity
 import com.iptv.player.util.NewContentNotifier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -86,6 +88,9 @@ class HomeActivity : BaseActivity() {
 
         /** When true, the screen shows radio stations only (the Radio folder). */
         const val EXTRA_RADIO_MODE = "extra_radio_mode"
+
+        /** How often the preview's "now playing" program + EPG dots roll over. */
+        private const val NOW_NEXT_REFRESH_MS = 30_000L
     }
 
     private val zap by lazy {
@@ -149,11 +154,20 @@ class HomeActivity : BaseActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN) {
             when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_LEFT ->
-                    if (inChannelView && binding.channelList.hasFocus()) {
+                KeyEvent.KEYCODE_DPAD_LEFT -> when {
+                    // Drill back to categories from the channel list (mirrors Back).
+                    inChannelView && binding.channelList.hasFocus() -> {
                         showCategories()
                         return true
                     }
+                    // LEFT from the focusable preview card returns to the left list
+                    // instead of dead-ending, keeping the drill path uniform.
+                    binding.previewCard.hasFocus() -> {
+                        (if (inChannelView) binding.channelList else binding.categoryList)
+                            .requestFocus()
+                        return true
+                    }
+                }
                 KeyEvent.KEYCODE_DPAD_RIGHT ->
                     if (!inChannelView && binding.categoryList.hasFocus()) {
                         categoryAdapter.currentList
@@ -217,6 +231,11 @@ class HomeActivity : BaseActivity() {
         )
         binding.channelList.layoutManager = LinearLayoutManager(this)
         binding.channelList.adapter = channelAdapter
+        // Same fix as the category list: the channel list re-emits on favorite
+        // toggles and lazy content loads, and the default change-animation detaches
+        // the focused row mid-diff, causing D-pad focus loss. Rebind in place.
+        (binding.channelList.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
+            ?.supportsChangeAnimations = false
 
         epgAdapter = ProgramAdapter()
         binding.epgList.layoutManager = LinearLayoutManager(this)
@@ -229,47 +248,65 @@ class HomeActivity : BaseActivity() {
     }
 
     private fun observe() {
+        // Lifecycle-scoped: collection is suspended while the screen is STOPPED so we
+        // don't do submitList / EPG / UI work off-screen, and resubscribes on START.
         lifecycleScope.launch {
-            viewModel.categories.collectLatest { cats ->
-                categoryAdapter.submitList(cats) {
-                    // Run the one-time initial selection after the list has committed
-                    // so focusCategory() can find the target row reliably.
-                    if (cats.isNotEmpty() && !initialSelectionDone) {
-                        initialSelectionDone = true
-                        val requested = intent.getStringExtra(EXTRA_INITIAL_CATEGORY)
-                        // Live TV skips the two synthetic rows (Favorites/Recent);
-                        // Radio mode has none, so land on its first real category.
-                        val target = cats.firstOrNull { it.id == requested }
-                            ?: cats.getOrNull(if (radioMode) 0 else 2) ?: cats.first()
-                        lastSelectedCategoryId = target.id
-                        viewModel.selectCategory(target.id)
-                        focusCategory(target.id)
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    viewModel.categories.collectLatest { cats ->
+                        categoryAdapter.submitList(cats) {
+                            // Run the one-time initial selection after the list has
+                            // committed so focusCategory() can find the row reliably.
+                            if (cats.isNotEmpty() && !initialSelectionDone) {
+                                initialSelectionDone = true
+                                val requested = intent.getStringExtra(EXTRA_INITIAL_CATEGORY)
+                                // Live TV skips the two synthetic rows (Favorites/Recent);
+                                // Radio mode has none, so land on its first real category.
+                                val target = cats.firstOrNull { it.id == requested }
+                                    ?: cats.getOrNull(if (radioMode) 0 else 2) ?: cats.first()
+                                lastSelectedCategoryId = target.id
+                                viewModel.selectCategory(target.id)
+                                focusCategory(target.id)
+                            }
+                        }
                     }
                 }
-            }
-        }
-        lifecycleScope.launch {
-            viewModel.channels.collectLatest { channels ->
-                currentChannels = channels
-                channelAdapter.submitList(channels) {
-                    if (pendingScrollReset) {
-                        pendingScrollReset = false
-                        binding.channelList.scrollToPosition(0)
-                    }
-                    // While still browsing categories, preview the first channel
-                    // of the focused category (like the reference design).
-                    if (!inChannelView) {
-                        val first = channels.firstOrNull()
-                        if (first != null) showInfo(first) else clearPreview()
+                launch {
+                    viewModel.channels.collectLatest { channels ->
+                        currentChannels = channels
+                        channelAdapter.submitList(channels) {
+                            if (pendingScrollReset) {
+                                pendingScrollReset = false
+                                binding.channelList.scrollToPosition(0)
+                            }
+                            // While still browsing categories, preview the first channel
+                            // of the focused category (like the reference design).
+                            if (!inChannelView) {
+                                val first = channels.firstOrNull()
+                                if (first != null) showInfo(first) else clearPreview()
+                            }
+                        }
+                        binding.emptyState.visibility =
+                            if (channels.isEmpty()) View.VISIBLE else View.GONE
                     }
                 }
-                binding.emptyState.visibility =
-                    if (channels.isEmpty()) View.VISIBLE else View.GONE
+                // Time-driven now/next refresh: rolls the "live now" program + EPG dots
+                // over program boundaries without a focus/data event. Auto-cancels when
+                // STOPPED (repeatOnLifecycle), so no off-screen ticking.
+                launch {
+                    while (true) {
+                        delay(NOW_NEXT_REFRESH_MS)
+                        refreshNowNext()
+                    }
+                }
             }
         }
     }
 
     private var nowNextJob: kotlinx.coroutines.Job? = null
+
+    /** Last EPG programs fetched for the previewed channel; reused by the now/next tick. */
+    private var currentPrograms: List<Program> = emptyList()
 
     /** The channel currently shown in the preview/info panel. */
     private var currentInfoChannel: Channel? = null
@@ -307,6 +344,7 @@ class HomeActivity : BaseActivity() {
             }
         }
         binding.previewProgram.text = ""
+        currentPrograms = emptyList()
         epgAdapter.submitList(emptyList())
         binding.epgEmpty.visibility = View.GONE
 
@@ -314,6 +352,7 @@ class HomeActivity : BaseActivity() {
         nowNextJob = lifecycleScope.launch {
             try {
                 val programs = viewModel.programs(channel)
+                currentPrograms = programs
                 val now = System.currentTimeMillis()
                 val current = programs.firstOrNull { it.isLiveAt(now) }
                 binding.previewProgram.text = current?.let {
@@ -329,6 +368,7 @@ class HomeActivity : BaseActivity() {
                 throw e
             } catch (e: Throwable) {
                 // Best-effort guide: never let an EPG fetch crash the UI coroutine.
+                currentPrograms = emptyList()
                 epgAdapter.submitList(emptyList())
                 binding.epgEmpty.visibility = View.VISIBLE
             }
@@ -345,8 +385,25 @@ class HomeActivity : BaseActivity() {
         binding.infoLogo.setImageDrawable(null)
         binding.previewCaptionLogo.setImageDrawable(null)
         nowNextJob?.cancel()
+        currentPrograms = emptyList()
         epgAdapter.submitList(emptyList())
         binding.epgEmpty.visibility = View.GONE
+    }
+
+    /**
+     * Re-evaluates the "live now" program for the previewed channel from the
+     * already-fetched EPG (no network) and refreshes the program caption + the
+     * EPG row dots, so the guide stays correct across program boundaries while
+     * the user lingers on one channel. Driven by a STARTED-scoped ticker.
+     */
+    private fun refreshNowNext() {
+        if (currentInfoChannel == null || currentPrograms.isEmpty()) return
+        val now = System.currentTimeMillis()
+        val current = currentPrograms.firstOrNull { it.isLiveAt(now) }
+        binding.previewProgram.text = current?.let {
+            "${timeFmt.format(Date(it.startMs))} - ${timeFmt.format(Date(it.stopMs))}  ${it.title}"
+        } ?: ""
+        epgAdapter.refreshLiveState()
     }
 
     /**
@@ -489,5 +546,8 @@ class HomeActivity : BaseActivity() {
     override fun onStop() {
         super.onStop()
         stopPreview()
+        // Drop any pending number-zap commit so a delayed lookup can't launch the
+        // player after we've left the screen (and to release the buffer/refs).
+        zap.cancel()
     }
 }
