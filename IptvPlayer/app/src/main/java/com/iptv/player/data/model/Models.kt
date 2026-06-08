@@ -135,8 +135,8 @@ enum class BufferMode(
     val exoRebufferMs: Int
 ) {
     LOW(1500, 1000, 4000, 500, 1000),
-    NORMAL(3000, 2000, 8000, 1000, 1500),
-    HIGH(6000, 4000, 15000, 2500, 3000);
+    NORMAL(5000, 3000, 12000, 1500, 2500),
+    HIGH(10000, 6000, 20000, 3000, 5000);
 
     companion object {
         fun fromName(value: String?): BufferMode =
