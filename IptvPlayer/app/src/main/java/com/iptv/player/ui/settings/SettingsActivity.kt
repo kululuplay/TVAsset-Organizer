@@ -243,6 +243,12 @@ class SettingsActivity : BaseActivity() {
         val statusValue = addInfoRow(c, getString(R.string.account_status), "…")
         val expiryValue = addInfoRow(c, getString(R.string.account_expiry), "…")
         val connValue = addInfoRow(c, getString(R.string.account_connections), "…")
+        // Public IPv4 (home WAN address, for support) merged into the account
+        // section instead of a separate Network Info block at the bottom.
+        val ipValue = addInfoRow(c, getString(R.string.settings_public_ip), "…")
+        lifecycleScope.launch {
+            ipValue.text = PublicIpProvider.fetchIpv4() ?: "—"
+        }
 
         addSectionHeader(c, getString(R.string.settings_device_info))
         val version = runCatching {
@@ -251,13 +257,6 @@ class SettingsActivity : BaseActivity() {
         addInfoRow(c, getString(R.string.settings_app_version), version)
         addInfoRow(c, getString(R.string.settings_device), "${Build.MANUFACTURER} ${Build.MODEL}")
         addInfoRow(c, getString(R.string.settings_android), "Android ${Build.VERSION.RELEASE}")
-
-        // Network: the customer's public IPv4 (home WAN address) for support.
-        addSectionHeader(c, getString(R.string.settings_network_info))
-        val ipValue = addInfoRow(c, getString(R.string.settings_public_ip), "…")
-        lifecycleScope.launch {
-            ipValue.text = PublicIpProvider.fetchIpv4() ?: "—"
-        }
 
         lifecycleScope.launch {
             val config = ServiceLocator.settings.getSourceConfig()
