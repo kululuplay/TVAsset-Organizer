@@ -56,6 +56,9 @@ class VlcPlayerEngine(
     private var audioDelayMs = 0L
     private var subtitleDelayMs = 0L
 
+    // One-shot per stream so the green-prone profile check fires at most once.
+    private var greenCheckDone = false
+
     override fun bind(container: ViewGroup) {
         // Tuned for smooth IPTV on Android TV: a generous network buffer to
         // absorb jitter, plus options that keep playback real-time on weak
@@ -140,7 +143,12 @@ class VlcPlayerEngine(
                     // VLC only accepts delays once the track is running.
                     applyDelays()
                     listener?.onPlaying()
+                    maybeFlagGreenProneProfile()
                 }
+                // Video output created => track dimensions/frame rate are populated;
+                // the most reliable point to read the profile and route the bad one
+                // to software before the green frame is all the user ever sees.
+                MediaPlayer.Event.Vout -> maybeFlagGreenProneProfile()
                 MediaPlayer.Event.EndReached -> listener?.onEnded()
                 MediaPlayer.Event.EncounteredError -> {
                     PlaybackLog.log(context, engineName, "EncounteredError (forceSoftware=$forceSoftware)")
@@ -154,9 +162,52 @@ class VlcPlayerEngine(
         videoLayout = layout
     }
 
+    /**
+     * On the hardware path, route the one Amlogic-green-prone profile — H.264 at
+     * 1080p with a high frame rate (1080p@50/60) — to software for THIS stream
+     * only (onVideoInvalid -> controller restarts on VLC_SW). Read once the video
+     * output exists so the track dimensions/frame rate are populated; all other
+     * streams (lower res, ~25fps interlaced, non-H.264) keep decoding on hardware.
+     * No-op when already software-decoding (forceSoftware).
+     */
+    private fun maybeFlagGreenProneProfile() {
+        if (forceSoftware || greenCheckDone) return
+        val track = mediaPlayer?.currentVideoTrack ?: return
+        val den = track.frameRateDen
+        val fps = if (den > 0) track.frameRateNum.toFloat() / den else 0f
+        val is1080p = track.height >= GREEN_PRONE_MIN_HEIGHT || track.width >= GREEN_PRONE_MIN_WIDTH
+        val h264 = isH264(track.codec) || isH264(track.originalCodec)
+        if (h264 && is1080p && fps >= GREEN_PRONE_MIN_FPS) {
+            greenCheckDone = true
+            PlaybackLog.log(
+                context, engineName,
+                "green-prone HW profile H264 ${track.width}x${track.height}@${fps}fps -> software fallback"
+            )
+            listener?.onVideoInvalid()
+        }
+    }
+
+    /** True when a libVLC fourcc (codec / originalCodec) identifies H.264/AVC. */
+    private fun isH264(codec: Int): Boolean = when (fourccToString(codec)) {
+        "h264", "avc1", "x264" -> true
+        else -> false
+    }
+
+    /** Decode a libVLC 4-character codec fourcc (little-endian int) to a string. */
+    private fun fourccToString(codec: Int): String {
+        val bytes = byteArrayOf(
+            (codec and 0xFF).toByte(),
+            ((codec ushr 8) and 0xFF).toByte(),
+            ((codec ushr 16) and 0xFF).toByte(),
+            ((codec ushr 24) and 0xFF).toByte()
+        )
+        return String(bytes, Charsets.US_ASCII).trim().lowercase()
+    }
+
     override fun play(url: String) {
         val vlc = libVlc ?: return
         val mp = mediaPlayer ?: return
+        greenCheckDone = false
         PlaybackLog.log(context, engineName, "play forceSoftware=$forceSoftware passthrough=$allowPassthrough")
         val media = Media(vlc, android.net.Uri.parse(url)).apply {
             // Hardware decoding unless software was forced (then both off).

@@ -1,0 +1,16 @@
+Big progress: with HARDWARE decode, ~90% of channels now play correctly on the Xiaomi Amlogic stick on BOTH engines (ExoPlayer and libVLC). The remaining green screen is now isolated to ONE specific stream profile:
+H.264, 1920x1080, 50 fps, ~10 Mbps, MP2 audio (high-framerate, high-bitrate 1080p50).
+Audio works on these channels; only the video is green. The Amlogic hardware H.264 decoder fails specifically on this demanding 1080p@50fps high-bitrate / high-level profile, while it handles normal channels fine. Fix WITHOUT breaking the 90% that now work:
+1. Detect this problematic profile per-stream and auto-fallback to SOFTWARE decode only for it.
+
+When a stream is H.264 at 1080p with a high frame rate (≥50 fps) and/or high bitrate, automatically route THAT stream to software decoding, while leaving all other channels on hardware (do NOT change the global default — keep hardware for everything else).
+Read the stream's resolution/framerate from the player's track info (ExoPlayer Format.frameRate/height, or libVLC media track info) and decide before/at playback start.
+
+2. Better: detect the green frame at runtime and auto-recover.
+
+Even cleaner than a static rule: if hardware decode produces no real rendered frames within ~1–2 seconds (green/blank), automatically restart THAT stream once with software decode. This catches the bad profile generically without hardcoding fps thresholds. Use ExoPlayer's render/first-frame callbacks (or libVLC frame output) to detect "audio playing but no video frames rendered" and trigger the per-stream software fallback.
+Make the fallback per-stream and one-shot (no restart loop), and switch back to hardware on the next normal channel.
+
+3. Keep both engines working. Apply the same per-stream fallback logic to whichever engine is active. Do not regress the 90% of channels that now display correctly.
+4. Capture a device log on one of these 1080p50 channels (decoder name, input format incl. frame rate and whether interlaced, any MediaCodec error) so we can confirm it's the 1080p50 profile and that software fallback engages only for those.
+GOAL: the 1080p50 / high-bitrate channels show real video (via automatic software fallback for just those streams), while all other channels stay on hardware and keep working. No green screen anywhere, and no regression on the channels that already work.

@@ -24,10 +24,24 @@ libVLC's software path is the only safety net.
   **Why:** track selection transiently reports no selected audio while the
   selector settles; firing immediately caused false fallbacks.
 - Video failure: **no first frame after READY** within a timeout → onVideoInvalid.
-  There is NO pixel-green sampling anymore — ExoPlayer now outputs to a
-  **SurfaceView** (can't getBitmap), and the SurfaceView fix removes the green
-  cause at source (see green-screen Amlogic memory). A green-but-rendering frame
-  is the one case no longer auto-detectable; relies on the surface fix holding.
+  There is NO pixel-green sampling — ExoPlayer outputs to a **SurfaceView**
+  (can't getBitmap).
+- **Green-but-rendering is NOT runtime-detectable**: on the Amlogic green-prone
+  profile the HW decoder DOES push a (green) frame, so `onRenderedFirstFrame`
+  fires and the no-frame watchdog is satisfied — it never triggers. Any
+  "confirmatory runtime symptom" idea fails for the same reason.
+- **So detect it by FORMAT instead**, deterministically, at playback start:
+  H.264 + (height≥1080 || width≥1920) + frameRate ≥ 49 → fire `onVideoInvalid`
+  one-shot → controller routes THIS stream to VLC_SW; everything else stays HW.
+  Exo reads `Format` in `onVideoInputFormatChanged`; libVLC reads
+  `mediaPlayer.currentVideoTrack` (width/height/frameRateNum/frameRateDen + codec
+  fourcc → h264/avc1/x264) on the `Vout`/`Playing` event. Guard one-shot per
+  stream; skip when already forceSoftware.
+  **Why fps≥49:** broadcast 1080i50 is signaled at ~25fps frame rate (works on
+  HW); only progressive 1080p50/60 reports ≥49. This is the only discriminator
+  available — neither Media3 Format nor libVLC VideoTrack exposes interlace.
+  **Edge:** a 1080i stream signaled at field rate (50) would false-trigger SW;
+  confirm against a real device log before tightening/raising the threshold.
 - Passthrough OFF (default) forces PCM via
   `AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES` so Dolby/DTS that the TV
   falsely advertises as passthrough-capable still gets decoded to audible PCM.

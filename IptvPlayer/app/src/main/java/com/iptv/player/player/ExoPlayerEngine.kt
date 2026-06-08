@@ -29,6 +29,7 @@ import android.view.ViewGroup
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
@@ -174,6 +175,7 @@ class ExoPlayerEngine(
                     "videoInputFormat ${format.width}x${format.height} " +
                         "${format.sampleMimeType} fps=${format.frameRate}"
                 )
+                maybeFlagGreenProneProfile(format)
             }
 
             override fun onDroppedVideoFrames(
@@ -262,6 +264,34 @@ class ExoPlayerEngine(
         }
     }
 
+    /**
+     * The Amlogic hardware H.264 decoder greens out on the demanding 1080p@50fps
+     * (high frame-rate / high-bitrate) profile while handling normal channels fine.
+     * The no-frame watchdog can't catch it: the decoder DOES push a (green) frame,
+     * so onRenderedFirstFrame fires and the watchdog is satisfied. Detect that one
+     * profile from the input format instead and trigger the per-stream software
+     * fallback (onVideoInvalid -> controller restarts this stream on libVLC SW).
+     * One-shot per stream (guarded by [videoReported]); every other stream — lower
+     * resolution, lower frame rate, or non-H.264 — stays on hardware untouched.
+     */
+    private fun maybeFlagGreenProneProfile(format: Format) {
+        if (videoReported) return
+        val h264 = format.sampleMimeType == MimeTypes.VIDEO_H264
+        val is1080p = format.height >= GREEN_PRONE_MIN_HEIGHT || format.width >= GREEN_PRONE_MIN_WIDTH
+        // frameRate is Format.NO_VALUE (-1f) when unknown, so the >= check already
+        // excludes it; only genuine high-frame-rate streams trip the threshold.
+        val highFps = format.frameRate >= GREEN_PRONE_MIN_FPS
+        if (h264 && is1080p && highFps) {
+            videoReported = true
+            PlaybackLog.log(
+                context, engineName,
+                "green-prone HW profile H264 ${format.width}x${format.height}" +
+                    "@${format.frameRate}fps -> software fallback"
+            )
+            listener?.onVideoInvalid()
+        }
+    }
+
     private fun scheduleNoFrameCheck() {
         handler.postDelayed({
             // Reached READY with a video track but never rendered a frame =>
@@ -312,5 +342,13 @@ class ExoPlayerEngine(
         private const val AUDIO_CHECK_DELAY_MS = 1200L
         /** If no frame renders this long after READY, treat video as failed. */
         private const val NO_FRAME_TIMEOUT_MS = 6000L
+
+        // The green-prone Amlogic profile: H.264 at 1080p with a high frame rate
+        // (1080p@50/60). Normal 1080i broadcasts report ~25fps (field-coded), so
+        // the >=49 threshold separates the failing progressive 50/60fps streams
+        // from the interlaced ones that decode fine on hardware.
+        private const val GREEN_PRONE_MIN_HEIGHT = 1080
+        private const val GREEN_PRONE_MIN_WIDTH = 1920
+        private const val GREEN_PRONE_MIN_FPS = 49f
     }
 }
