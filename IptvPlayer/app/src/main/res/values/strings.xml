@@ -21,10 +21,6 @@
     <string name="wizard_step_source">Choose how to connect</string>
     <string name="wizard_step_language">Choose your language</string>
     <string name="wizard_finish">Finish</string>
-    <string name="wizard_next">Next</string>
-    <string name="wizard_step_indicator">Step %1$d of %2$d</string>
-    <string name="wizard_connect_title">Ready to connect</string>
-    <string name="wizard_connect_message">Now connect your IPTV service to start watching.</string>
     <string name="wizard_language_subtitle">Choose the language you\'d like to use.</string>
     <string name="wizard_language_system">System default</string>
 
