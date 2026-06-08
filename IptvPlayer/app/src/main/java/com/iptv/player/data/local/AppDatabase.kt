@@ -42,6 +42,8 @@ import com.iptv.player.data.local.entity.SeriesFtsEntity
 import com.iptv.player.data.local.entity.VodCategoryEntity
 import com.iptv.player.data.local.entity.VodEntity
 import com.iptv.player.data.local.entity.VodFtsEntity
+import com.iptv.player.data.local.entity.WatchedEntity
+import com.iptv.player.data.local.dao.WatchedDao
 
 @Database(
     entities = [
@@ -60,9 +62,10 @@ import com.iptv.player.data.local.entity.VodFtsEntity
         EpgMappingEntity::class,
         VodFtsEntity::class,
         SeriesFtsEntity::class,
-        ChannelFtsEntity::class
+        ChannelFtsEntity::class,
+        WatchedEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -82,6 +85,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun vodFtsDao(): VodFtsDao
     abstract fun seriesFtsDao(): SeriesFtsDao
     abstract fun channelFtsDao(): ChannelFtsDao
+    abstract fun watchedDao(): WatchedDao
 
     companion object {
 
@@ -120,13 +124,30 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v9 -> v10: adds the `watched` table that records finished movies/episodes
+         * so a "watched" tick survives the resume row being cleared on completion.
+         * Purely additive — existing cached content and resume positions are kept.
+         */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `watched` " +
+                        "(`contentId` TEXT NOT NULL, `type` TEXT NOT NULL, " +
+                        "`seriesId` TEXT, `watchedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`contentId`))"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_watched_seriesId` ON `watched` (`seriesId`)")
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(
                 context.applicationContext,
                 AppDatabase::class.java,
                 "iptv.db"
             )
-                .addMigrations(MIGRATION_8_9)
+                .addMigrations(MIGRATION_8_9, MIGRATION_9_10)
                 // Safety net for upgrades from versions older than 8 (dev-only
                 // builds that predate real migrations); v8 -> v9 is non-destructive.
                 .fallbackToDestructiveMigration()

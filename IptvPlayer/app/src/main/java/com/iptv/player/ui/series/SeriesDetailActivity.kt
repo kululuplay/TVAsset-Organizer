@@ -26,6 +26,8 @@ import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.CastAdapter
 import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.RatingStars
+import com.iptv.player.ui.common.SimilarAdapter
+import com.iptv.player.ui.common.SimilarCard
 import com.iptv.player.ui.player.VodPlayerActivity
 import com.iptv.player.ui.trailer.TrailerActivity
 import kotlinx.coroutines.CancellationException
@@ -46,6 +48,7 @@ class SeriesDetailActivity : BaseActivity() {
 
     private lateinit var seasonAdapter: SeasonAdapter
     private lateinit var episodeAdapter: EpisodeAdapter
+    private val similarAdapter = SimilarAdapter(onClicked = { openSimilar(it) })
 
     private var seriesId: String? = null
     private var seriesName: String = ""
@@ -88,6 +91,10 @@ class SeriesDetailActivity : BaseActivity() {
         binding.episodeList.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.episodeList.adapter = episodeAdapter
+
+        binding.similarList.layoutManager =
+            LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        binding.similarList.adapter = similarAdapter
     }
 
     /** Per-episode progress + the last-watched episode for a one-tap Play resume. */
@@ -97,15 +104,18 @@ class SeriesDetailActivity : BaseActivity() {
             // stale local cache) must never stop the series page from opening.
             val progress: Map<String, Long>
             val latest: ContinueItem?
+            val watched: Set<String>
             try {
                 progress = repo.episodeProgress(id)
                 latest = repo.latestSeriesResume(id)
+                watched = repo.watchedEpisodeIds(id)
             } catch (ce: CancellationException) {
                 throw ce
             } catch (t: Throwable) {
                 return@launch
             }
             episodeAdapter.setProgress(progress)
+            episodeAdapter.setWatched(watched)
             latestResume = latest
             if (latest != null) {
                 binding.playLabel.text = getString(R.string.resume_continue) + "  " +
@@ -148,8 +158,38 @@ class SeriesDetailActivity : BaseActivity() {
             } catch (t: Throwable) {
                 null
             }
-            if (series != null) bindHeader(series)
+            if (series != null) {
+                bindHeader(series)
+                loadSimilar(series)
+            }
         }
+    }
+
+    /** Loads other series from the same category into the "Similar" rail. */
+    private fun loadSimilar(series: Series) {
+        lifecycleScope.launch {
+            val similar = try {
+                repo.similarSeries(series)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                emptyList()
+            }
+            val cards = similar.map {
+                SimilarCard(it.id, it.name, it.posterUrl, it.rating, it.releaseDate)
+            }
+            similarAdapter.submitList(cards)
+            val show = cards.isNotEmpty()
+            binding.similarLabel.visibility = if (show) View.VISIBLE else View.GONE
+            binding.similarList.visibility = if (show) View.VISIBLE else View.GONE
+        }
+    }
+
+    /** Reopens the detail screen for a tapped "Similar" poster. */
+    private fun openSimilar(card: SimilarCard) {
+        startActivity(Intent(this, SeriesDetailActivity::class.java).apply {
+            putExtra(EXTRA_SERIES_ID, card.id)
+        })
     }
 
     private fun bindHeader(series: Series) {

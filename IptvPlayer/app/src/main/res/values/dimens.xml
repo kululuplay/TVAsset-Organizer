@@ -10,6 +10,7 @@
     <!-- ~5% safe area so content isn't cropped on old TVs. -->
     <dimen name="safe_area_h">48dp</dimen>
     <dimen name="safe_area_v">27dp</dimen>
+    <dimen name="similar_poster_width">120dp</dimen>
     <dimen name="tile_radius">20dp</dimen>
     <dimen name="badge_radius">16dp</dimen>
     <dimen name="badge_hero">88dp</dimen>

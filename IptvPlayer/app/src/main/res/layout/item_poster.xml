@@ -24,6 +24,35 @@
         app:layout_constraintDimensionRatio="H,2:3"
         android:contentDescription="@string/nav_movies" />
 
+    <!-- Resume progress bar pinned to the bottom of the poster artwork. -->
+    <ProgressBar
+        android:id="@+id/posterProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="0dp"
+        android:layout_height="4dp"
+        android:max="100"
+        android:progressTint="@color/accent"
+        android:progressBackgroundTint="@color/bg_card_focused"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="@id/posterImage"
+        app:layout_constraintEnd_toEndOf="@id/posterImage"
+        app:layout_constraintBottom_toBottomOf="@id/posterImage" />
+
+    <!-- Watched (finished) tick, top-left of the poster artwork. -->
+    <ImageView
+        android:id="@+id/posterWatched"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:padding="3dp"
+        android:src="@drawable/ic_check"
+        android:background="@drawable/bg_time_chip"
+        android:tint="@color/accent"
+        android:layout_margin="@dimen/space_xs"
+        android:visibility="gone"
+        android:contentDescription="@string/cd_watched"
+        app:layout_constraintTop_toTopOf="@id/posterImage"
+        app:layout_constraintStart_toStartOf="@id/posterImage" />
+
     <!-- Floating rating badge (top-right of the poster). -->
     <LinearLayout
         android:id="@+id/posterRatingRow"

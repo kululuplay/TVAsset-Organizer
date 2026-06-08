@@ -107,11 +107,18 @@
     <string name="detail_genre">Genre</string>
     <string name="detail_year">Year</string>
     <string name="detail_rating">Rating</string>
+    <string name="cd_watched">Watched</string>
+    <string name="sort_label">Sort</string>
+    <string name="sort_recent">Recently added</string>
+    <string name="sort_az">A-Z</string>
+    <string name="sort_rating">Rating</string>
+    <string name="sort_year">Year</string>
     <string name="detail_plot">Plot</string>
     <string name="series_season">Season %1$d</string>
     <string name="series_episode">Episode %1$d</string>
     <string name="detail_more">more</string>
     <string name="detail_seasons">Seasons</string>
+    <string name="detail_similar">Similar</string>
     <string name="cat_recently_added">Recently added</string>
 
     <!-- Settings -->

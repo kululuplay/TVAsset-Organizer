@@ -62,6 +62,23 @@
                 android:maxLines="1"
                 android:ellipsize="end" />
 
+            <TextView
+                android:id="@+id/sortButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:background="@drawable/bg_poster"
+                android:paddingHorizontal="@dimen/space_m"
+                android:paddingVertical="@dimen/space_s"
+                android:layout_marginEnd="@dimen/space_m"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:drawableStart="@drawable/ic_sort"
+                android:drawablePadding="@dimen/space_s" />
+
             <com.iptv.player.ui.common.ClockView
                 android:id="@+id/clock"
                 android:layout_width="wrap_content"

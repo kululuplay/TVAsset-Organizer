@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Category
+import com.iptv.player.data.model.ContentSort
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.VodItem
 import androidx.paging.PagingData
@@ -70,6 +71,20 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
     private val selectedCategory = MutableStateFlow<String?>(null)
     private val query = MutableStateFlow("")
 
+    /** Current grid ordering; cycled from the UI. Defaults to newest-first. */
+    private val _sort = MutableStateFlow(ContentSort.RECENT)
+    val sort: StateFlow<ContentSort> = _sort
+
+    fun setSort(order: ContentSort) {
+        _sort.value = order
+    }
+
+    /** Watch-progress percents (0..100) keyed by resume id, for grid bars. */
+    suspend fun repoAllWatchProgress(): Map<String, Int> = repo.allWatchProgress()
+
+    /** Watched (finished) content ids, for grid ticks. */
+    suspend fun repoWatchedIds(): Set<String> = repo.watchedIds()
+
     // Categories whose movies are currently being lazily downloaded. Tracked so
     // overlapping selections don't fetch the same category twice and so the
     // spinner only hides once *all* in-flight fetches finish.
@@ -110,13 +125,14 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
     val items: Flow<PagingData<VodItem>> =
         combine(
             selectedCategory,
-            query.debounce(250).distinctUntilChanged()
-        ) { catId, q -> catId to q }
-            .flatMapLatest { (catId, q) ->
+            query.debounce(250).distinctUntilChanged(),
+            _sort
+        ) { catId, q, sort -> Triple(catId, q, sort) }
+            .flatMapLatest { (catId, q, sort) ->
                 when {
                     q.isNotEmpty() -> repo.pagingVodSearch(q)
-                    catId == null || catId == CAT_ALL -> repo.pagingRecentVod()
-                    else -> repo.pagingVodByCategory(catId)
+                    catId == null || catId == CAT_ALL -> repo.pagingVodAll(sort)
+                    else -> repo.pagingVodByCategory(catId, sort)
                 }
             }
             .cachedIn(viewModelScope)

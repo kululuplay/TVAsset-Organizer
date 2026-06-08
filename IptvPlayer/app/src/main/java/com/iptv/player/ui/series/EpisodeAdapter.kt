@@ -27,11 +27,19 @@ class EpisodeAdapter(
     /** Saved positions (ms) keyed by episode id, used to draw per-card progress. */
     private var progressByEpisode: Map<String, Long> = emptyMap()
 
+    /** Raw episode ids that have been fully watched, used to draw the tick. */
+    private var watchedEpisodes: Set<String> = emptySet()
+
     /** Series poster, used when an episode has no still of its own. */
     var fallbackPoster: String? = null
 
     fun setProgress(progress: Map<String, Long>) {
         progressByEpisode = progress
+        notifyDataSetChanged()
+    }
+
+    fun setWatched(ids: Set<String>) {
+        watchedEpisodes = ids
         notifyDataSetChanged()
     }
 
@@ -50,6 +58,7 @@ class EpisodeAdapter(
         private val number: TextView = itemView.findViewById(R.id.episodeNumber)
         private val title: TextView = itemView.findViewById(R.id.episodeTitle)
         private val progress: ProgressBar = itemView.findViewById(R.id.episodeProgress)
+        private val watched: ImageView = itemView.findViewById(R.id.episodeWatched)
 
         fun bind(episode: Episode) {
             number.text = itemView.context.getString(
@@ -69,9 +78,12 @@ class EpisodeAdapter(
                 }
             }
 
+            val isWatched = episode.id in watchedEpisodes
+            watched.visibility = if (isWatched) View.VISIBLE else View.GONE
+
             val positionMs = progressByEpisode[episode.id] ?: 0L
             val durationMs = (episode.durationSecs ?: 0) * 1000L
-            if (positionMs > 0L && durationMs > 0L) {
+            if (!isWatched && positionMs > 0L && durationMs > 0L) {
                 progress.progress = ((positionMs * 100) / durationMs).toInt().coerceIn(0, 100)
                 progress.visibility = View.VISIBLE
             } else {

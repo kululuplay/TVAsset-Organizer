@@ -27,12 +27,14 @@ import com.iptv.player.cast.CastController
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.AspectRatio
 import com.iptv.player.data.model.DecoderMode
+import com.iptv.player.data.model.Episode
 import com.iptv.player.data.model.ResumeKind
 import com.iptv.player.data.model.ResumeMeta
 import com.iptv.player.databinding.ActivityVodPlayerBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.SleepTimer
 import com.iptv.player.util.AppInfo
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.videolan.libvlc.LibVLC
@@ -366,6 +368,7 @@ class VodPlayerActivity : BaseActivity() {
                     binding.playPauseButton.setImageResource(R.drawable.ic_play)
                     binding.playPauseButton.contentDescription = getString(R.string.detail_play)
                     persistResume()
+                    onPlaybackFinished()
                 }
                 MediaPlayer.Event.EncounteredError -> {
                     binding.bufferingIndicator.visibility = View.GONE
@@ -414,6 +417,67 @@ class VodPlayerActivity : BaseActivity() {
         media.release()
         mp.play()
         startTimers()
+    }
+
+    /**
+     * On playback completion: mark the finished item watched (so grid/episode
+     * badges update) and, for series episodes, auto-continue with the next
+     * episode — same season first, then the first episode of the next season —
+     * so binge-watching is hands-free.
+     */
+    private fun onPlaybackFinished() {
+        val meta = resumeMeta ?: return
+        lifecycleScope.launch {
+            try {
+                repo.markWatched(meta.contentId, meta.kind.raw, meta.seriesId)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (_: Throwable) {
+            }
+            if (meta.kind != ResumeKind.EPISODE) return@launch
+            val seriesId = meta.seriesId ?: return@launch
+            val next = nextEpisode(seriesId, meta.seasonNumber, meta.episodeNumber) ?: return@launch
+            startEpisode(next, meta)
+        }
+    }
+
+    /** Next episode after (season, episode), rolling into the next season's first. */
+    private suspend fun nextEpisode(seriesId: String, season: Int, episode: Int): Episode? {
+        val seasons = try {
+            repo.getCachedSeasons(seriesId)
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (_: Throwable) {
+            return null
+        }
+        if (seasons.isEmpty()) return null
+        val ordered = seasons.sortedBy { it.seasonNumber }
+        val current = ordered.firstOrNull { it.seasonNumber == season }
+        val eps = current?.episodes?.sortedBy { it.episodeNumber }.orEmpty()
+        val idx = eps.indexOfFirst { it.episodeNumber == episode }
+        if (idx >= 0 && idx + 1 < eps.size) return eps[idx + 1]
+        // Roll over to the first episode of the next season.
+        return ordered.firstOrNull { it.seasonNumber > season }
+            ?.episodes?.minByOrNull { it.episodeNumber }
+    }
+
+    /** Swaps the player onto [next], reusing the live engine, and plays from start. */
+    private fun startEpisode(next: Episode, prev: ResumeMeta) {
+        streamUrl = next.streamUrl
+        resumeId = "ep_" + next.id
+        resumeMeta = prev.copy(
+            contentId = "ep_" + next.id,
+            streamUrl = next.streamUrl,
+            posterUrl = next.posterUrl ?: prev.posterUrl,
+            seasonNumber = next.seasonNumber,
+            episodeNumber = next.episodeNumber
+        )
+        binding.titleText.text = next.title
+        // Fresh playback session: re-evaluate the track hint and never resume.
+        trackHintShown = false
+        autoResume = false
+        preparePlayback(0L)
+        showControls()
     }
 
     private fun startTimers() {

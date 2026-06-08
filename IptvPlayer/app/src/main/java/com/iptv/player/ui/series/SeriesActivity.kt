@@ -17,6 +17,7 @@ import androidx.paging.LoadState
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.R
+import com.iptv.player.data.model.ContentSort
 import com.iptv.player.databinding.ActivitySeriesBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.NewContentPopup
@@ -41,6 +42,11 @@ class SeriesActivity : BaseActivity() {
 
     private lateinit var categoryAdapter: CategoryAdapter
     private lateinit var seriesAdapter: SeriesAdapter
+
+    /** Sort orders cycled by the header button, in display order. */
+    private val sortCycle = listOf(
+        ContentSort.RECENT, ContentSort.NAME, ContentSort.RATING, ContentSort.YEAR
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -101,6 +107,22 @@ class SeriesActivity : BaseActivity() {
         binding.posterGrid.layoutManager = GridLayoutManager(this, 4)
         binding.posterGrid.autoFitColumns(min = 3)
         binding.posterGrid.adapter = seriesAdapter
+
+        binding.sortButton.setOnClickListener {
+            val next = sortCycle[(sortCycle.indexOf(viewModel.sort.value) + 1) % sortCycle.size]
+            viewModel.setSort(next)
+        }
+    }
+
+    /** Localised "Sort: <order>" label for the header chip. */
+    private fun sortLabel(order: ContentSort): String {
+        val option = when (order) {
+            ContentSort.RECENT -> R.string.sort_recent
+            ContentSort.NAME -> R.string.sort_az
+            ContentSort.RATING -> R.string.sort_rating
+            ContentSort.YEAR -> R.string.sort_year
+        }
+        return "${getString(R.string.sort_label)}: ${getString(option)}"
     }
 
     private fun observe() {
@@ -123,6 +145,11 @@ class SeriesActivity : BaseActivity() {
         lifecycleScope.launch {
             viewModel.items.collectLatest { data ->
                 seriesAdapter.submitData(data)
+            }
+        }
+        lifecycleScope.launch {
+            viewModel.sort.collectLatest { order ->
+                binding.sortButton.text = sortLabel(order)
             }
         }
         // When a fresh page settles (category switch / new search), jump to the top.

@@ -22,6 +22,8 @@ import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.CastAdapter
 import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.RatingStars
+import com.iptv.player.ui.common.SimilarAdapter
+import com.iptv.player.ui.common.SimilarCard
 import com.iptv.player.ui.player.VodPlayerActivity
 import com.iptv.player.ui.trailer.TrailerActivity
 import kotlinx.coroutines.CancellationException
@@ -37,6 +39,7 @@ class VodDetailActivity : BaseActivity() {
     private val repo = ServiceLocator.repository
     private val settings = ServiceLocator.settings
     private val castAdapter = CastAdapter()
+    private val similarAdapter = SimilarAdapter(onClicked = { openSimilar(it) })
 
     private var current: VodItem? = null
     private var hasResume = false
@@ -50,6 +53,10 @@ class VodDetailActivity : BaseActivity() {
         binding.castList.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.castList.adapter = castAdapter
+
+        binding.similarList.layoutManager =
+            LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        binding.similarList.adapter = similarAdapter
 
         val id = intent.getStringExtra(EXTRA_VOD_ID)
         if (id == null) {
@@ -111,6 +118,34 @@ class VodDetailActivity : BaseActivity() {
             false
         }
         renderFavorite()
+        loadSimilar(item)
+    }
+
+    /** Loads other movies from the same category into the "Similar" rail. */
+    private fun loadSimilar(item: VodItem) {
+        lifecycleScope.launch {
+            val similar = try {
+                repo.similarMovies(item)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                emptyList()
+            }
+            val cards = similar.map {
+                SimilarCard(it.id, it.name, it.posterUrl, it.rating, it.releaseDate)
+            }
+            similarAdapter.submitList(cards)
+            val show = cards.isNotEmpty()
+            binding.similarLabel.visibility = if (show) View.VISIBLE else View.GONE
+            binding.similarList.visibility = if (show) View.VISIBLE else View.GONE
+        }
+    }
+
+    /** Reopens the detail screen for a tapped "Similar" poster. */
+    private fun openSimilar(card: SimilarCard) {
+        startActivity(Intent(this, VodDetailActivity::class.java).apply {
+            putExtra(EXTRA_VOD_ID, card.id)
+        })
     }
 
     private fun bind(item: VodItem) {

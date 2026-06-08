@@ -213,6 +213,7 @@
                 android:focusable="true"
                 android:focusableInTouchMode="false"
                 android:padding="@dimen/space_m"
+                android:nextFocusRight="@id/similarList"
                 android:src="@drawable/ic_heart"
                 android:contentDescription="@string/section_favorites" />
         </LinearLayout>
@@ -277,4 +278,36 @@
                 android:visibility="gone" />
         </FrameLayout>
     </LinearLayout>
+
+    <!-- "Similar" rail in the empty top-right column. -->
+    <TextView
+        android:id="@+id/similarLabel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/space_l"
+        android:layout_marginEnd="@dimen/safe_area_h"
+        android:layout_marginTop="@dimen/safe_area_v"
+        android:text="@string/detail_similar"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/detail_section_text"
+        android:textStyle="bold"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="@id/heroGuideline"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/similarList"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_s"
+        android:layout_marginStart="@dimen/space_l"
+        android:layout_marginEnd="@dimen/safe_area_h"
+        android:clipToPadding="false"
+        android:nextFocusLeft="@id/playButton"
+        android:nextFocusDown="@id/seasonList"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="@id/heroGuideline"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/similarLabel" />
 </androidx.constraintlayout.widget.ConstraintLayout>

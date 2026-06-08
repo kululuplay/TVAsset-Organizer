@@ -33,6 +33,7 @@ import com.iptv.player.data.local.entity.VodFtsEntity
 import com.iptv.player.data.model.AccountInfo
 import com.iptv.player.data.model.Category
 import com.iptv.player.data.model.Channel
+import com.iptv.player.data.model.ContentSort
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.util.NewContentNotifier
 import com.iptv.player.data.model.ContinueItem
@@ -94,6 +95,7 @@ class IptvRepository(
     private val seriesCategoryDao = db.seriesCategoryDao()
     private val profileDao = db.profileDao()
     private val resumeDao = db.resumeDao()
+    private val watchedDao = db.watchedDao()
     private val epgMappingDao = db.epgMappingDao()
     private val vodFtsDao = db.vodFtsDao()
     private val seriesFtsDao = db.seriesFtsDao()
@@ -456,6 +458,28 @@ class IptvRepository(
         Pager(pagingConfig) { vodDao.pagingByCategory(categoryId) }
             .flow.map { data -> data.map { it.toModel() } }
 
+    /** Whole movie cache in the requested [sort] order. */
+    fun pagingVodAll(sort: ContentSort): Flow<PagingData<VodItem>> =
+        Pager(pagingConfig) {
+            when (sort) {
+                ContentSort.RECENT -> vodDao.pagingRecent()
+                ContentSort.NAME -> vodDao.pagingAllByName()
+                ContentSort.RATING -> vodDao.pagingAllByRating()
+                ContentSort.YEAR -> vodDao.pagingAllByYear()
+            }
+        }.flow.map { data -> data.map { it.toModel() } }
+
+    /** One category's movies in the requested [sort] order. */
+    fun pagingVodByCategory(categoryId: String, sort: ContentSort): Flow<PagingData<VodItem>> =
+        Pager(pagingConfig) {
+            when (sort) {
+                ContentSort.RECENT -> vodDao.pagingByCategory(categoryId)
+                ContentSort.NAME -> vodDao.pagingCategoryByName(categoryId)
+                ContentSort.RATING -> vodDao.pagingCategoryByRating(categoryId)
+                ContentSort.YEAR -> vodDao.pagingCategoryByYear(categoryId)
+            }
+        }.flow.map { data -> data.map { it.toModel() } }
+
     /** Instant FTS search, paged. Empty input yields an empty page (no MATCH). */
     fun pagingVodSearch(query: String): Flow<PagingData<VodItem>> {
         val match = toFtsQuery(query)
@@ -668,6 +692,28 @@ class IptvRepository(
     fun pagingSeriesByCategory(categoryId: String): Flow<PagingData<Series>> =
         Pager(pagingConfig) { seriesDao.pagingByCategory(categoryId) }
             .flow.map { data -> data.map { it.toModel() } }
+
+    /** Whole series cache in the requested [sort] order. */
+    fun pagingSeriesAll(sort: ContentSort): Flow<PagingData<Series>> =
+        Pager(pagingConfig) {
+            when (sort) {
+                ContentSort.RECENT -> seriesDao.pagingRecent()
+                ContentSort.NAME -> seriesDao.pagingAllByName()
+                ContentSort.RATING -> seriesDao.pagingAllByRating()
+                ContentSort.YEAR -> seriesDao.pagingAllByYear()
+            }
+        }.flow.map { data -> data.map { it.toModel() } }
+
+    /** One category's series in the requested [sort] order. */
+    fun pagingSeriesByCategory(categoryId: String, sort: ContentSort): Flow<PagingData<Series>> =
+        Pager(pagingConfig) {
+            when (sort) {
+                ContentSort.RECENT -> seriesDao.pagingByCategory(categoryId)
+                ContentSort.NAME -> seriesDao.pagingCategoryByName(categoryId)
+                ContentSort.RATING -> seriesDao.pagingCategoryByRating(categoryId)
+                ContentSort.YEAR -> seriesDao.pagingCategoryByYear(categoryId)
+            }
+        }.flow.map { data -> data.map { it.toModel() } }
 
     /** Instant FTS search, paged. Empty input yields an empty page (no MATCH). */
     fun pagingSeriesSearch(query: String): Flow<PagingData<Series>> {
@@ -1161,6 +1207,11 @@ class IptvRepository(
             // the Continue Watching rail to genuinely in-progress content.
             if (positionMs < 10_000 || (durationMs > 0 && positionMs > durationMs - 30_000)) {
                 resumeDao.clear(meta.contentId)
+                // A near-complete position means the title was finished: record it
+                // as watched so the tick survives the resume row being cleared.
+                if (durationMs > 0 && positionMs > durationMs - 30_000) {
+                    markWatched(meta.contentId, meta.kind.raw, meta.seriesId)
+                }
             } else {
                 resumeDao.save(
                     ResumeEntity(
@@ -1218,6 +1269,59 @@ class IptvRepository(
         seasonNumber = seasonNumber,
         episodeNumber = episodeNumber
     )
+
+    /** Watch-progress percent (0..100) keyed by resume contentId, for grid bars. */
+    suspend fun allWatchProgress(): Map<String, Int> = withContext(Dispatchers.IO) {
+        resumeDao.all().associate { row ->
+            val pct = if (row.durationMs > 0) {
+                ((row.positionMs * 100) / row.durationMs).toInt().coerceIn(0, 100)
+            } else 0
+            row.contentId to pct
+        }
+    }
+
+    // ---- Watched (finished) state --------------------------------------
+
+    suspend fun markWatched(contentId: String, type: String, seriesId: String? = null) =
+        withContext(Dispatchers.IO) {
+            watchedDao.mark(
+                com.iptv.player.data.local.entity.WatchedEntity(
+                    contentId = contentId,
+                    type = type,
+                    seriesId = seriesId,
+                    watchedAt = System.currentTimeMillis()
+                )
+            )
+        }
+
+    suspend fun isWatched(contentId: String): Boolean =
+        withContext(Dispatchers.IO) { watchedDao.isWatched(contentId) }
+
+    /** All watched content ids, for badging the movie/series grids. */
+    suspend fun watchedIds(): Set<String> =
+        withContext(Dispatchers.IO) { watchedDao.allIds().toSet() }
+
+    /** Watched episode ids for one series (raw episode ids, "ep_" stripped). */
+    suspend fun watchedEpisodeIds(seriesId: String): Set<String> =
+        withContext(Dispatchers.IO) {
+            watchedDao.idsForSeries(seriesId).map { it.removePrefix("ep_") }.toSet()
+        }
+
+    // ---- Similar / recommended -----------------------------------------
+
+    /** Other movies in the same category as [item], for the detail "Similar" rail. */
+    suspend fun similarMovies(item: VodItem, limit: Int = 20): List<VodItem> =
+        withContext(Dispatchers.IO) {
+            val categoryId = item.categoryId ?: return@withContext emptyList()
+            vodDao.sampleByCategory(categoryId, item.id, limit).map { it.toModel() }
+        }
+
+    /** Other series in the same category as [item], for the detail "Similar" rail. */
+    suspend fun similarSeries(item: Series, limit: Int = 20): List<Series> =
+        withContext(Dispatchers.IO) {
+            val categoryId = item.categoryId ?: return@withContext emptyList()
+            seriesDao.sampleByCategory(categoryId, item.id, limit).map { it.toModel() }
+        }
 
     // ---- TMDB enrichment ------------------------------------------------
 

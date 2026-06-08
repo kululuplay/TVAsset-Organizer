@@ -88,7 +88,14 @@
     <string name="detail_genre">Tür</string>
     <string name="detail_year">Yıl</string>
     <string name="detail_rating">Puan</string>
+    <string name="cd_watched">İzlendi</string>
+    <string name="sort_label">Sırala</string>
+    <string name="sort_recent">Son Eklenenler</string>
+    <string name="sort_az">A-Z</string>
+    <string name="sort_rating">Puana göre</string>
+    <string name="sort_year">Yıla göre</string>
     <string name="detail_plot">Konu</string>
+    <string name="detail_similar">Benzer</string>
     <string name="series_season">%1$d. Sezon</string>
     <string name="series_episode">%1$d. Bölüm</string>
 

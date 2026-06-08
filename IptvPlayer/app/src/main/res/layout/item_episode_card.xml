@@ -32,6 +32,19 @@
             android:progressTint="@color/accent"
             android:progressBackgroundTint="@color/bg_card_focused"
             android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/episodeWatched"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="top|end"
+            android:layout_margin="@dimen/space_xs"
+            android:padding="3dp"
+            android:src="@drawable/ic_check"
+            android:background="@drawable/bg_time_chip"
+            android:tint="@color/accent"
+            android:visibility="gone"
+            android:contentDescription="@string/cd_watched" />
     </FrameLayout>
 
     <TextView

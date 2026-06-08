@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Category
+import com.iptv.player.data.model.ContentSort
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.Series
 import androidx.paging.PagingData
@@ -70,6 +71,14 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
     private val selectedCategory = MutableStateFlow<String?>(null)
     private val query = MutableStateFlow("")
 
+    /** Current grid ordering; cycled from the UI. Defaults to newest-first. */
+    private val _sort = MutableStateFlow(ContentSort.RECENT)
+    val sort: StateFlow<ContentSort> = _sort
+
+    fun setSort(order: ContentSort) {
+        _sort.value = order
+    }
+
     // Categories whose series are currently being lazily downloaded. Tracked so
     // overlapping selections don't fetch the same category twice and so the
     // spinner only hides once *all* in-flight fetches finish.
@@ -110,13 +119,14 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
     val items: Flow<PagingData<Series>> =
         combine(
             selectedCategory,
-            query.debounce(250).distinctUntilChanged()
-        ) { catId, q -> catId to q }
-            .flatMapLatest { (catId, q) ->
+            query.debounce(250).distinctUntilChanged(),
+            _sort
+        ) { catId, q, sort -> Triple(catId, q, sort) }
+            .flatMapLatest { (catId, q, sort) ->
                 when {
                     q.isNotEmpty() -> repo.pagingSeriesSearch(q)
-                    catId == null || catId == CAT_ALL -> repo.pagingRecentSeries()
-                    else -> repo.pagingSeriesByCategory(catId)
+                    catId == null || catId == CAT_ALL -> repo.pagingSeriesAll(sort)
+                    else -> repo.pagingSeriesByCategory(catId, sort)
                 }
             }
             .cachedIn(viewModelScope)

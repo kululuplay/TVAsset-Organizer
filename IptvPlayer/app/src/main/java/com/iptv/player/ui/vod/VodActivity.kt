@@ -16,6 +16,7 @@ import androidx.paging.LoadState
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.R
+import com.iptv.player.data.model.ContentSort
 import com.iptv.player.databinding.ActivityVodBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.NewContentPopup
@@ -40,6 +41,15 @@ class VodActivity : BaseActivity() {
 
     private lateinit var categoryAdapter: CategoryAdapter
     private lateinit var vodAdapter: VodAdapter
+
+    /** Watch-progress percent and watched ids, refreshed in [onResume]. */
+    private var progressMap: Map<String, Int> = emptyMap()
+    private var watchedSet: Set<String> = emptySet()
+
+    /** Sort orders cycled by the header button, in display order. */
+    private val sortCycle = listOf(
+        ContentSort.RECENT, ContentSort.NAME, ContentSort.RATING, ContentSort.YEAR
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,6 +87,20 @@ class VodActivity : BaseActivity() {
         binding.dateText.text = DateFormat
             .getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
             .format(Date())
+        refreshWatchState()
+    }
+
+    /**
+     * Reloads watch-progress and watched-state maps (cheap Room reads) so the
+     * poster bars and ticks reflect playback that happened since we left, then
+     * rebinds the visible cards.
+     */
+    private fun refreshWatchState() {
+        lifecycleScope.launch {
+            progressMap = viewModel.repoAllWatchProgress()
+            watchedSet = viewModel.repoWatchedIds()
+            vodAdapter.notifyDataSetChanged()
+        }
     }
 
     private fun setupLists() {
@@ -97,9 +121,27 @@ class VodActivity : BaseActivity() {
                 PinLockHelper.guard(this, isAdult = item.isAdult()) { openDetail(item.id) }
             }
         )
+        vodAdapter.progressProvider = { id -> progressMap[id] ?: 0 }
+        vodAdapter.watchedProvider = { id -> id in watchedSet }
         binding.posterGrid.layoutManager = GridLayoutManager(this, 4)
         binding.posterGrid.autoFitColumns(min = 3)
         binding.posterGrid.adapter = vodAdapter
+
+        binding.sortButton.setOnClickListener {
+            val next = sortCycle[(sortCycle.indexOf(viewModel.sort.value) + 1) % sortCycle.size]
+            viewModel.setSort(next)
+        }
+    }
+
+    /** Localised "Sort: <order>" label for the header chip. */
+    private fun sortLabel(order: ContentSort): String {
+        val option = when (order) {
+            ContentSort.RECENT -> R.string.sort_recent
+            ContentSort.NAME -> R.string.sort_az
+            ContentSort.RATING -> R.string.sort_rating
+            ContentSort.YEAR -> R.string.sort_year
+        }
+        return "${getString(R.string.sort_label)}: ${getString(option)}"
     }
 
     private fun observe() {
@@ -124,6 +166,11 @@ class VodActivity : BaseActivity() {
                 vodAdapter.submitData(data)
             }
         }
+        lifecycleScope.launch {
+            viewModel.sort.collectLatest { order ->
+                binding.sortButton.text = sortLabel(order)
+            }
+        }
         // When a fresh page settles (category switch / new search), jump to the top.
         lifecycleScope.launch {
             vodAdapter.loadStateFlow
@@ -144,13 +191,6 @@ class VodActivity : BaseActivity() {
             vodAdapter.loadStateFlow.collectLatest { state ->
                 val empty = state.refresh is LoadState.NotLoading && vodAdapter.itemCount == 0
                 binding.emptyState.visibility = if (empty) View.VISIBLE else View.GONE
-            }
-        }
-        // Lightweight spinner while a category's movies are lazily downloading.
-        lifecycleScope.launch {
-            viewModel.refreshing.collectLatest { loading ->
-                binding.loadingIndicator.visibility = if (loading) View.VISIBLE else View.GONE
-                if (loading) binding.emptyState.visibility = View.GONE
             }
         }
         // Lightweight spinner while a category's movies are lazily downloading.

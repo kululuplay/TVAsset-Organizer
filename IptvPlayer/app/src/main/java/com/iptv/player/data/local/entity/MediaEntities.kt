@@ -167,6 +167,22 @@ data class ResumeEntity(
     val episodeNumber: Int = 0
 )
 
+/**
+ * Marks a movie or episode as fully watched (finished). Kept separate from
+ * [ResumeEntity] because a finished item's resume row is deleted, so the
+ * "watched" tick must survive that deletion. contentId is prefixed the same
+ * way as resume: "vod_<id>" for movies, "ep_<id>" for episodes.
+ */
+@Entity(tableName = "watched", indices = [Index("seriesId")])
+data class WatchedEntity(
+    @PrimaryKey val contentId: String,
+    /** "movie" or "episode". */
+    val type: String = "movie",
+    /** Set for episodes so a series can mark all its watched episodes at once. */
+    val seriesId: String? = null,
+    val watchedAt: Long = 0
+)
+
 /** Manual override of a channel's EPG id when tvg-id doesn't match. */
 @Entity(tableName = "epg_mapping")
 data class EpgMappingEntity(

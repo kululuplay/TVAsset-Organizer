@@ -21,6 +21,7 @@ import com.iptv.player.data.local.entity.SeriesFtsEntity
 import com.iptv.player.data.local.entity.VodCategoryEntity
 import com.iptv.player.data.local.entity.VodEntity
 import com.iptv.player.data.local.entity.VodFtsEntity
+import com.iptv.player.data.local.entity.WatchedEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -90,6 +91,25 @@ interface VodDao {
     @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
     fun pagingByCategory(categoryId: String): PagingSource<Int, VodEntity>
 
+    // ---- Sorted variants (A-Z / rating / year) for the list sort control ----
+    @Query("SELECT * FROM vod ORDER BY name")
+    fun pagingAllByName(): PagingSource<Int, VodEntity>
+
+    @Query("SELECT * FROM vod ORDER BY rating DESC, name")
+    fun pagingAllByRating(): PagingSource<Int, VodEntity>
+
+    @Query("SELECT * FROM vod ORDER BY releaseDate DESC, name")
+    fun pagingAllByYear(): PagingSource<Int, VodEntity>
+
+    @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY name")
+    fun pagingCategoryByName(categoryId: String): PagingSource<Int, VodEntity>
+
+    @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY rating DESC, name")
+    fun pagingCategoryByRating(categoryId: String): PagingSource<Int, VodEntity>
+
+    @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY releaseDate DESC, name")
+    fun pagingCategoryByYear(categoryId: String): PagingSource<Int, VodEntity>
+
     /** FTS-backed instant search, paged. [query] is a sanitized FTS MATCH expression. */
     @Query("""
         SELECT v.* FROM vod v
@@ -113,6 +133,10 @@ interface VodDao {
     /** All movie ids in a category, used to detect newly-added movies on refresh. */
     @Query("SELECT id FROM vod WHERE categoryId = :categoryId")
     suspend fun idsForCategory(categoryId: String): List<String>
+
+    /** A handful of other movies in the same category, for the "Similar" rail. */
+    @Query("SELECT * FROM vod WHERE categoryId = :categoryId AND id != :excludeId ORDER BY addedAt DESC, name LIMIT :limit")
+    suspend fun sampleByCategory(categoryId: String, excludeId: String, limit: Int): List<VodEntity>
 }
 
 @Dao
@@ -182,6 +206,25 @@ interface SeriesDao {
     @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
     fun pagingByCategory(categoryId: String): PagingSource<Int, SeriesEntity>
 
+    // ---- Sorted variants (A-Z / rating / year) for the list sort control ----
+    @Query("SELECT * FROM series ORDER BY name")
+    fun pagingAllByName(): PagingSource<Int, SeriesEntity>
+
+    @Query("SELECT * FROM series ORDER BY rating DESC, name")
+    fun pagingAllByRating(): PagingSource<Int, SeriesEntity>
+
+    @Query("SELECT * FROM series ORDER BY releaseDate DESC, name")
+    fun pagingAllByYear(): PagingSource<Int, SeriesEntity>
+
+    @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY name")
+    fun pagingCategoryByName(categoryId: String): PagingSource<Int, SeriesEntity>
+
+    @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY rating DESC, name")
+    fun pagingCategoryByRating(categoryId: String): PagingSource<Int, SeriesEntity>
+
+    @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY releaseDate DESC, name")
+    fun pagingCategoryByYear(categoryId: String): PagingSource<Int, SeriesEntity>
+
     /** FTS-backed instant search, paged. [query] is a sanitized FTS MATCH expression. */
     @Query("""
         SELECT s.* FROM series s
@@ -208,6 +251,10 @@ interface SeriesDao {
     /** All series ids in a category, used to detect newly-added series on refresh. */
     @Query("SELECT id FROM series WHERE categoryId = :categoryId")
     suspend fun idsForCategory(categoryId: String): List<String>
+
+    /** A handful of other series in the same category, for the "Similar" rail. */
+    @Query("SELECT * FROM series WHERE categoryId = :categoryId AND id != :excludeId ORDER BY addedAt DESC, name LIMIT :limit")
+    suspend fun sampleByCategory(categoryId: String, excludeId: String, limit: Int): List<SeriesEntity>
 }
 
 @Dao
@@ -252,11 +299,36 @@ interface ResumeDao {
     @Query("SELECT * FROM resume WHERE seriesId = :seriesId")
     suspend fun forSeries(seriesId: String): List<ResumeEntity>
 
+    /** Every saved position, used to draw progress bars across a movie/series grid. */
+    @Query("SELECT * FROM resume WHERE positionMs > 0 AND durationMs > 0")
+    suspend fun all(): List<ResumeEntity>
+
     /** Last-watched episode of a series, for a one-tap "continue" action. */
     @Query("SELECT * FROM resume WHERE seriesId = :seriesId ORDER BY updatedAt DESC LIMIT 1")
     suspend fun latestForSeries(seriesId: String): ResumeEntity?
 
     @Query("DELETE FROM resume WHERE contentId = :contentId")
+    suspend fun clear(contentId: String)
+}
+
+@Dao
+interface WatchedDao {
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun mark(entry: WatchedEntity)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM watched WHERE contentId = :contentId)")
+    suspend fun isWatched(contentId: String): Boolean
+
+    /** All watched content ids, used to badge movie/series grids. */
+    @Query("SELECT contentId FROM watched")
+    suspend fun allIds(): List<String>
+
+    /** Watched episode ids for one series, used to badge the episode rail. */
+    @Query("SELECT contentId FROM watched WHERE seriesId = :seriesId")
+    suspend fun idsForSeries(seriesId: String): List<String>
+
+    @Query("DELETE FROM watched WHERE contentId = :contentId")
     suspend fun clear(contentId: String)
 }
 
