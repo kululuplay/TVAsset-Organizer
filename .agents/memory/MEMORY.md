@@ -11,6 +11,7 @@
 - [Android TV green-screen (Amlogic)](android-green-screen-vlc-texture.md) — chroma override (RV16/RV32) is a DEAD END for HW decode (output stays "21 Biplanar", still green); SurfaceView always; libVLC HW DR re-enabled (watch output:17 freeze); ExoPlayer is the native MediaCodec→Surface bet.
 - [Android TV density normalization](android-tv-density-normalization.md) — UI zoomed/tiny across all pages = box mis-reports densityDpi; lock Configuration.densityDpi to DESIGN_WIDTH_DP (now 1120dp); raising that width = denser UI (more columns/rows).
 - [Cache-first detail screens](cache-first-detail-screens.md) — VOD/Series detail must render Room cache first then refresh network in bg; provider detail APIs can take ~20s.
+- [Category list change-animation steals focus](category-list-change-animation-focus.md) — fast category browsing exits to Dashboard; live count updates + RecyclerView change anims detach focused row. Disable supportsChangeAnimations.
 - [D-pad focus after ListAdapter diff](recyclerview-focus-after-diff.md) — requestFocus in submitList commit callback+post; and NEVER notifyDataSetChanged from a focus listener (kills D-pad focus) — use payloaded notifyItemChanged.
 - [Favorites id namespaces](favorites-id-namespaces.md) — favorites table mixes channel/vod_/series_ ids; the channel INNER JOIN silently drops non-channel favorites.
 - [IPTV single-connection contract](iptv-single-connection.md) — one stream/socket max: stop-before-start, serialize transitions, release (not pause) on background, reuse engine + swap Media.

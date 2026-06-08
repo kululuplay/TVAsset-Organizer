@@ -195,6 +195,12 @@ class HomeActivity : BaseActivity() {
         )
         binding.categoryList.layoutManager = LinearLayoutManager(this)
         binding.categoryList.adapter = categoryAdapter
+        // Category counts update live as content lazy-loads, re-emitting the list.
+        // The default change-animation detaches the focused row mid-diff, so fast
+        // D-pad browsing loses focus and the screen pops back to the Dashboard.
+        // Disabling change animations rebinds the row in place and keeps focus.
+        (binding.categoryList.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
+            ?.supportsChangeAnimations = false
 
         channelAdapter = ChannelAdapter(
             // Press-to-preview model: navigating only refreshes the info/EPG

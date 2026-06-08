@@ -114,6 +114,12 @@ class VodActivity : BaseActivity() {
         )
         binding.categoryList.layoutManager = LinearLayoutManager(this)
         binding.categoryList.adapter = categoryAdapter
+        // Counts update live as movies lazy-load, re-emitting the category list.
+        // The default change-animation detaches the focused row mid-diff, so fast
+        // D-pad browsing loses focus and the screen pops back to the Dashboard.
+        // Disabling change animations rebinds the row in place and keeps focus.
+        (binding.categoryList.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
+            ?.supportsChangeAnimations = false
 
         vodAdapter = VodAdapter(
             onFocused = { },
