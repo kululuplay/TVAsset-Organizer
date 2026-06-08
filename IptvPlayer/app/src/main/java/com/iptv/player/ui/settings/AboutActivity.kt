@@ -147,6 +147,15 @@ class AboutActivity : BaseActivity() {
             return
         }
 
+        // Delete APKs left behind by previous updates. A successful download is
+        // kept (it is handed to the system installer) but never cleaned up after,
+        // so without this purge every update added another ~30-40 MB file to the
+        // app's external storage and its on-device size kept swelling.
+        runCatching {
+            dir.listFiles { f -> f.name.startsWith("update-") && f.name.endsWith(".apk") }
+                ?.forEach { it.delete() }
+        }
+
         binding.btnUpdateNow.visibility = View.GONE
         binding.btnCheckUpdate.isEnabled = false
         binding.aboutUpdateStatus.visibility = View.GONE

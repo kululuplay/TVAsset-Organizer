@@ -36,6 +36,14 @@ before pushing (bump `versionCode` too). The updater compares only numeric versi
 parts, so same-version pushes reuse tag `v1.0.0` and clients stay "up to date".
 No bump = no detected update.
 
+**Downloaded-APK cleanup (storage swell):** `AboutActivity.downloadApk` streams
+each update to `getExternalFilesDir` as `update-<timestamp>.apk` and only deletes
+the file on failure/cancel — a SUCCESSFUL download is kept and never cleaned up,
+so the timestamped name left a fresh ~30-40 MB APK behind on EVERY update and the
+app's on-device size kept growing. Fix: purge existing `update-*.apk` in that dir
+before each download (keeps at most one). **How to apply:** if you change the
+download path/filename, keep a purge-before-download step or storage swells again.
+
 **Immutable releases (CI publish gotcha):** GitHub now serves published releases as
 IMMUTABLE — their assets cannot be deleted or overwritten. `softprops/action-gh-release`
 re-running on an EXISTING release tries to delete+re-upload the asset and fails with
