@@ -1,0 +1,121 @@
+06-09 00:18:42.567   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-09 00:18:42.583   565   579 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-09 00:18:43.874 18009 19616 E VLC     : [c2d6e6c0/4ca0] libvlc input: ES_OUT_SET_(GROUP_)PCR  is called too late (jitter of 81 ms ignored)
+06-09 00:18:43.875 18009 19625 E VLC     : [e90a3200/4ca9] libvlc decoder: Timestamp conversion failed for 40407012667: no reference clock
+06-09 00:18:43.875 18009 19625 E VLC     : [e90a3200/4ca9] libvlc decoder: Could not convert timestamp 0 for FFmpeg
+06-09 00:18:45.580   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-09 00:18:45.595   565  1842 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-09 00:18:47.859 18009 19616 E VLC     : [c2d6e6c0/4ca0] libvlc input: ES_OUT_SET_(GROUP_)PCR  is called too late (jitter of 81 ms ignored)
+06-09 00:18:47.876 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40407560001: no reference clock
+06-09 00:18:47.876 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:18:47.877 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40407580001: no reference clock
+06-09 00:18:47.877 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:18:47.921 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40407600001: no reference clock
+06-09 00:18:47.921 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:18:47.922 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40407620001: no reference clock
+06-09 00:18:47.922 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:18:48.594   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-09 00:18:48.607   565  1386 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-09 00:18:49.549 18009 19628 W AudioTrack: restartIfDisabled(617): releaseBuffer() track 0xafb53090 disabled due to previous underrun, restarting
+06-09 00:18:51.607   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-09 00:18:51.624   565  1842 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-09 00:18:51.990 18009 19616 E VLC     : [c2d6e6c0/4ca0] libvlc input: ES_OUT_SET_(GROUP_)PCR  is called too late (jitter of 83 ms ignored)
+06-09 00:18:52.009 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40408560001: no reference clock
+06-09 00:18:52.010 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:18:52.030 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40408580001: no reference clock
+06-09 00:18:52.030 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:18:52.030 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40408600001: no reference clock
+06-09 00:18:52.030 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:18:52.088 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40408620001: no reference clock
+06-09 00:18:52.088 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:18:52.088 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40408640001: no reference clock
+06-09 00:18:52.088 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:18:52.094 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40408660001: no reference clock
+06-09 00:18:52.094 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:18:52.095 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40408680001: no reference clock
+06-09 00:18:52.095 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:18:52.105 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40408700001: no reference clock
+06-09 00:18:52.105 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:18:52.106 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40408720001: no reference clock
+06-09 00:18:52.106 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:18:52.664  1896  1896 W ThreadPoolForeg: type=1400 audit(0.0:9320): avc: denied { write } for name="traced_producer" dev="tmpfs" ino=14648 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:traced_producer_socket:s0 tclass=sock_file permissive=0 app=com.google.android.gms
+06-09 00:18:53.821 18009 19628 W AudioTrack: restartIfDisabled(617): releaseBuffer() track 0xafb53090 disabled due to previous underrun, restarting
+06-09 00:18:54.620   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-09 00:18:54.633   565  1842 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-09 00:18:56.029 18009 19616 E VLC     : [c2d6e6c0/4ca0] libvlc input: ES_OUT_SET_(GROUP_)PCR  is called too late (jitter of 83 ms ignored)
+06-09 00:18:57.633   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-09 00:18:57.648   565   579 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-09 00:18:59.955 18009 19616 E VLC     : [c2d6e6c0/4ca0] libvlc input: ES_OUT_SET_(GROUP_)PCR  is called too late (jitter of 205 ms ignored)
+06-09 00:19:00.030 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40409940001: no reference clock
+06-09 00:19:00.030 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:00.030 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40409960001: no reference clock
+06-09 00:19:00.030 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:00.037 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40409980001: no reference clock
+06-09 00:19:00.037 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:00.039 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410000001: no reference clock
+06-09 00:19:00.039 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:00.046 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410020001: no reference clock
+06-09 00:19:00.046 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:00.046 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410040001: no reference clock
+06-09 00:19:00.046 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:00.050 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410060001: no reference clock
+06-09 00:19:00.050 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:00.050 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410080001: no reference clock
+06-09 00:19:00.051 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:00.065 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410100001: no reference clock
+06-09 00:19:00.065 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:00.065 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410120001: no reference clock
+06-09 00:19:00.065 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:00.071 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410140001: no reference clock
+06-09 00:19:00.071 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:00.072 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410160001: no reference clock
+06-09 00:19:00.072 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:00.079 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410180001: no reference clock
+06-09 00:19:00.079 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:00.079 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410200001: no reference clock
+06-09 00:19:00.080 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:00.084 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410220001: no reference clock
+06-09 00:19:00.084 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:00.086 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410240001: no reference clock
+06-09 00:19:00.086 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:00.645   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-09 00:19:00.659   565   579 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-09 00:19:01.893 18009 19628 W AudioTrack: restartIfDisabled(617): releaseBuffer() track 0xafb53090 disabled due to previous underrun, restarting
+06-09 00:19:03.658   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-09 00:19:03.674   565   579 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-09 00:19:03.950 18009 19616 E VLC     : [c2d6e6c0/4ca0] libvlc input: ES_OUT_SET_(GROUP_)PCR  is called too late (jitter of 70 ms ignored)
+06-09 00:19:03.951 18009 19625 E VLC     : [e90a3200/4ca9] libvlc decoder: Timestamp conversion failed for 40410820667: no reference clock
+06-09 00:19:03.951 18009 19625 E VLC     : [e90a3200/4ca9] libvlc decoder: Could not convert timestamp 0 for FFmpeg
+06-09 00:19:03.962 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410400001: no reference clock
+06-09 00:19:03.962 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:03.962 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410420001: no reference clock
+06-09 00:19:03.962 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:03.963 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410440001: no reference clock
+06-09 00:19:03.963 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:03.963 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410460001: no reference clock
+06-09 00:19:03.963 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:05.611 18009 19628 W AudioTrack: restartIfDisabled(617): releaseBuffer() track 0xafb53090 disabled due to previous underrun, restarting
+06-09 00:19:06.671   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-09 00:19:06.686   565   579 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-09 00:19:07.608 18009 19616 E VLC     : [c2d6e6c0/4ca0] libvlc input: ES_OUT_SET_(GROUP_)PCR  is called too late (jitter of 110 ms ignored)
+06-09 00:19:07.609 18009 19625 E VLC     : [e90a3200/4ca9] libvlc decoder: Timestamp conversion failed for 40411364667: no reference clock
+06-09 00:19:07.609 18009 19625 E VLC     : [e90a3200/4ca9] libvlc decoder: Could not convert timestamp 0 for FFmpeg
+06-09 00:19:07.639 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40410980001: no reference clock
+06-09 00:19:07.639 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:07.639 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40411000001: no reference clock
+06-09 00:19:07.639 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:07.646 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40411020001: no reference clock
+06-09 00:19:07.646 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:07.646 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40411040001: no reference clock
+06-09 00:19:07.646 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:07.653 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Timestamp conversion failed for 40411060001: no reference clock
+06-09 00:19:07.653 18009 19636 E VLC     : [e90962a0/4cb4] libvlc decoder: Could not convert timestamp 0 for mediacodec
+06-09 00:19:08.776 17118 17118 W ThreadPoolForeg: type=1400 audit(0.0:9321): avc: denied { write } for name="traced_producer" dev="tmpfs" ino=14648 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:traced_producer_socket:s0 tclass=sock_file permissive=0 app=com.google.android.gms
+06-09 00:19:09.290 18009 19628 W AudioTrack: restartIfDisabled(617): releaseBuffer() track 0xafb53090 disabled due to previous underrun, restarting
+06-09 00:19:09.681   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-09 00:19:09.696   565  1842 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-09 00:19:11.241 18009 19616 E VLC     : [c2d6e6c0/4ca0] libvlc input: ES_OUT_SET_(GROUP_)PCR  is called too late (jitter of 70 ms ignored)
+06-09 00:19:11.242 18009 19625 E VLC     : [e90a3200/4ca9] libvlc decoder: Timestamp conversion failed for 40411972667: no reference clock
+06-09 00:19:11.242 18009 19625 E VLC     : [e90a3200/4ca9] libvlc decoder: Could not convert timestamp 0 for FFmpeg
+06-09 00:19:12.695   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-09 00:19:12.708   565  1386 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
