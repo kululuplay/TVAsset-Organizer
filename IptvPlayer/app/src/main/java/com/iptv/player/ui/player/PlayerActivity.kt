@@ -70,6 +70,16 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     private var okDownTime = 0L
     private var epgJob: Job? = null
 
+    /** True when this player adopted the live preview's controller (came from Home). */
+    private var adoptedPreview = false
+
+    /**
+     * True once we've parked the controller for Home to re-adopt on BACK (the
+     * reverse hand-off), so onStop/onDestroy must NOT pause or release it — Home
+     * now owns the single live connection and keeps the picture going.
+     */
+    private var handingBack = false
+
     /** User's preferred live container; applied to the URL at play time. */
     private var streamFormat: StreamFormat = StreamFormat.TS
 
@@ -118,6 +128,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             if (adopted != null) {
                 // Seamless hand-off: rebind the still-playing engine to this
                 // screen's surface and take ownership — no new play()/reconnect.
+                adoptedPreview = true
                 controller = adopted
                 controller.setCallback(this@PlayerActivity)
                 // The hand-off tears down and recreates the video surface, so the
@@ -239,8 +250,24 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         when {
             statsVisible -> hideStats()
             binding.infoOverlay.visibility == View.VISIBLE -> hideOverlay()
-            else -> super.onBackPressed()
+            else -> {
+                handBackPreviewIfPossible()
+                super.onBackPressed()
+            }
         }
+    }
+
+    /**
+     * Reverse hand-off: when leaving a player that adopted the live preview, park
+     * the still-playing controller (plus the current channel id) so Home re-adopts
+     * it into the preview surface instead of a dead/closed preview. onStop/onDestroy
+     * then skip pause/release because Home now owns the single live connection.
+     * Only the BACK exit hands back; sleep-timer/error exits fall through to release.
+     */
+    private fun handBackPreviewIfPossible() {
+        if (!adoptedPreview || !::controller.isInitialized) return
+        handingBack = true
+        ServiceLocator.handOverLiveController(controller, currentChannel?.id)
     }
 
     // ---- Player menu (MENU key) ----------------------------------------
@@ -426,7 +453,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     override fun onStop() {
         super.onStop()
-        if (::controller.isInitialized) controller.pause()
+        // Don't pause when handing the controller back to Home — it must keep
+        // playing into the preview surface that Home re-adopted.
+        if (!handingBack && ::controller.isInitialized) controller.pause()
     }
 
     override fun onStart() {
@@ -442,7 +471,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         overlayHandler.removeCallbacksAndMessages(null)
         handoffCoverHandler.removeCallbacksAndMessages(null)
         statsHandler.removeCallbacksAndMessages(null)
-        if (::controller.isInitialized) controller.release()
+        // Don't release a controller we've handed back to Home — it owns it now.
+        if (!handingBack && ::controller.isInitialized) controller.release()
     }
 
     // ---- Diagnostics overlay -------------------------------------------

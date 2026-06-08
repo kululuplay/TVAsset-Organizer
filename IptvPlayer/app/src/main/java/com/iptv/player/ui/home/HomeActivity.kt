@@ -629,19 +629,51 @@ class HomeActivity : BaseActivity() {
                 decoderMode = decoder,
                 allowPassthrough = passthrough,
                 bufferMode = buffer,
-                callback = object : PlayerController.Callback {
-                    override fun onBuffering() {}
-                    override fun onPlaying(engineName: String) {
-                        binding.infoLogo.visibility = View.GONE
-                    }
-                    override fun onFatalError() {
-                        binding.infoLogo.visibility = View.VISIBLE
-                    }
-                    override fun onRetrying(attempt: Int) {}
-                }
+                callback = buildPreviewCallback()
             )
         }
         previewController?.play(channel.streamUrl)
+    }
+
+    /**
+     * UI callback for the preview controller. Hiding the channel logo on a real
+     * video signal reveals the picture; onVideoResumed() also fires after a
+     * surface re-attach (e.g. re-adopting the controller handed back from the
+     * fullscreen player) where onPlaying may not fire again.
+     */
+    private fun buildPreviewCallback() = object : PlayerController.Callback {
+        override fun onBuffering() {}
+        override fun onPlaying(engineName: String) {
+            binding.infoLogo.visibility = View.GONE
+        }
+        override fun onVideoResumed() {
+            binding.infoLogo.visibility = View.GONE
+        }
+        override fun onFatalError() {
+            binding.infoLogo.visibility = View.VISIBLE
+        }
+        override fun onRetrying(attempt: Int) {}
+    }
+
+    /**
+     * Reverse hand-off: re-adopt the live controller the fullscreen player gave
+     * back on BACK, rebinding it onto the preview surface so returning to Home
+     * keeps the picture playing (no reconnect, single connection preserved). The
+     * channel logo stays over the surface until the first frame lands after the
+     * re-bind, covering the brief gap with the logo instead of black.
+     */
+    private fun reAdoptHandedBackPreview(controller: PlayerController, channelId: String?) {
+        handingOverPreview = false
+        previewController = controller
+        controller.setCallback(buildPreviewCallback())
+        binding.infoLogo.visibility = View.VISIBLE
+        controller.rebind(binding.previewVideo)
+        val channel = channelId?.let { id -> currentChannels.firstOrNull { it.id == id } }
+        if (channel != null) {
+            currentInfoChannel = channel
+            previewingChannel = channel
+            lockCaptionToPreview(channel)
+        }
     }
 
     /** Stops + releases the preview so the single stream connection is freed. */
@@ -653,6 +685,17 @@ class HomeActivity : BaseActivity() {
         previewingChannel = null
         captionPrograms = emptyList()
         binding.infoLogo.visibility = View.VISIBLE
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Reverse hand-off: if the fullscreen player gave its live controller back
+        // on BACK, re-adopt it into the preview surface so returning to Home keeps
+        // the picture playing instead of a dead/closed preview. Null on a normal
+        // start (nothing parked), so this is a no-op except after a player BACK.
+        val handedBack = ServiceLocator.consumePendingLiveController() ?: return
+        val channelId = ServiceLocator.consumePendingLiveChannelId()
+        reAdoptHandedBackPreview(handedBack, channelId)
     }
 
     override fun onStop() {

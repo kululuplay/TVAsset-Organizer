@@ -51,9 +51,21 @@ object ServiceLocator {
      */
     @Volatile private var pendingLiveController: PlayerController? = null
 
-    /** Park a live controller for the fullscreen player to adopt. */
-    fun handOverLiveController(controller: PlayerController) {
+    /**
+     * Channel id parked alongside the controller on the REVERSE hand-off (fullscreen
+     * -> preview), so Home can restore the right caption/now-playing when it
+     * re-adopts. Null on the forward hand-off (the player gets its channel from the
+     * launch intent).
+     */
+    @Volatile private var pendingLiveChannelId: String? = null
+
+    /**
+     * Park a live controller for the other screen to adopt. [channelId] is set only
+     * on the reverse hand-off so Home knows which channel the picture is showing.
+     */
+    fun handOverLiveController(controller: PlayerController, channelId: String? = null) {
         pendingLiveController = controller
+        pendingLiveChannelId = channelId
     }
 
     /** Take (and clear) the parked controller, or null if none was handed over. */
@@ -61,6 +73,13 @@ object ServiceLocator {
         val controller = pendingLiveController
         pendingLiveController = null
         return controller
+    }
+
+    /** Take (and clear) the channel id parked with a reverse hand-off, or null. */
+    fun consumePendingLiveChannelId(): String? {
+        val id = pendingLiveChannelId
+        pendingLiveChannelId = null
+        return id
     }
 
     fun init(context: Context) {

@@ -24,3 +24,21 @@ no-op so other Callback implementers don't break); the fullscreen activity shows
 indicator before `rebind()` and clears it in `onVideoResumed()`, with a safety
 timeout in case the event never arrives. The keyframe wait itself is not removable
 without stream control — covering the gap is the UX fix, not eliminating it.
+
+## Reverse hand-off (return-to-Home dead preview)
+**Symptom:** After exiting fullscreen with BACK the Home preview stayed blank —
+the fullscreen activity released its (adopted) controller in onDestroy and Home
+had already cleared its own preview on the forward hand-over, so nothing restarted.
+
+**Fix:** symmetric reverse hand-off. On BACK from a player that adopted the preview,
+park the still-playing controller (+ current channel id) and set a `handingBack`
+flag so onStop/onDestroy skip pause()/release(). Home.onStart() consumes the parked
+controller, rebind()s it onto the preview surface, restores previewingChannel/caption.
+
+**Why it's lifecycle-safe:** BACK order is Player.onPause -> Home.onStart(adopts) ->
+Player.onStop -> Player.onDestroy, so Home owns the controller before the player's
+stop/destroy run; the `handingBack` guards stop the player from pausing/releasing it
+out from under Home. Forward park (channelId=null, consumed in PlayerActivity.onCreate
+when EXTRA_ADOPT_PREVIEW) and reverse park (consumed in Home.onStart) never overlap.
+Single-connection preserved: no reconnect, just a surface rebind. Show the channel
+logo until onVideoResumed() (real Vout/first-frame) since onPlaying may not refire.
