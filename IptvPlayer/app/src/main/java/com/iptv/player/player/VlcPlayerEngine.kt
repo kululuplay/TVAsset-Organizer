@@ -163,12 +163,14 @@ class VlcPlayerEngine(
     }
 
     /**
-     * On the hardware path, route the one Amlogic-green-prone profile — H.264 at
-     * 1080p with a high frame rate (1080p@50/60) — to software for THIS stream
-     * only (onVideoInvalid -> controller restarts on VLC_SW). Read once the video
-     * output exists so the track dimensions/frame rate are populated; all other
-     * streams (lower res, ~25fps interlaced, non-H.264) keep decoding on hardware.
-     * No-op when already software-decoding (forceSoftware).
+     * On the hardware path, route the one Amlogic-green-prone profile — 1080p with
+     * a high frame rate (1080p@50/60, the failing H.264 streams) — to software for
+     * THIS stream only (onVideoInvalid -> controller restarts on VLC_SW). Read once
+     * the video output exists so the track dimensions/frame rate are populated.
+     * Keyed on resolution + frame rate (no codec gate: libVLC's track codec field
+     * is not safely typed across versions, and the fps>=49 + 1080p rule already
+     * isolates the failing profile). Normal channels — lower resolution, or ~25fps
+     * interlaced 1080i — stay on hardware. No-op when already forceSoftware.
      */
     private fun maybeFlagGreenProneProfile() {
         if (forceSoftware || greenCheckDone) return
@@ -176,32 +178,14 @@ class VlcPlayerEngine(
         val den = track.frameRateDen
         val fps = if (den > 0) track.frameRateNum.toFloat() / den else 0f
         val is1080p = track.height >= GREEN_PRONE_MIN_HEIGHT || track.width >= GREEN_PRONE_MIN_WIDTH
-        val h264 = isH264(track.codec) || isH264(track.originalCodec)
-        if (h264 && is1080p && fps >= GREEN_PRONE_MIN_FPS) {
+        if (is1080p && fps >= GREEN_PRONE_MIN_FPS) {
             greenCheckDone = true
             PlaybackLog.log(
                 context, engineName,
-                "green-prone HW profile H264 ${track.width}x${track.height}@${fps}fps -> software fallback"
+                "green-prone HW profile ${track.width}x${track.height}@${fps}fps -> software fallback"
             )
             listener?.onVideoInvalid()
         }
-    }
-
-    /** True when a libVLC fourcc (codec / originalCodec) identifies H.264/AVC. */
-    private fun isH264(codec: Int): Boolean = when (fourccToString(codec)) {
-        "h264", "avc1", "x264" -> true
-        else -> false
-    }
-
-    /** Decode a libVLC 4-character codec fourcc (little-endian int) to a string. */
-    private fun fourccToString(codec: Int): String {
-        val bytes = byteArrayOf(
-            (codec and 0xFF).toByte(),
-            ((codec ushr 8) and 0xFF).toByte(),
-            ((codec ushr 16) and 0xFF).toByte(),
-            ((codec ushr 24) and 0xFF).toByte()
-        )
-        return String(bytes, Charsets.US_ASCII).trim().lowercase()
     }
 
     override fun play(url: String) {
@@ -280,5 +264,12 @@ class VlcPlayerEngine(
          * connections — the priority for smooth Android TV playback.
          */
         private const val NETWORK_CACHING_MS = 3000
+
+        // Green-prone Amlogic profile: 1080p at a high frame rate (1080p@50/60).
+        // Broadcast 1080i reports ~25fps (field-coded) so the >=49 threshold keeps
+        // it on hardware; only progressive 1080p50/60 trips the software fallback.
+        private const val GREEN_PRONE_MIN_HEIGHT = 1080
+        private const val GREEN_PRONE_MIN_WIDTH = 1920
+        private const val GREEN_PRONE_MIN_FPS = 49f
     }
 }

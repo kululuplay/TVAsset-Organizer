@@ -33,10 +33,16 @@ libVLC's software path is the only safety net.
 - **So detect it by FORMAT instead**, deterministically, at playback start:
   H.264 + (height≥1080 || width≥1920) + frameRate ≥ 49 → fire `onVideoInvalid`
   one-shot → controller routes THIS stream to VLC_SW; everything else stays HW.
-  Exo reads `Format` in `onVideoInputFormatChanged`; libVLC reads
-  `mediaPlayer.currentVideoTrack` (width/height/frameRateNum/frameRateDen + codec
-  fourcc → h264/avc1/x264) on the `Vout`/`Playing` event. Guard one-shot per
-  stream; skip when already forceSoftware.
+  Exo reads `Format` in `onVideoInputFormatChanged` (gate on
+  `MimeTypes.VIDEO_H264` — safe). libVLC reads `mediaPlayer.currentVideoTrack`
+  (`width`/`height`/`frameRateNum`/`frameRateDen` — proven, VodPlayerActivity
+  uses width/height) on the `Vout`/`Playing` event. Guard one-shot per stream
+  (`greenCheckDone`, reset in play()); skip when already forceSoftware.
+  **libVLC has NO codec gate**: `Media.Track.codec` field type isn't safely typed
+  across libvlc-android versions (don't risk it); resolution + fps≥49 already
+  isolates the failing profile. **Constants are per-class** — each engine needs
+  its own `private const GREEN_PRONE_*` in ITS companion (referencing the other
+  engine's private companion = unresolved reference, fails kspDebugKotlin).
   **Why fps≥49:** broadcast 1080i50 is signaled at ~25fps frame rate (works on
   HW); only progressive 1080p50/60 reports ≥49. This is the only discriminator
   available — neither Media3 Format nor libVLC VideoTrack exposes interlace.
