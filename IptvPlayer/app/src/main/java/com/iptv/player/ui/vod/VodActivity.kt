@@ -16,6 +16,8 @@ import androidx.paging.LoadState
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.R
+import com.iptv.player.data.ServiceLocator
+import com.iptv.player.data.model.Category
 import com.iptv.player.data.model.ContentSort
 import com.iptv.player.databinding.ActivityVodBinding
 import com.iptv.player.ui.common.BaseActivity
@@ -27,6 +29,7 @@ import com.iptv.player.ui.common.isAdult
 import com.iptv.player.ui.home.CategoryAdapter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -45,6 +48,9 @@ class VodActivity : BaseActivity() {
     /** Watch-progress percent and watched ids, refreshed in [onResume]. */
     private var progressMap: Map<String, Int> = emptyMap()
     private var watchedSet: Set<String> = emptySet()
+
+    /** The category currently shown, so the header title can follow the sort. */
+    private var currentCategory: Category? = null
 
     /** Sort orders cycled by the header button, in display order. */
     private val sortCycle = listOf(
@@ -97,9 +103,11 @@ class VodActivity : BaseActivity() {
      */
     private fun refreshWatchState() {
         lifecycleScope.launch {
+            val settings = ServiceLocator.settings
+            vodAdapter.adultLocked = settings.lockAdult.first() && settings.hasPin()
             progressMap = viewModel.repoAllWatchProgress()
             watchedSet = viewModel.repoWatchedIds()
-            vodAdapter.notifyDataSetChanged()
+            vodAdapter.notifyItemRangeChanged(0, vodAdapter.itemCount)
         }
     }
 
@@ -108,7 +116,8 @@ class VodActivity : BaseActivity() {
             onFocused = { cat ->
                 viewModel.selectCategory(cat.id)
                 categoryAdapter.setSelected(cat.id)
-                binding.contentTitle.text = cat.name
+                currentCategory = cat
+                updateContentTitle()
             },
             onClicked = { focusFirstItem() }
         )
@@ -150,60 +159,93 @@ class VodActivity : BaseActivity() {
         return "${getString(R.string.sort_label)}: ${getString(option)}"
     }
 
+    /**
+     * Header title for the current selection. The "Recently added" rail keeps its
+     * label only while newest-first; any other sort relabels it "All movies" so the
+     * heading never contradicts the visible order. Real categories show their name.
+     */
+    private fun updateContentTitle() {
+        val cat = currentCategory ?: return
+        binding.contentTitle.text = if (cat.id == VodViewModel.CAT_ALL) {
+            if (viewModel.sort.value == ContentSort.RECENT) {
+                getString(R.string.cat_recently_added)
+            } else {
+                getString(R.string.all_movies)
+            }
+        } else {
+            cat.name
+        }
+    }
+
     private fun observe() {
         lifecycleScope.launch {
-            viewModel.categories.collectLatest { cats ->
-                val firstLoad = categoryAdapter.currentList.isEmpty()
-                categoryAdapter.submitList(cats) {
-                    if (firstLoad && cats.isNotEmpty()) {
-                        val first = cats.first()
-                        viewModel.selectCategory(first.id)
-                        categoryAdapter.setSelected(first.id)
-                        binding.contentTitle.text = first.name
-                        // Land focus on the first category so the screen is
-                        // navigable on entry and the user can D-pad down/right.
-                        focusFirstCategory()
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    viewModel.categories.collectLatest { cats ->
+                        val firstLoad = categoryAdapter.currentList.isEmpty()
+                        categoryAdapter.submitList(cats) {
+                            if (firstLoad && cats.isNotEmpty()) {
+                                // Restore the prior selection (survives config
+                                // change via the ViewModel) instead of always
+                                // snapping back to the first category.
+                                val existing = viewModel.selectedCategoryId
+                                val target = cats.firstOrNull { it.id == existing } ?: cats.first()
+                                // Reselect whenever the restored target differs (incl.
+                                // a now-hidden/removed prior selection), so the grid and
+                                // any lazy fetch align with a still-visible category.
+                                if (viewModel.selectedCategoryId != target.id) {
+                                    viewModel.selectCategory(target.id)
+                                }
+                                categoryAdapter.setSelected(target.id)
+                                currentCategory = target
+                                updateContentTitle()
+                                // Land focus on the first category so the screen is
+                                // navigable on entry and the user can D-pad down/right.
+                                focusFirstCategory()
+                            }
+                        }
                     }
                 }
-            }
-        }
-        lifecycleScope.launch {
-            viewModel.items.collectLatest { data ->
-                vodAdapter.submitData(data)
-            }
-        }
-        lifecycleScope.launch {
-            viewModel.sort.collectLatest { order ->
-                binding.sortButton.text = sortLabel(order)
-            }
-        }
-        // When a fresh page settles (category switch / new search), jump to the top.
-        lifecycleScope.launch {
-            vodAdapter.loadStateFlow
-                .distinctUntilChangedBy { it.refresh }
-                .collectLatest { state ->
-                    // Only snap to the top when the user is NOT already inside the
-                    // grid. Lazily-downloaded movies write to Room while browsing,
-                    // which invalidates the PagingSource and re-settles refresh; an
-                    // unconditional scrollToPosition(0) then yanked the grid to the
-                    // top mid-scroll and focus escaped back to the category list.
-                    if (state.refresh is LoadState.NotLoading && !binding.posterGrid.hasFocus()) {
-                        binding.posterGrid.scrollToPosition(0)
+                launch {
+                    viewModel.items.collectLatest { data ->
+                        vodAdapter.submitData(data)
                     }
                 }
-        }
-        // Empty state: only once the refresh has settled with nothing to show.
-        lifecycleScope.launch {
-            vodAdapter.loadStateFlow.collectLatest { state ->
-                val empty = state.refresh is LoadState.NotLoading && vodAdapter.itemCount == 0
-                binding.emptyState.visibility = if (empty) View.VISIBLE else View.GONE
-            }
-        }
-        // Lightweight spinner while a category's movies are lazily downloading.
-        lifecycleScope.launch {
-            viewModel.refreshing.collectLatest { loading ->
-                binding.loadingIndicator.visibility = if (loading) View.VISIBLE else View.GONE
-                if (loading) binding.emptyState.visibility = View.GONE
+                launch {
+                    viewModel.sort.collectLatest { order ->
+                        binding.sortButton.text = sortLabel(order)
+                        updateContentTitle()
+                    }
+                }
+                // When a fresh page settles (category switch / new search), jump to the top.
+                launch {
+                    vodAdapter.loadStateFlow
+                        .distinctUntilChangedBy { it.refresh }
+                        .collectLatest { state ->
+                            // Only snap to the top when the user is NOT already inside the
+                            // grid. Lazily-downloaded movies write to Room while browsing,
+                            // which invalidates the PagingSource and re-settles refresh; an
+                            // unconditional scrollToPosition(0) then yanked the grid to the
+                            // top mid-scroll and focus escaped back to the category list.
+                            if (state.refresh is LoadState.NotLoading && !binding.posterGrid.hasFocus()) {
+                                binding.posterGrid.scrollToPosition(0)
+                            }
+                        }
+                }
+                // Empty state: only once the refresh has settled with nothing to show.
+                launch {
+                    vodAdapter.loadStateFlow.collectLatest { state ->
+                        val empty = state.refresh is LoadState.NotLoading && vodAdapter.itemCount == 0
+                        binding.emptyState.visibility = if (empty) View.VISIBLE else View.GONE
+                    }
+                }
+                // Lightweight spinner while a category's movies are lazily downloading.
+                launch {
+                    viewModel.refreshing.collectLatest { loading ->
+                        binding.loadingIndicator.visibility = if (loading) View.VISIBLE else View.GONE
+                        if (loading) binding.emptyState.visibility = View.GONE
+                    }
+                }
             }
         }
     }

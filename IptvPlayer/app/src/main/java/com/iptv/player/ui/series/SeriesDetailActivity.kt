@@ -31,7 +31,6 @@ import com.iptv.player.ui.common.SimilarCard
 import com.iptv.player.ui.player.VodPlayerActivity
 import com.iptv.player.ui.trailer.TrailerActivity
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class SeriesDetailActivity : BaseActivity() {
@@ -114,8 +113,7 @@ class SeriesDetailActivity : BaseActivity() {
             } catch (t: Throwable) {
                 return@launch
             }
-            episodeAdapter.setProgress(progress)
-            episodeAdapter.setWatched(watched)
+            episodeAdapter.setWatchState(progress, watched)
             latestResume = latest
             if (latest != null) {
                 binding.playLabel.text = getString(R.string.resume_continue) + "  " +
@@ -152,7 +150,7 @@ class SeriesDetailActivity : BaseActivity() {
     private fun loadHeader(id: String) {
         lifecycleScope.launch {
             val series: Series? = try {
-                repo.observeSeries().first().firstOrNull { it.id == id }
+                repo.getSeriesCached(id)
             } catch (ce: CancellationException) {
                 throw ce
             } catch (t: Throwable) {

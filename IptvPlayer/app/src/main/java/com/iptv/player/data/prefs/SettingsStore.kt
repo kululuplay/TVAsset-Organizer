@@ -18,6 +18,7 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.iptv.player.data.model.AspectRatio
 import com.iptv.player.data.model.BufferMode
+import com.iptv.player.data.model.ContentSort
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
@@ -68,6 +69,10 @@ class SettingsStore(private val context: Context) {
         val CAT_ORDER_LIVE = stringPreferencesKey("cat_order_live")
         val CAT_ORDER_VOD = stringPreferencesKey("cat_order_vod")
         val CAT_ORDER_SERIES = stringPreferencesKey("cat_order_series")
+
+        // Persisted grid sort order for the Movies / Series browse screens.
+        val CONTENT_SORT_VOD = stringPreferencesKey("content_sort_vod")
+        val CONTENT_SORT_SERIES = stringPreferencesKey("content_sort_series")
     }
 
     // ---- Routing flags --------------------------------------------------
@@ -360,6 +365,23 @@ class SettingsStore(private val context: Context) {
 
     suspend fun resetCategoryOrder(type: ContentType) =
         context.dataStore.edit { it.remove(orderKey(type)) }
+
+    // LIVE has no sort control; it maps to the VOD key but is never read for LIVE.
+    private fun sortKey(type: ContentType) = when (type) {
+        ContentType.SERIES -> Keys.CONTENT_SORT_SERIES
+        else -> Keys.CONTENT_SORT_VOD
+    }
+
+    /** Persisted grid sort for [type]; defaults to newest-first. */
+    fun contentSort(type: ContentType): Flow<ContentSort> =
+        context.dataStore.data.map { prefs ->
+            prefs[sortKey(type)]
+                ?.let { runCatching { ContentSort.valueOf(it) }.getOrNull() }
+                ?: ContentSort.RECENT
+        }
+
+    suspend fun setContentSort(type: ContentType, sort: ContentSort) =
+        context.dataStore.edit { it[sortKey(type)] = sort.name }
 
     companion object {
         /** Default parental PIN used until the user sets their own. */

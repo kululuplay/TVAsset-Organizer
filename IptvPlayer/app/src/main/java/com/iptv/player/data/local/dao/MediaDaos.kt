@@ -84,22 +84,26 @@ interface VodDao {
 
     // ---- Paging 3 sources (bounded, lazily-paged for huge catalogs) -----
 
-    /** Whole movie cache, newest first — the "Recently added" default view. */
-    @Query("SELECT * FROM vod ORDER BY addedAt DESC, name")
-    fun pagingRecent(): PagingSource<Int, VodEntity>
+    /**
+     * Whole movie cache, newest first — the "Recently added" default view.
+     * [hidden] category ids are excluded so Content Manager hides leak nowhere
+     * (empty list = exclude nothing; rows with no category are always kept).
+     */
+    @Query("SELECT * FROM vod WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY addedAt DESC, name")
+    fun pagingRecent(hidden: List<String>): PagingSource<Int, VodEntity>
 
     @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
     fun pagingByCategory(categoryId: String): PagingSource<Int, VodEntity>
 
     // ---- Sorted variants (A-Z / rating / year) for the list sort control ----
-    @Query("SELECT * FROM vod ORDER BY name")
-    fun pagingAllByName(): PagingSource<Int, VodEntity>
+    @Query("SELECT * FROM vod WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY name")
+    fun pagingAllByName(hidden: List<String>): PagingSource<Int, VodEntity>
 
-    @Query("SELECT * FROM vod ORDER BY rating DESC, name")
-    fun pagingAllByRating(): PagingSource<Int, VodEntity>
+    @Query("SELECT * FROM vod WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY rating DESC, name")
+    fun pagingAllByRating(hidden: List<String>): PagingSource<Int, VodEntity>
 
-    @Query("SELECT * FROM vod ORDER BY releaseDate DESC, name")
-    fun pagingAllByYear(): PagingSource<Int, VodEntity>
+    @Query("SELECT * FROM vod WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY releaseDate DESC, name")
+    fun pagingAllByYear(hidden: List<String>): PagingSource<Int, VodEntity>
 
     @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY name")
     fun pagingCategoryByName(categoryId: String): PagingSource<Int, VodEntity>
@@ -115,9 +119,10 @@ interface VodDao {
         SELECT v.* FROM vod v
         JOIN vod_fts ON v.id = vod_fts.id
         WHERE vod_fts MATCH :query
+          AND (v.categoryId IS NULL OR v.categoryId NOT IN (:hidden))
         ORDER BY v.addedAt DESC, v.name
     """)
-    fun pagingSearch(query: String): PagingSource<Int, VodEntity>
+    fun pagingSearch(query: String, hidden: List<String>): PagingSource<Int, VodEntity>
 
     /** Movie count per category id, used for the category row badges. */
     @Query("""
@@ -199,22 +204,26 @@ interface SeriesDao {
 
     // ---- Paging 3 sources (bounded, lazily-paged for huge catalogs) -----
 
-    /** Whole series cache, newest first — the "Recently added" default view. */
-    @Query("SELECT * FROM series ORDER BY addedAt DESC, name")
-    fun pagingRecent(): PagingSource<Int, SeriesEntity>
+    /**
+     * Whole series cache, newest first — the "Recently added" default view.
+     * [hidden] category ids are excluded so Content Manager hides leak nowhere
+     * (empty list = exclude nothing; rows with no category are always kept).
+     */
+    @Query("SELECT * FROM series WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY addedAt DESC, name")
+    fun pagingRecent(hidden: List<String>): PagingSource<Int, SeriesEntity>
 
     @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
     fun pagingByCategory(categoryId: String): PagingSource<Int, SeriesEntity>
 
     // ---- Sorted variants (A-Z / rating / year) for the list sort control ----
-    @Query("SELECT * FROM series ORDER BY name")
-    fun pagingAllByName(): PagingSource<Int, SeriesEntity>
+    @Query("SELECT * FROM series WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY name")
+    fun pagingAllByName(hidden: List<String>): PagingSource<Int, SeriesEntity>
 
-    @Query("SELECT * FROM series ORDER BY rating DESC, name")
-    fun pagingAllByRating(): PagingSource<Int, SeriesEntity>
+    @Query("SELECT * FROM series WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY rating DESC, name")
+    fun pagingAllByRating(hidden: List<String>): PagingSource<Int, SeriesEntity>
 
-    @Query("SELECT * FROM series ORDER BY releaseDate DESC, name")
-    fun pagingAllByYear(): PagingSource<Int, SeriesEntity>
+    @Query("SELECT * FROM series WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY releaseDate DESC, name")
+    fun pagingAllByYear(hidden: List<String>): PagingSource<Int, SeriesEntity>
 
     @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY name")
     fun pagingCategoryByName(categoryId: String): PagingSource<Int, SeriesEntity>
@@ -230,9 +239,10 @@ interface SeriesDao {
         SELECT s.* FROM series s
         JOIN series_fts ON s.id = series_fts.id
         WHERE series_fts MATCH :query
+          AND (s.categoryId IS NULL OR s.categoryId NOT IN (:hidden))
         ORDER BY s.addedAt DESC, s.name
     """)
-    fun pagingSearch(query: String): PagingSource<Int, SeriesEntity>
+    fun pagingSearch(query: String, hidden: List<String>): PagingSource<Int, SeriesEntity>
 
     /** Series count per category id, used for the category row badges. */
     @Query("""

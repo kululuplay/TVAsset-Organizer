@@ -454,21 +454,24 @@ class IptvRepository(
 
     /** Whole movie cache, newest first — the "Recently added" default view. */
     fun pagingRecentVod(): Flow<PagingData<VodItem>> =
-        Pager(pagingConfig) { vodDao.pagingRecent() }
+        Pager(pagingConfig) { vodDao.pagingRecent(emptyList()) }
             .flow.map { data -> data.map { it.toModel() } }
 
     fun pagingVodByCategory(categoryId: String): Flow<PagingData<VodItem>> =
         Pager(pagingConfig) { vodDao.pagingByCategory(categoryId) }
             .flow.map { data -> data.map { it.toModel() } }
 
-    /** Whole movie cache in the requested [sort] order. */
-    fun pagingVodAll(sort: ContentSort): Flow<PagingData<VodItem>> =
+    /**
+     * Whole movie cache in the requested [sort] order, with [hidden] categories
+     * (from Content Manager) excluded so they never leak into the "all" view.
+     */
+    fun pagingVodAll(sort: ContentSort, hidden: List<String> = emptyList()): Flow<PagingData<VodItem>> =
         Pager(pagingConfig) {
             when (sort) {
-                ContentSort.RECENT -> vodDao.pagingRecent()
-                ContentSort.NAME -> vodDao.pagingAllByName()
-                ContentSort.RATING -> vodDao.pagingAllByRating()
-                ContentSort.YEAR -> vodDao.pagingAllByYear()
+                ContentSort.RECENT -> vodDao.pagingRecent(hidden)
+                ContentSort.NAME -> vodDao.pagingAllByName(hidden)
+                ContentSort.RATING -> vodDao.pagingAllByRating(hidden)
+                ContentSort.YEAR -> vodDao.pagingAllByYear(hidden)
             }
         }.flow.map { data -> data.map { it.toModel() } }
 
@@ -484,10 +487,10 @@ class IptvRepository(
         }.flow.map { data -> data.map { it.toModel() } }
 
     /** Instant FTS search, paged. Empty input yields an empty page (no MATCH). */
-    fun pagingVodSearch(query: String): Flow<PagingData<VodItem>> {
+    fun pagingVodSearch(query: String, hidden: List<String> = emptyList()): Flow<PagingData<VodItem>> {
         val match = toFtsQuery(query)
         if (match.isBlank()) return flowOf(PagingData.empty())
-        return Pager(pagingConfig) { vodDao.pagingSearch(match) }
+        return Pager(pagingConfig) { vodDao.pagingSearch(match, hidden) }
             .flow.map { data -> data.map { it.toModel() } }
     }
     /**
@@ -661,6 +664,15 @@ class IptvRepository(
 
     fun observeSeries(): Flow<List<Series>> = seriesDao.observeAll().map { it.map { e -> e.toModel() } }
 
+    /**
+     * Instant, network-free series record straight from the local cache (populated
+     * by [refreshSeriesCategory]). Lets the detail header render immediately instead
+     * of scanning the entire series list in memory.
+     */
+    suspend fun getSeriesCached(id: String): Series? = withContext(Dispatchers.IO) {
+        seriesDao.getById(id)?.toModel()
+    }
+
     /** Latest [limit] series by added date, for the "Recently added" rail. */
     fun observeRecentSeries(limit: Int): Flow<List<Series>> =
         seriesDao.observeRecent(limit).map { it.map { e -> e.toModel() } }
@@ -689,21 +701,24 @@ class IptvRepository(
 
     /** Whole series cache, newest first — the "Recently added" default view. */
     fun pagingRecentSeries(): Flow<PagingData<Series>> =
-        Pager(pagingConfig) { seriesDao.pagingRecent() }
+        Pager(pagingConfig) { seriesDao.pagingRecent(emptyList()) }
             .flow.map { data -> data.map { it.toModel() } }
 
     fun pagingSeriesByCategory(categoryId: String): Flow<PagingData<Series>> =
         Pager(pagingConfig) { seriesDao.pagingByCategory(categoryId) }
             .flow.map { data -> data.map { it.toModel() } }
 
-    /** Whole series cache in the requested [sort] order. */
-    fun pagingSeriesAll(sort: ContentSort): Flow<PagingData<Series>> =
+    /**
+     * Whole series cache in the requested [sort] order, with [hidden] categories
+     * (from Content Manager) excluded so they never leak into the "all" view.
+     */
+    fun pagingSeriesAll(sort: ContentSort, hidden: List<String> = emptyList()): Flow<PagingData<Series>> =
         Pager(pagingConfig) {
             when (sort) {
-                ContentSort.RECENT -> seriesDao.pagingRecent()
-                ContentSort.NAME -> seriesDao.pagingAllByName()
-                ContentSort.RATING -> seriesDao.pagingAllByRating()
-                ContentSort.YEAR -> seriesDao.pagingAllByYear()
+                ContentSort.RECENT -> seriesDao.pagingRecent(hidden)
+                ContentSort.NAME -> seriesDao.pagingAllByName(hidden)
+                ContentSort.RATING -> seriesDao.pagingAllByRating(hidden)
+                ContentSort.YEAR -> seriesDao.pagingAllByYear(hidden)
             }
         }.flow.map { data -> data.map { it.toModel() } }
 
@@ -719,10 +734,10 @@ class IptvRepository(
         }.flow.map { data -> data.map { it.toModel() } }
 
     /** Instant FTS search, paged. Empty input yields an empty page (no MATCH). */
-    fun pagingSeriesSearch(query: String): Flow<PagingData<Series>> {
+    fun pagingSeriesSearch(query: String, hidden: List<String> = emptyList()): Flow<PagingData<Series>> {
         val match = toFtsQuery(query)
         if (match.isBlank()) return flowOf(PagingData.empty())
-        return Pager(pagingConfig) { seriesDao.pagingSearch(match) }
+        return Pager(pagingConfig) { seriesDao.pagingSearch(match, hidden) }
             .flow.map { data -> data.map { it.toModel() } }
     }
 
@@ -1281,6 +1296,23 @@ class IptvRepository(
             } else 0
             row.contentId to pct
         }
+    }
+
+    /**
+     * In-progress percent (0..100) keyed by *series* id, for the series grid bars.
+     * A series has no resume row of its own — progress is tracked per episode — so
+     * we surface the most recently watched episode's progress as the series's
+     * "continue" hint. (There is no series-level *watched* tick: the grid can't
+     * cheaply know whether every episode is finished.)
+     */
+    suspend fun seriesWatchProgress(): Map<String, Int> = withContext(Dispatchers.IO) {
+        resumeDao.all()
+            .filter { it.seriesId != null && it.durationMs > 0 }
+            .groupBy { it.seriesId!! }
+            .mapValues { (_, rows) ->
+                val latest = rows.maxByOrNull { it.updatedAt } ?: return@mapValues 0
+                ((latest.positionMs * 100) / latest.durationMs).toInt().coerceIn(0, 100)
+            }
     }
 
     // ---- Watched (finished) state --------------------------------------

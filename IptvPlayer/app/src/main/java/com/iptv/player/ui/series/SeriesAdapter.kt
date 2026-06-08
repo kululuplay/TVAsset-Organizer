@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.paging.PagingDataAdapter
 import androidx.recyclerview.widget.DiffUtil
@@ -18,11 +19,26 @@ import coil.load
 import com.iptv.player.R
 import com.iptv.player.data.model.Series
 import com.iptv.player.ui.common.LogoPlaceholder
+import com.iptv.player.ui.common.isAdult
 
 class SeriesAdapter(
     private val onFocused: (Series) -> Unit,
     private val onClicked: (Series) -> Unit
 ) : PagingDataAdapter<Series, SeriesAdapter.VH>(DIFF) {
+
+    /**
+     * Returns the latest in-progress percent (0..100) for a series id. A series
+     * has no series-level "watched" tick (the grid can't know if every episode
+     * is finished), so only the resume bar is shown — see [seriesWatchProgress].
+     */
+    var progressProvider: ((String) -> Int)? = null
+
+    /**
+     * When true, adult-flagged posters are masked (artwork, title and badges
+     * hidden behind a lock) until the parental PIN is entered on click — so the
+     * metadata never leaks on screen. Set from the parental-lock setting.
+     */
+    var adultLocked: Boolean = false
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val view = LayoutInflater.from(parent.context)
@@ -42,9 +58,35 @@ class SeriesAdapter(
         private val meta: TextView = itemView.findViewById(R.id.posterMeta)
         private val ratingRow: LinearLayout = itemView.findViewById(R.id.posterRatingRow)
         private val rating: TextView = itemView.findViewById(R.id.posterRating)
+        private val progressBar: ProgressBar = itemView.findViewById(R.id.posterProgress)
 
         fun bind(item: Series) {
+            itemView.setOnClickListener { onClicked(item) }
+            itemView.setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus) onFocused(item)
+            }
+
+            // Parental gate: mask adult metadata until the PIN is entered.
+            if (adultLocked && item.isAdult()) {
+                name.text = itemView.context.getString(R.string.adult_locked_title)
+                meta.visibility = View.GONE
+                ratingRow.visibility = View.GONE
+                progressBar.visibility = View.GONE
+                poster.scaleType = ImageView.ScaleType.FIT_CENTER
+                poster.setImageResource(R.drawable.ic_lock)
+                return
+            }
+            poster.scaleType = ImageView.ScaleType.CENTER_CROP
+
             name.text = item.name
+
+            val pct = progressProvider?.invoke(item.id) ?: 0
+            if (pct in 1..99) {
+                progressBar.progress = pct
+                progressBar.visibility = View.VISIBLE
+            } else {
+                progressBar.visibility = View.GONE
+            }
 
             val year = item.releaseDate?.take(4)?.takeIf { it.isNotBlank() }
             meta.text = year ?: ""
@@ -68,11 +110,6 @@ class SeriesAdapter(
                     error(placeholder)
                 }
             }
-
-            itemView.setOnFocusChangeListener { _, hasFocus ->
-                if (hasFocus) onFocused(item)
-            }
-            itemView.setOnClickListener { onClicked(item) }
         }
     }
 

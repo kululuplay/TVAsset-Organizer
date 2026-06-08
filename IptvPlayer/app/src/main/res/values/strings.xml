@@ -123,6 +123,9 @@
     <string name="detail_seasons">Seasons</string>
     <string name="detail_similar">Similar</string>
     <string name="cat_recently_added">Recently added</string>
+    <string name="all_movies">All movies</string>
+    <string name="all_series">All series</string>
+    <string name="adult_locked_title">Locked</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>

@@ -99,6 +99,10 @@
     <string name="sort_year">Yıla göre</string>
     <string name="detail_plot">Konu</string>
     <string name="detail_similar">Benzer</string>
+    <string name="cat_recently_added">Son Eklenenler</string>
+    <string name="all_movies">Tüm Filmler</string>
+    <string name="all_series">Tüm Diziler</string>
+    <string name="adult_locked_title">Kilitli</string>
     <string name="series_season">%1$d. Sezon</string>
     <string name="series_episode">%1$d. Bölüm</string>
 

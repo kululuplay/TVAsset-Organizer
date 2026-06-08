@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -71,13 +72,25 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
     private val selectedCategory = MutableStateFlow<String?>(null)
     private val query = MutableStateFlow("")
 
-    /** Current grid ordering; cycled from the UI. Defaults to newest-first. */
+    /** The currently selected category id (survives config changes). */
+    val selectedCategoryId: String? get() = selectedCategory.value
+
+    /** Current grid ordering; cycled from the UI. Restored from settings. */
     private val _sort = MutableStateFlow(ContentSort.RECENT)
     val sort: StateFlow<ContentSort> = _sort
 
+    init {
+        // Restore the user's last-used sort so it survives process death.
+        viewModelScope.launch { _sort.value = settings.contentSort(ContentType.SERIES).first() }
+    }
+
     fun setSort(order: ContentSort) {
         _sort.value = order
+        viewModelScope.launch { settings.setContentSort(ContentType.SERIES, order) }
     }
+
+    /** Latest in-progress percent (0..100) keyed by series id, for grid bars. */
+    suspend fun repoSeriesWatchProgress(): Map<String, Int> = repo.seriesWatchProgress()
 
     // Categories whose series are currently being lazily downloaded. Tracked so
     // overlapping selections don't fetch the same category twice and so the
@@ -116,16 +129,29 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
      * is empty. The query is debounced so typing doesn't re-query on every
      * keystroke; [cachedIn] keeps the paged stream alive across config changes.
      */
+    private data class GridParams(
+        val catId: String?,
+        val query: String,
+        val sort: ContentSort,
+        val hidden: Set<String>
+    )
+
     val items: Flow<PagingData<Series>> =
         combine(
             selectedCategory,
             query.debounce(250).distinctUntilChanged(),
-            _sort
-        ) { catId, q, sort -> Triple(catId, q, sort) }
-            .flatMapLatest { (catId, q, sort) ->
+            _sort,
+            settings.hiddenCategories(ContentType.SERIES)
+        ) { catId, q, sort, hidden -> GridParams(catId, q, sort, hidden) }
+            .flatMapLatest { (catId, q, sort, hidden) ->
+                val hiddenList = hidden.toList()
                 when {
-                    q.isNotEmpty() -> repo.pagingSeriesSearch(q)
-                    catId == null || catId == CAT_ALL -> repo.pagingSeriesAll(sort)
+                    q.isNotEmpty() -> repo.pagingSeriesSearch(q, hiddenList)
+                    catId == null || catId == CAT_ALL -> repo.pagingSeriesAll(sort, hiddenList)
+                    // A selected category that becomes hidden (Content Manager) must
+                    // not keep leaking its content through the unfiltered by-category
+                    // path; fall back to the filtered "all" grid until reselected.
+                    catId in hidden -> repo.pagingSeriesAll(sort, hiddenList)
                     else -> repo.pagingSeriesByCategory(catId, sort)
                 }
             }

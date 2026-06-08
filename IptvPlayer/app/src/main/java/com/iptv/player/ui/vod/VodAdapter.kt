@@ -19,6 +19,7 @@ import coil.load
 import com.iptv.player.R
 import com.iptv.player.data.model.VodItem
 import com.iptv.player.ui.common.LogoPlaceholder
+import com.iptv.player.ui.common.isAdult
 
 class VodAdapter(
     private val onFocused: (VodItem) -> Unit,
@@ -30,6 +31,13 @@ class VodAdapter(
 
     /** True when a movie's resume id ("vod_<id>") has been fully watched. */
     var watchedProvider: ((String) -> Boolean)? = null
+
+    /**
+     * When true, adult-flagged posters are masked (artwork, title and badges
+     * hidden behind a lock) until the parental PIN is entered on click — so the
+     * metadata never leaks on screen. Set from the parental-lock setting.
+     */
+    var adultLocked: Boolean = false
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val view = LayoutInflater.from(parent.context)
@@ -53,6 +61,24 @@ class VodAdapter(
         private val watched: ImageView = itemView.findViewById(R.id.posterWatched)
 
         fun bind(item: VodItem) {
+            itemView.setOnClickListener { onClicked(item) }
+            itemView.setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus) onFocused(item)
+            }
+
+            // Parental gate: mask adult metadata until the PIN is entered.
+            if (adultLocked && item.isAdult()) {
+                name.text = itemView.context.getString(R.string.adult_locked_title)
+                meta.visibility = View.GONE
+                ratingRow.visibility = View.GONE
+                progressBar.visibility = View.GONE
+                watched.visibility = View.GONE
+                poster.scaleType = ImageView.ScaleType.FIT_CENTER
+                poster.setImageResource(R.drawable.ic_lock)
+                return
+            }
+            poster.scaleType = ImageView.ScaleType.CENTER_CROP
+
             name.text = item.name
 
             val contentId = "vod_${item.id}"
@@ -89,11 +115,6 @@ class VodAdapter(
                     error(placeholder)
                 }
             }
-
-            itemView.setOnFocusChangeListener { _, hasFocus ->
-                if (hasFocus) onFocused(item)
-            }
-            itemView.setOnClickListener { onClicked(item) }
         }
     }
 

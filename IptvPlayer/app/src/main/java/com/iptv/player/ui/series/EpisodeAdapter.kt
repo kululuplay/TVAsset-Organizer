@@ -33,14 +33,14 @@ class EpisodeAdapter(
     /** Series poster, used when an episode has no still of its own. */
     var fallbackPoster: String? = null
 
-    fun setProgress(progress: Map<String, Long>) {
+    /**
+     * Applies resume progress + watched ticks together in a single rebind, so the
+     * rail isn't churned by two back-to-back full refreshes.
+     */
+    fun setWatchState(progress: Map<String, Long>, watched: Set<String>) {
         progressByEpisode = progress
-        notifyDataSetChanged()
-    }
-
-    fun setWatched(ids: Set<String>) {
-        watchedEpisodes = ids
-        notifyDataSetChanged()
+        watchedEpisodes = watched
+        notifyItemRangeChanged(0, itemCount)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
