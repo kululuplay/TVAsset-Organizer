@@ -1,4 +1,5 @@
 - [Settings network diagnostics](settings-network-diagnostics.md) — in-Settings speed test streams a CDN file (not the throttled IPTV origin); public IPv4 must use an IPv4-only validated endpoint, NOT weather's ipapi (returns IPv6); cancel net job on panel-leave/onPause + restore UI in finally.
+- [Green-prone 0x0 dimensions](green-prone-zero-dimensions.md) — VLC green-prone routing must bail on 0x0/unknown video dims (not just unknown fps), else Amlogic `!isUhd` fires a premature SW fallback that kills 4K HEVC.
 - [Hidden-category leak](hidden-category-leak.md) — hidden cats must be filtered on catalog queries (DAO `NOT IN (:hidden)`) AND guarded on the selected-category path (`catId in hidden` → fall back to filtered all).
 - [Focus-driven row recoloring](android-focus-row-recolor.md) — focusable parent row recolors on focus, but children need `android:duplicateParentState="true"` to follow the color selector.
 - [Android TV EditText focus trap](android-tv-edittext-focus-trap.md) — D-pad stuck on search box; land focus on content on load + intercept DPAD_DOWN/RIGHT on the EditText (nextFocus to non-focusable RecyclerView is unreliable).

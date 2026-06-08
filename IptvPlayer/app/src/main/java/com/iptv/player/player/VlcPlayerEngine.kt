@@ -208,6 +208,13 @@ class VlcPlayerEngine(
     private fun maybeRouteByProfile() {
         if (greenCheckDone.get()) return
         val track = mediaPlayer?.currentVideoTrack ?: return
+        // Dimensions are frequently still 0x0 on the first Playing/Vout event for
+        // live TS (and at startup before the video track is parsed). Routing on
+        // 0x0 is harmful: isUhd is false, so on Amlogic (greenProne = !isUhd) it
+        // fires a premature software fallback — which for a real 4K HEVC stream is
+        // unplayable. Bail without claiming so the rechecks re-run once the true
+        // resolution is known (4K -> isUhd -> stays on hardware).
+        if (track.width <= 0 || track.height <= 0) return
         val den = track.frameRateDen
         val fps = if (den > 0) track.frameRateNum.toFloat() / den else 0f
         val isUhd = track.height >= UHD_MIN_HEIGHT || track.width >= UHD_MIN_WIDTH
