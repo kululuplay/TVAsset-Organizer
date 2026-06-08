@@ -217,9 +217,14 @@ class SettingsStore(private val context: Context) {
 
     // ---- TMDB -----------------------------------------------------------
 
-    val tmdbKey: Flow<String> = context.dataStore.data.map { it[Keys.TMDB_KEY] ?: "" }
+    // Falls back to a built-in key so poster/detail enrichment works out of the
+    // box; a user-saved key (if any) still takes precedence.
+    val tmdbKey: Flow<String> = context.dataStore.data.map {
+        it[Keys.TMDB_KEY]?.takeIf(String::isNotBlank) ?: DEFAULT_TMDB_KEY
+    }
 
-    suspend fun getTmdbKey(): String = context.dataStore.data.first()[Keys.TMDB_KEY] ?: ""
+    suspend fun getTmdbKey(): String =
+        context.dataStore.data.first()[Keys.TMDB_KEY]?.takeIf(String::isNotBlank) ?: DEFAULT_TMDB_KEY
 
     suspend fun setTmdbKey(key: String) =
         context.dataStore.edit { it[Keys.TMDB_KEY] = key }
@@ -359,5 +364,8 @@ class SettingsStore(private val context: Context) {
     companion object {
         /** Default parental PIN used until the user sets their own. */
         const val DEFAULT_PIN = "0000"
+
+        /** Built-in TMDB key so movie/series enrichment works without setup. */
+        const val DEFAULT_TMDB_KEY = "d03661ebe50f70d41b0a67b7f6e4c14f"
     }
 }
