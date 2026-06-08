@@ -22,6 +22,7 @@
     <string name="dash_sub_favorites">Ihre Favoriten</string>
     <string name="dash_sub_continue">Weiterschauen</string>
     <string name="dash_sub_search">Alles finden</string>
+    <string name="dash_sub_radio">Radiosender</string>
 
     <!-- Weather pill -->
     <string name="weather_unavailable">Wetter nicht verfügbar</string>

@@ -26,13 +26,21 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class HomeViewModel : ViewModel() {
+class HomeViewModel(private val radio: Boolean = false) : ViewModel() {
 
     private val repo = ServiceLocator.repository
 
     companion object {
         const val CAT_FAVORITES = "__favorites__"
         const val CAT_RECENT = "__recent__"
+    }
+
+    /** Builds a [HomeViewModel] in either Live TV ([radio] = false) or Radio mode. */
+    class Factory(private val radio: Boolean) : androidx.lifecycle.ViewModelProvider.Factory {
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            @Suppress("UNCHECKED_CAST")
+            return HomeViewModel(radio) as T
+        }
     }
 
     /**
@@ -42,12 +50,16 @@ class HomeViewModel : ViewModel() {
      */
     val categories: StateFlow<List<Category>> =
         combine(
-            repo.observeVisibleCategories(ContentType.LIVE),
+            repo.observeVisibleCategories(ContentType.LIVE, radio = radio),
             repo.observeFavorites()
         ) { cats, favs ->
             buildList {
-                add(Category(CAT_FAVORITES, "Favorites", ContentType.LIVE, count = favs.size))
-                add(Category(CAT_RECENT, "Recently Watched", ContentType.LIVE))
+                // Radio mode is a clean folder of stations only — the synthetic
+                // Favorites/Recent rows stay on the Live TV page.
+                if (!radio) {
+                    add(Category(CAT_FAVORITES, "Favorites", ContentType.LIVE, count = favs.size))
+                    add(Category(CAT_RECENT, "Recently Watched", ContentType.LIVE))
+                }
                 addAll(cats)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -66,10 +78,12 @@ class HomeViewModel : ViewModel() {
         ) { catId, favIds -> catId to favIds.map { it.id }.toSet() }
             .flatMapLatest { (catId, favSet) ->
                 val source: Flow<List<Channel>> = when (catId) {
-                    null -> repo.observeChannels(ContentType.LIVE)
-                    CAT_FAVORITES -> repo.observeFavorites()
-                    CAT_RECENT -> repo.observeRecent()
-                    else -> repo.observeChannelsByCategory(ContentType.LIVE, catId)
+                    null -> repo.observeChannels(ContentType.LIVE, radio = radio)
+                    // Favorites/Recent are cross-section; keep radios off the Live
+                    // TV page (these synthetic rows only ever show in live mode).
+                    CAT_FAVORITES -> repo.observeFavorites().map { it.filterNot { c -> c.isRadio } }
+                    CAT_RECENT -> repo.observeRecent().map { it.filterNot { c -> c.isRadio } }
+                    else -> repo.observeChannelsByCategory(ContentType.LIVE, catId, radio = radio)
                 }
                 // Annotate each channel with its current favorite state.
                 source.map { list -> list.map { it.copy(isFavorite = favSet.contains(it.id)) } }

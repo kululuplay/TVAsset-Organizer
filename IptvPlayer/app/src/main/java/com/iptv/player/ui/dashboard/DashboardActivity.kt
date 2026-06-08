@@ -72,6 +72,14 @@ class DashboardActivity : BaseActivity() {
             R.string.nav_movies, R.string.dash_sub_movies) { open(VodActivity::class.java) }
         configCard(binding.tileSeries, R.drawable.ic_series, R.drawable.bg_badge_series,
             R.string.nav_series, R.string.dash_sub_series) { open(SeriesActivity::class.java) }
+        // Radio stations live in their own folder; Live TV excludes them.
+        configCard(binding.tileRadio, R.drawable.ic_radio, R.drawable.bg_badge_radio,
+            R.string.nav_radio, R.string.dash_sub_radio) {
+            startActivity(
+                Intent(this, HomeActivity::class.java)
+                    .putExtra(HomeActivity.EXTRA_RADIO_MODE, true)
+            )
+        }
         configCard(binding.tileSettings, R.drawable.ic_settings, R.drawable.bg_badge_settings,
             R.string.nav_settings, R.string.dash_sub_settings) { open(SettingsActivity::class.java) }
         // Unified favorites across channels, movies and series (not just Live TV).

@@ -34,6 +34,7 @@
     <string name="connecting">جارٍ الاتصال…</string>
 
     <string name="nav_live">البث المباشر</string>
+    <string name="nav_radio">الراديو</string>
     <string name="nav_movies">أفلام</string>
     <string name="nav_series">مسلسلات</string>
     <string name="nav_guide">دليل القنوات</string>

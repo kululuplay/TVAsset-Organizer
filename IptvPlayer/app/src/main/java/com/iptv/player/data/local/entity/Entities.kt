@@ -28,7 +28,9 @@ data class ChannelEntity(
     /** Index in the source's stream list, so lists keep the server's order. */
     val position: Int = 0,
     /** Index of this channel's category in the source's category list. */
-    val categoryPosition: Int = Int.MAX_VALUE
+    val categoryPosition: Int = Int.MAX_VALUE,
+    /** True for radio stations (no video); kept off the Live TV page. */
+    val isRadio: Boolean = false
 )
 
 /**

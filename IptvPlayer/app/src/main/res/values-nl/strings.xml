@@ -34,6 +34,7 @@
     <string name="connecting">Verbinden…</string>
 
     <string name="nav_live">Live-tv</string>
+    <string name="nav_radio">Radio</string>
     <string name="nav_movies">Films</string>
     <string name="nav_series">Series</string>
     <string name="nav_guide">Tv-gids</string>

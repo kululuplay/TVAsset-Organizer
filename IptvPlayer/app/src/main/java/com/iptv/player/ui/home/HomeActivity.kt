@@ -48,8 +48,11 @@ import java.util.Locale
 class HomeActivity : BaseActivity() {
 
     private lateinit var binding: ActivityHomeBinding
+
+    /** When true, this screen shows radio stations only (launched as the Radio folder). */
+    private val radioMode: Boolean by lazy { intent.getBooleanExtra(EXTRA_RADIO_MODE, false) }
     private val viewModel: HomeViewModel by lazy {
-        ViewModelProvider(this)[HomeViewModel::class.java]
+        ViewModelProvider(this, HomeViewModel.Factory(radioMode))[HomeViewModel::class.java]
     }
 
     private lateinit var categoryAdapter: CategoryAdapter
@@ -80,6 +83,9 @@ class HomeActivity : BaseActivity() {
     companion object {
         /** Optional category id to open on (e.g. Favorites from the dashboard). */
         const val EXTRA_INITIAL_CATEGORY = "extra_initial_category"
+
+        /** When true, the screen shows radio stations only (the Radio folder). */
+        const val EXTRA_RADIO_MODE = "extra_radio_mode"
     }
 
     private val zap by lazy {
@@ -225,8 +231,10 @@ class HomeActivity : BaseActivity() {
                     if (cats.isNotEmpty() && !initialSelectionDone) {
                         initialSelectionDone = true
                         val requested = intent.getStringExtra(EXTRA_INITIAL_CATEGORY)
+                        // Live TV skips the two synthetic rows (Favorites/Recent);
+                        // Radio mode has none, so land on its first real category.
                         val target = cats.firstOrNull { it.id == requested }
-                            ?: cats.getOrNull(2) ?: cats.first()
+                            ?: cats.getOrNull(if (radioMode) 0 else 2) ?: cats.first()
                         lastSelectedCategoryId = target.id
                         viewModel.selectCategory(target.id)
                         focusCategory(target.id)
@@ -393,6 +401,7 @@ class HomeActivity : BaseActivity() {
             val intent = Intent(this, PlayerActivity::class.java).apply {
                 putExtra(PlayerActivity.EXTRA_CHANNEL_ID, channel.id)
                 putExtra(PlayerActivity.EXTRA_CATEGORY_ID, lastSelectedCategoryId)
+                putExtra(PlayerActivity.EXTRA_RADIO_MODE, radioMode)
             }
             startActivity(intent)
         }

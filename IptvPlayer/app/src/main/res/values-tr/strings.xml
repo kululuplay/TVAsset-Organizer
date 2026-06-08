@@ -36,6 +36,7 @@
     <string name="nav_live">Canlı TV</string>
     <string name="nav_movies">Filmler</string>
     <string name="nav_series">Diziler</string>
+    <string name="nav_radio">Radyo</string>
     <string name="nav_guide">TV Rehberi</string>
     <string name="nav_search">Ara</string>
     <string name="nav_settings">Ayarlar</string>

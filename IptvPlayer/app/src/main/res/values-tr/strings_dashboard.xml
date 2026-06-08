@@ -24,6 +24,7 @@
     <string name="dash_sub_favorites">Kaydettikleriniz</string>
     <string name="dash_sub_continue">İzlemeye devam et</string>
     <string name="dash_sub_search">Her şeyi bul</string>
+    <string name="dash_sub_radio">Radyo istasyonları</string>
 
     <!-- Weather pill -->
     <string name="weather_unavailable">Hava durumu yok</string>

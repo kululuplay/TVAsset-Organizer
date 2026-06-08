@@ -123,20 +123,20 @@ class IptvRepository(
 
     // ---- Reactive reads (UI layer) --------------------------------------
 
-    fun observeCategories(type: ContentType): Flow<List<Category>> =
-        channelDao.observeCategories(type.name).map { rows ->
+    fun observeCategories(type: ContentType, radio: Int = -1): Flow<List<Category>> =
+        channelDao.observeCategories(type.name, radio).map { rows ->
             rows.map { Category(it.categoryId, it.categoryName ?: "Uncategorized", type) }
         }
 
-    fun observeChannels(type: ContentType): Flow<List<Channel>> =
-        channelDao.observeByType(type.name).map { list -> list.map { it.toModel() } }
+    fun observeChannels(type: ContentType, radio: Boolean = false): Flow<List<Channel>> =
+        channelDao.observeByType(type.name, if (radio) 1 else 0).map { list -> list.map { it.toModel() } }
 
-    fun observeChannelsByCategory(type: ContentType, categoryId: String): Flow<List<Channel>> =
-        channelDao.observeByCategory(type.name, categoryId).map { list -> list.map { it.toModel() } }
+    fun observeChannelsByCategory(type: ContentType, categoryId: String, radio: Boolean = false): Flow<List<Channel>> =
+        channelDao.observeByCategory(type.name, categoryId, if (radio) 1 else 0).map { list -> list.map { it.toModel() } }
 
     /** Channel counts per category id, used for the category row badges. */
-    fun observeCategoryCounts(type: ContentType): Flow<Map<String, Int>> =
-        channelDao.observeCategoryCounts(type.name).map { rows ->
+    fun observeCategoryCounts(type: ContentType, radio: Int = -1): Flow<Map<String, Int>> =
+        channelDao.observeCategoryCounts(type.name, radio).map { rows ->
             rows.associate { it.categoryId to it.count }
         }
 
@@ -176,7 +176,7 @@ class IptvRepository(
 
     /** Live channels that advertise a catch-up / timeshift archive. */
     fun observeCatchupChannels(): Flow<List<Channel>> =
-        channelDao.observeByType(ContentType.LIVE.name)
+        channelDao.observeByType(ContentType.LIVE.name, 0)
             .map { list -> list.map { it.toModel() }.filter { it.catchupDays > 0 } }
 
     /**
@@ -208,15 +208,15 @@ class IptvRepository(
     // ---- Managed / visible categories (Content Manager) -----------------
 
     /** Raw category list for [type] in source/default order (no user prefs). */
-    private fun rawCategories(type: ContentType): Flow<List<Category>> = when (type) {
-        ContentType.LIVE -> observeCategories(ContentType.LIVE)
+    private fun rawCategories(type: ContentType, radio: Int = -1): Flow<List<Category>> = when (type) {
+        ContentType.LIVE -> observeCategories(ContentType.LIVE, radio)
         ContentType.VOD -> observeVodCategories()
         ContentType.SERIES -> observeSeriesCategories()
     }
 
     /** Per-category content counts for [type]. */
-    private fun categoryCounts(type: ContentType): Flow<Map<String, Int>> = when (type) {
-        ContentType.LIVE -> observeCategoryCounts(ContentType.LIVE)
+    private fun categoryCounts(type: ContentType, radio: Int = -1): Flow<Map<String, Int>> = when (type) {
+        ContentType.LIVE -> observeCategoryCounts(ContentType.LIVE, radio)
         ContentType.VOD -> observeVodCategoryCounts()
         ContentType.SERIES -> observeSeriesCategoryCounts()
     }
@@ -252,16 +252,19 @@ class IptvRepository(
      * Visible categories for [type]: hidden categories removed and the user's
      * custom order applied — used by the Live/Movies/Series browse rails.
      */
-    fun observeVisibleCategories(type: ContentType): Flow<List<Category>> =
-        combine(
-            rawCategories(type),
-            categoryCounts(type),
+    fun observeVisibleCategories(type: ContentType, radio: Boolean = false): Flow<List<Category>> {
+        // Radio split only applies to LIVE; other types ignore it (-1 = all).
+        val radioFilter = if (type == ContentType.LIVE) (if (radio) 1 else 0) else -1
+        return combine(
+            rawCategories(type, radioFilter),
+            categoryCounts(type, radioFilter),
             settings.hiddenCategories(type),
             settings.categoryOrder(type)
         ) { cats, counts, hidden, order ->
             val visible = cats.filter { it.id !in hidden }.map { it.copy(count = counts[it.id]) }
             applyCategoryOrder(visible, order)
         }
+    }
 
     // ---- Channel overrides (hide / custom order) ------------------------
 
@@ -1347,15 +1350,27 @@ class IptvRepository(
         categoryId = categoryId, categoryName = categoryName,
         epgChannelId = epgChannelId, number = number,
         type = ContentType.valueOf(type), isFavorite = isFav, catchupDays = catchupDays,
-        position = position, categoryPosition = categoryPosition
+        position = position, categoryPosition = categoryPosition, isRadio = isRadio
     )
 
     private fun Channel.toEntity() = ChannelEntity(
         id = id, name = name, streamUrl = streamUrl, logoUrl = logoUrl,
         categoryId = categoryId, categoryName = categoryName,
         epgChannelId = epgChannelId, number = number, type = type.name,
-        catchupDays = catchupDays, position = position, categoryPosition = categoryPosition
+        catchupDays = catchupDays, position = position, categoryPosition = categoryPosition,
+        isRadio = type == ContentType.LIVE && isRadioCategory(categoryName)
     )
+
+    /**
+     * Heuristic radio classifier. Providers don't flag radio explicitly, so a
+     * channel is treated as radio when its category name reads like one
+     * (e.g. "Radio", "RADYO", "FM Radio"). Centralized so the Live TV page and
+     * the Radio section stay in lockstep with the DB back-fill migration.
+     */
+    private fun isRadioCategory(name: String?): Boolean {
+        val n = name?.lowercase() ?: return false
+        return n.contains("radio") || n.contains("radyo")
+    }
 
     private fun VodEntity.toModel() = VodItem(
         id = id, name = name, streamUrl = streamUrl, posterUrl = posterUrl,

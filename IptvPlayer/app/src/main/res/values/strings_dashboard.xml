@@ -27,6 +27,7 @@
     <string name="dash_sub_favorites">Your saved picks</string>
     <string name="dash_sub_continue">Resume watching</string>
     <string name="dash_sub_search">Find anything</string>
+    <string name="dash_sub_radio">Radio stations</string>
 
     <!-- Weather pill -->
     <string name="weather_unavailable">Weather unavailable</string>

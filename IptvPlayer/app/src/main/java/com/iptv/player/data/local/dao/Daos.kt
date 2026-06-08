@@ -32,17 +32,19 @@ interface ChannelDao {
         SELECT c.* FROM channels c
         LEFT JOIN channel_overrides o ON o.channelId = c.id
         WHERE c.type = :type AND COALESCE(o.hidden, 0) = 0
+          AND (:radio < 0 OR c.isRadio = :radio)
         ORDER BY COALESCE(o.sortOrder, 2147483647), c.position
     """)
-    fun observeByType(type: String): Flow<List<ChannelEntity>>
+    fun observeByType(type: String, radio: Int): Flow<List<ChannelEntity>>
 
     @Query("""
         SELECT c.* FROM channels c
         LEFT JOIN channel_overrides o ON o.channelId = c.id
         WHERE c.type = :type AND c.categoryId = :categoryId AND COALESCE(o.hidden, 0) = 0
+          AND (:radio < 0 OR c.isRadio = :radio)
         ORDER BY COALESCE(o.sortOrder, 2147483647), c.position
     """)
-    fun observeByCategory(type: String, categoryId: String): Flow<List<ChannelEntity>>
+    fun observeByCategory(type: String, categoryId: String, radio: Int): Flow<List<ChannelEntity>>
 
     // Manager list: ALL channels (incl. hidden) with their override state.
     @Query("""
@@ -58,10 +60,11 @@ interface ChannelDao {
     @Query("""
         SELECT categoryId, categoryName FROM channels
         WHERE type = :type AND categoryId IS NOT NULL
+          AND (:radio < 0 OR isRadio = :radio)
         GROUP BY categoryId, categoryName
         ORDER BY MIN(categoryPosition)
     """)
-    fun observeCategories(type: String): Flow<List<CategoryRow>>
+    fun observeCategories(type: String, radio: Int): Flow<List<CategoryRow>>
 
     @Query("SELECT * FROM channels WHERE name LIKE '%' || :query || '%' AND type = :type ORDER BY name LIMIT 200")
     fun search(query: String, type: String): Flow<List<ChannelEntity>>
@@ -91,9 +94,10 @@ interface ChannelDao {
         SELECT c.categoryId AS categoryId, COUNT(*) AS count FROM channels c
         LEFT JOIN channel_overrides o ON o.channelId = c.id
         WHERE c.type = :type AND c.categoryId IS NOT NULL AND COALESCE(o.hidden, 0) = 0
+          AND (:radio < 0 OR c.isRadio = :radio)
         GROUP BY c.categoryId
     """)
-    fun observeCategoryCounts(type: String): Flow<List<CategoryCountRow>>
+    fun observeCategoryCounts(type: String, radio: Int): Flow<List<CategoryCountRow>>
 }
 
 /** Projection row for the distinct category query. */

@@ -43,6 +43,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         // channel zapping); this restored player zaps the full live list and
         // simply ignores the extra.
         const val EXTRA_CATEGORY_ID = "extra_category_id"
+        /** When true, up/down zapping stays within the radio list, not Live TV. */
+        const val EXTRA_RADIO_MODE = "extra_radio_mode"
         private const val OVERLAY_TIMEOUT = 4000L
         private const val LONG_PRESS_MS = 600L
     }
@@ -85,6 +87,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             finish()
             return
         }
+        viewModel.radioMode = intent.getBooleanExtra(EXTRA_RADIO_MODE, false)
 
         lifecycleScope.launch {
             val mode: PlayerMode = viewModel.playerMode()

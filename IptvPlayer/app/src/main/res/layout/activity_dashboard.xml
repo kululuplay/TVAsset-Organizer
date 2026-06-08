@@ -212,6 +212,14 @@
                     layout="@layout/item_dashboard_card"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="@dimen/space_m" />
+
+                <include
+                    android:id="@+id/tileRadio"
+                    layout="@layout/item_dashboard_card"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
                     android:layout_weight="1" />
             </LinearLayout>
 

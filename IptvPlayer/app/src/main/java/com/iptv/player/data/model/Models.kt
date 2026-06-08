@@ -32,7 +32,9 @@ data class Channel(
     /** 0-based index in the source's stream list, preserving server order. */
     val position: Int = 0,
     /** 0-based index of this channel's category in the source's category list. */
-    val categoryPosition: Int = Int.MAX_VALUE
+    val categoryPosition: Int = Int.MAX_VALUE,
+    /** True for radio stations; kept off the Live TV page (own Radio folder). */
+    val isRadio: Boolean = false
 )
 
 /** A channel paired with its manager state (hidden flag) for the channel editor. */

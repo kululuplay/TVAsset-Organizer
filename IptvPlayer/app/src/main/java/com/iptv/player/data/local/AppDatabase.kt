@@ -65,7 +65,7 @@ import com.iptv.player.data.local.dao.WatchedDao
         ChannelFtsEntity::class,
         WatchedEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -141,13 +141,30 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v10 -> v11: adds the `isRadio` flag to channels so radio stations can be
+         * split out of the Live TV page into their own Dashboard section. Additive
+         * and non-destructive — the column is back-filled from the category name
+         * (categories containing "radio"/"radyo") so existing caches classify
+         * immediately, and the next refresh recomputes it at ingest.
+         */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `channels` ADD COLUMN `isRadio` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    "UPDATE `channels` SET `isRadio` = 1 WHERE " +
+                        "LOWER(categoryName) LIKE '%radio%' OR LOWER(categoryName) LIKE '%radyo%'"
+                )
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(
                 context.applicationContext,
                 AppDatabase::class.java,
                 "iptv.db"
             )
-                .addMigrations(MIGRATION_8_9, MIGRATION_9_10)
+                .addMigrations(MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                 // Safety net for upgrades from versions older than 8 (dev-only
                 // builds that predate real migrations); v8 -> v9 is non-destructive.
                 .fallbackToDestructiveMigration()

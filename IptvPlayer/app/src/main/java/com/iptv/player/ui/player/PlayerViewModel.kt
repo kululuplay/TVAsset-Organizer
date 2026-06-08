@@ -22,12 +22,15 @@ class PlayerViewModel : ViewModel() {
     private val repo = ServiceLocator.repository
     private val settings = ServiceLocator.settings
 
-    /** Flat list of live channels used for up/down zapping. */
+    /** Flat list of channels used for up/down zapping. */
     private var playlist: List<Channel> = emptyList()
     private var currentIndex: Int = -1
 
+    /** When true, zapping stays within the radio list (Radio folder playback). */
+    var radioMode: Boolean = false
+
     suspend fun loadPlaylist() {
-        playlist = repo.observeChannels(ContentType.LIVE).first()
+        playlist = repo.observeChannels(ContentType.LIVE, radio = radioMode).first()
     }
 
     suspend fun playerMode(): PlayerMode = settings.playerMode.first()
