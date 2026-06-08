@@ -100,6 +100,7 @@
     <string name="detail_plot">Konu</string>
     <string name="detail_similar">Benzer</string>
     <string name="cat_recently_added">Son Eklenenler</string>
+    <string name="cat_for_you">Beğenebilirsin</string>
     <string name="all_movies">Tüm Filmler</string>
     <string name="all_series">Tüm Diziler</string>
     <string name="adult_locked_title">Kilitli</string>

@@ -39,6 +39,7 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
 
     companion object {
         const val CAT_ALL = "__all__"
+        const val CAT_POPULAR = "__popular__"
         const val RECENT_LIMIT = 20
     }
 
@@ -63,6 +64,16 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
                         getApplication<Application>().getString(R.string.cat_recently_added),
                         ContentType.SERIES,
                         count = cats.sumOf { it.count ?: 0 }.coerceAtMost(RECENT_LIMIT)
+                    )
+                )
+                // "You may like" — top-rated series across the whole catalog, so
+                // every poster is guaranteed playable (no TMDB key / dead links).
+                add(
+                    Category(
+                        CAT_POPULAR,
+                        getApplication<Application>().getString(R.string.cat_for_you),
+                        ContentType.SERIES,
+                        count = cats.sumOf { it.count ?: 0 }
                     )
                 )
                 addAll(cats)
@@ -105,7 +116,9 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun selectCategory(categoryId: String) {
         selectedCategory.value = categoryId
-        if (categoryId == CAT_ALL) return
+        // Synthetic rails ("Recently added", "You may like") are computed from the
+        // local cache — never trigger a per-category network fetch for them.
+        if (categoryId == CAT_ALL || categoryId == CAT_POPULAR) return
         if (!inFlight.add(categoryId)) return // already fetching this category
         viewModelScope.launch {
             try {
@@ -147,6 +160,9 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
                 val hiddenList = hidden.toList()
                 when {
                     q.isNotEmpty() -> repo.pagingSeriesSearch(q, hiddenList)
+                    // "You may like" always shows highest-rated first, regardless of
+                    // the grid's current sort selection.
+                    catId == CAT_POPULAR -> repo.pagingSeriesAll(ContentSort.RATING, hiddenList)
                     catId == null || catId == CAT_ALL -> repo.pagingSeriesAll(sort, hiddenList)
                     // A selected category that becomes hidden (Content Manager) must
                     // not keep leaking its content through the unfiltered by-category
