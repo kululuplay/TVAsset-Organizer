@@ -25,9 +25,18 @@ options on top of it. When in doubt, restore the baseline decode/display config:
    video, audio kept playing). A 1.1.x build that turned DR ON regressed this; the
    1.1.0/1.1.1 comment claiming "DR-off reintroduces green (A/B-confirmed)" was
    WRONG — that earlier green was the TextureView, not DR.
-3. **Do NOT force a display chroma.** No `--android-display-chroma=RV32`. Forcing
-   RV32 pushed VLC onto an unrecognized byte-buffer format (`output: 17 unknown`)
-   and caused the same `dequeue_in timeout` freeze. The baseline never set it.
+3. **Display chroma: RV32 froze, RV16 is the current green fix (UNVERIFIED).**
+   Forcing `--android-display-chroma=RV32` pushed VLC onto an unrecognized
+   byte-buffer format (`output: 17 unknown`) + `dequeue_in timeout` freeze — do
+   NOT use RV32. BUT a device that decodes a HEALTHY frame and still greens (luma
+   ghost, wrong chroma) is a compositor NV12-plane fault, NOT decode/surface/window
+   (those logs are byte-identical to sticks that show video — see below). The only
+   lever that targets the plane is forcing the `android_display` vout to convert to
+   packed RGB. So the HW path now sets `--android-display-chroma=RV16` (lighter than
+   RV32; only valid because DR is OFF so frames are non-opaque). This is an
+   EXPERIMENT pending real-stick confirmation (green gone on Xiaomi AND no freeze on
+   the working Firestick, since the HW config is shared and untestable here). If
+   RV16 also freezes/greens, the proven-safe answer remains SOFTWARE decode.
 4. **No deinterlace on the hardware path.** Software deinterlace (yadif/bob) can't
    touch opaque HW buffers; the Amlogic chip deinterlaces 1080i natively. Only add
    `--deinterlace=1` + `bob` when `forceSoftware` (raw I420) — and even that is
