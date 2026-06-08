@@ -17,9 +17,11 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.iptv.player.data.model.AspectRatio
+import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
+import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.data.model.SourceConfig
 import com.iptv.player.data.model.SourceType
 import kotlinx.coroutines.flow.Flow
@@ -38,6 +40,8 @@ class SettingsStore(private val context: Context) {
         val M3U_URL = stringPreferencesKey("m3u_url")
         val PLAYER_MODE = stringPreferencesKey("player_mode")
         val DECODER_MODE = stringPreferencesKey("decoder_mode")
+        val LIVE_STREAM_FORMAT = stringPreferencesKey("live_stream_format")
+        val BUFFER_MODE = stringPreferencesKey("buffer_mode")
         val AUDIO_PASSTHROUGH = booleanPreferencesKey("audio_passthrough")
         val LAST_CHANNEL = stringPreferencesKey("last_channel")
         val RESUME_ON_LAUNCH = booleanPreferencesKey("resume_on_launch")
@@ -98,6 +102,26 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setDecoderMode(mode: DecoderMode) =
         context.dataStore.edit { it[Keys.DECODER_MODE] = mode.name }
+
+    val streamFormat: Flow<StreamFormat> = context.dataStore.data.map {
+        StreamFormat.fromName(it[Keys.LIVE_STREAM_FORMAT])
+    }
+
+    suspend fun getStreamFormat(): StreamFormat =
+        StreamFormat.fromName(context.dataStore.data.first()[Keys.LIVE_STREAM_FORMAT])
+
+    suspend fun setStreamFormat(format: StreamFormat) =
+        context.dataStore.edit { it[Keys.LIVE_STREAM_FORMAT] = format.name }
+
+    val bufferMode: Flow<BufferMode> = context.dataStore.data.map {
+        BufferMode.fromName(it[Keys.BUFFER_MODE])
+    }
+
+    suspend fun getBufferMode(): BufferMode =
+        BufferMode.fromName(context.dataStore.data.first()[Keys.BUFFER_MODE])
+
+    suspend fun setBufferMode(mode: BufferMode) =
+        context.dataStore.edit { it[Keys.BUFFER_MODE] = mode.name }
 
     /**
      * Audio passthrough (encoded bitstream over HDMI/SPDIF for AV receivers).

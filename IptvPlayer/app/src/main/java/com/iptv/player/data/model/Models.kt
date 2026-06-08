@@ -96,6 +96,52 @@ enum class DecoderMode {
     }
 }
 
+/**
+ * Live stream container format the user prefers. Xtream live channels are stored
+ * with the default `.ts` extension; choosing HLS rewrites that to `.m3u8` at
+ * playback time (some providers serve both and one path is smoother than the
+ * other on a given network). VOD/series keep their real container extension.
+ */
+enum class StreamFormat(val extension: String) {
+    /** MPEG-TS (`.ts`) — the most compatible Xtream live transport. */
+    TS("ts"),
+    /** HLS (`.m3u8`) — adaptive segmented delivery. */
+    HLS("m3u8");
+
+    companion object {
+        fun fromName(value: String?): StreamFormat =
+            entries.firstOrNull { it.name == value } ?: TS
+    }
+}
+
+/**
+ * Network/cache buffer size. A larger buffer trades a little zap latency for far
+ * fewer stalls on jittery connections; a smaller one zaps faster. Carries the
+ * concrete values for both engines so the choice maps cleanly onto libVLC's
+ * network/live caching and ExoPlayer's DefaultLoadControl durations.
+ */
+enum class BufferMode(
+    /** libVLC --network-caching / --live-caching (ms). */
+    val networkCachingMs: Int,
+    /** ExoPlayer DefaultLoadControl min buffer (ms). */
+    val exoMinBufferMs: Int,
+    /** ExoPlayer DefaultLoadControl max buffer (ms). */
+    val exoMaxBufferMs: Int,
+    /** ExoPlayer buffer required before (re)starting playback (ms). */
+    val exoPlaybackMs: Int,
+    /** ExoPlayer buffer required after a rebuffer (ms). */
+    val exoRebufferMs: Int
+) {
+    LOW(1500, 1000, 4000, 500, 1000),
+    NORMAL(3000, 2000, 8000, 1000, 1500),
+    HIGH(6000, 4000, 15000, 2500, 3000);
+
+    companion object {
+        fun fromName(value: String?): BufferMode =
+            entries.firstOrNull { it.name == value } ?: NORMAL
+    }
+}
+
 /** Stored connection profile (one active source at a time for this milestone). */
 data class SourceConfig(
     val type: SourceType,

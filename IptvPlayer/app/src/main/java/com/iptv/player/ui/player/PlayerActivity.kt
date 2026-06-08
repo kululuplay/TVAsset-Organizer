@@ -24,13 +24,16 @@ import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.NowNext
 import com.iptv.player.data.model.PlayerMode
+import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.databinding.ActivityPlayerBinding
 import com.iptv.player.player.PlayerController
+import com.iptv.player.player.StreamInfo
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.SleepTimer
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
@@ -55,6 +58,13 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     private var okDownTime = 0L
     private var epgJob: Job? = null
 
+    /** User's preferred live container; applied to the URL at play time. */
+    private var streamFormat: StreamFormat = StreamFormat.TS
+
+    /** Diagnostics overlay state (toggled via the menu / INFO key). */
+    private val statsHandler = Handler(Looper.getMainLooper())
+    private var statsVisible = false
+
     private val sleepTimer = SleepTimer { finish() }
     private val castController by lazy {
         CastController(this) {
@@ -78,12 +88,14 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
         lifecycleScope.launch {
             val mode: PlayerMode = viewModel.playerMode()
+            streamFormat = viewModel.streamFormat()
             controller = PlayerController(
                 context = this@PlayerActivity,
                 container = binding.videoContainer,
                 mode = mode,
                 decoderMode = viewModel.decoderMode(),
                 allowPassthrough = viewModel.audioPassthrough(),
+                bufferMode = viewModel.bufferMode(),
                 callback = this@PlayerActivity
             )
             val channel = viewModel.resolveChannel(channelId)
@@ -98,8 +110,31 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     private fun startChannel(channel: Channel) {
         currentChannel = channel
-        controller.play(channel.streamUrl)
+        controller.play(applyStreamFormat(channel.streamUrl))
         showOverlay(channel)
+        if (statsVisible) refreshStats()
+    }
+
+    /**
+     * Rewrite a live channel URL to the user's preferred container. Xtream live
+     * URLs are baked with `.ts` at sync time; swap only that known live extension
+     * (or an existing `.m3u8`) on the path so HLS users hit the `.m3u8` path. Any
+     * `?query`/`#fragment` (CDN tokens etc.) is split off first so it's preserved,
+     * and anything that isn't a recognised live URL (VOD/series real containers)
+     * is left untouched.
+     */
+    private fun applyStreamFormat(url: String): String {
+        val ext = streamFormat.extension
+        val cut = url.indexOfFirst { it == '?' || it == '#' }
+        val path = if (cut >= 0) url.substring(0, cut) else url
+        val suffix = if (cut >= 0) url.substring(cut) else ""
+        val lower = path.lowercase(Locale.US)
+        val base = when {
+            lower.endsWith(".ts") -> path.dropLast(3)
+            lower.endsWith(".m3u8") -> path.dropLast(5)
+            else -> return url
+        }
+        return "$base.$ext$suffix"
     }
 
     // ---- D-pad handling -------------------------------------------------
@@ -122,6 +157,10 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             }
             KeyEvent.KEYCODE_MENU -> {
                 showPlayerMenu()
+                return true
+            }
+            KeyEvent.KEYCODE_INFO -> {
+                toggleStats()
                 return true
             }
         }
@@ -155,11 +194,11 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     }
 
     override fun onBackPressed() {
-        // First press closes the overlay; second exits.
-        if (binding.infoOverlay.visibility == View.VISIBLE) {
-            hideOverlay()
-        } else {
-            super.onBackPressed()
+        // Back peels overlays one at a time: stats first, then info, then exit.
+        when {
+            statsVisible -> hideStats()
+            binding.infoOverlay.visibility == View.VISIBLE -> hideOverlay()
+            else -> super.onBackPressed()
         }
     }
 
@@ -183,6 +222,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             labels.add(getString(R.string.cast))
             actions.add { castController.onCastButtonClicked() }
         }
+
+        labels.add(getString(R.string.stream_info))
+        actions.add { toggleStats() }
 
         PlayerDialogs.showOptions(
             this,
@@ -351,6 +393,51 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         sleepTimer.release()
         castController.detach()
         overlayHandler.removeCallbacksAndMessages(null)
+        statsHandler.removeCallbacksAndMessages(null)
         if (::controller.isInitialized) controller.release()
     }
+
+    // ---- Diagnostics overlay -------------------------------------------
+
+    private fun toggleStats() {
+        if (statsVisible) hideStats() else showStats()
+    }
+
+    private fun showStats() {
+        statsVisible = true
+        binding.statsOverlay.visibility = View.VISIBLE
+        refreshStats()
+    }
+
+    private fun hideStats() {
+        statsVisible = false
+        statsHandler.removeCallbacksAndMessages(null)
+        binding.statsOverlay.visibility = View.GONE
+    }
+
+    /** Repaint the overlay every second so resolution/bitrate stay current. */
+    private fun refreshStats() {
+        if (!statsVisible || !::controller.isInitialized) return
+        binding.statsOverlay.text = formatStats(controller.streamInfo())
+        statsHandler.removeCallbacksAndMessages(null)
+        statsHandler.postDelayed({ refreshStats() }, STATS_REFRESH_MS)
+    }
+
+    private fun formatStats(info: StreamInfo?): String {
+        if (info == null) return getString(R.string.stream_info_unavailable)
+        val res = if (info.width > 0 && info.height > 0) "${info.width}×${info.height}" else DASH
+        val fps = if (info.fps > 0f) String.format(Locale.US, "%.0f", info.fps) else DASH
+        val bitrate = info.bitrateKbps?.let { "$it kbps" } ?: DASH
+        return buildString {
+            append(getString(R.string.stream_info)).append('\n')
+            append(getString(R.string.stream_info_engine, info.engine)).append('\n')
+            append(getString(R.string.stream_info_resolution, res)).append('\n')
+            append(getString(R.string.stream_info_fps, fps)).append('\n')
+            append(getString(R.string.stream_info_codec, info.codec ?: DASH)).append('\n')
+            append(getString(R.string.stream_info_bitrate, bitrate))
+        }
+    }
 }
+
+private const val STATS_REFRESH_MS = 1000L
+private const val DASH = "—"

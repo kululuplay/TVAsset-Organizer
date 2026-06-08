@@ -20,6 +20,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.view.ViewGroup
+import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.util.PlaybackLog
@@ -30,6 +31,7 @@ class PlayerController(
     private val mode: PlayerMode,
     private val decoderMode: DecoderMode = DecoderMode.SOFTWARE,
     private val allowPassthrough: Boolean = false,
+    private val bufferMode: BufferMode = BufferMode.NORMAL,
     private val callback: Callback
 ) {
 
@@ -128,8 +130,8 @@ class PlayerController(
         val create = Runnable {
             if (generation != startGeneration) return@Runnable
             val newEngine: PlayerEngine =
-                if (useVlc) VlcPlayerEngine(context, forceSoftware, allowPassthrough)
-                else ExoPlayerEngine(context, allowPassthrough)
+                if (useVlc) VlcPlayerEngine(context, forceSoftware, allowPassthrough, bufferMode.networkCachingMs)
+                else ExoPlayerEngine(context, allowPassthrough, bufferMode)
             newEngine.bind(container)
             newEngine.setListener(engineListener)
             engine = newEngine
@@ -211,6 +213,9 @@ class PlayerController(
             Stage.VLC_SW -> null
         }
     }
+
+    /** Current video stream info for the diagnostics overlay, or null. */
+    fun streamInfo(): StreamInfo? = engine?.getStreamInfo()
 
     fun pause() = engine?.pause()
     fun resume() = engine?.resume()

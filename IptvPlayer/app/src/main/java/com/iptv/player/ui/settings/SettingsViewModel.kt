@@ -8,8 +8,10 @@ package com.iptv.player.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.iptv.player.data.ServiceLocator
+import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
+import com.iptv.player.data.model.StreamFormat
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
@@ -19,6 +21,8 @@ class SettingsViewModel : ViewModel() {
 
     val playerMode: Flow<PlayerMode> = settings.playerMode
     val decoderMode: Flow<DecoderMode> = settings.decoderMode
+    val streamFormat: Flow<StreamFormat> = settings.streamFormat
+    val bufferMode: Flow<BufferMode> = settings.bufferMode
     val audioPassthrough: Flow<Boolean> = settings.audioPassthrough
     val showClock: Flow<Boolean> = settings.showClock
     val screensaverMinutes: Flow<Int> = settings.screensaverMinutes
@@ -31,6 +35,11 @@ class SettingsViewModel : ViewModel() {
     fun setPlayerMode(mode: PlayerMode) = viewModelScope.launch { settings.setPlayerMode(mode) }
 
     fun setDecoderMode(mode: DecoderMode) = viewModelScope.launch { settings.setDecoderMode(mode) }
+
+    fun setStreamFormat(format: StreamFormat) =
+        viewModelScope.launch { settings.setStreamFormat(format) }
+
+    fun setBufferMode(mode: BufferMode) = viewModelScope.launch { settings.setBufferMode(mode) }
 
     fun setAudioPassthrough(enabled: Boolean) =
         viewModelScope.launch { settings.setAudioPassthrough(enabled) }

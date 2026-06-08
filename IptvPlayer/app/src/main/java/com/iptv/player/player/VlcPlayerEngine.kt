@@ -40,7 +40,9 @@ class VlcPlayerEngine(
     /** When true, MediaCodec is disabled and decoding is pure software. */
     private val forceSoftware: Boolean = false,
     /** When false (default) audio is decoded to PCM; true allows SPDIF passthrough. */
-    private val allowPassthrough: Boolean = false
+    private val allowPassthrough: Boolean = false,
+    /** Network/live caching in ms (user "Buffer size" setting). */
+    private val networkCachingMs: Int = 3000
 ) : PlayerEngine {
 
     override val engineName: String = "VLC"
@@ -65,8 +67,8 @@ class VlcPlayerEngine(
         // hardware instead of accumulating delay (the main cause of stutter).
         val options = arrayListOf(
             // Bigger live buffer soaks up network hiccups before they freeze.
-            "--network-caching=$NETWORK_CACHING_MS",
-            "--live-caching=$NETWORK_CACHING_MS",
+            "--network-caching=$networkCachingMs",
+            "--live-caching=$networkCachingMs",
             // Many IPTV TS streams carry irregular PCR/timestamps; disabling the
             // jitter/synchro guards stops VLC from stalling to "catch up".
             "--clock-jitter=0",
@@ -197,8 +199,8 @@ class VlcPlayerEngine(
             // Hardware decoding unless software was forced (then both off).
             setHWDecoderEnabled(!forceSoftware, !forceSoftware)
             // Mirror the instance buffer/jitter tuning at the stream level.
-            addOption(":network-caching=$NETWORK_CACHING_MS")
-            addOption(":live-caching=$NETWORK_CACHING_MS")
+            addOption(":network-caching=$networkCachingMs")
+            addOption(":live-caching=$networkCachingMs")
             addOption(":clock-jitter=0")
             addOption(":clock-synchro=0")
             if (forceSoftware) addOption(":avcodec-hw=none")
@@ -239,6 +241,45 @@ class VlcPlayerEngine(
         this.listener = listener
     }
 
+    /**
+     * Read the live video track for the diagnostics overlay. width/height and the
+     * frame-rate num/den are proven-safe across libVLC versions (already used by
+     * the green-prone profile check). codec is read through an Any?-typed helper
+     * so it compiles whether libVLC exposes it as an Int fourcc or a String;
+     * bitrate (bits/s) is converted to kbps. Null fields render as "—".
+     */
+    override fun getStreamInfo(): StreamInfo? {
+        val track = mediaPlayer?.currentVideoTrack ?: return null
+        val den = track.frameRateDen
+        val fps = if (den > 0) track.frameRateNum.toFloat() / den else 0f
+        val bitrateKbps = track.bitrate.takeIf { it > 0 }?.let { it / 1000 }
+        return StreamInfo(
+            width = track.width,
+            height = track.height,
+            fps = fps,
+            codec = codecLabel(track.codec),
+            bitrateKbps = bitrateKbps,
+            engine = engineName
+        )
+    }
+
+    /**
+     * libVLC's track codec field is not consistently typed across versions (an
+     * Int fourcc on some, a String on others). Accept Any? so this compiles
+     * regardless and decode at runtime: a fourcc Int -> its 4 ASCII chars.
+     */
+    private fun codecLabel(codec: Any?): String? = when (codec) {
+        is String -> codec.trim().takeIf { it.isNotBlank() }
+        is Int -> fourccToString(codec)
+        else -> null
+    }
+
+    private fun fourccToString(fourcc: Int): String? {
+        if (fourcc == 0) return null
+        val chars = CharArray(4) { i -> ((fourcc shr (i * 8)) and 0xFF).toChar() }
+        return String(chars).trim().takeIf { it.isNotBlank() }?.uppercase()
+    }
+
     // VLC delays are expressed in microseconds.
     override fun setAudioDelayMs(ms: Long) {
         audioDelayMs = ms
@@ -258,13 +299,6 @@ class VlcPlayerEngine(
     }
 
     companion object {
-        /**
-         * Live/network buffer in ms. A larger buffer trades a little extra
-         * zap/startup latency for far fewer stalls and freezes on jittery IPTV
-         * connections — the priority for smooth Android TV playback.
-         */
-        private const val NETWORK_CACHING_MS = 3000
-
         // Green-prone Amlogic profile: 1080p at a high frame rate (1080p@50/60).
         // Broadcast 1080i reports ~25fps (field-coded) so the >=49 threshold keeps
         // it on hardware; only progressive 1080p50/60 trips the software fallback.

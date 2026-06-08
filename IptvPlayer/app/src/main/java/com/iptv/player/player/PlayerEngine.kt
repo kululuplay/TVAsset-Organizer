@@ -37,9 +37,29 @@ interface PlayerEngine {
     /** True when this backend can actually apply audio/subtitle delay. */
     val supportsDelay: Boolean get() = false
 
+    /**
+     * Current video stream technical info for the diagnostics overlay, or null
+     * when nothing is playing yet / the backend can't report it.
+     */
+    fun getStreamInfo(): StreamInfo? = null
+
     /** Identifies which backend this is (for UI badges / logging). */
     val engineName: String
 }
+
+/**
+ * Snapshot of the playing video stream for the on-screen diagnostics overlay.
+ * Fields are best-effort: codec/bitrate may be null when a backend can't expose
+ * them (e.g. libVLC across versions); 0 / null render as "—" in the UI.
+ */
+data class StreamInfo(
+    val width: Int,
+    val height: Int,
+    val fps: Float,
+    val codec: String?,
+    val bitrateKbps: Int?,
+    val engine: String
+)
 
 /** Playback state callbacks routed to the UI. */
 interface PlayerListener {

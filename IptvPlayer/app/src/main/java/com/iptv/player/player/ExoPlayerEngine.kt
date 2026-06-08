@@ -47,13 +47,16 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
 import com.iptv.player.R
+import com.iptv.player.data.model.BufferMode
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.PlaybackLog
 
 class ExoPlayerEngine(
     private val context: Context,
     /** When false (default) audio is decoded to PCM; true allows HDMI passthrough. */
-    private val allowPassthrough: Boolean = false
+    private val allowPassthrough: Boolean = false,
+    /** Buffer size (user "Buffer size" setting) -> DefaultLoadControl durations. */
+    private val bufferMode: BufferMode = BufferMode.NORMAL
 ) : PlayerEngine {
 
     override val engineName: String = "ExoPlayer"
@@ -77,13 +80,14 @@ class ExoPlayerEngine(
     }
 
     override fun bind(container: ViewGroup) {
-        // Small buffers => quick channel zap on live streams.
+        // Buffer durations from the user's "Buffer size" setting (smaller = faster
+        // zap, larger = fewer stalls on jittery links).
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                /* minBufferMs = */ 2000,
-                /* maxBufferMs = */ 8000,
-                /* bufferForPlaybackMs = */ 1000,
-                /* bufferForPlaybackAfterRebufferMs = */ 1500
+                /* minBufferMs = */ bufferMode.exoMinBufferMs,
+                /* maxBufferMs = */ bufferMode.exoMaxBufferMs,
+                /* bufferForPlaybackMs = */ bufferMode.exoPlaybackMs,
+                /* bufferForPlaybackAfterRebufferMs = */ bufferMode.exoRebufferMs
             )
             .build()
 
@@ -335,6 +339,37 @@ class ExoPlayerEngine(
 
     override fun setListener(listener: PlayerListener?) {
         this.listener = listener
+    }
+
+    /**
+     * Stream info for the diagnostics overlay, read from the selected video
+     * Format. Media3 exposes every field safely: width/height, frameRate
+     * (NO_VALUE when unknown), the sample MIME type (mapped to a friendly codec
+     * name) and the peak/average bitrate (bits/s -> kbps).
+     */
+    override fun getStreamInfo(): StreamInfo? {
+        val fmt = player?.videoFormat ?: return null
+        val fps = if (fmt.frameRate > 0f) fmt.frameRate else 0f
+        val bits = fmt.peakBitrate.takeIf { it > 0 } ?: fmt.averageBitrate.takeIf { it > 0 }
+        return StreamInfo(
+            width = fmt.width.coerceAtLeast(0),
+            height = fmt.height.coerceAtLeast(0),
+            fps = fps,
+            codec = codecLabel(fmt.sampleMimeType),
+            bitrateKbps = bits?.let { it / 1000 },
+            engine = engineName
+        )
+    }
+
+    private fun codecLabel(mime: String?): String? = when (mime) {
+        null -> null
+        MimeTypes.VIDEO_H264 -> "H.264"
+        MimeTypes.VIDEO_H265 -> "H.265"
+        MimeTypes.VIDEO_MPEG2 -> "MPEG-2"
+        MimeTypes.VIDEO_MP4V -> "MPEG-4"
+        MimeTypes.VIDEO_VP9 -> "VP9"
+        MimeTypes.VIDEO_AV1 -> "AV1"
+        else -> mime.substringAfter('/').uppercase()
     }
 
     companion object {

@@ -8,10 +8,12 @@ package com.iptv.player.ui.player
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.iptv.player.data.ServiceLocator
+import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
+import com.iptv.player.data.model.StreamFormat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -31,6 +33,10 @@ class PlayerViewModel : ViewModel() {
     suspend fun playerMode(): PlayerMode = settings.playerMode.first()
 
     suspend fun decoderMode(): DecoderMode = settings.getDecoderMode()
+
+    suspend fun streamFormat(): StreamFormat = settings.getStreamFormat()
+
+    suspend fun bufferMode(): BufferMode = settings.getBufferMode()
 
     suspend fun audioPassthrough(): Boolean = settings.getAudioPassthrough()
 

@@ -26,8 +26,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
+import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
+import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.data.prefs.SettingsStore
 import com.iptv.player.databinding.ActivitySettingsBinding
 import com.iptv.player.ui.account.AccountActivity
@@ -66,6 +68,8 @@ class SettingsActivity : BaseActivity() {
     private val languageRows = linkedMapOf<String, View>()
     private val playerRows = linkedMapOf<PlayerMode, View>()
     private var decoderModeValue: TextView? = null
+    private var streamFormatValue: TextView? = null
+    private var bufferModeValue: TextView? = null
     private var passthroughSwitch: SwitchCompat? = null
 
     private var autoSyncEnabled = false
@@ -305,6 +309,20 @@ class SettingsActivity : BaseActivity() {
         decoderRow.setOnClickListener { showDecoderModeDialog() }
         c.addView(decoderRow)
 
+        // Live stream container preference (TS / HLS) for providers serving both.
+        val formatRow = inflateMaster(c, getString(R.string.settings_stream_format))
+        streamFormatValue = formatRow.findViewById<TextView>(R.id.mValue)
+            .also { it.visibility = View.VISIBLE }
+        formatRow.setOnClickListener { showStreamFormatDialog() }
+        c.addView(formatRow)
+
+        // Buffer size (Low / Normal / High) -> caching on both engines.
+        val bufferRow = inflateMaster(c, getString(R.string.settings_buffer))
+        bufferModeValue = bufferRow.findViewById<TextView>(R.id.mValue)
+            .also { it.visibility = View.VISIBLE }
+        bufferRow.setOnClickListener { showBufferModeDialog() }
+        c.addView(bufferRow)
+
         // Audio passthrough toggle (default OFF = decode to PCM for sound).
         val passthroughRow = inflateMaster(c, getString(R.string.settings_audio_passthrough))
         passthroughSwitch = passthroughRow.findViewById<SwitchCompat>(R.id.mSwitch)
@@ -531,6 +549,12 @@ class SettingsActivity : BaseActivity() {
             viewModel.decoderMode.collectLatest { decoderModeValue?.text = decoderModeLabel(it) }
         }
         lifecycleScope.launch {
+            viewModel.streamFormat.collectLatest { streamFormatValue?.text = streamFormatLabel(it) }
+        }
+        lifecycleScope.launch {
+            viewModel.bufferMode.collectLatest { bufferModeValue?.text = bufferModeLabel(it) }
+        }
+        lifecycleScope.launch {
             viewModel.audioPassthrough.collectLatest { passthroughSwitch?.isChecked = it }
         }
         lifecycleScope.launch {
@@ -612,6 +636,39 @@ class SettingsActivity : BaseActivity() {
         AlertDialog.Builder(this)
             .setTitle(R.string.settings_decoder_mode)
             .setItems(labels) { _, which -> viewModel.setDecoderMode(modes[which]) }
+            .show()
+    }
+
+    private fun streamFormatLabel(format: StreamFormat): String = getString(
+        when (format) {
+            StreamFormat.TS -> R.string.settings_stream_format_ts
+            StreamFormat.HLS -> R.string.settings_stream_format_hls
+        }
+    )
+
+    private fun showStreamFormatDialog() {
+        val formats = listOf(StreamFormat.TS, StreamFormat.HLS)
+        val labels = formats.map { streamFormatLabel(it) }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings_stream_format)
+            .setItems(labels) { _, which -> viewModel.setStreamFormat(formats[which]) }
+            .show()
+    }
+
+    private fun bufferModeLabel(mode: BufferMode): String = getString(
+        when (mode) {
+            BufferMode.LOW -> R.string.settings_buffer_low
+            BufferMode.NORMAL -> R.string.settings_buffer_normal
+            BufferMode.HIGH -> R.string.settings_buffer_high
+        }
+    )
+
+    private fun showBufferModeDialog() {
+        val modes = listOf(BufferMode.LOW, BufferMode.NORMAL, BufferMode.HIGH)
+        val labels = modes.map { bufferModeLabel(it) }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings_buffer)
+            .setItems(labels) { _, which -> viewModel.setBufferMode(modes[which]) }
             .show()
     }
 
