@@ -39,6 +39,8 @@ import com.iptv.player.ui.login.LoginActivity
 import com.iptv.player.ui.profiles.ProfilesActivity
 import com.iptv.player.util.LocaleManager
 import com.iptv.player.util.PlaybackLog
+import com.iptv.player.util.PublicIpProvider
+import com.iptv.player.util.SpeedTester
 import com.iptv.player.work.SyncScheduler
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -53,7 +55,7 @@ class SettingsActivity : BaseActivity() {
         ViewModelProvider(this)[SettingsViewModel::class.java]
     }
 
-    private enum class Panel { GENERAL, LANGUAGE, PIN, CATEGORIES, PLAYER, TIME, TMDB }
+    private enum class Panel { GENERAL, LANGUAGE, PIN, CATEGORIES, PLAYER, TIME, TMDB, SPEEDTEST }
 
     private var selectedRow: View? = null
 
@@ -73,6 +75,9 @@ class SettingsActivity : BaseActivity() {
     private var autoSyncEnabled = false
     private var autoSyncHours = 12
     private var generalLoaded = false
+
+    // Running download speed-test coroutine (cancelled when leaving the panel).
+    private var speedTestJob: kotlinx.coroutines.Job? = null
 
     // PIN entry state.
     private val pinBoxViews = mutableListOf<TextView>()
@@ -96,6 +101,16 @@ class SettingsActivity : BaseActivity() {
             .format(Date())
     }
 
+    override fun onPause() {
+        super.onPause()
+        // Don't keep a download running while the screen is in the background.
+        cancelSpeedTest()
+        binding.speedProgress.visibility = View.GONE
+        binding.speedStart.isEnabled = true
+        binding.speedStart.alpha = 1f
+        binding.speedStart.setText(R.string.speedtest_start)
+    }
+
     // ---- Left rail -----------------------------------------------------
 
     private fun buildRail() {
@@ -106,6 +121,7 @@ class SettingsActivity : BaseActivity() {
         addNavRow(c, getString(R.string.settings_content_manager), Panel.CATEGORIES)
         addNavRow(c, getString(R.string.settings_player_mode), Panel.PLAYER)
         addNavRow(c, getString(R.string.settings_time_sync), Panel.TIME)
+        addNavRow(c, getString(R.string.settings_speedtest), Panel.SPEEDTEST)
 
         lockAdultSwitch = addToggleRow(c, getString(R.string.settings_lock_adult)) { checked ->
             if (checked) {
@@ -189,6 +205,7 @@ class SettingsActivity : BaseActivity() {
         buildCategoriesPanel()
         buildPinPanel()
         buildTmdbPanel()
+        buildSpeedtestPanel()
     }
 
     private fun detailView(panel: Panel): View = when (panel) {
@@ -199,9 +216,12 @@ class SettingsActivity : BaseActivity() {
         Panel.PLAYER -> binding.detailPlayer
         Panel.TIME -> binding.detailTime
         Panel.TMDB -> binding.detailTmdb
+        Panel.SPEEDTEST -> binding.detailSpeedtest
     }
 
     private fun showPanel(panel: Panel, row: View) {
+        // Stop any in-flight speed test when navigating away from its panel.
+        if (panel != Panel.SPEEDTEST) cancelSpeedTest()
         Panel.values().forEach { detailView(it).visibility = View.GONE }
         detailView(panel).visibility = View.VISIBLE
 
@@ -231,6 +251,13 @@ class SettingsActivity : BaseActivity() {
         addInfoRow(c, getString(R.string.settings_app_version), version)
         addInfoRow(c, getString(R.string.settings_device), "${Build.MANUFACTURER} ${Build.MODEL}")
         addInfoRow(c, getString(R.string.settings_android), "Android ${Build.VERSION.RELEASE}")
+
+        // Network: the customer's public IPv4 (home WAN address) for support.
+        addSectionHeader(c, getString(R.string.settings_network_info))
+        val ipValue = addInfoRow(c, getString(R.string.settings_public_ip), "…")
+        lifecycleScope.launch {
+            ipValue.text = PublicIpProvider.fetchIpv4() ?: "—"
+        }
 
         lifecycleScope.launch {
             val config = ServiceLocator.settings.getSourceConfig()
@@ -451,6 +478,92 @@ class SettingsActivity : BaseActivity() {
             viewModel.setTmdbKey(binding.tmdbInput.text.toString().trim())
             Toast.makeText(this, R.string.action_save, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    // ---- Speed test ----------------------------------------------------
+
+    private fun buildSpeedtestPanel() {
+        binding.speedStart.setOnClickListener { runSpeedTest() }
+    }
+
+    private fun runSpeedTest() {
+        if (speedTestJob?.isActive == true) return
+        binding.speedStatus.visibility = View.GONE
+        binding.speedProgress.visibility = View.VISIBLE
+        binding.speedResult.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+        binding.speedResult.text = formatMbps(0.0)
+        binding.speedStart.isEnabled = false
+        binding.speedStart.alpha = 0.5f
+        binding.speedStart.setText(R.string.speedtest_running)
+
+        speedTestJob = lifecycleScope.launch {
+            var completed = false
+            try {
+                val mbps = SpeedTester.measureMbps { live ->
+                    binding.speedResult.text = formatMbps(live)
+                }
+                completed = true
+                if (mbps < 0) {
+                    binding.speedResult.text = getString(R.string.speedtest_idle)
+                    binding.speedStatus.visibility = View.VISIBLE
+                    binding.speedStatus.setText(R.string.speedtest_failed)
+                    binding.speedStatus.setTextColor(
+                        ContextCompat.getColor(this@SettingsActivity, R.color.danger)
+                    )
+                } else {
+                    showSpeedResult(mbps)
+                }
+            } finally {
+                // Runs on normal completion AND on cancellation (panel switch /
+                // onPause), so the controls never get stuck in the running state.
+                binding.speedProgress.visibility = View.GONE
+                binding.speedStart.isEnabled = true
+                binding.speedStart.alpha = 1f
+                if (completed) {
+                    binding.speedStart.setText(R.string.speedtest_retry)
+                } else {
+                    // Cancelled before a result: reset to the initial state.
+                    binding.speedStart.setText(R.string.speedtest_start)
+                    binding.speedResult.text = getString(R.string.speedtest_idle)
+                    binding.speedStatus.visibility = View.GONE
+                }
+                speedTestJob = null
+            }
+        }
+    }
+
+    private fun showSpeedResult(mbps: Double) {
+        binding.speedResult.text = formatMbps(mbps)
+        val (tierRes, msgRes, colorRes) = when {
+            mbps < 20 -> Triple(
+                R.string.speedtest_tier_poor, R.string.speedtest_msg_poor, R.color.danger
+            )
+            mbps <= 50 -> Triple(
+                R.string.speedtest_tier_normal, R.string.speedtest_msg_normal, R.color.warning
+            )
+            mbps < 100 -> Triple(
+                R.string.speedtest_tier_good, R.string.speedtest_msg_good, R.color.success
+            )
+            else -> Triple(
+                R.string.speedtest_tier_excellent, R.string.speedtest_msg_excellent, R.color.accent_emerald
+            )
+        }
+        val color = ContextCompat.getColor(this, colorRes)
+        binding.speedResult.setTextColor(color)
+        binding.speedStatus.visibility = View.VISIBLE
+        binding.speedStatus.text = "${getString(tierRes)} · ${getString(msgRes)}"
+        binding.speedStatus.setTextColor(color)
+    }
+
+    private fun formatMbps(mbps: Double): String {
+        val v = mbps.coerceAtLeast(0.0)
+        return if (v < 10) String.format(Locale.getDefault(), "%.1f", v)
+        else String.format(Locale.getDefault(), "%.0f", v)
+    }
+
+    private fun cancelSpeedTest() {
+        speedTestJob?.cancel()
+        speedTestJob = null
     }
 
     // ---- Detail helpers ------------------------------------------------

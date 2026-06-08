@@ -1,3 +1,4 @@
+- [Settings network diagnostics](settings-network-diagnostics.md) — in-Settings speed test streams a CDN file (not the throttled IPTV origin); public IPv4 must use an IPv4-only validated endpoint, NOT weather's ipapi (returns IPv6); cancel net job on panel-leave/onPause + restore UI in finally.
 - [Focus-driven row recoloring](android-focus-row-recolor.md) — focusable parent row recolors on focus, but children need `android:duplicateParentState="true"` to follow the color selector.
 - [Android TV EditText focus trap](android-tv-edittext-focus-trap.md) — D-pad stuck on search box; land focus on content on load + intercept DPAD_DOWN/RIGHT on the EditText (nextFocus to non-focusable RecyclerView is unreliable).
 - [API21-safe vector launcher icons](android-vector-launcher-icons.md) — system-drawn icon VectorDrawables can't use inline gradients on API21-23; use flat fills + alpha.

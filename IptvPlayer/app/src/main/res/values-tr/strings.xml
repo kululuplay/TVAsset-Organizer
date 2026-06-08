@@ -262,4 +262,27 @@
     <string name="expiry_expired_title">Aboneliğinizin süresi doldu</string>
     <string name="expiry_expired_message">Abonelik süreniz sona erdiği için artık hiçbir içeriği izleyemezsiniz. İzlemeye devam etmek için lütfen IPTV sağlayıcınızla aboneliğinizi yenileyin.</string>
     <string name="expiry_expired_date">Bitiş tarihi: %1$s</string>
+
+    <!-- Genel IP (Genel Bilgiler) -->
+    <string name="settings_network_info">Ağ Bilgileri</string>
+    <string name="settings_public_ip">Genel IP (IPv4)</string>
+
+    <!-- Hız testi -->
+    <string name="settings_speedtest">Hız Testi</string>
+    <string name="speedtest_title">İnternet Hız Testi</string>
+    <string name="speedtest_desc">Gerçek indirme hızınızı ölçmek için testi başlatın. Test yaklaşık 10 saniye sürer.</string>
+    <string name="speedtest_start">Testi Başlat</string>
+    <string name="speedtest_retry">Tekrar Test Et</string>
+    <string name="speedtest_running">Test ediliyor…</string>
+    <string name="speedtest_unit">Mbps</string>
+    <string name="speedtest_idle">—</string>
+    <string name="speedtest_failed">Test başarısız. Lütfen bağlantınızı kontrol edin.</string>
+    <string name="speedtest_tier_poor">Zayıf</string>
+    <string name="speedtest_tier_normal">Normal</string>
+    <string name="speedtest_tier_good">İyi</string>
+    <string name="speedtest_tier_excellent">Mükemmel</string>
+    <string name="speedtest_msg_poor">Bu hızda stabil olarak yayın izleyemezsiniz.</string>
+    <string name="speedtest_msg_normal">HD yayınlar için yeterli.</string>
+    <string name="speedtest_msg_good">Akıcı yayın için iyi bir hız.</string>
+    <string name="speedtest_msg_excellent">Tüm içerikler için mükemmel, 4K dahil.</string>
 </resources>

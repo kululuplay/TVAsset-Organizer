@@ -38,4 +38,27 @@
     <string name="settings_enter_old_pin">Enter your current PIN</string>
     <string name="settings_enter_new_pin">Enter a new PIN</string>
     <string name="settings_pin_changed">PIN updated</string>
+
+    <!-- Public IP (General Info) -->
+    <string name="settings_network_info">Network Info</string>
+    <string name="settings_public_ip">Public IP (IPv4)</string>
+
+    <!-- Speed test -->
+    <string name="settings_speedtest">Speed Test</string>
+    <string name="speedtest_title">Internet Speed Test</string>
+    <string name="speedtest_desc">Start the test to measure your real download speed. It takes about 10 seconds.</string>
+    <string name="speedtest_start">Start Test</string>
+    <string name="speedtest_retry">Test Again</string>
+    <string name="speedtest_running">Testing…</string>
+    <string name="speedtest_unit">Mbps</string>
+    <string name="speedtest_idle">—</string>
+    <string name="speedtest_failed">Test failed. Please check your connection.</string>
+    <string name="speedtest_tier_poor">Poor</string>
+    <string name="speedtest_tier_normal">Normal</string>
+    <string name="speedtest_tier_good">Good</string>
+    <string name="speedtest_tier_excellent">Excellent</string>
+    <string name="speedtest_msg_poor">You can\'t watch streams stably at this speed.</string>
+    <string name="speedtest_msg_normal">Sufficient for HD streams.</string>
+    <string name="speedtest_msg_good">A good speed for smooth streaming.</string>
+    <string name="speedtest_msg_excellent">Excellent for all content, including 4K.</string>
 </resources>
