@@ -39,6 +39,21 @@ class VodAdapter(
      */
     var adultLocked: Boolean = false
 
+    /**
+     * Re-binds only the currently attached cards so resume bars / watched ticks /
+     * adult masking pick up state that changed while away — WITHOUT touching the
+     * adapter's item notifications. Calling notifyItemRangeChanged(0, itemCount)
+     * on a Paging adapter races its own async page invalidation (lazy Room writes
+     * invalidate the PagingSource) and throws "Inconsistency detected" -> a crash
+     * that drops the user back to the Dashboard. A direct holder rebind avoids it.
+     */
+    fun refreshVisible(recyclerView: RecyclerView) {
+        for (i in 0 until recyclerView.childCount) {
+            val holder = recyclerView.getChildViewHolder(recyclerView.getChildAt(i)) as? VH ?: continue
+            holder.boundItem?.let { holder.bind(it) }
+        }
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_poster, parent, false)
@@ -60,7 +75,12 @@ class VodAdapter(
         private val progressBar: ProgressBar = itemView.findViewById(R.id.posterProgress)
         private val watched: ImageView = itemView.findViewById(R.id.posterWatched)
 
+        /** Last item bound here, so [refreshVisible] can re-bind without Paging. */
+        var boundItem: VodItem? = null
+            private set
+
         fun bind(item: VodItem) {
+            boundItem = item
             itemView.setOnClickListener { onClicked(item) }
             itemView.setOnFocusChangeListener { _, hasFocus ->
                 if (hasFocus) onFocused(item)

@@ -105,7 +105,10 @@ class SeriesActivity : BaseActivity() {
             val settings = ServiceLocator.settings
             seriesAdapter.adultLocked = settings.lockAdult.first() && settings.hasPin()
             progressMap = viewModel.repoSeriesWatchProgress()
-            seriesAdapter.notifyItemRangeChanged(0, seriesAdapter.itemCount)
+            // Direct rebind of attached cards only. A blanket notifyItemRangeChanged
+            // on this Paging adapter races Paging's own page invalidation and crashes
+            // with "Inconsistency detected", bouncing the user to the Dashboard.
+            seriesAdapter.refreshVisible(binding.posterGrid)
         }
     }
 

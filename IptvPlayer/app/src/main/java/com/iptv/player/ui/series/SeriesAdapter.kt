@@ -40,6 +40,21 @@ class SeriesAdapter(
      */
     var adultLocked: Boolean = false
 
+    /**
+     * Re-binds only the currently attached cards so resume bars / adult masking
+     * pick up state that changed while away — WITHOUT touching the adapter's item
+     * notifications. Calling notifyItemRangeChanged(0, itemCount) on a Paging
+     * adapter races its own async page invalidation (lazy Room writes invalidate
+     * the PagingSource) and throws "Inconsistency detected" -> a crash that drops
+     * the user back to the Dashboard. A direct holder rebind avoids that entirely.
+     */
+    fun refreshVisible(recyclerView: RecyclerView) {
+        for (i in 0 until recyclerView.childCount) {
+            val holder = recyclerView.getChildViewHolder(recyclerView.getChildAt(i)) as? VH ?: continue
+            holder.boundItem?.let { holder.bind(it) }
+        }
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_poster, parent, false)
@@ -60,7 +75,12 @@ class SeriesAdapter(
         private val rating: TextView = itemView.findViewById(R.id.posterRating)
         private val progressBar: ProgressBar = itemView.findViewById(R.id.posterProgress)
 
+        /** Last item bound here, so [refreshVisible] can re-bind without Paging. */
+        var boundItem: Series? = null
+            private set
+
         fun bind(item: Series) {
+            boundItem = item
             itemView.setOnClickListener { onClicked(item) }
             itemView.setOnFocusChangeListener { _, hasFocus ->
                 if (hasFocus) onFocused(item)

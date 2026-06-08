@@ -85,11 +85,24 @@ class SeriesDetailActivity : BaseActivity() {
         binding.seasonList.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.seasonList.adapter = seasonAdapter
+        // The season chip recolors itself via notifyItemChanged from its own focus
+        // listener. With change animations on, that notify detaches the focused
+        // chip (cross-fade), focus is lost, RecyclerView re-grabs it, the focus
+        // listener fires again -> an infinite focus ping-pong that floods the IME
+        // (onStartInput) and ANRs the screen, kicking the user back to Dashboard.
+        // Rebinding in place (animations off) keeps D-pad focus and breaks the loop.
+        (binding.seasonList.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
+            ?.supportsChangeAnimations = false
 
         episodeAdapter = EpisodeAdapter(onClicked = { playEpisode(it) })
         binding.episodeList.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.episodeList.adapter = episodeAdapter
+        // Same guard: setWatchState() rebinds visible episode cards via
+        // notifyItemRangeChanged; without this it could steal focus from the card
+        // the user is on when resume progress lands.
+        (binding.episodeList.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
+            ?.supportsChangeAnimations = false
 
         binding.similarList.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)

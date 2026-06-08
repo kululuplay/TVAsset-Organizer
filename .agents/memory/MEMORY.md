@@ -33,6 +33,7 @@
 - [VLC skiploopfilter macroblocking](vlc-skiploopfilter-macroblocking.md) — avcodec-skiploopfilter=all kills the deblocking filter -> macroblocking with clean audio (SW path); use nonref; flag lives in BOTH live+VOD option sets.
 - [Live preview + catch-up surfacing](live-preview-and-catchup.md) — Home preview card runs its own PlayerController (single-connection: release before full player); catch-up stack already exists, just needed entry points (GUIDE key + badge).
 - [Radio vs Live TV separation](radio-live-separation.md) — radio = LIVE rows tagged by category name; excluding from Live must also cover player zap list + Home Favorites/Recent rows, not just the category list.
+- [PagingDataAdapter manual-notify crash](paging-adapter-manual-notify-crash.md) — never notifyItemRangeChanged/notifyDataSetChanged on a Paging adapter; races invalidation -> "Inconsistency detected" crash; rebind attached holders directly.
 - [Decoder default = SOFTWARE](decoder-default-auto.md) — two kinds of green: no-frame (detectable, EXO watchdog) vs wrong-chroma plane (UNDETECTABLE, Amlogic). Chroma-green forced SOFTWARE default; can't watchdog it.
 - [Stream format / buffer / diagnostics settings](stream-format-buffer-diagnostics.md) — live format = play-time URL rewrite (split off query/fragment first); BufferMode carries per-engine values; VLC codec needs Any? helper.
 - [UHD/4K decode routing](uhd-4k-decode-routing.md) — 4K can't software-decode; escalate UHD(≥1440p) to HW on both live+VOD; green downgrade must exclude UHD.

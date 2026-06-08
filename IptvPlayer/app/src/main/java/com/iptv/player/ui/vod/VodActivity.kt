@@ -107,7 +107,10 @@ class VodActivity : BaseActivity() {
             vodAdapter.adultLocked = settings.lockAdult.first() && settings.hasPin()
             progressMap = viewModel.repoAllWatchProgress()
             watchedSet = viewModel.repoWatchedIds()
-            vodAdapter.notifyItemRangeChanged(0, vodAdapter.itemCount)
+            // Direct rebind of attached cards only. A blanket notifyItemRangeChanged
+            // on this Paging adapter races Paging's own page invalidation and crashes
+            // with "Inconsistency detected", bouncing the user to the Dashboard.
+            vodAdapter.refreshVisible(binding.posterGrid)
         }
     }
 
