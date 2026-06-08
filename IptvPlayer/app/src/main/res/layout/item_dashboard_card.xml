@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Reusable dashboard destination card: a gradient icon badge over a title and
-     a short subtitle, centered on a dark glass surface. The icon badge, title and
-     subtitle are filled in per destination from code. Focusable for D-pad; scales
+<!-- Reusable dashboard destination card, redesigned editorial-style: a gradient
+     icon badge anchored top-left, with the title and short subtitle pinned to the
+     bottom-left. The icon badge, title, subtitle (and, for the hero tile, the
+     surface) are filled in per destination from code. Focusable for D-pad; scales
      and shows a brand-pink ring on focus. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -13,11 +14,9 @@
     android:clickable="true">
 
     <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:orientation="vertical"
-        android:gravity="center"
         android:padding="@dimen/space_m">
 
         <ImageView
@@ -30,12 +29,17 @@
             android:tint="@color/text_primary"
             android:contentDescription="@string/nav_live" />
 
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="@dimen/space_s" />
+
         <TextView
             android:id="@+id/cardTitle"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_s"
-            android:gravity="center"
+            android:gravity="start"
             android:textColor="@color/text_primary"
             android:textSize="@dimen/text_body"
             android:textStyle="bold"
@@ -44,10 +48,10 @@
 
         <TextView
             android:id="@+id/cardSubtitle"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
-            android:gravity="center"
+            android:gravity="start"
             android:textColor="@color/text_secondary"
             android:textSize="@dimen/text_caption"
             android:maxLines="1"

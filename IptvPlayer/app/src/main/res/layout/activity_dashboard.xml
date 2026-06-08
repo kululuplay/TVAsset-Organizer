@@ -176,7 +176,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_s"
-                android:gravity="center"
+                android:gravity="start"
                 android:text="@string/dash_prompt_title"
                 android:textColor="@color/text_primary"
                 android:textSize="@dimen/text_big_title"
@@ -186,15 +186,15 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_xs"
-                android:gravity="center"
+                android:gravity="start"
                 android:text="@string/dash_prompt_subtitle"
                 android:textColor="@color/text_secondary"
                 android:textSize="@dimen/text_caption" />
 
-            <!-- Primary card row -->
+            <!-- Primary row: content destinations, with Live TV as a wide hero. -->
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="168dp"
+                android:layout_height="196dp"
                 android:orientation="horizontal"
                 android:layout_marginTop="@dimen/space_l">
 
@@ -203,7 +203,7 @@
                     layout="@layout/item_dashboard_card"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:layout_weight="1"
+                    android:layout_weight="2"
                     android:layout_marginEnd="@dimen/space_m" />
 
                 <include
@@ -219,31 +219,23 @@
                     layout="@layout/item_dashboard_card"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="@dimen/space_m" />
+                    android:layout_weight="1" />
+            </LinearLayout>
 
-                <include
-                    android:id="@+id/tileSettings"
-                    layout="@layout/item_dashboard_card"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="@dimen/space_m" />
+            <!-- Secondary row: personal + utility destinations, four even cards. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="156dp"
+                android:orientation="horizontal"
+                android:layout_marginTop="@dimen/space_m">
 
                 <include
                     android:id="@+id/tileFavorites"
                     layout="@layout/item_dashboard_card"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:layout_weight="1" />
-            </LinearLayout>
-
-            <!-- Secondary card row -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="132dp"
-                android:orientation="horizontal"
-                android:layout_marginTop="@dimen/space_m">
+                    android:layout_weight="1"
+                    android:layout_marginEnd="@dimen/space_m" />
 
                 <include
                     android:id="@+id/tileContinue"
@@ -255,6 +247,14 @@
 
                 <include
                     android:id="@+id/tileSearch"
+                    layout="@layout/item_dashboard_card"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="@dimen/space_m" />
+
+                <include
+                    android:id="@+id/tileSettings"
                     layout="@layout/item_dashboard_card"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"

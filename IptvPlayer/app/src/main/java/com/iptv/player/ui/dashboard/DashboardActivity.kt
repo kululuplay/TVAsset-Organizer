@@ -65,7 +65,9 @@ class DashboardActivity : BaseActivity() {
 
     private fun wireCards() {
         configCard(binding.tileLive, R.drawable.ic_tv, R.drawable.bg_badge_live,
-            R.string.nav_live, R.string.dash_sub_live) { open(HomeActivity::class.java) }
+            R.string.nav_live, R.string.dash_sub_live, R.drawable.bg_tile_hero) {
+            open(HomeActivity::class.java)
+        }
         configCard(binding.tileMovies, R.drawable.ic_movie, R.drawable.bg_badge_movies,
             R.string.nav_movies, R.string.dash_sub_movies) { open(VodActivity::class.java) }
         configCard(binding.tileSeries, R.drawable.ic_series, R.drawable.bg_badge_series,
@@ -84,13 +86,19 @@ class DashboardActivity : BaseActivity() {
             R.string.action_search, R.string.dash_sub_search) { open(SearchActivity::class.java) }
     }
 
-    /** Fills a reusable dashboard card with its icon, badge, label and action. */
+    /**
+     * Fills a reusable dashboard card with its icon, badge, label and action.
+     * [bgRes], when set, overrides the default glass surface (used to give the
+     * Live TV hero its brand-glow background). Keep [onClick] last so the
+     * trailing-lambda call sites stay valid.
+     */
     private fun configCard(
         card: ItemDashboardCardBinding,
         iconRes: Int,
         badgeRes: Int,
         titleRes: Int,
         subtitleRes: Int,
+        bgRes: Int? = null,
         onClick: () -> Unit
     ) {
         card.cardIcon.setImageResource(iconRes)
@@ -98,6 +106,7 @@ class DashboardActivity : BaseActivity() {
         card.cardIcon.contentDescription = getString(titleRes)
         card.cardTitle.setText(titleRes)
         card.cardSubtitle.setText(subtitleRes)
+        bgRes?.let { card.root.setBackgroundResource(it) }
         card.root.setOnClickListener { onClick() }
     }
 
