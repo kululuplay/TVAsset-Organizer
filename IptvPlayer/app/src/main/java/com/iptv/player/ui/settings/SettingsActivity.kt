@@ -29,8 +29,10 @@ import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
+import com.iptv.player.data.model.SourceType
 import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.data.prefs.SettingsStore
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import com.iptv.player.databinding.ActivitySettingsBinding
 import com.iptv.player.ui.content.ContentManagerActivity
 import com.iptv.player.ui.common.BaseActivity
@@ -498,7 +500,7 @@ class SettingsActivity : BaseActivity() {
         speedTestJob = lifecycleScope.launch {
             var completed = false
             try {
-                val mbps = SpeedTester.measureMbps { live ->
+                val mbps = SpeedTester.measureMbps(speedTestFallbackUrls()) { live ->
                     binding.speedResult.text = formatMbps(live)
                 }
                 completed = true
@@ -528,6 +530,40 @@ class SettingsActivity : BaseActivity() {
                 }
                 speedTestJob = null
             }
+        }
+    }
+
+    /**
+     * Fallback speed-test targets on the customer's OWN portal, tried only if the
+     * public CDN mirrors are all unreachable (common on locked-down IPTV boxes
+     * that whitelist just the portal host). For Xtream we pull the full m3u_plus
+     * playlist export — a large, unthrottled, always-reachable download; for M3U
+     * sources we re-fetch the playlist URL itself.
+     */
+    private suspend fun speedTestFallbackUrls(): List<String> {
+        val config = ServiceLocator.settings.getSourceConfig() ?: return emptyList()
+        return when (config.type) {
+            SourceType.XTREAM -> {
+                // Build via HttpUrl so credentials with reserved chars (& ? # space)
+                // are percent-encoded into a well-formed URL instead of corrupting
+                // the query string.
+                if (config.username.isBlank()) {
+                    emptyList()
+                } else {
+                    val url = config.serverUrl.trimEnd('/').toHttpUrlOrNull()
+                        ?.newBuilder()
+                        ?.addPathSegment("get.php")
+                        ?.addQueryParameter("username", config.username)
+                        ?.addQueryParameter("password", config.password)
+                        ?.addQueryParameter("type", "m3u_plus")
+                        ?.addQueryParameter("output", "ts")
+                        ?.build()
+                        ?.toString()
+                    if (url == null) emptyList() else listOf(url)
+                }
+            }
+            SourceType.M3U_URL ->
+                if (config.m3uUrl.isBlank()) emptyList() else listOf(config.m3uUrl)
         }
     }
 

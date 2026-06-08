@@ -1,0 +1,1490 @@
+06-08 23:30:11.957  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-08 23:30:12.141   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-08 23:30:12.156   565  1629 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-08 23:30:13.373  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-08 23:30:14.602 18009 18009 D PlaybackLog: [Controller] play mode=AUTO decoder=AUTO start=VLC_HW
+06-08 23:30:14.621 18009 18009 D PlaybackLog: [VLC] play forceSoftware=false passthrough=false
+06-08 23:30:15.084 18009 18512 E VLC     : [f5002110/4850] libvlc audio output: too low audio sample frequency (0)
+06-08 23:30:15.084 18009 18512 E VLC     : [e909be80/4850] libvlc decoder: failed to create audio output
+06-08 23:30:15.158   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-08 23:30:15.175   565  1629 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-08 23:30:15.178   565  1629 I ActivityTaskManager: START u0 {cmp=com.iptv.player/.ui.player.PlayerActivity (has extras)} from uid 10078
+06-08 23:30:15.194  1326  1567 I MitvPolicyDatabaseManager: updatePackageUsage com.iptv.player/com.iptv.player.ui.home.HomeActivity (0,1,16)
+06-08 23:30:15.205  1326  1326 D MiTv-TvService-Parent: current foreground packagename is com.iptv.player mFgClassName: com.iptv.player.ui.player.PlayerActivity
+06-08 23:30:15.289   565   590 I ActivityTaskManager: Displayed com.iptv.player/.ui.player.PlayerActivity: +109ms
+06-08 23:30:15.302  1202  1202 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.iptv.player, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=-1, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+06-08 23:30:15.359 18009 18009 D PlaybackLog: [Controller] play mode=AUTO decoder=AUTO start=VLC_HW
+06-08 23:30:15.376 18009 18009 D PlaybackLog: [VLC] play forceSoftware=false passthrough=false
+06-08 23:30:15.669 18009 18526 E VLC     : [f50057c0/485e] libvlc audio output: too low audio sample frequency (0)
+06-08 23:30:15.669 18009 18526 E VLC     : [e909b400/485e] libvlc decoder: failed to create audio output
+06-08 23:30:15.708   365   903 E BufferQueueProducer: [com.iptv.player/com.iptv.player.ui.home.HomeActivity#0](id:16d000008af,api:0,p:-1,c:365) disconnect: not connected (req=1)
+06-08 23:30:15.872 18009 18536 E VLC     : [c1c41750/4868] libvlc window: request 1 not implemented
+06-08 23:30:15.873 18009 18536 E VLC     : [f51b2ce0/4868] libvlc vout display: can't get Subtitles Surface
+06-08 23:30:15.873 18009 18536 E VLC     : [c1c41750/4868] libvlc window: request 1 not implemented
+06-08 23:30:15.886 18009 18536 E VLC     : [c1c41750/4868] libvlc window: request 0 not implemented
+06-08 23:30:15.886 18009 18536 E VLC     : [c1c41750/4868] libvlc window: request 0 not implemented
+06-08 23:30:15.886 18009 18536 E VLC     : [c1c41750/4868] libvlc window: request 1 not implemented
+06-08 23:30:15.887 18009 18535 E VLC     : [f50057c0/4867] libvlc audio output: module not functional
+06-08 23:30:15.887 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: failed to create audio output
+06-08 23:30:15.891 18009 18535 D AudioTrack: set(): streamType -1, sampleRate 48000, format 0x1, channelMask 0x3f, frameCount 8200, flags #0, notificationFrames 0, sessionId 0, transferType 3, uid -1, pid -1
+06-08 23:30:15.905 18009 18540 I OMXClient: IOmx service obtained
+06-08 23:30:15.905   468   468 I OMXMaster: makeComponentInstance(OMX.amlogic.hevc.decoder.awesome2) in android.hardwar process
+06-08 23:30:15.906   468   468 D OmxComponentManagerImpl: support frame mode
+06-08 23:30:15.906 18009 18535 W AudioTrack: Use of stream types is deprecated for operations other than volume control
+06-08 23:30:15.906   468   468 D OmxComponentManagerImpl: use dv frame mode
+06-08 23:30:15.906 18009 18535 W AudioTrack: See the documentation of AudioTrack() for what to use instead with android.media.AudioAttributes to qualify your playback use case
+06-08 23:30:15.906   468   468 D OmxComponentManagerImpl: support avs frame mode
+06-08 23:30:15.906   468   468 D OmxComponentManagerImpl: format support multi-instance
+06-08 23:30:15.906   468   468 D OmxComponentManagerImpl: getEntryByName_2_num=0, componentName:OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.906   468   468 V AmlogicVideoDecoderAwesome2: [358]AmlogicVideoDecoder2:111 >
+06-08 23:30:15.906   468   468 V AmlogicVideoDecoderAwesome2: [358]initializeState_l:1519 >
+06-08 23:30:15.906   468   468 D AmlogicVideoDecoderAwesome2: [358]"vendor.media.omx.latency is not set used def=1.000000\n"
+06-08 23:30:15.906   468   468 D AmlogicVideoDecoderAwesome2: [358]"vendor.media.omx.frame_numlatency is not set used def=10\n"
+06-08 23:30:15.906   468   468 D AmlogicVideoDecoderAwesome2: [359]"AmlogicVideoDecoder2, mOmxInstancenum 1, mOmxInstanceID 359"
+06-08 23:30:15.906   468   468 D AmlogicVideoDecoderAwesome2: [359]"vendor.omx2.blkmode is not set used def=0\n"
+06-08 23:30:15.906   468   468 D AmlogicVideoDecoderAwesome2: [359]"vendor.omx2.maxalloc is not set used def=1\n"
+06-08 23:30:15.906   468   468 I AmlogicVideoDecoderAwesome2: [359]"default use NV21"
+06-08 23:30:15.907   468   468 W OmxLogConf: Can not read property media.omx.log_levels, using 0
+06-08 23:30:15.908   468   468 D OmxResManage: ResManWrapper OMX-366 init, fd = 11
+06-08 23:30:15.908   468   468 D AmlogicVideoDecoderAwesome2: [359]"vendor.media.omx2.out_buffer1 is not set used def=8\n"
+06-08 23:30:15.908   468   468 D AmlogicVideoDecoderAwesome2: [359]"out buf:8"
+06-08 23:30:15.908   468   468 D AmlogicVideoDecoderAwesome2: [359]"vendor.media.omx2.dw is not set used def=0\n"
+06-08 23:30:15.908   468   468 D OmxVideoDecoder: setInputCoding OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.908   468   468 D OmxVideoDecoder: mIsLinux49=0, mIsLinux54=1, major=5, minor=4
+06-08 23:30:15.908   468   468 D OmxVideoDecoder: multi dec exist
+06-08 23:30:15.908   468   468 D OmxVideoDecoder: use dv frame mode
+06-08 23:30:15.908   468   468 D OmxVideoDecoder: avs multi dec exist
+06-08 23:30:15.908   468   468 D OmxVideoDecoder: Use frame mode for multidec.
+06-08 23:30:15.908   468   468 D OmxVideoDecoder: Use min out buffer size
+06-08 23:30:15.908   468   468 D OmxVideoDecoder: mSupportPiPVideo = 1
+06-08 23:30:15.909   468   468 D OmxVideoDecoder: mMustOsdDisplay 0, mAmVideoUsed=0, mSupportPiPVideo=1, mPipVideoUsed=0, mVideoUsedByOmx=0
+06-08 23:30:15.909   468   468 D OMX-VENDOR-EXT: OMX.amlogic.hevc.decoder.awesome2 : Vendor extensions supported (17)
+06-08 23:30:15.909   468   468 D OMX-VENDOR-EXT:    vendor.4k-osd{{ enable : Int32 },  }
+06-08 23:30:15.909   468   468 D OMX-VENDOR-EXT:    vendor.video-trickmode{{ enable : Int32 },  }
+06-08 23:30:15.909   468   468 D OMX-VENDOR-EXT:    vendor.unstable-pts{{ enable : Int32 },  }
+06-08 23:30:15.909   468   468 D OMX-VENDOR-EXT:    vendor.is-mvc{{ enable : Int32 },  }
+06-08 23:30:15.910   468   468 D OMX-VENDOR-EXT:    vendor.is-flv{{ nContainIndex : Int32 },  }
+06-08 23:30:15.910   468   468 D OMX-VENDOR-EXT:    vendor.dvconfig-box{{ disable : Int32 },  }
+06-08 23:30:15.910   468   468 D OMX-VENDOR-EXT:    vendor.profile-level{{ n-profile : Int32 },  { n-level : Int32 },  }
+06-08 23:30:15.910   468   468 D OMX-VENDOR-EXT:    vendor.nrdp{{ video-peek-in-tunnel : Int32 },  }
+06-08 23:30:15.910   468   468 D OMX-VENDOR-EXT:    vendor.low-latency{{ enable : Int32 },  }
+06-08 23:30:15.910   468   468 D OMX-VENDOR-EXT:    vendor.save-mem{{ enable : Int32 },  }
+06-08 23:30:15.910   468   468 D OMX-VENDOR-EXT:    vendor.videoLayer{{ type : Int32 },  }
+06-08 23:30:15.910   468   468 D OMX-VENDOR-EXT:    vendor.renderByOmx{{ enable : Int32 },  }
+06-08 23:30:15.910   468   468 D OMX-VENDOR-EXT:    vendor.passthoughMode{{ video-filter-id : Int32 },  }
+06-08 23:30:15.910   468   468 D OMX-VENDOR-EXT:    vendor.VideoQos{{ info : String },  }
+06-08 23:30:15.910   468   468 D OMX-VENDOR-EXT:    vendor.rotation-angle{{ angle : Int32 },  }
+06-08 23:30:15.910   468   468 D OMX-VENDOR-EXT:    vendor.McodecReport{{ info : String },  }
+06-08 23:30:15.910   468   468 D OMX-VENDOR-EXT:    vendor.START.low-latency{{ enable : Int32 },  }
+06-08 23:30:15.910   468   468 D OmxVideoDecoder: video type 11 support v4l2, use omx2
+06-08 23:30:15.910   468   468 D OmxComponentManagerImpl: IncreaseEntryNumByName pEntry->mNum=0, pEntry->mMaxNum:9,componentName:OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.910   468   468 I omx_core: OMX_getHandle_num=1
+06-08 23:30:15.910   468   468 D OmxComponent: mApkName=media.codec
+06-08 23:30:15.912   468   468 W HwBinder:468_6: type=1400 audit(0.0:9021): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-08 23:30:15.912   468   468 W HwBinder:468_6: type=1400 audit(0.0:9022): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-08 23:30:15.912     0     0 I [91568.704512@0]  resman: 369 appname:OMX-366, type=0
+06-08 23:30:15.916 18009 18539 D MediaCodec: flushMediametrics
+06-08 23:30:15.916 18009 18539 I MediaCodec: [OMX.amlogic.hevc.decoder.awesome2] setting surface generation to 18441222
+06-08 23:30:15.917   468   468 D OmxVideoDecoder: setParameter 1500 0x1000017
+06-08 23:30:15.917   468   468 D OmxVideoDecoder: setInputCoding video_decoder.hevc
+06-08 23:30:15.917   468  7667 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.enableAndroidNativeBuffers"
+06-08 23:30:15.917   468  7667 D OmxVideoDecoder: setParameter 1500 0x7f000000
+06-08 23:30:15.917   468  7667 V OmxVideoDecoder: setParameter 2083 EnableNativeBuffers 1
+06-08 23:30:15.917   468  7667 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-08 23:30:15.917   468  7667 V OmxVideoDecoder: nWidth=640,nHeight=480, nMinbufs=0
+06-08 23:30:15.917   468  7667 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.allocateNativeHandle"
+06-08 23:30:15.917   468  7667 D OmxVideoDecoder: setParameter 1500 0x7f00000a
+06-08 23:30:15.917   468  7667 E OMXNodeInstance: setParameter(0xe9706f74:amlogic.hevc.decoder.awesome2, OMX.google.android.index.allocateNativeHandle(0x7f00000a): Output:1 en=0) ERROR: UnsupportedSetting(0x80001019)
+06-08 23:30:15.917   468  7667 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.storeANWBufferInMetadata"
+06-08 23:30:15.917   468  7667 D OmxVideoDecoder: setParameter 1500 0x7f00000d
+06-08 23:30:15.917   468  7667 D OmxVideoDecoder: setParameter 2103 OMX_GoogleAndroidStoreANWBufferInMetadata
+06-08 23:30:15.917   468  7667 V OmxVideoDecoder: mUseStoreANWBufferInMetadata=1
+06-08 23:30:15.917   468  7667 E OMXNodeInstance: getParameter(0xe9706f74:amlogic.hevc.decoder.awesome2, ??(0x6f600011)) ERROR: UnsupportedIndex(0x8000101a)
+06-08 23:30:15.917   468  7667 D OmxVideoDecoder: setParameter 1500 0x6000001
+06-08 23:30:15.918   468  7667 D OmxVideoDecoder: setParameter nPortIndex 0 CompFmt 0xb ColorFmt 0
+06-08 23:30:15.918   468  6193 D OmxVideoDecoder: setParameter 1500 0x6000001
+06-08 23:30:15.918   468  6193 D OmxVideoDecoder: setParameter nPortIndex 1 CompFmt 0 ColorFmt 0x11
+06-08 23:30:15.918   468  6193 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.hevc.decoder.awesome2, width 640, height 480 nBufferCountMin:3
+06-08 23:30:15.918   468  7667 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-08 23:30:15.918   468  7667 D OmxVideoDecoder: setParameter nPortIndex 0 nFrameWidth 3840 nFrameHeight 2160 nSliceHeight 16
+06-08 23:30:15.918   468  7667 D OmxVideoDecoder: 4K file codec mm set mVideoClass changed to 2
+06-08 23:30:15.918   468  7667 E OmxVideoDecoder:  reset input buffer:8294400
+06-08 23:30:15.918   468  7667 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-08 23:30:15.918   468  7667 V OmxVideoDecoder: nWidth=640,nHeight=480, nMinbufs=0
+06-08 23:30:15.918   468  7667 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.hevc.decoder.awesome2, width 640, height 480 nBufferCountMin:8
+06-08 23:30:15.918   468  6193 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-08 23:30:15.918   468  6193 D OmxVideoDecoder: adaptiveplayback default set w*d: 4096*2304
+06-08 23:30:15.918   468  6193 D OmxVideoDecoder: media.omx.display_mode=3
+06-08 23:30:15.918   468  6193 D OmxVideoDecoder: mjpeg vc1 wmv wmv3 force display_mode=3
+06-08 23:30:15.918   468  6193 D OmxVideoDecoder: choose mVideoUsedByOmx=0, mVideoUsedByThis=0, mAmVideoUsed=0
+06-08 23:30:15.918   468  6193 D OmxVideoDecoder: mDisplayMode = DISPLAY_MODE_V4LVIDEO
+06-08 23:30:15.919   468  6193 D OmxVideoDecoder: choose mDisplayMode=3
+06-08 23:30:15.919   468  6193 E libc    : Access denied finding property "media.omx.width"
+06-08 23:30:15.919   468  6193 E libc    : Access denied finding property "media.omx.height"
+06-08 23:30:15.919   468  6193 D OmxVideoDecoder: DecoderWidthFromExtractor[3840] * mDecoderHeightFromExtractor[2160] > buffer_maxwidth[1920] * buffer_maxheight[1088]
+06-08 23:30:15.919   468  6193 D OmxVideoDecoder: setParameter nPortIndex 1 nFrameWidth 3840 nFrameHeight 2160 nSliceHeight 2160
+06-08 23:30:15.919   468  6193 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-08 23:30:15.919   468  6193 V OmxVideoDecoder: nWidth=3840,nHeight=2160, nMinbufs=0
+06-08 23:30:15.919   468  6193 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.describeColorAspects"
+06-08 23:30:15.919   468  7667 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.storeMetaDataInBuffers"
+06-08 23:30:15.919   468  7667 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.storeANWBufferInMetadata"
+06-08 23:30:15.919   468  7667 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.prepareForAdaptivePlayback"
+06-08 23:30:15.919   468  7667 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.configureVideoTunnelMode"
+06-08 23:30:15.920   468  7667 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.useAndroidNativeBuffer2"
+06-08 23:30:15.920   468  7667 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.useAndroidNativeBuffer"
+06-08 23:30:15.920   468  7667 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.enableAndroidNativeBuffers"
+06-08 23:30:15.920   468  7667 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.allocateNativeHandle"
+06-08 23:30:15.920   468  7667 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.getAndroidNativeBufferUsage"
+06-08 23:30:15.920   468  7667 D OmxVideoDecoder: setConfig 2887 0x7f00000c
+06-08 23:30:15.920   468   468 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.describeHDRStaticInfo"
+06-08 23:30:15.920   468   468 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.describeHDR10PlusInfo"
+06-08 23:30:15.920   468  6193 D OmxVideoDecoder: setConfig 2887 0x7f000009
+06-08 23:30:15.920   468  6193 D OmxVideoDecoder: HDRStaticInfo: R=0 0; G=0 0; B=0 0; W=0 0; MaxDisplayLuminance:0, MinDisplayLuminance=0, mMaxContentLightLevel=0, MaxContentLightLevel=0
+06-08 23:30:15.920   468  6193 D OmxVideoDecoder: HDRStaticInfo: all parmeter is 0, set mHasHDRStaticInfo to false
+06-08 23:30:15.920   468   468 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.hevc.decoder.awesome2, width 3840, height 2160 nBufferCountMin:3
+06-08 23:30:15.921   468   468 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.hevc.decoder.awesome2, width 3840, height 2160 nBufferCountMin:3
+06-08 23:30:15.921   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.921   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=0 (4k-osd)
+06-08 23:30:15.921   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.921   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=1 (video-trickmode)
+06-08 23:30:15.921   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.921   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=2 (unstable-pts)
+06-08 23:30:15.922   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.922   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=3 (is-mvc)
+06-08 23:30:15.922   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.922   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=4 (is-flv)
+06-08 23:30:15.922   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.922   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=5 (dvconfig-box)
+06-08 23:30:15.922   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.923   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-08 23:30:15.923   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.923   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-08 23:30:15.923   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.923   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=7 (nrdp)
+06-08 23:30:15.923   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.923   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=8 (low-latency)
+06-08 23:30:15.923   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.923   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=9 (save-mem)
+06-08 23:30:15.923   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.924   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=10 (videoLayer)
+06-08 23:30:15.924   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.924   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=11 (renderByOmx)
+06-08 23:30:15.924   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.924   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=12 (passthoughMode)
+06-08 23:30:15.924   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.924   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=13 (VideoQos)
+06-08 23:30:15.924   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.924   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=14 (rotation-angle)
+06-08 23:30:15.924   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.924   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=15 (McodecReport)
+06-08 23:30:15.924   468   468 D OmxVideoDecoder: mMcodecReport=0 mPeer.get=-377475392
+06-08 23:30:15.924   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.924   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=16 (START.low-latency)
+06-08 23:30:15.925   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.925   468  7667 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-08 23:30:15.925   468  7667 V OmxVideoDecoder: nWidth=3840,nHeight=2160, nMinbufs=0
+06-08 23:30:15.925   468  7667 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.hevc.decoder.awesome2, width 3840, height 2160 nBufferCountMin:8
+06-08 23:30:15.925   468  7667 D OmxVideoDecoder: getConfig 2745 0x700000f
+06-08 23:30:15.925   468  7667 D OmxVideoDecoder: getConfig 2748 nIndex 0x700000f
+06-08 23:30:15.925   468  7667 I AmlogicVideoDecoderAwesome2: [359]"getAndroidNativeBufferCrop [3840 x 2160] \n"
+06-08 23:30:15.925   468  7667 D OmxVideoDecoder: getConfig OMX_IndexConfigCommonOutputCrop pRect->nWidth=3840, pRect->nHeight=2160
+06-08 23:30:15.925   468   468 D OmxVideoDecoder: setConfig 2887 0x7f00000c
+06-08 23:30:15.925   468  7667 D OmxVideoDecoder: getConfig 2745 0x7f00000c
+06-08 23:30:15.925   468  7667 D OmxVideoDecoder: getConfig 2745 0x7f00000c
+06-08 23:30:15.925   468  7667 E OMXNodeInstance: getConfig(0xe9706f74:amlogic.hevc.decoder.awesome2, ??(0x7f00000c)) ERROR: UnsupportedSetting(0x80001019)
+06-08 23:30:15.925   468  7667 D OmxVideoDecoder: getConfig 2745 0x7f000009
+06-08 23:30:15.926   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.926   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=0 (4k-osd)
+06-08 23:30:15.926   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.926   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=1 (video-trickmode)
+06-08 23:30:15.926   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.926   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=2 (unstable-pts)
+06-08 23:30:15.926   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.926   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=3 (is-mvc)
+06-08 23:30:15.926   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.926   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=4 (is-flv)
+06-08 23:30:15.926   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.926   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=5 (dvconfig-box)
+06-08 23:30:15.926   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.926   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-08 23:30:15.926   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.926   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-08 23:30:15.926   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.926   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=7 (nrdp)
+06-08 23:30:15.927   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.927   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=8 (low-latency)
+06-08 23:30:15.927   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.927   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=9 (save-mem)
+06-08 23:30:15.927   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.927   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=10 (videoLayer)
+06-08 23:30:15.927   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.927   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=11 (renderByOmx)
+06-08 23:30:15.928   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.928   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=12 (passthoughMode)
+06-08 23:30:15.929   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.929   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=13 (VideoQos)
+06-08 23:30:15.929   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.929   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=14 (rotation-angle)
+06-08 23:30:15.930   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.930   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=15 (McodecReport)
+06-08 23:30:15.930   468  7667 D OmxVideoDecoder: mMcodecReport=0 mPeer.get=-377475392
+06-08 23:30:15.930   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.930   468  6193 V OmxVideoDecoder: VendorExt: getConfig: index=16 (START.low-latency)
+06-08 23:30:15.930   468  6193 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:15.931   468 18542 I OmxComponent: OMX_CommandStateSet 850 Cmd 0 nParam1 0x2
+06-08 23:30:15.931   468 18542 I OmxComponent: OMX-366 STATE_SET:   OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.931   468 18542 I OmxComponent: OMX-366 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.931   468   468 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.hevc.decoder.awesome2, width 3840, height 2160 nBufferCountMin:3
+06-08 23:30:15.932   468   468 W HwBinder:468_7: type=1400 audit(0.0:9023): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-08 23:30:15.932   468   468 W HwBinder:468_7: type=1400 audit(0.0:9024): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-08 23:30:15.933   468 18542 I OmxComponent: OMX-366 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.934   468 18542 I chatty  : uid=1046(mediacodec) ecoder.awesome2 identical 1 line
+06-08 23:30:15.935   468 18542 I OmxComponent: OMX-366 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.936   468  6193 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-08 23:30:15.936   468  6193 V OmxVideoDecoder: nWidth=3840,nHeight=2160, nMinbufs=0
+06-08 23:30:15.936   468  6193 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.hevc.decoder.awesome2, width 3840, height 2160 nBufferCountMin:8
+06-08 23:30:15.936   468  7667 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-08 23:30:15.936   468  7667 V OmxVideoDecoder: nWidth=3840,nHeight=2160, nMinbufs=0
+06-08 23:30:15.936   468  7667 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.hevc.decoder.awesome2, width 3840, height 2160 nBufferCountMin:8
+06-08 23:30:15.936   468  7667 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.AndroidNativeBufferConsumerUsage"
+06-08 23:30:15.936   468  7667 D OmxVideoDecoder: setParameter 1500 0x7f00000b
+06-08 23:30:15.937   468  7667 D OmxVideoDecoder: OMX_GoogleAndroidIndexAndroidNativeBufferConsumerUsage 0x100
+06-08 23:30:15.937   468  7667 D OmxVideoDecoder: Use OSD layer if don't use HWC.
+06-08 23:30:15.937   468  7667 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.getAndroidNativeBufferUsage"
+06-08 23:30:15.937   468  7667 D OmxVideoDecoder: Get NativeBufferUsage 0xc00200
+06-08 23:30:15.937   468  7667 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-08 23:30:15.937   468  7667 D OmxVideoDecoder: adaptiveplayback default set w*d: 4096*2304
+06-08 23:30:15.937   468  7667 W OmxVideoDecoder: 4kosd set output error, newBufferCount 13 > 12
+06-08 23:30:15.937   468  7667 E OMXNodeInstance: setParameter(0xe9706f74:amlogic.hevc.decoder.awesome2, ParamPortDefinition(0x2000001)) ERROR: UnsupportedSetting(0x80001019)
+06-08 23:30:15.937 18009 18540 W ACodec  : [OMX.amlogic.hevc.decoder.awesome2] setting nBufferCountActual to 13 failed: -1010
+06-08 23:30:15.937   468  7667 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-08 23:30:15.937   468  7667 D OmxVideoDecoder: adaptiveplayback default set w*d: 4096*2304
+06-08 23:30:15.937   468  7667 D OmxVideoDecoder: media.omx.display_mode=3
+06-08 23:30:15.937   468  7667 D OmxVideoDecoder: mjpeg vc1 wmv wmv3 force display_mode=3
+06-08 23:30:15.937   468  7667 D OmxVideoDecoder: choose mVideoUsedByOmx=0, mVideoUsedByThis=0, mAmVideoUsed=0
+06-08 23:30:15.937   468  7667 D OmxVideoDecoder: choose mDisplayMode=0
+06-08 23:30:15.937   468  7667 E libc    : Access denied finding property "media.omx.width"
+06-08 23:30:15.938   468  7667 E libc    : Access denied finding property "media.omx.height"
+06-08 23:30:15.938   468  7667 D OmxVideoDecoder: mMustOsdDisplay is true
+06-08 23:30:15.938   468  7667 D OmxVideoDecoder: setParameter nPortIndex 1 nFrameWidth 3840 nFrameHeight 2160 nSliceHeight 2160
+06-08 23:30:15.938   468  7667 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-08 23:30:15.938   468  7667 V OmxVideoDecoder: nWidth=3840,nHeight=2160, nMinbufs=0
+06-08 23:30:15.938   468   468 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-08 23:30:15.938   468 18542 I OmxComponent: OMX-366 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.939   468  7667 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-08 23:30:15.939   468 18542 I OmxComponent: OMX-366 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.940   468  7667 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-08 23:30:15.940   468 18542 I OmxComponent: OMX-366 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.940   468  7667 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-08 23:30:15.940   468 18542 I OmxComponent: OMX-366 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.940   468  7667 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-08 23:30:15.941   468 18542 I OmxComponent: OMX-366 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.941   468  7667 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-08 23:30:15.941   468 18542 I OmxComponent: OMX-366 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.941   468  7667 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-08 23:30:15.941   468 18542 I OmxComponent: OMX-366 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.941   468  7667 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-08 23:30:15.941   468 18542 I OmxComponent: OMX-366 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.941   468  7667 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-08 23:30:15.941   468 18542 I OmxComponent: OMX-366 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.942   468  7667 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-08 23:30:15.942   468 18542 I OmxComponent: OMX-366 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.942   468  7667 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-08 23:30:15.942   468 18542 I OmxComponent: OMX-366 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.942   468  7667 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-08 23:30:15.942   468 18542 I OmxComponent: OMX-366 STATE_TRANS: OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.942   468 18542 V AmlogicVideoDecoderAwesome2: [359]acquireResources:411 >
+06-08 23:30:15.942   468 18542 D AmlogicVideoDecoderAwesome2: [359]"setUp mDurationUs = 0 videoDefine.xFramerate = 0"
+06-08 23:30:15.942   468 18542 V debugSetup: media.omx.dumpRecv is disabled
+06-08 23:30:15.942   468 18542 V debugSetup: media.omx.dumpCodec is disabled
+06-08 23:30:15.942   468 18542 E AmlogicVideoDecoderAwesome2: setUp(): 1126 mOwner->isGameMode()=0
+06-08 23:30:15.942   468 18542 D AmlogicVideoDecoderAwesome2: [359]"vendor.media.omx.gamemode is not set used def=0\n"
+06-08 23:30:15.942   468 18542 I AmlogicVideoDecoderAwesome2: [359]"setUp width 3840, height 2160\n"
+06-08 23:30:15.942   468 18542 D AmlogicVideoDecoderAwesome2: [359]"vendor.media.omx2.dw is not set used def=1\n"
+06-08 23:30:15.942   468 18542 D AmlogicVideoDecoderAwesome2: [359]"vendor.media.omx2.margin is not set used def=5\n"
+06-08 23:30:15.942   468 18542 I AmlogicVideoDecoderAwesome2: [359]"mIsSurfacTexture 1, mDoubleWriteMode 1, default_margin:5 \n"
+06-08 23:30:15.942   468 18542 D AmlogicVideoDecoderAwesome2: [359]"codecInit"
+06-08 23:30:15.942   468 18542 V AmlogicVideoDecoderAwesome2: [359]"codecInit hevc\n"
+06-08 23:30:15.948     0     0 I [91568.741217@3]  [680]: vcodec_dec decoder ffffff8038224000
+06-08 23:30:15.948     0     0 I [91568.741309@3]  [680]: release decoder ffffff8038224000
+06-08 23:30:15.948     0     0 I [91568.744304@1]  [681]: vcodec_dec decoder ffffff801bbc4000
+06-08 23:30:15.960     0     0 D         : [91568.753808@1]  decoder_bmmu_box_alloc_box, tvp_flags = 0
+06-08 23:30:15.962   468 18542 D AmlogicVideoDecoderAwesome2: [359]"codecInit done"
+06-08 23:30:15.962   468 18542 D AmlogicVideoDecoderAwesome2: [359]"mOutWidth is 3840 mOutHeight is 2160 mFlvFlag=0 mOutBufferCount is 12"
+06-08 23:30:15.962   468 18542 D AmlogicVideoDecoderAwesome2: [359]"mOutBufferCount =12 mDecOutWidth 3840 mDecOutHeight 2176\n"
+06-08 23:30:15.962   468 18542 D AmlogicVideoDecoderAwesome2: [359]"mIsNativeBuffers =1\n"
+06-08 23:30:15.962   468 18542 D AmlogicVideoDecoderAwesome2: [359]"setUp mOutPortChanged=0\n"
+06-08 23:30:15.962   468 18542 I OmxComponent: STATE_DONE:  OMX_StateLoaded => OMX_StateIdle : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.963   468 18549 I VDA     : vendor.media.omx2.in_buffer set = 5
+06-08 23:30:15.963   468 18542 I OmxComponent: OMX_CommandStateSet 850 Cmd 0 nParam1 0x3
+06-08 23:30:15.963   468 18542 I OmxComponent: OMX-366 STATE_SET:   OMX_StateIdle => OMX_StateExecuting : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.963   468 18542 V AmlogicVideoDecoderAwesome2: [359]prepare:312 >
+06-08 23:30:15.963   468 18542 V AmlogicVideoDecoderAwesome2: [359]start:325 >
+06-08 23:30:15.963   468 18542 D AmlogicVideoDecoderAwesome2: [359]"mVideo start\n"
+06-08 23:30:15.963   468 18542 I OmxComponent: OMX-366 STATE_TRANS: OMX_StateIdle => OMX_StateExecuting : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.963   468 18542 I OmxComponent: STATE_DONE:  OMX_StateIdle => OMX_StateExecuting : OMX.amlogic.hevc.decoder.awesome2
+06-08 23:30:15.963   468 18550 V OMX_WorkerPeer: vendor/amlogic/common/omx/omx_framework/WorkerPeer.cpp:runWorkerStatic:155 --------------------
+06-08 23:30:15.963   468 18550 V OMX_WorkerPeer: vendor/amlogic/common/omx/omx_framework/WorkerPeer.cpp:runWorker:161 --------------------
+06-08 23:30:15.970   468 18550 V AmlogicVideoDecoderAwesome2: [359]"doCodecSpec csd_len=173\n"
+06-08 23:30:15.970   468 18550 E AmlogicVideoDecoderAwesome: SPS: Main10 profile bitstream
+06-08 23:30:15.970   468 18550 E AmlogicVideoDecoderAwesome: SPS: bit_depth=10,10
+06-08 23:30:15.970   468 18550 D AmlogicVideoDecoderAwesome2: [359]"hevc csd size = 173, [3840:2160],bitdepth=10"
+06-08 23:30:15.986 18009 18536 E VLC     : [c1c41750/4868] libvlc window: request 1 not implemented
+06-08 23:30:15.993   468  7667 I chatty  : uid=1046(mediacodec) HwBinder:468_7 identical 1 line
+06-08 23:30:16.000   468 18550 I AmlogicVideoDecoderAwesome2: [359]"check_stream_info mInPutFrameCount 3\n"
+06-08 23:30:16.000   468 18550 D AmlogicVideoDecoderAwesome2: [359]"=11, =3840, =2160, =4096, =2304, =56979600001, =56979920001, =56979760001, =157678, =132355, =85263"
+06-08 23:30:16.081   468 18549 V android.hardware.media.omx@1.0-service: [0608/233016.081260:VERBOSE1:v4l2_video_decode_accelerator.cc(2563)] CheckInterlaced(): 
+06-08 23:30:16.081   468 18544 D AmlogicVideoDecoderAwesome2: [359]"ProvidePictureBuffers minNumBuffers:13, size(3840x2160) alignsize(3840x2176)"
+06-08 23:30:16.081   468 18544 D AmlogicVideoDecoderAwesome2: [359]"================OMX_EventPortSettingsChanged: 0xe9802ec0, dw_realloc 0"
+06-08 23:30:16.081   468 18544 D AmlogicVideoDecoderAwesome2: [359]"width 3840:3840, height 2160:2160, buffer count 9:13\n"
+06-08 23:30:16.081   468 18549 I VDA     : [0] "decoder_state_ = kDecoding wait -> decoding in decode buffer task"
+06-08 23:30:16.082   468   468 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-08 23:30:16.082   468   468 V OmxVideoDecoder: nWidth=3840,nHeight=2160, nMinbufs=9
+06-08 23:30:16.082   468   468 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.hevc.decoder.awesome2, width 3840, height 2160 nBufferCountMin:9
+06-08 23:30:16.082   468   468 D OmxVideoDecoder: getConfig 2745 0x700000f
+06-08 23:30:16.082   468   468 D OmxVideoDecoder: getConfig 2748 nIndex 0x700000f
+06-08 23:30:16.082   468   468 I AmlogicVideoDecoderAwesome2: [359]"getAndroidNativeBufferCrop [3840 x 2160] \n"
+06-08 23:30:16.082   468   468 D OmxVideoDecoder: getConfig OMX_IndexConfigCommonOutputCrop pRect->nWidth=3840, pRect->nHeight=2160
+06-08 23:30:16.082   468   468 D OmxVideoDecoder: setConfig 2887 0x7f00000c
+06-08 23:30:16.083   468   468 D OmxVideoDecoder: getConfig 2745 0x7f00000c
+06-08 23:30:16.083   468   468 D OmxVideoDecoder: getConfig 2745 0x7f00000c
+06-08 23:30:16.083   468   468 E OMXNodeInstance: getConfig(0xe9706f74:amlogic.hevc.decoder.awesome2, ??(0x7f00000c)) ERROR: UnsupportedSetting(0x80001019)
+06-08 23:30:16.083   468   468 D OmxVideoDecoder: getConfig 2745 0x7f000009
+06-08 23:30:16.083   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.083   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=0 (4k-osd)
+06-08 23:30:16.083   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.083   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=1 (video-trickmode)
+06-08 23:30:16.083   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.083   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=2 (unstable-pts)
+06-08 23:30:16.083   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.083   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=3 (is-mvc)
+06-08 23:30:16.083   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.083   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=4 (is-flv)
+06-08 23:30:16.083   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.083   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=5 (dvconfig-box)
+06-08 23:30:16.084   468   468 W omx@1.0-service: type=1400 audit(0.0:9025): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-08 23:30:16.084   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.084   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-08 23:30:16.084   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.084   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=6 (profile-level)
+06-08 23:30:16.084   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.084   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=7 (nrdp)
+06-08 23:30:16.084   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.084   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=8 (low-latency)
+06-08 23:30:16.084   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.084   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=9 (save-mem)
+06-08 23:30:16.084   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.084   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=10 (videoLayer)
+06-08 23:30:16.085   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.085   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=11 (renderByOmx)
+06-08 23:30:16.085   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.085   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=12 (passthoughMode)
+06-08 23:30:16.085   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.085   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=13 (VideoQos)
+06-08 23:30:16.085   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.085   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=14 (rotation-angle)
+06-08 23:30:16.085   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.085   468  7667 V OmxVideoDecoder: VendorExt: getConfig: index=15 (McodecReport)
+06-08 23:30:16.085   468  7667 D OmxVideoDecoder: mMcodecReport=0 mPeer.get=-377475392
+06-08 23:30:16.085   468   468 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.085   468   468 V OmxVideoDecoder: VendorExt: getConfig: index=16 (START.low-latency)
+06-08 23:30:16.086   468  7667 D OmxVideoDecoder: getConfig 2745 0x6f100004
+06-08 23:30:16.086   468 18542 I OmxComponent: OMX_CommandPortDisable 850 Cmd 0x2 nParam1 0x1
+06-08 23:30:16.086   468 18542 V AmlogicVideoDecoderAwesome2: [359]disablePort:1065 >
+06-08 23:30:16.086   468 18542 D AmlogicVideoDecoderAwesome2: [359]"disablePort output"
+06-08 23:30:16.086   468 18542 V AmlogicVideoDecoderAwesome2: [359]flushOutput:986 >
+06-08 23:30:16.086   468 18542 D AmlogicVideoDecoderAwesome2: [359]"__flushOutput__fillBufferDone:0 0xeb2c2770\n"
+06-08 23:30:16.086   468 18542 D AmlogicVideoDecoderAwesome2: [359]"__flushOutput__fillBufferDone:1 0xeb2c1ff0\n"
+06-08 23:30:16.086   468 18542 D AmlogicVideoDecoderAwesome2: [359]"__flushOutput__fillBufferDone:2 0xeb2c1f30\n"
+06-08 23:30:16.086   468 18542 D AmlogicVideoDecoderAwesome2: [359]"__flushOutput__fillBufferDone:3 0xeb2c10f0\n"
+06-08 23:30:16.086   468 18542 D AmlogicVideoDecoderAwesome2: [359]"__flushOutput__fillBufferDone:4 0xeb2c1690\n"
+06-08 23:30:16.086   468 18542 D AmlogicVideoDecoderAwesome2: [359]"__flushOutput__fillBufferDone:5 0xeb2c1bd0\n"
+06-08 23:30:16.086   468 18542 D AmlogicVideoDecoderAwesome2: [359]"__flushOutput__fillBufferDone:6 0xeb2c0070\n"
+06-08 23:30:16.086   468 18542 D AmlogicVideoDecoderAwesome2: [359]"__flushOutput__fillBufferDone:7 0xeb2c1210\n"
+06-08 23:30:16.086   468 18542 V AmlogicVideoDecoderAwesome2: [359]flushOutput:1061 >
+06-08 23:30:16.088   468   468 W omx@1.0-service: type=1400 audit(0.0:9026): avc: denied { read } for name="u:object_r:default_prop:s0" dev="tmpfs" ino=12518 scontext=u:r:mediacodec:s0 tcontext=u:object_r:default_prop:s0 tclass=file permissive=0
+06-08 23:30:16.090   468 18542 I OmxComponent: OMX_CommandPortEnable 850 Cmd 0x3 nParam1 0x1
+06-08 23:30:16.090   468   468 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-08 23:30:16.090   468 18542 V AmlogicVideoDecoderAwesome2: [359]enablePort:1079 >
+06-08 23:30:16.090   468   468 V OmxVideoDecoder: nWidth=3840,nHeight=2160, nMinbufs=9
+06-08 23:30:16.090   468 18542 D AmlogicVideoDecoderAwesome2: [359]"enablePort output"
+06-08 23:30:16.090   468   468 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.hevc.decoder.awesome2, width 3840, height 2160 nBufferCountMin:9
+06-08 23:30:16.090   468 18542 D AmlogicVideoDecoderAwesome2: [359]"enablePort: output buffer:mWidth:3840, mHeight:2160,mOutBufferCount=12"
+06-08 23:30:16.090   468 18542 D AmlogicVideoDecoderAwesome2: [359]"enablePort: minbufNum:9, actualbufNum=13 nBufferCountMin:9 nBufferCountActual:12"
+06-08 23:30:16.090   468 18542 D AmlogicVideoDecoderAwesome2: [359]"enablePort output"
+06-08 23:30:16.090   468   468 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-08 23:30:16.090   468   468 V OmxVideoDecoder: nWidth=3840,nHeight=2160, nMinbufs=9
+06-08 23:30:16.090   468   468 I OmxVideoDecoder: getParameter Component Name OMX.amlogic.hevc.decoder.awesome2, width 3840, height 2160 nBufferCountMin:9
+06-08 23:30:16.091   468   468 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.AndroidNativeBufferConsumerUsage"
+06-08 23:30:16.091   468   468 D OmxVideoDecoder: setParameter 1500 0x7f00000b
+06-08 23:30:16.091   468   468 D OmxVideoDecoder: OMX_GoogleAndroidIndexAndroidNativeBufferConsumerUsage 0x100
+06-08 23:30:16.091   468  6193 D OmxComponent: getExtensionIndex 1237 name="OMX.google.android.index.getAndroidNativeBufferUsage"
+06-08 23:30:16.091   468  6193 D OmxVideoDecoder: Get NativeBufferUsage 0xc00200
+06-08 23:30:16.091   468  6193 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-08 23:30:16.091   468  6193 D OmxVideoDecoder: adaptiveplayback default set w*d: 4096*2304
+06-08 23:30:16.091   468  6193 W OmxVideoDecoder: 4kosd set output error, newBufferCount 14 > 13
+06-08 23:30:16.091   468  6193 E OMXNodeInstance: setParameter(0xe9706f74:amlogic.hevc.decoder.awesome2, ParamPortDefinition(0x2000001)) ERROR: UnsupportedSetting(0x80001019)
+06-08 23:30:16.091 18009 18540 W ACodec  : [OMX.amlogic.hevc.decoder.awesome2] setting nBufferCountActual to 14 failed: -1010
+06-08 23:30:16.091   468   468 D OmxVideoDecoder: setParameter 1500 0x2000001
+06-08 23:30:16.092   468   468 D OmxVideoDecoder: adaptiveplayback default set w*d: 4096*2304
+06-08 23:30:16.092   468   468 D OmxVideoDecoder: media.omx.display_mode=3
+06-08 23:30:16.092   468   468 D OmxVideoDecoder: mjpeg vc1 wmv wmv3 force display_mode=3
+06-08 23:30:16.092   468   468 D OmxVideoDecoder: choose mVideoUsedByOmx=0, mVideoUsedByThis=0, mAmVideoUsed=0
+06-08 23:30:16.092   468   468 D OmxVideoDecoder: choose mDisplayMode=0
+06-08 23:30:16.092   468   468 E libc    : Access denied finding property "media.omx.width"
+06-08 23:30:16.092   468   468 E libc    : Access denied finding property "media.omx.height"
+06-08 23:30:16.092   468   468 D OmxVideoDecoder: mMustOsdDisplay is true
+06-08 23:30:16.092   468   468 D OmxVideoDecoder: setParameter nPortIndex 1 nFrameWidth 3840 nFrameHeight 2160 nSliceHeight 2160
+06-08 23:30:16.092   468   468 V OmxVideoDecoder: updatePort mUseNativeBuffers 1
+06-08 23:30:16.092   468   468 V OmxVideoDecoder: nWidth=3840,nHeight=2160, nMinbufs=9
+06-08 23:30:16.093   468  6193 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-08 23:30:16.093   468   468 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-08 23:30:16.094   468   468 I chatty  : uid=1046(mediacodec) omx@1.0-service identical 4 lines
+06-08 23:30:16.094   468   468 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-08 23:30:16.095   468  6193 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-08 23:30:16.096   468  6193 I chatty  : uid=1046(mediacodec) HwBinder:468_6 identical 4 lines
+06-08 23:30:16.096   468  6193 E OMX_AmlogicPeerBufferWrapper: setVideoNativeMetadata
+06-08 23:30:16.097   468 18550 D AmlogicVideoDecoderAwesome2: set mEstimateDurationUs to mDurationUs = 160000
+06-08 23:30:16.102   468 18542 D AmlogicVideoDecoderAwesome2: [359]"======setOutputBufsNum==for port changed=====:13"
+06-08 23:30:16.102   468 18542 D AmlogicVideoDecoderAwesome2: [359]"======setOutputBuf, line 1261=======:0, 0x0, fd:28"
+06-08 23:30:16.102   468 18542 D AmlogicVideoDecoderAwesome2: [359]"======setOutputBuf, line 1261=======:1, 0x0, fd:31"
+06-08 23:30:16.102   468 18542 D AmlogicVideoDecoderAwesome2: [359]"======setOutputBuf, line 1261=======:2, 0x0, fd:38"
+06-08 23:30:16.103   468 18542 D AmlogicVideoDecoderAwesome2: [359]"======setOutputBuf, line 1261=======:3, 0x0, fd:43"
+06-08 23:30:16.108     0     0 D         : [91568.903896@3]  decoder_bmmu_box_alloc_box, tvp_flags = 0
+06-08 23:30:16.137 18009 18547 E VLC     : [e90a39e0/4873] libvlc decoder: output: 17 unknown, 3840x2160 stride 3840 2160, crop 0 0 0 0
+06-08 23:30:16.147   468 18542 D AmlogicVideoDecoderAwesome2: [359]"======setOutputBuf, line 1261=======:4, 0x0, fd:49"
+06-08 23:30:16.156   468 18542 D AmlogicVideoDecoderAwesome2: [359]"======setOutputBuf, line 1261=======:5, 0x0, fd:54"
+06-08 23:30:16.157   468 18542 D AmlogicVideoDecoderAwesome2: [359]"======setOutputBuf, line 1261=======:6, 0x0, fd:59"
+06-08 23:30:16.159   468 18542 D AmlogicVideoDecoderAwesome2: [359]"======setOutputBuf, line 1261=======:7, 0x0, fd:64"
+06-08 23:30:16.177   468 18542 D AmlogicVideoDecoderAwesome2: [359]"======setOutputBuf, line 1261=======:8, 0x0, fd:69"
+06-08 23:30:16.199   468 18542 D AmlogicVideoDecoderAwesome2: [359]"======setOutputBuf, line 1261=======:9, 0x0, fd:74"
+06-08 23:30:16.901 18009 18536 E VLC     : [c1c41750/4868] libvlc window: request 3 not implemented
+06-08 23:30:18.162 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.163 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150541457597 for FFmpeg
+06-08 23:30:18.163 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.164 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150541489597 for FFmpeg
+06-08 23:30:18.167 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.167 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150541521597 for FFmpeg
+06-08 23:30:18.168 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.168 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150541553597 for FFmpeg
+06-08 23:30:18.171 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.171 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150541585597 for FFmpeg
+06-08 23:30:18.172 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.172 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150541617597 for FFmpeg
+06-08 23:30:18.173 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.173 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150541649597 for FFmpeg
+06-08 23:30:18.173   468 18542 D AmlogicVideoDecoderAwesome2: [359]"======setOutputBuf, line 1261=======:10, 0x0, fd:79"
+06-08 23:30:18.174 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.174 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150541681597 for FFmpeg
+06-08 23:30:18.175 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.175 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150541713597 for FFmpeg
+06-08 23:30:18.177 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.177 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150541745597 for FFmpeg
+06-08 23:30:18.178   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-08 23:30:18.178 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.178 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150541777597 for FFmpeg
+06-08 23:30:18.180 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.180 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150541809597 for FFmpeg
+06-08 23:30:18.181 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.182 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150541841597 for FFmpeg
+06-08 23:30:18.184 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.184 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150541873597 for FFmpeg
+06-08 23:30:18.185 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.185 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150541905597 for FFmpeg
+06-08 23:30:18.186 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.187 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150541937597 for FFmpeg
+06-08 23:30:18.188 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.188 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150541969597 for FFmpeg
+06-08 23:30:18.189 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.189 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542001597 for FFmpeg
+06-08 23:30:18.190 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.190 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542033597 for FFmpeg
+06-08 23:30:18.191 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.191 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542065597 for FFmpeg
+06-08 23:30:18.193 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.193 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542097597 for FFmpeg
+06-08 23:30:18.195 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.195 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542129597 for FFmpeg
+06-08 23:30:18.196 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.196 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542161597 for FFmpeg
+06-08 23:30:18.197 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.197 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542193597 for FFmpeg
+06-08 23:30:18.200 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.200 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542225597 for FFmpeg
+06-08 23:30:18.202 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.202 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542257597 for FFmpeg
+06-08 23:30:18.203 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.203 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542289597 for FFmpeg
+06-08 23:30:18.204 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.204 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542321597 for FFmpeg
+06-08 23:30:18.205 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.205 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542353597 for FFmpeg
+06-08 23:30:18.207 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.207 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542385597 for FFmpeg
+06-08 23:30:18.208 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.208 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542417597 for FFmpeg
+06-08 23:30:18.209 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.209 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542449597 for FFmpeg
+06-08 23:30:18.209 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.209 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542481597 for FFmpeg
+06-08 23:30:18.210 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.210 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542513597 for FFmpeg
+06-08 23:30:18.211 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.211 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542545597 for FFmpeg
+06-08 23:30:18.211 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.211 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542577597 for FFmpeg
+06-08 23:30:18.212 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.212 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542609597 for FFmpeg
+06-08 23:30:18.213 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.213 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542641597 for FFmpeg
+06-08 23:30:18.215 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.215 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542673597 for FFmpeg
+06-08 23:30:18.215 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.215 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542705597 for FFmpeg
+06-08 23:30:18.216 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.216 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542737597 for FFmpeg
+06-08 23:30:18.217 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.217 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542769597 for FFmpeg
+06-08 23:30:18.218 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.219 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542801597 for FFmpeg
+06-08 23:30:18.220 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.220 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542833597 for FFmpeg
+06-08 23:30:18.221 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.221 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542865597 for FFmpeg
+06-08 23:30:18.221 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.221 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542897597 for FFmpeg
+06-08 23:30:18.222 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.222 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542929597 for FFmpeg
+06-08 23:30:18.223 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.223 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542961597 for FFmpeg
+06-08 23:30:18.223   565   876 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-08 23:30:18.224 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.224 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150542993597 for FFmpeg
+06-08 23:30:18.225 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.225 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543025597 for FFmpeg
+06-08 23:30:18.225 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.225 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543057597 for FFmpeg
+06-08 23:30:18.226 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.226 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543089597 for FFmpeg
+06-08 23:30:18.227 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.227 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543121597 for FFmpeg
+06-08 23:30:18.228 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.228 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543153597 for FFmpeg
+06-08 23:30:18.228 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.229 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543185597 for FFmpeg
+06-08 23:30:18.229 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.229 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543217597 for FFmpeg
+06-08 23:30:18.230 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.230 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543249597 for FFmpeg
+06-08 23:30:18.230   565  1272 E TaskPersister: File error accessing recents directory (directory doesn't exist?).
+06-08 23:30:18.231 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.231 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543281597 for FFmpeg
+06-08 23:30:18.231 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.231 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543313597 for FFmpeg
+06-08 23:30:18.232 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.232 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543345597 for FFmpeg
+06-08 23:30:18.233 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.233 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543377597 for FFmpeg
+06-08 23:30:18.233 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.233 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543409597 for FFmpeg
+06-08 23:30:18.234 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.234 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543441597 for FFmpeg
+06-08 23:30:18.235 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.235 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543473597 for FFmpeg
+06-08 23:30:18.235 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.235 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543505597 for FFmpeg
+06-08 23:30:18.236 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.236 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543537597 for FFmpeg
+06-08 23:30:18.237 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.237 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543569597 for FFmpeg
+06-08 23:30:18.237 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.238 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543601597 for FFmpeg
+06-08 23:30:18.238 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.238 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543633597 for FFmpeg
+06-08 23:30:18.239 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.239 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543665597 for FFmpeg
+06-08 23:30:18.240 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.240 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543697597 for FFmpeg
+06-08 23:30:18.241 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.241 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543729597 for FFmpeg
+06-08 23:30:18.241 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.241 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543761597 for FFmpeg
+06-08 23:30:18.242 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.242 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543793597 for FFmpeg
+06-08 23:30:18.243 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.243 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543825597 for FFmpeg
+06-08 23:30:18.244 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.244 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543857597 for FFmpeg
+06-08 23:30:18.245 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.245 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543889597 for FFmpeg
+06-08 23:30:18.245 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.245 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543921597 for FFmpeg
+06-08 23:30:18.246 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.246 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543953597 for FFmpeg
+06-08 23:30:18.247 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.247 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150543985597 for FFmpeg
+06-08 23:30:18.247 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.247 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544017597 for FFmpeg
+06-08 23:30:18.248 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.248 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544049597 for FFmpeg
+06-08 23:30:18.249 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.249 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544081597 for FFmpeg
+06-08 23:30:18.249 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.249 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544113597 for FFmpeg
+06-08 23:30:18.250 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.250 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544145597 for FFmpeg
+06-08 23:30:18.251 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.251 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544177597 for FFmpeg
+06-08 23:30:18.251 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.251 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544209597 for FFmpeg
+06-08 23:30:18.252 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.252 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544241597 for FFmpeg
+06-08 23:30:18.253 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.253 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544273597 for FFmpeg
+06-08 23:30:18.253 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.253 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544305597 for FFmpeg
+06-08 23:30:18.254 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.254 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544337597 for FFmpeg
+06-08 23:30:18.255 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.255 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544369597 for FFmpeg
+06-08 23:30:18.256 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.256 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544401597 for FFmpeg
+06-08 23:30:18.256 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.257 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544433597 for FFmpeg
+06-08 23:30:18.257 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.257 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544465597 for FFmpeg
+06-08 23:30:18.258 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.258 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544497597 for FFmpeg
+06-08 23:30:18.259 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.259 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544529597 for FFmpeg
+06-08 23:30:18.280 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.281 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544561597 for FFmpeg
+06-08 23:30:18.366 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.366 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544593597 for FFmpeg
+06-08 23:30:18.370 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.370 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544625597 for FFmpeg
+06-08 23:30:18.409 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.409 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544657597 for FFmpeg
+06-08 23:30:18.412 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.412 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544689597 for FFmpeg
+06-08 23:30:18.412 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.412 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544721597 for FFmpeg
+06-08 23:30:18.453 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.453 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544753597 for FFmpeg
+06-08 23:30:18.454 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.454 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544785597 for FFmpeg
+06-08 23:30:18.493 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.493 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544817597 for FFmpeg
+06-08 23:30:18.533 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.534 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544849597 for FFmpeg
+06-08 23:30:18.553 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.553 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544881597 for FFmpeg
+06-08 23:30:18.595 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.595 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544913597 for FFmpeg
+06-08 23:30:18.633 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.633 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544945597 for FFmpeg
+06-08 23:30:18.653 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.653 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150544977597 for FFmpeg
+06-08 23:30:18.692 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.692 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545009597 for FFmpeg
+06-08 23:30:18.712 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.712 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545041597 for FFmpeg
+06-08 23:30:18.753 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.753 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545073597 for FFmpeg
+06-08 23:30:18.793 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.793 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545105597 for FFmpeg
+06-08 23:30:18.813 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.813 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545137597 for FFmpeg
+06-08 23:30:18.853 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.853 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545169597 for FFmpeg
+06-08 23:30:18.873 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.873 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545201597 for FFmpeg
+06-08 23:30:18.894 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.894 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545233597 for FFmpeg
+06-08 23:30:18.954 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.955 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545265597 for FFmpeg
+06-08 23:30:18.972 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:18.972 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545297597 for FFmpeg
+06-08 23:30:19.037 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.038 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545329597 for FFmpeg
+06-08 23:30:19.040 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.040 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545361597 for FFmpeg
+06-08 23:30:19.074 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.074 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545393597 for FFmpeg
+06-08 23:30:19.114 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.114 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545425597 for FFmpeg
+06-08 23:30:19.132 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.133 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545457597 for FFmpeg
+06-08 23:30:19.178 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.178 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545489597 for FFmpeg
+06-08 23:30:19.194 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.194 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545521597 for FFmpeg
+06-08 23:30:19.233 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.233 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545553597 for FFmpeg
+06-08 23:30:19.275 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.275 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545585597 for FFmpeg
+06-08 23:30:19.294 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.294 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545617597 for FFmpeg
+06-08 23:30:19.352 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.352 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545649597 for FFmpeg
+06-08 23:30:19.353 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.354 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545681597 for FFmpeg
+06-08 23:30:19.396 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.396 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545713597 for FFmpeg
+06-08 23:30:19.435 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.435 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545745597 for FFmpeg
+06-08 23:30:19.454 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.454 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545777597 for FFmpeg
+06-08 23:30:19.493 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.494 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545809597 for FFmpeg
+06-08 23:30:19.520 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.520 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545841597 for FFmpeg
+06-08 23:30:19.555 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.555 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545873597 for FFmpeg
+06-08 23:30:19.596 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.596 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545905597 for FFmpeg
+06-08 23:30:19.615 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.615 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545937597 for FFmpeg
+06-08 23:30:19.674 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.674 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150545969597 for FFmpeg
+06-08 23:30:19.678 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.678 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546001597 for FFmpeg
+06-08 23:30:19.713 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.714 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546033597 for FFmpeg
+06-08 23:30:19.757 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.758 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546065597 for FFmpeg
+06-08 23:30:19.774 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.775 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546097597 for FFmpeg
+06-08 23:30:19.815 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.815 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546129597 for FFmpeg
+06-08 23:30:19.833 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.833 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546161597 for FFmpeg
+06-08 23:30:19.873 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.874 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546193597 for FFmpeg
+06-08 23:30:19.914 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.914 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546225597 for FFmpeg
+06-08 23:30:19.936 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.937 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546257597 for FFmpeg
+06-08 23:30:19.995 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.995 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546289597 for FFmpeg
+06-08 23:30:19.996 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:19.996 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546321597 for FFmpeg
+06-08 23:30:20.035 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.035 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546353597 for FFmpeg
+06-08 23:30:20.073 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.074 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546385597 for FFmpeg
+06-08 23:30:20.096 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.096 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546417597 for FFmpeg
+06-08 23:30:20.133 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.133 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546449597 for FFmpeg
+06-08 23:30:20.157 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.157 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546481597 for FFmpeg
+06-08 23:30:20.198 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.199 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546513597 for FFmpeg
+06-08 23:30:20.233 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.233 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546545597 for FFmpeg
+06-08 23:30:20.253 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.253 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546577597 for FFmpeg
+06-08 23:30:20.295 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.295 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546609597 for FFmpeg
+06-08 23:30:20.313 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.313 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546641597 for FFmpeg
+06-08 23:30:20.355 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.355 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546673597 for FFmpeg
+06-08 23:30:20.394 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.394 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546705597 for FFmpeg
+06-08 23:30:20.413 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.414 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546737597 for FFmpeg
+06-08 23:30:20.453 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.454 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546769597 for FFmpeg
+06-08 23:30:20.476 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.476 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546801597 for FFmpeg
+06-08 23:30:20.516 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.516 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546833597 for FFmpeg
+06-08 23:30:20.563 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.564 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546865597 for FFmpeg
+06-08 23:30:20.575 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.576 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546897597 for FFmpeg
+06-08 23:30:20.621 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.621 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546929597 for FFmpeg
+06-08 23:30:20.637 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.637 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546961597 for FFmpeg
+06-08 23:30:20.675 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.675 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150546993597 for FFmpeg
+06-08 23:30:20.700  1896  1896 W ThreadPoolForeg: type=1400 audit(0.0:9027): avc: denied { write } for name="traced_producer" dev="tmpfs" ino=14648 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:traced_producer_socket:s0 tclass=sock_file permissive=0 app=com.google.android.gms
+06-08 23:30:20.736 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.736 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547025597 for FFmpeg
+06-08 23:30:20.737 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.737 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547057597 for FFmpeg
+06-08 23:30:20.776 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.776 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547089597 for FFmpeg
+06-08 23:30:20.793 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.793 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547121597 for FFmpeg
+06-08 23:30:20.815 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.815 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547153597 for FFmpeg
+06-08 23:30:20.876 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.876 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547185597 for FFmpeg
+06-08 23:30:20.897 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.897 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547217597 for FFmpeg
+06-08 23:30:20.933 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.933 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547249597 for FFmpeg
+06-08 23:30:20.953 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.954 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547281597 for FFmpeg
+06-08 23:30:20.995 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:20.995 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547313597 for FFmpeg
+06-08 23:30:21.054 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.054 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547345597 for FFmpeg
+06-08 23:30:21.055 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.056 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547377597 for FFmpeg
+06-08 23:30:21.092 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.092 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547409597 for FFmpeg
+06-08 23:30:21.112 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.112 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547441597 for FFmpeg
+06-08 23:30:21.155 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.155 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547473597 for FFmpeg
+06-08 23:30:21.197 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.197 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547505597 for FFmpeg
+06-08 23:30:21.213 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.213 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547537597 for FFmpeg
+06-08 23:30:21.218   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-08 23:30:21.234   565   876 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-08 23:30:21.256 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.257 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547569597 for FFmpeg
+06-08 23:30:21.277 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.278 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547601597 for FFmpeg
+06-08 23:30:21.314 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.315 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547633597 for FFmpeg
+06-08 23:30:21.356 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.356 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547665597 for FFmpeg
+06-08 23:30:21.375 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.376 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547697597 for FFmpeg
+06-08 23:30:21.416 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.416 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547729597 for FFmpeg
+06-08 23:30:21.433 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.433 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547761597 for FFmpeg
+06-08 23:30:21.474 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.474 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547793597 for FFmpeg
+06-08 23:30:21.517 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.517 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547825597 for FFmpeg
+06-08 23:30:21.534 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.534 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547857597 for FFmpeg
+06-08 23:30:21.575 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.575 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547889597 for FFmpeg
+06-08 23:30:21.594 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.594 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547921597 for FFmpeg
+06-08 23:30:21.633 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.634 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547953597 for FFmpeg
+06-08 23:30:21.675 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.675 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150547985597 for FFmpeg
+06-08 23:30:21.695 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.695 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548017597 for FFmpeg
+06-08 23:30:21.733 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.733 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548049597 for FFmpeg
+06-08 23:30:21.754 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.754 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548081597 for FFmpeg
+06-08 23:30:21.794 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.794 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548113597 for FFmpeg
+06-08 23:30:21.836 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.836 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548145597 for FFmpeg
+06-08 23:30:21.856 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.857 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548177597 for FFmpeg
+06-08 23:30:21.895 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.895 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548209597 for FFmpeg
+06-08 23:30:21.915 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.916 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548241597 for FFmpeg
+06-08 23:30:21.953 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:21.954 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548273597 for FFmpeg
+06-08 23:30:22.014 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.015 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548305597 for FFmpeg
+06-08 23:30:22.016 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.016 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548337597 for FFmpeg
+06-08 23:30:22.056 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.056 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548369597 for FFmpeg
+06-08 23:30:22.080 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.080 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548401597 for FFmpeg
+06-08 23:30:22.115 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.115 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548433597 for FFmpeg
+06-08 23:30:22.156 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.157 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548465597 for FFmpeg
+06-08 23:30:22.181 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.181 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548497597 for FFmpeg
+06-08 23:30:22.214 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.214 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548529597 for FFmpeg
+06-08 23:30:22.233 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.233 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548561597 for FFmpeg
+06-08 23:30:22.277 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.278 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548593597 for FFmpeg
+06-08 23:30:22.279 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.279 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548625597 for FFmpeg
+06-08 23:30:22.333 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.333 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548657597 for FFmpeg
+06-08 23:30:22.377 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.378 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548689597 for FFmpeg
+06-08 23:30:22.395 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.395 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548721597 for FFmpeg
+06-08 23:30:22.433 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.433 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548753597 for FFmpeg
+06-08 23:30:22.473 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.473 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548785597 for FFmpeg
+06-08 23:30:22.496 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.496 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548817597 for FFmpeg
+06-08 23:30:22.534 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.535 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548849597 for FFmpeg
+06-08 23:30:22.565 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.565 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548881597 for FFmpeg
+06-08 23:30:22.594 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.594 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548913597 for FFmpeg
+06-08 23:30:22.633 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.633 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548945597 for FFmpeg
+06-08 23:30:22.657 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.657 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150548977597 for FFmpeg
+06-08 23:30:22.698 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.698 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549009597 for FFmpeg
+06-08 23:30:22.713 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.714 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549041597 for FFmpeg
+06-08 23:30:22.758 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.758 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549073597 for FFmpeg
+06-08 23:30:22.798 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.798 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549105597 for FFmpeg
+06-08 23:30:22.816 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.816 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549137597 for FFmpeg
+06-08 23:30:22.861 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.861 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549169597 for FFmpeg
+06-08 23:30:22.876 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.876 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549201597 for FFmpeg
+06-08 23:30:22.917 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.917 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549233597 for FFmpeg
+06-08 23:30:22.956 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.959 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549265597 for FFmpeg
+06-08 23:30:22.975 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:22.975 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549297597 for FFmpeg
+06-08 23:30:23.016 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.016 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549329597 for FFmpeg
+06-08 23:30:23.042 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.042 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549361597 for FFmpeg
+06-08 23:30:23.075 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.075 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549393597 for FFmpeg
+06-08 23:30:23.113 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.113 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549425597 for FFmpeg
+06-08 23:30:23.133 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.133 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549457597 for FFmpeg
+06-08 23:30:23.173 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.173 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549489597 for FFmpeg
+06-08 23:30:23.200 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.200 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549521597 for FFmpeg
+06-08 23:30:23.238 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.238 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549553597 for FFmpeg
+06-08 23:30:23.273 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.273 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549585597 for FFmpeg
+06-08 23:30:23.294 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.294 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549617597 for FFmpeg
+06-08 23:30:23.334 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.335 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549649597 for FFmpeg
+06-08 23:30:23.355 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.355 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549681597 for FFmpeg
+06-08 23:30:23.393 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.393 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549713597 for FFmpeg
+06-08 23:30:23.441 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.441 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549745597 for FFmpeg
+06-08 23:30:23.458 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.458 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549777597 for FFmpeg
+06-08 23:30:23.495 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.495 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549809597 for FFmpeg
+06-08 23:30:23.515 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.516 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549841597 for FFmpeg
+06-08 23:30:23.553 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.553 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549873597 for FFmpeg
+06-08 23:30:23.594 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.595 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549905597 for FFmpeg
+06-08 23:30:23.620 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.620 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549937597 for FFmpeg
+06-08 23:30:23.653 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.653 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150549969597 for FFmpeg
+06-08 23:30:23.680 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.680 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550001597 for FFmpeg
+06-08 23:30:23.718 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.718 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550033597 for FFmpeg
+06-08 23:30:23.753 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.753 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550065597 for FFmpeg
+06-08 23:30:23.778 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.778 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550097597 for FFmpeg
+06-08 23:30:23.813 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.813 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550129597 for FFmpeg
+06-08 23:30:23.835 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.835 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550161597 for FFmpeg
+06-08 23:30:23.873 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.874 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550193597 for FFmpeg
+06-08 23:30:23.918 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.918 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550225597 for FFmpeg
+06-08 23:30:23.935 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.935 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550257597 for FFmpeg
+06-08 23:30:23.975 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.975 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550289597 for FFmpeg
+06-08 23:30:23.993 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:23.993 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550321597 for FFmpeg
+06-08 23:30:24.037 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.037 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550353597 for FFmpeg
+06-08 23:30:24.076 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.076 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550385597 for FFmpeg
+06-08 23:30:24.098 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.098 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550417597 for FFmpeg
+06-08 23:30:24.134 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.135 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550449597 for FFmpeg
+06-08 23:30:24.160 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.160 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550481597 for FFmpeg
+06-08 23:30:24.193 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.194 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550513597 for FFmpeg
+06-08 23:30:24.232   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-08 23:30:24.233 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.233 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550545597 for FFmpeg
+06-08 23:30:24.254 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.254 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550577597 for FFmpeg
+06-08 23:30:24.263   565   876 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-08 23:30:24.301 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.301 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550609597 for FFmpeg
+06-08 23:30:24.314 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.315 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550641597 for FFmpeg
+06-08 23:30:24.354 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.354 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550673597 for FFmpeg
+06-08 23:30:24.398 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.399 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550705597 for FFmpeg
+06-08 23:30:24.415 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.416 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550737597 for FFmpeg
+06-08 23:30:24.453 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.453 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550769597 for FFmpeg
+06-08 23:30:24.475 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.476 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550801597 for FFmpeg
+06-08 23:30:24.513 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.513 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550833597 for FFmpeg
+06-08 23:30:24.553 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.553 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550865597 for FFmpeg
+06-08 23:30:24.574 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.574 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550897597 for FFmpeg
+06-08 23:30:24.614 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.614 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550929597 for FFmpeg
+06-08 23:30:24.634 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.634 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550961597 for FFmpeg
+06-08 23:30:24.652 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.653 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150550993597 for FFmpeg
+06-08 23:30:24.714 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.714 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551025597 for FFmpeg
+06-08 23:30:24.733 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.733 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551057597 for FFmpeg
+06-08 23:30:24.776 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.777 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551089597 for FFmpeg
+06-08 23:30:24.793 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.794 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551121597 for FFmpeg
+06-08 23:30:24.833 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.834 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551153597 for FFmpeg
+06-08 23:30:24.875 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.875 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551185597 for FFmpeg
+06-08 23:30:24.899 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.899 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551217597 for FFmpeg
+06-08 23:30:24.935 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.936 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551249597 for FFmpeg
+06-08 23:30:24.966 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.967 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551281597 for FFmpeg
+06-08 23:30:24.994 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:24.994 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551313597 for FFmpeg
+06-08 23:30:25.034 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.034 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551345597 for FFmpeg
+06-08 23:30:25.054 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.054 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551377597 for FFmpeg
+06-08 23:30:25.095 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.095 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551409597 for FFmpeg
+06-08 23:30:25.118 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.118 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551441597 for FFmpeg
+06-08 23:30:25.159 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.159 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551473597 for FFmpeg
+06-08 23:30:25.196 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.197 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551505597 for FFmpeg
+06-08 23:30:25.221 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.221 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551537597 for FFmpeg
+06-08 23:30:25.253 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.254 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551569597 for FFmpeg
+06-08 23:30:25.274 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.275 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551601597 for FFmpeg
+06-08 23:30:25.316 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.316 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551633597 for FFmpeg
+06-08 23:30:25.354 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.354 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551665597 for FFmpeg
+06-08 23:30:25.373 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.374 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551697597 for FFmpeg
+06-08 23:30:25.420 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.420 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551729597 for FFmpeg
+06-08 23:30:25.434 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.434 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551761597 for FFmpeg
+06-08 23:30:25.479 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.479 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551793597 for FFmpeg
+06-08 23:30:25.521 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.521 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551825597 for FFmpeg
+06-08 23:30:25.539 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.539 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551857597 for FFmpeg
+06-08 23:30:25.574 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.574 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551889597 for FFmpeg
+06-08 23:30:25.594 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.594 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551921597 for FFmpeg
+06-08 23:30:25.634 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.634 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551953597 for FFmpeg
+06-08 23:30:25.674 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.674 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150551985597 for FFmpeg
+06-08 23:30:25.693 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.693 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552017597 for FFmpeg
+06-08 23:30:25.736 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.736 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552049597 for FFmpeg
+06-08 23:30:25.754 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.754 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552081597 for FFmpeg
+06-08 23:30:25.799 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.799 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552113597 for FFmpeg
+06-08 23:30:25.836 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.836 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552145597 for FFmpeg
+06-08 23:30:25.854 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.854 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552177597 for FFmpeg
+06-08 23:30:25.895 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.896 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552209597 for FFmpeg
+06-08 23:30:25.922 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.922 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552241597 for FFmpeg
+06-08 23:30:25.953 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:25.954 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552273597 for FFmpeg
+06-08 23:30:26.002 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.002 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552305597 for FFmpeg
+06-08 23:30:26.013 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.013 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552337597 for FFmpeg
+06-08 23:30:26.055 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.055 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552369597 for FFmpeg
+06-08 23:30:26.074 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.074 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552401597 for FFmpeg
+06-08 23:30:26.120 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.120 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552433597 for FFmpeg
+06-08 23:30:26.121 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.121 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552465597 for FFmpeg
+06-08 23:30:26.173 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.174 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552497597 for FFmpeg
+06-08 23:30:26.217 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.217 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552529597 for FFmpeg
+06-08 23:30:26.235 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.235 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552561597 for FFmpeg
+06-08 23:30:26.273 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.273 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552593597 for FFmpeg
+06-08 23:30:26.315 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.315 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552625597 for FFmpeg
+06-08 23:30:26.339 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.339 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552657597 for FFmpeg
+06-08 23:30:26.376 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.377 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552689597 for FFmpeg
+06-08 23:30:26.396 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.396 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552721597 for FFmpeg
+06-08 23:30:26.435 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.435 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552753597 for FFmpeg
+06-08 23:30:26.474 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.475 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552785597 for FFmpeg
+06-08 23:30:26.497 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.497 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552817597 for FFmpeg
+06-08 23:30:26.534 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.534 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552849597 for FFmpeg
+06-08 23:30:26.554 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.554 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552881597 for FFmpeg
+06-08 23:30:26.574 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.575 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552913597 for FFmpeg
+06-08 23:30:26.636 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.636 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552945597 for FFmpeg
+06-08 23:30:26.654 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.654 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150552977597 for FFmpeg
+06-08 23:30:26.692 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.692 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553009597 for FFmpeg
+06-08 23:30:26.721 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.721 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553041597 for FFmpeg
+06-08 23:30:26.762 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.762 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553073597 for FFmpeg
+06-08 23:30:26.796 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.796 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553105597 for FFmpeg
+06-08 23:30:26.818 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.818 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553137597 for FFmpeg
+06-08 23:30:26.854 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.855 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553169597 for FFmpeg
+06-08 23:30:26.873 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.873 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553201597 for FFmpeg
+06-08 23:30:26.915 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.915 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553233597 for FFmpeg
+06-08 23:30:26.962 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.962 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553265597 for FFmpeg
+06-08 23:30:26.975 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:26.976 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553297597 for FFmpeg
+06-08 23:30:27.020 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.020 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553329597 for FFmpeg
+06-08 23:30:27.039 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.039 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553361597 for FFmpeg
+06-08 23:30:27.085 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.085 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553393597 for FFmpeg
+06-08 23:30:27.118 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.118 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553425597 for FFmpeg
+06-08 23:30:27.133 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.133 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553457597 for FFmpeg
+06-08 23:30:27.175 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.175 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553489597 for FFmpeg
+06-08 23:30:27.199 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.199 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553521597 for FFmpeg
+06-08 23:30:27.233 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.233 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553553597 for FFmpeg
+06-08 23:30:27.251   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-08 23:30:27.276 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.277 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553585597 for FFmpeg
+06-08 23:30:27.280   565   876 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-08 23:30:27.295 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.295 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553617597 for FFmpeg
+06-08 23:30:27.335 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.335 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553649597 for FFmpeg
+06-08 23:30:27.355 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.355 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553681597 for FFmpeg
+06-08 23:30:27.403 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.403 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553713597 for FFmpeg
+06-08 23:30:27.436 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.436 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553745597 for FFmpeg
+06-08 23:30:27.456 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.456 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553777597 for FFmpeg
+06-08 23:30:27.498 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.498 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553809597 for FFmpeg
+06-08 23:30:27.514 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.514 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553841597 for FFmpeg
+06-08 23:30:27.556 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.556 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553873597 for FFmpeg
+06-08 23:30:27.598 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.598 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553905597 for FFmpeg
+06-08 23:30:27.612 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.612 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553937597 for FFmpeg
+06-08 23:30:27.653 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.653 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150553969597 for FFmpeg
+06-08 23:30:27.674 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.674 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554001597 for FFmpeg
+06-08 23:30:27.725 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.726 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554033597 for FFmpeg
+06-08 23:30:27.756 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.756 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554065597 for FFmpeg
+06-08 23:30:27.773 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.773 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554097597 for FFmpeg
+06-08 23:30:27.820 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.820 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554129597 for FFmpeg
+06-08 23:30:27.833 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.833 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554161597 for FFmpeg
+06-08 23:30:27.874 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.874 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554193597 for FFmpeg
+06-08 23:30:27.914 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.914 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554225597 for FFmpeg
+06-08 23:30:27.933 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.933 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554257597 for FFmpeg
+06-08 23:30:27.973 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.974 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554289597 for FFmpeg
+06-08 23:30:27.995 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:27.995 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554321597 for FFmpeg
+06-08 23:30:28.041 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.041 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554353597 for FFmpeg
+06-08 23:30:28.073 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.073 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554385597 for FFmpeg
+06-08 23:30:28.093 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.093 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554417597 for FFmpeg
+06-08 23:30:28.135 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.136 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554449597 for FFmpeg
+06-08 23:30:28.155 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.156 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554481597 for FFmpeg
+06-08 23:30:28.197 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.197 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554513597 for FFmpeg
+06-08 23:30:28.233 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.234 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554545597 for FFmpeg
+06-08 23:30:28.254 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.254 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554577597 for FFmpeg
+06-08 23:30:28.296 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.296 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554609597 for FFmpeg
+06-08 23:30:28.317 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.317 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554641597 for FFmpeg
+06-08 23:30:28.355 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.355 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554673597 for FFmpeg
+06-08 23:30:28.394 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.394 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554705597 for FFmpeg
+06-08 23:30:28.425 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.425 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554737597 for FFmpeg
+06-08 23:30:28.455 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.455 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554769597 for FFmpeg
+06-08 23:30:28.475 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.475 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554801597 for FFmpeg
+06-08 23:30:28.524 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.524 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554833597 for FFmpeg
+06-08 23:30:28.557 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.557 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554865597 for FFmpeg
+06-08 23:30:28.575 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.575 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554897597 for FFmpeg
+06-08 23:30:28.612 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.613 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554929597 for FFmpeg
+06-08 23:30:28.636 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.636 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554961597 for FFmpeg
+06-08 23:30:28.674 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.674 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150554993597 for FFmpeg
+06-08 23:30:28.717 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.717 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555025597 for FFmpeg
+06-08 23:30:28.733 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.733 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555057597 for FFmpeg
+06-08 23:30:28.775 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.775 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555089597 for FFmpeg
+06-08 23:30:28.792 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.793 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555121597 for FFmpeg
+06-08 23:30:28.841 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.841 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555153597 for FFmpeg
+06-08 23:30:28.877 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.877 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555185597 for FFmpeg
+06-08 23:30:28.899 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.900 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555217597 for FFmpeg
+06-08 23:30:28.935 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.935 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555249597 for FFmpeg
+06-08 23:30:28.953 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.953 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555281597 for FFmpeg
+06-08 23:30:28.997 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:28.997 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555313597 for FFmpeg
+06-08 23:30:29.042 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.042 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555345597 for FFmpeg
+06-08 23:30:29.053 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.054 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555377597 for FFmpeg
+06-08 23:30:29.099 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.099 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555409597 for FFmpeg
+06-08 23:30:29.116 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.117 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555441597 for FFmpeg
+06-08 23:30:29.155 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.156 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555473597 for FFmpeg
+06-08 23:30:29.196 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.196 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555505597 for FFmpeg
+06-08 23:30:29.214 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.221 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555537597 for FFmpeg
+06-08 23:30:29.257 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.258 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555569597 for FFmpeg
+06-08 23:30:29.274 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.274 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555601597 for FFmpeg
+06-08 23:30:29.321 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.321 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555633597 for FFmpeg
+06-08 23:30:29.355 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.355 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555665597 for FFmpeg
+06-08 23:30:29.374 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.374 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555697597 for FFmpeg
+06-08 23:30:29.419 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.419 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555729597 for FFmpeg
+06-08 23:30:29.434 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.434 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555761597 for FFmpeg
+06-08 23:30:29.475 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.475 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555793597 for FFmpeg
+06-08 23:30:29.515 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.515 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555825597 for FFmpeg
+06-08 23:30:29.533 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.533 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555857597 for FFmpeg
+06-08 23:30:29.578 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.578 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555889597 for FFmpeg
+06-08 23:30:29.596 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.596 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555921597 for FFmpeg
+06-08 23:30:29.637 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.638 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555953597 for FFmpeg
+06-08 23:30:29.674 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.674 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150555985597 for FFmpeg
+06-08 23:30:29.693 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.693 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556017597 for FFmpeg
+06-08 23:30:29.745 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.747 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556049597 for FFmpeg
+06-08 23:30:29.756 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.757 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556081597 for FFmpeg
+06-08 23:30:29.794 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.794 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556113597 for FFmpeg
+06-08 23:30:29.836 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.836 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556145597 for FFmpeg
+06-08 23:30:29.853 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.853 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556177597 for FFmpeg
+06-08 23:30:29.896 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.897 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556209597 for FFmpeg
+06-08 23:30:29.916 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.917 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556241597 for FFmpeg
+06-08 23:30:29.955 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.955 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556273597 for FFmpeg
+06-08 23:30:29.959 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:29.959 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556305597 for FFmpeg
+06-08 23:30:30.014 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.015 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556337597 for FFmpeg
+06-08 23:30:30.056 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.057 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556369597 for FFmpeg
+06-08 23:30:30.075 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.076 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556401597 for FFmpeg
+06-08 23:30:30.114 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.114 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556433597 for FFmpeg
+06-08 23:30:30.154 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.154 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556465597 for FFmpeg
+06-08 23:30:30.173 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.173 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556497597 for FFmpeg
+06-08 23:30:30.217 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.218 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556529597 for FFmpeg
+06-08 23:30:30.233 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.234 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556561597 for FFmpeg
+06-08 23:30:30.268   565   642 E WifiVendorHal: getWifiLinkLayerStats_1_3_Internal(l.978) failed {.code = ERROR_UNKNOWN, .description = unknown}
+06-08 23:30:30.273 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.273 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556593597 for FFmpeg
+06-08 23:30:30.305   565  1629 E WifiService: Permission violation - getConfiguredNetworks not allowed for uid=10042, packageName=com.google.android.tvrecommendations, reason=java.lang.SecurityException: UID 10042 has no location permission
+06-08 23:30:30.313 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.313 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556625597 for FFmpeg
+06-08 23:30:30.333 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.333 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556657597 for FFmpeg
+06-08 23:30:30.375 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.375 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556689597 for FFmpeg
+06-08 23:30:30.398 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.398 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556721597 for FFmpeg
+06-08 23:30:30.419 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.420 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556753597 for FFmpeg
+06-08 23:30:30.477 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.477 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556785597 for FFmpeg
+06-08 23:30:30.495 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.495 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556817597 for FFmpeg
+06-08 23:30:30.534 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.534 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556849597 for FFmpeg
+06-08 23:30:30.557 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.558 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556881597 for FFmpeg
+06-08 23:30:30.593 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.593 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556913597 for FFmpeg
+06-08 23:30:30.637 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.638 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556945597 for FFmpeg
+06-08 23:30:30.653 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.653 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150556977597 for FFmpeg
+06-08 23:30:30.693 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.693 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557009597 for FFmpeg
+06-08 23:30:30.713 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.714 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557041597 for FFmpeg
+06-08 23:30:30.755 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.755 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557073597 for FFmpeg
+06-08 23:30:30.797 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.797 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557105597 for FFmpeg
+06-08 23:30:30.820 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.820 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557137597 for FFmpeg
+06-08 23:30:30.856 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.856 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557169597 for FFmpeg
+06-08 23:30:30.876 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.876 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557201597 for FFmpeg
+06-08 23:30:30.917 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.919 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557233597 for FFmpeg
+06-08 23:30:30.964 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.965 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557265597 for FFmpeg
+06-08 23:30:30.972 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:30.973 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557297597 for FFmpeg
+06-08 23:30:31.015 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:31.015 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557329597 for FFmpeg
+06-08 23:30:31.034 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:31.034 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557361597 for FFmpeg
+06-08 23:30:31.073 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:31.073 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557393597 for FFmpeg
+06-08 23:30:31.123 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:31.123 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557425597 for FFmpeg
+06-08 23:30:31.137 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:31.138 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557457597 for FFmpeg
+06-08 23:30:31.175 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:31.175 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557489597 for FFmpeg
+06-08 23:30:31.194 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:31.194 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557521597 for FFmpeg
+06-08 23:30:31.234 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:31.235 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557553597 for FFmpeg
+06-08 23:30:31.274 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:31.274 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557585597 for FFmpeg
+06-08 23:30:31.292 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:31.292 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557617597 for FFmpeg
+06-08 23:30:31.333 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:31.333 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557649597 for FFmpeg
+06-08 23:30:31.353 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Timestamp conversion failed (delay 3000000, buffering 100000, bound 3000000)
+06-08 23:30:31.353 18009 18535 E VLC     : [e909b400/4867] libvlc decoder: Could not convert timestamp 150557681597 for FFmpeg

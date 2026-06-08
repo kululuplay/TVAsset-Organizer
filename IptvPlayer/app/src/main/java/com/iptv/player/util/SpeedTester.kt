@@ -62,8 +62,19 @@ object SpeedTester {
             .build()
     }
 
-    suspend fun measureMbps(onProgress: (Double) -> Unit): Double {
-        for (url in DOWNLOAD_URLS) {
+    /**
+     * Runs the test against the public CDN mirrors first (true unthrottled line
+     * speed), then against any [fallbackUrls] — typically the customer's own IPTV
+     * portal. Many IPTV boxes sit on locked-down networks that only whitelist the
+     * portal host, so every public mirror is unreachable and the test would show
+     * a bare failure; the portal is the one endpoint guaranteed to be reachable
+     * (their streams play), so it keeps the test from erroring out entirely.
+     */
+    suspend fun measureMbps(
+        fallbackUrls: List<String> = emptyList(),
+        onProgress: (Double) -> Unit
+    ): Double {
+        for (url in DOWNLOAD_URLS + fallbackUrls) {
             val mbps = measureFrom(url, onProgress)
             if (mbps >= 0) return mbps
         }
@@ -74,10 +85,19 @@ object SpeedTester {
         url: String,
         onProgress: (Double) -> Unit
     ): Double = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", BROWSER_USER_AGENT)
-            .build()
+        // Guard request construction: Request.Builder().url(String) throws on a
+        // malformed URL, so a bad fallback target must fail this attempt (-> try
+        // the next one) rather than crash the whole coroutine.
+        val request = try {
+            Request.Builder()
+                .url(url)
+                .header("User-Agent", BROWSER_USER_AGENT)
+                .build()
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (_: Throwable) {
+            return@withContext -1.0
+        }
         val call = speedClient.newCall(request)
 
         // Tie the blocking OkHttp call to the coroutine lifecycle: if the coroutine
