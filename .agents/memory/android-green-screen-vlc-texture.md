@@ -38,12 +38,28 @@ options on top of it. When in doubt, restore the baseline decode/display config:
 3a. **ExoPlayer/Media3 is the primary HW-green candidate on Amlogic.** ExoPlayer
    hands the SurfaceView straight to MediaCodec (decode → underlay), which is the
    box's native HW-video pipeline and is exactly what greens under libVLC's
-   `android_display` vout. So when libVLC HW greens, route to ExoPlayer instead of
-   SOFTWARE (which stutters on weak sticks). Selectable via Settings → Player Mode →
-   ExoPlayer. **Routing trap fixed:** `initialStage()` now checks
-   `PlayerMode.EXOPLAYER` BEFORE the `DecoderMode.SOFTWARE` default — otherwise the
-   Software default short-circuited to `VLC_SW` and ExoPlayer was never reachable.
-   Pending real-stick result: does ExoPlayer show real video (no green) on Xiaomi?
+   `android_display` vout. Real-stick result (Xiaomi, decoder=HARDWARE): libVLC HW
+   = green from the start (its vout never reaches the underlay); ExoPlayer HW =
+   REAL VIDEO for ~1s, then drops to green. So ExoPlayer is the right engine — the
+   first frames PROVE the surface/underlay wiring works; only the ~1s drop must be
+   fixed. Route to ExoPlayer when libVLC HW greens, not SOFTWARE (which stutters).
+   **Routing trap fixed:** `initialStage()` now checks `PlayerMode.EXOPLAYER`
+   BEFORE the `DecoderMode.SOFTWARE` default — otherwise the Software default
+   short-circuited to `VLC_SW` and ExoPlayer was never reachable.
+3b. **ExoPlayer "1 second then green" = SurfaceView resize-recreate (prime
+   suspect).** PlayerView's default `resize_mode=fit` resizes the SurfaceView when
+   the video size arrives (~1s after first frames) to honour aspect ratio; a
+   SurfaceView bounds change tears down + recreates its surface, and the Amlogic
+   compositor greens the freshly-created surface — same root cause as the EXO→VLC
+   swap green, just self-inflicted by the aspect relayout. Fix: `resize_mode=fill`
+   in `view_exo_player.xml` keeps the surface at a CONSTANT size (created once).
+   Tradeoff: fill ignores aspect (16:9-on-16:9 is fine; SD 4:3 stretches). Added
+   `onVideoSizeChanged`/`onSurfaceSizeChanged`/`onRenderedFirstFrame` +
+   AnalyticsListener (decoder name, input format, dropped frames, codec error)
+   logging to confirm from the next log whether it's the resize, interlaced field
+   decoding, or a decoder error. **If fill does NOT stop the green**, the log will
+   show a codec error / dropped-frame burst at the drop = interlaced HW-decode
+   fault, not the surface.
 4. **No deinterlace on the hardware path.** Software deinterlace (yadif/bob) can't
    touch opaque HW buffers; the Amlogic chip deinterlaces 1080i natively. Only add
    `--deinterlace=1` + `bob` when `forceSoftware` (raw I420) — and even that is

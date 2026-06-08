@@ -3,7 +3,13 @@
      hardware-decoded video on Amlogic (and most Android TV) SoCs is composited
      on a dedicated UNDERLAY video plane below the app surface. A TextureView
      CANNOT display that underlay and guarantees a green/black frame with audio
-     on real sticks, so SurfaceView is required. -->
+     on real sticks, so SurfaceView is required.
+
+     resize_mode="fill" keeps the SurfaceView at a constant size. With "fit", a
+     video-size change drives an aspect relayout that RESIZES the SurfaceView,
+     which tears down and recreates its surface ~1s into playback -> the Amlogic
+     compositor greens the freshly-created surface (real video shows for ~1s
+     first). fill ignores aspect so the surface is created once and kept. -->
 <androidx.media3.ui.PlayerView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -11,4 +17,4 @@
     android:layout_height="match_parent"
     app:surface_type="surface_view"
     app:use_controller="false"
-    app:resize_mode="fit" />
+    app:resize_mode="fill" />

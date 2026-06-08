@@ -1,0 +1,15 @@
+New test results pinpoint the cause. On the Xiaomi Amlogic stick, HARDWARE decode:
+
+libVLC + Hardware → green screen from the start, audio works. libVLC's video output never lands on the Amlogic underlay plane.
+ExoPlayer + Hardware → real video for ~1 second, then drops to green screen.
+
+The ExoPlayer result is the key: it PROVES hardware decode + SurfaceView + the Amlogic underlay plane CAN display real video (the first frames show). So the problem is no longer surface/output wiring — it is what happens ~1 second in. This "1 second of video then green" pattern on Amlogic almost always means the content is INTERLACED (1080i) and the decoder/compositor fails once it moves past the initial keyframes into interlaced field decoding. The logs confirm is interlaced. Fix in this priority:
+1. Focus on ExoPlayer (it's the one that can show video) — handle interlaced content.
+
+Ensure ExoPlayer/Media3 is configured to handle interlaced 1080i streams. Enable decoder fallback (setEnableDecoderFallback(true)) and make sure video tunneling is DISABLED (tunneling frequently causes the "1 second then green/black" failure on Amlogic with interlaced TS streams).
+Verify the SurfaceView output is stable and not being re-created/re-attached ~1s in (a surface re-creation right after start would also cause the drop). Attach the surface once and keep it.
+If Amlogic's hardware deinterlacer is the thing crashing, test forcing progressive output / a different decoder, or letting the Amlogic decoder handle deinterlace via its standard MediaCodec path without extra processing.
+
+2. For libVLC + Hardware (green from start): the android_display vout is not reaching the underlay plane on Amlogic. Try enabling libVLC deinterlace for interlaced streams (--deinterlace=1, mode bob which is lighter than yadif), and confirm MediaCodec direct rendering is actually active. But since ExoPlayer already shows frames and libVLC shows none, ExoPlayer is the more promising engine on Amlogic — prioritize making ExoPlayer stable over fixing libVLC here.
+3. Capture a fresh device log during the ExoPlayer test, specifically the moment it drops to green (~1s in). Log ExoPlayer onPlayerError, onVideoSizeChanged, onRenderedFirstFrame, and any MediaCodec/surface events around that 1-second mark, so we can confirm whether it's interlaced field decoding, a surface re-creation, or a decoder error.
+GOAL: ExoPlayer + Hardware shows continuous real video on the Xiaomi Amlogic stick (not just 1 second). Report whether disabling tunneling / enabling deinterlace stops the drop to green.

@@ -12,9 +12,12 @@
  *     controller can fall back to libVLC (software PCM decode).
  *   - Video uses a SurfaceView (required: Amlogic and most TV SoCs composite
  *     hardware-decoded frames on an underlay plane a TextureView cannot show,
- *     which is the real green-screen cause). Decoder fallback + disabled
- *     tunneling guard the decode path; if no first frame arrives after READY
- *     the decoder is stuck -> onVideoInvalid -> libVLC software fallback.
+ *     which is the real green-screen cause). The PlayerView uses resize_mode=fill
+ *     so the SurfaceView stays at a CONSTANT size: a video-size-driven aspect
+ *     relayout would otherwise resize the SurfaceView, tearing down + recreating
+ *     its surface ~1s in and greening the new surface on Amlogic. Decoder fallback
+ *     + disabled tunneling guard the decode path; if no first frame arrives after
+ *     READY the decoder is stuck -> onVideoInvalid -> libVLC software fallback.
  */
 package com.iptv.player.player
 
@@ -24,14 +27,18 @@ import android.os.Looper
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
+import androidx.media3.common.VideoSize
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
@@ -117,11 +124,71 @@ class ExoPlayerEngine(
 
             override fun onRenderedFirstFrame() {
                 firstFrameRendered = true
+                PlaybackLog.log(context, engineName, "onRenderedFirstFrame")
+            }
+
+            // Amlogic "1 second then green" tracing. A video-size change drives
+            // PlayerView's aspect relayout; with resize_mode=fit that RESIZES the
+            // SurfaceView, tearing down + recreating its surface so the compositor
+            // greens the new one. resize_mode=fill now keeps the surface constant —
+            // these two logs confirm whether any resize still slips through.
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                PlaybackLog.log(
+                    context, engineName,
+                    "onVideoSizeChanged ${videoSize.width}x${videoSize.height} " +
+                        "par=${videoSize.pixelWidthHeightRatio}"
+                )
+            }
+
+            override fun onSurfaceSizeChanged(width: Int, height: Int) {
+                PlaybackLog.log(context, engineName, "onSurfaceSizeChanged ${width}x$height")
             }
 
             override fun onPlayerError(error: PlaybackException) {
                 PlaybackLog.log(context, engineName, "onPlayerError ${error.errorCodeName}")
                 listener?.onError(error.errorCodeName)
+            }
+        })
+
+        // Decoder/codec tracing so the next on-device log pins the ~1s drop:
+        // decoder name, the (interlaced?) input format, dropped-frame bursts and
+        // any codec error distinguish interlaced field decoding from a surface
+        // recreation from a decoder error.
+        exo.addAnalyticsListener(object : AnalyticsListener {
+            override fun onVideoDecoderInitialized(
+                eventTime: AnalyticsListener.EventTime,
+                decoderName: String,
+                initializedTimestampMs: Long,
+                initializationDurationMs: Long
+            ) {
+                PlaybackLog.log(context, engineName, "videoDecoder=$decoderName")
+            }
+
+            override fun onVideoInputFormatChanged(
+                eventTime: AnalyticsListener.EventTime,
+                format: Format,
+                decoderReuseEvaluation: DecoderReuseEvaluation?
+            ) {
+                PlaybackLog.log(
+                    context, engineName,
+                    "videoInputFormat ${format.width}x${format.height} " +
+                        "${format.sampleMimeType} fps=${format.frameRate}"
+                )
+            }
+
+            override fun onDroppedVideoFrames(
+                eventTime: AnalyticsListener.EventTime,
+                droppedFrames: Int,
+                elapsedMs: Long
+            ) {
+                PlaybackLog.log(context, engineName, "droppedVideoFrames=$droppedFrames/${elapsedMs}ms")
+            }
+
+            override fun onVideoCodecError(
+                eventTime: AnalyticsListener.EventTime,
+                videoCodecError: Exception
+            ) {
+                PlaybackLog.log(context, engineName, "videoCodecError ${videoCodecError.message}")
             }
         })
 
