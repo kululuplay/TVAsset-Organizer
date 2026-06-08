@@ -114,8 +114,21 @@ class VlcPlayerEngine(
             "--http-user-agent=${AppInfo.USER_AGENT}"
         )
         // Default = decode audio to PCM (no passthrough). Disable SPDIF so AC-3/
-        // E-AC-3/DTS are software-decoded to stereo PCM that any HDMI sink plays.
-        if (!allowPassthrough) options.add("--no-spdif")
+        // E-AC-3/DTS are software-decoded to PCM that any HDMI sink plays, and
+        // force a STEREO downmix so the output is 2.0.
+        //
+        // Field log (Amlogic box, 4K HEVC channel): the audio was 5.1 (6-channel,
+        // AudioTrack channelMask 0x3f). The AudioTrack output could not open a
+        // 6-channel PCM track ("too low audio sample frequency (0)" then "module
+        // not functional"), so the 4K video played but there was NO sound. libVLC
+        // raises no error for an audio-only output failure, so the controller's
+        // fallback ladder never fires and the stream stays silent. Requesting
+        // stereo makes libVLC downmix 5.1 -> 2.0 PCM that the box's AudioTrack
+        // accepts; genuinely-stereo channels are unaffected (already 2.0).
+        if (!allowPassthrough) {
+            options.add("--no-spdif")
+            options.add("--stereo-mode=1")
+        }
         // Deinterlace ONLY on the software path. On the hardware path the Amlogic
         // decoder outputs OPAQUE MediaCodec buffers (VLC logs "output: 17 unknown")
         // and deinterlaces interlaced (1080i) content natively on its underlay
@@ -298,7 +311,12 @@ class VlcPlayerEngine(
             addOption(":clock-jitter=0")
             addOption(":clock-synchro=0")
             if (forceSoftware) addOption(":avcodec-hw=none")
-            if (!allowPassthrough) addOption(":no-spdif")
+            if (!allowPassthrough) {
+                addOption(":no-spdif")
+                // Force a 5.1 -> 2.0 stereo downmix (mirrors the instance option) so
+                // boxes that can't open a 6-channel PCM AudioTrack still get sound.
+                addOption(":stereo-mode=1")
+            }
             // Software-path deinterlace only (opaque HW buffers can't be filtered
             // and the Amlogic HW decoder deinterlaces 1080i natively).
             if (forceSoftware) {

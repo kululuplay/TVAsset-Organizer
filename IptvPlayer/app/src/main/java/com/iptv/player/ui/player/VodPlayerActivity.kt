@@ -301,8 +301,14 @@ class VodPlayerActivity : BaseActivity() {
             "--avcodec-skiploopfilter=nonref",
             "--avcodec-fast",
             // Decode audio to PCM (no SPDIF/passthrough) so AC-3/E-AC-3/DTS are
-            // always audible on plain HDMI sinks.
+            // always audible on plain HDMI sinks, and force a STEREO downmix so the
+            // output is 2.0. Some boxes (e.g. Amlogic) can't open a 6-channel PCM
+            // AudioTrack for 5.1 content ("too low audio sample frequency (0)" /
+            // "module not functional") and play picture with no sound; downmixing
+            // 5.1 -> 2.0 fixes it and leaves stereo content unchanged. Mirrors
+            // VlcPlayerEngine.
             "--no-spdif",
+            "--stereo-mode=1",
             "--http-reconnect",
             "--http-user-agent=${AppInfo.USER_AGENT}"
         )
@@ -416,6 +422,9 @@ class VodPlayerActivity : BaseActivity() {
             addOption(":clock-synchro=0")
             if (forceSoftware) addOption(":avcodec-hw=none")
             addOption(":no-spdif")
+            // Force a 5.1 -> 2.0 stereo downmix (mirrors the instance option) so
+            // boxes that can't open a 6-channel PCM AudioTrack still get sound.
+            addOption(":stereo-mode=1")
             if (forceSoftware) {
                 addOption(":deinterlace=1")
                 addOption(":deinterlace-mode=bob")
