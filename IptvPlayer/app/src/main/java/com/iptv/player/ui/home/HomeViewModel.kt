@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -78,7 +79,10 @@ class HomeViewModel(private val radio: Boolean = false) : ViewModel() {
         ) { catId, favIds -> catId to favIds.map { it.id }.toSet() }
             .flatMapLatest { (catId, favSet) ->
                 val source: Flow<List<Channel>> = when (catId) {
-                    null -> repo.observeChannels(ContentType.LIVE, radio = radio)
+                    // Pre-selection startup state: emit nothing rather than loading the
+                    // entire LIVE catalog, which the initial category selection replaces
+                    // a moment later anyway (avoids a big throwaway list on big catalogs).
+                    null -> flowOf(emptyList())
                     // Favorites/Recent are cross-section; keep radios off the Live
                     // TV page (these synthetic rows only ever show in live mode).
                     CAT_FAVORITES -> repo.observeFavorites().map { it.filterNot { c -> c.isRadio } }

@@ -35,3 +35,4 @@
 - [Stream format / buffer / diagnostics settings](stream-format-buffer-diagnostics.md) — live format = play-time URL rewrite (split off query/fragment first); BufferMode carries per-engine values; VLC codec needs Any? helper.
 - [UHD/4K decode routing](uhd-4k-decode-routing.md) — 4K can't software-decode; escalate UHD(≥1440p) to HW on both live+VOD; green downgrade must exclude UHD.
 - [VLC live-TS fps populates late](vlc-live-fps-late-populate.md) — frameRate is 0 on the first Playing/Vout; fps-gated green-prone routing must re-check (delayed + Buffering-100%) with an AtomicBoolean one-shot, else 1080p50 greens on HW.
+- [Parental gate covers metadata](parental-gate-covers-metadata.md) — PIN-gating playback isn't enough; focus/auto-preview panels leak locked category name/logo/EPG — gate the metadata render too.

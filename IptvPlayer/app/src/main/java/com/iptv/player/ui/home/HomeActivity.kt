@@ -91,6 +91,13 @@ class HomeActivity : BaseActivity() {
 
         /** How often the preview's "now playing" program + EPG dots roll over. */
         private const val NOW_NEXT_REFRESH_MS = 30_000L
+
+        /**
+         * Debounce window before a focus-driven EPG fetch actually runs. Fast D-pad
+         * scrolling cancels the in-flight (delayed) job before it hits the provider,
+         * so only the channel the user settles on triggers a guide fetch.
+         */
+        private const val EPG_DEBOUNCE_MS = 200L
     }
 
     private val zap by lazy {
@@ -283,7 +290,12 @@ class HomeActivity : BaseActivity() {
                             // of the focused category (like the reference design).
                             if (!inChannelView) {
                                 val first = channels.firstOrNull()
-                                if (first != null) showInfo(first) else clearPreview()
+                                // Don't auto-preview a locked adult category's first
+                                // channel: that would leak its name/logo/EPG before the
+                                // PIN is entered. Only metadata is gated here; playback
+                                // is already guarded in drillIntoCategory/openPlayer.
+                                if (first != null && !isCurrentCategoryLocked()) showInfo(first)
+                                else clearPreview()
                             }
                         }
                         binding.emptyState.visibility =
@@ -321,6 +333,9 @@ class HomeActivity : BaseActivity() {
     private val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
 
     private fun showInfo(channel: Channel) {
+        // Re-selecting the channel already shown (e.g. the list re-emits on a favorite
+        // toggle, or a refocus) shouldn't re-fetch its guide or rebuild the panel.
+        if (channel.id == currentInfoChannel?.id && currentPrograms.isNotEmpty()) return
         // Never let the preview video keep playing a channel the info panel has
         // moved off of; preview only survives while we stay on its own channel.
         if (previewingChannelId != null && previewingChannelId != channel.id) {
@@ -351,6 +366,9 @@ class HomeActivity : BaseActivity() {
         nowNextJob?.cancel()
         nowNextJob = lifecycleScope.launch {
             try {
+                // Debounce: rapid D-pad scrolling cancels this before the fetch fires,
+                // so only the channel the user settles on hits the provider/Room.
+                delay(EPG_DEBOUNCE_MS)
                 val programs = viewModel.programs(channel)
                 currentPrograms = programs
                 val now = System.currentTimeMillis()
@@ -404,6 +422,16 @@ class HomeActivity : BaseActivity() {
             "${timeFmt.format(Date(it.startMs))} - ${timeFmt.format(Date(it.stopMs))}  ${it.title}"
         } ?: ""
         epgAdapter.refreshLiveState()
+    }
+
+    /**
+     * True when the currently focused category is a locked (adult, not-yet-unlocked)
+     * folder, so the right-pane preview/EPG must stay masked until the PIN is entered.
+     */
+    private fun isCurrentCategoryLocked(): Boolean {
+        val cat = categoryAdapter.currentList.firstOrNull { it.id == lastSelectedCategoryId }
+            ?: return false
+        return cat.isAdult() && cat.id !in unlockedCategories
     }
 
     /**
@@ -546,6 +574,8 @@ class HomeActivity : BaseActivity() {
     override fun onStop() {
         super.onStop()
         stopPreview()
+        // Stop any in-flight EPG fetch so the guide isn't loaded off-screen.
+        nowNextJob?.cancel()
         // Drop any pending number-zap commit so a delayed lookup can't launch the
         // player after we've left the screen (and to release the buffer/refs).
         zap.cancel()
