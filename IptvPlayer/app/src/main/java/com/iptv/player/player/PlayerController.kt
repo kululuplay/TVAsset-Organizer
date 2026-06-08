@@ -90,9 +90,29 @@ class PlayerController(
         // Cancel any pending retry from a previous stream so zapping is clean.
         mainHandler.removeCallbacksAndMessages(null)
         currentUrl = url
-        triedStages.clear()
         retryCount = 0
-        stage = initialStage()
+        val initial = initialStage()
+
+        // Fast zap: when the next stream would start on the very same stage the
+        // current engine is already running, keep that engine alive and just swap
+        // the stream on it. This skips the full release + re-create of a fresh
+        // LibVLC/ExoPlayer instance AND the ENGINE_SWAP_DELAY_MS surface-handoff
+        // guard, so channel changes are near-instant — and because the SurfaceView
+        // is retained (no teardown), it sidesteps the swap-gap green frame too.
+        // Only the steady state qualifies: if the current stream had already
+        // fallen back to a different stage, drop through to a clean restart so the
+        // new channel still gets the full hardware-first fallback ladder.
+        val reusable = engine
+        if (reusable != null && stage == initial) {
+            triedStages.clear()
+            triedStages.add(initial)
+            PlaybackLog.log(context, "Controller", "fast-zap reuse stage=$initial")
+            reusable.play(url)
+            return
+        }
+
+        triedStages.clear()
+        stage = initial
         PlaybackLog.log(context, "Controller", "play mode=$mode decoder=$decoderMode start=$stage")
         startStage(stage)
     }

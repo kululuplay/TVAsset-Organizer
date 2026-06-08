@@ -76,6 +76,13 @@ class VlcPlayerEngine(
     // we re-run the check a few times after start until fps is known.
     private val profileHandler = Handler(Looper.getMainLooper())
 
+    // Silent-audio self-heal. libVLC normally auto-selects an audio track, but a
+    // stream can come up with audio present yet NO track selected (audioTrack ==
+    // -1) -> picture, no sound, and libVLC raises no error for it. A short delay
+    // after Playing we re-select the first real audio track. One-shot per stream.
+    private val audioHandler = Handler(Looper.getMainLooper())
+    private var audioHealAttempted = false
+
     override fun bind(container: ViewGroup) {
         // Tuned for smooth IPTV on Android TV: a generous network buffer to
         // absorb jitter, plus options that keep playback real-time on weak
@@ -181,6 +188,7 @@ class VlcPlayerEngine(
                     listener?.onPlaying()
                     maybeRouteByProfile()
                     scheduleProfileRechecks()
+                    scheduleAudioCheck()
                 }
                 // Video output created => track dimensions/frame rate are populated;
                 // the most reliable point to read the profile and route the bad one
@@ -301,6 +309,15 @@ class VlcPlayerEngine(
         val mp = mediaPlayer ?: return
         greenCheckDone.set(false)
         profileHandler.removeCallbacksAndMessages(null)
+        // Reset the silent-audio guard and stop any stream still running on this
+        // engine. play() is now also the fast-zap reuse path — the controller keeps
+        // the engine alive across same-stage channel changes — so we must stop the
+        // previous media before swapping in the next (single-connection contract:
+        // one stream at a time, stop before start). On a freshly-bound engine this
+        // stop() is a harmless no-op.
+        audioHealAttempted = false
+        audioHandler.removeCallbacksAndMessages(null)
+        mp.stop()
         PlaybackLog.log(context, engineName, "play forceSoftware=$forceSoftware passthrough=$allowPassthrough")
         val media = Media(vlc, android.net.Uri.parse(url)).apply {
             // Hardware decoding unless software was forced (then both off).
@@ -333,15 +350,43 @@ class VlcPlayerEngine(
         mp.play()
     }
 
+    /**
+     * A short delay after playback starts, verify an audio track is actually
+     * selected. If the stream carries audio but none is selected (audioTrack ==
+     * -1), re-select the first real track so sound comes through. This is an
+     * in-engine self-heal: it never swaps engines, so it can't trade silence for
+     * a green screen on boxes where ExoPlayer can't show the underlay video. (The
+     * common 5.1-too-many-channels silence is handled separately by the forced
+     * stereo downmix in bind()/play().)
+     */
+    private fun scheduleAudioCheck() {
+        if (audioHealAttempted) return
+        audioHandler.removeCallbacksAndMessages(null)
+        audioHandler.postDelayed({ healSilentAudio() }, AUDIO_CHECK_DELAY_MS)
+    }
+
+    private fun healSilentAudio() {
+        if (audioHealAttempted) return
+        val mp = mediaPlayer ?: return
+        val firstReal = mp.audioTracks?.firstOrNull { it.id != -1 } ?: return
+        if (mp.audioTrack == -1) {
+            audioHealAttempted = true
+            PlaybackLog.log(context, engineName, "audio present but unselected -> selecting track ${firstReal.id}")
+            mp.audioTrack = firstReal.id
+        }
+    }
+
     override fun pause() { mediaPlayer?.pause() }
     override fun resume() { mediaPlayer?.play() }
     override fun stop() {
         profileHandler.removeCallbacksAndMessages(null)
+        audioHandler.removeCallbacksAndMessages(null)
         mediaPlayer?.stop()
     }
 
     override fun release() {
         profileHandler.removeCallbacksAndMessages(null)
+        audioHandler.removeCallbacksAndMessages(null)
         mediaPlayer?.setEventListener(null)
         mediaPlayer?.stop()
         mediaPlayer?.detachViews()
@@ -431,5 +476,8 @@ class VlcPlayerEngine(
         // TS often reports fps=0 on the first event, so we re-check until it
         // populates; the Buffering(100%) re-check covers any longer tail.
         private val PROFILE_RECHECK_DELAYS_MS = longArrayOf(700L, 1500L, 3000L, 5000L)
+
+        // Delay after Playing before checking that an audio track is selected.
+        private const val AUDIO_CHECK_DELAY_MS = 1500L
     }
 }
