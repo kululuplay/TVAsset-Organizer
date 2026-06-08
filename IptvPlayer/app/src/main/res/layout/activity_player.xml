@@ -40,22 +40,26 @@
     <!-- Zapping / info overlay -->
     <LinearLayout
         android:id="@+id/infoOverlay"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|start"
+        android:minHeight="@dimen/zap_banner_height"
+        android:layout_gravity="bottom"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:background="@drawable/bg_overlay"
-        android:layout_margin="@dimen/safe_area_v"
-        android:padding="@dimen/space_s"
+        android:background="@drawable/bg_zap_banner"
+        android:layout_marginStart="@dimen/safe_area_h"
+        android:layout_marginEnd="@dimen/safe_area_h"
+        android:layout_marginBottom="@dimen/safe_area_v"
+        android:paddingHorizontal="@dimen/space_m"
+        android:paddingVertical="@dimen/space_s"
         android:visibility="gone">
 
         <ImageView
             android:id="@+id/overlayLogo"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="@dimen/zap_banner_logo"
+            android:layout_height="@dimen/zap_banner_logo"
             android:scaleType="fitCenter"
-            android:layout_marginEnd="@dimen/space_s"
+            android:layout_marginEnd="@dimen/space_m"
             android:contentDescription="@string/now_playing" />
 
         <TextView
@@ -63,16 +67,16 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="@color/brand_pink"
-            android:textSize="@dimen/text_title"
+            android:textSize="@dimen/zap_text_number"
             android:textStyle="bold"
-            android:minWidth="40dp"
+            android:minWidth="@dimen/zap_number_min_width"
             android:gravity="center"
-            android:layout_marginEnd="@dimen/space_s" />
+            android:layout_marginEnd="@dimen/space_m" />
 
         <LinearLayout
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:maxWidth="520dp"
+            android:layout_weight="1"
             android:orientation="vertical">
 
             <TextView
@@ -80,7 +84,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_body"
+                android:textSize="@dimen/zap_text_title"
                 android:textStyle="bold"
                 android:maxLines="1"
                 android:ellipsize="end" />
@@ -90,7 +94,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_small"
+                android:textSize="@dimen/zap_text_secondary"
                 android:layout_marginTop="@dimen/space_xs" />
 
             <TextView
@@ -98,7 +102,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_small"
+                android:textSize="@dimen/zap_text_secondary"
                 android:maxLines="1"
                 android:ellipsize="end"
                 android:layout_marginTop="@dimen/space_xs"
@@ -109,7 +113,7 @@
                 android:id="@+id/epgProgress"
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
-                android:layout_height="4dp"
+                android:layout_height="@dimen/zap_progress_height"
                 android:max="100"
                 android:progressDrawable="@drawable/progress_now"
                 android:layout_marginTop="@dimen/space_xs"
@@ -130,7 +134,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="@color/text_secondary"
-                    android:textSize="@dimen/text_small" />
+                    android:textSize="@dimen/zap_text_secondary" />
 
                 <TextView
                     android:id="@+id/overlayRemain"
@@ -140,14 +144,14 @@
                     android:gravity="center"
                     android:textColor="@color/brand_pink"
                     android:textStyle="bold"
-                    android:textSize="@dimen/text_small" />
+                    android:textSize="@dimen/zap_text_secondary" />
 
                 <TextView
                     android:id="@+id/overlayEnd"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="@color/text_secondary"
-                    android:textSize="@dimen/text_small" />
+                    android:textSize="@dimen/zap_text_secondary" />
             </LinearLayout>
 
             <TextView
@@ -155,7 +159,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_small"
+                android:textSize="@dimen/zap_text_secondary"
                 android:maxLines="1"
                 android:ellipsize="end"
                 android:layout_marginTop="@dimen/space_xs"

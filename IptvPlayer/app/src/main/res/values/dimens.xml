@@ -60,4 +60,15 @@
     <dimen name="epg_row_height">64dp</dimen>
     <dimen name="epg_channel_col">220dp</dimen>
     <dimen name="epg_minute_width">6dp</dimen>
+
+    <!-- Channel info / zap banner (bottom overlay shown on channel change).
+         Reference 1920x1080 = 960x540dp; all values dp/sp. Side safe margin uses
+         safe_area_h (48dp), bottom uses safe_area_v (27dp). -->
+    <dimen name="zap_banner_height">120dp</dimen>
+    <dimen name="zap_banner_logo">64dp</dimen>
+    <dimen name="zap_number_min_width">40dp</dimen>
+    <dimen name="zap_progress_height">4dp</dimen>
+    <dimen name="zap_text_title">24sp</dimen>
+    <dimen name="zap_text_number">20sp</dimen>
+    <dimen name="zap_text_secondary">16sp</dimen>
 </resources>

@@ -1,0 +1,64 @@
+You are working on an existing Android TV (Leanback) app written in Kotlin.
+There is already a "channel info banner" (zap banner) that appears automatically at
+the bottom of the screen when the user changes channels and auto-dismisses after a
+few seconds. The component WORKS, but its dimensions and typography are wrong. Your
+ONLY job is to fix sizing/spacing/typography to match the spec below. Do NOT redesign
+the logic, do NOT rename things, do NOT change the channel-change or auto-dismiss flow.
+
+STEP 1 — Locate the component first
+- Find the existing zap/info banner layout and its view-holder/controller.
+  Likely files: a layout XML (e.g. view_channel_info_banner.xml) and a Kotlin class with
+  "Banner", "ChannelInfo", "Zap", or "Now/Next" in the name.
+- Before editing, print the file paths and the current dimension/text values you found,
+  so the change is traceable.
+
+DESIGN BASELINE
+- Reference resolution: 1920x1080 px, which Android TV treats as 960x540 dp (1dp ≈ 2px).
+- Use ONLY dp for sizes/spacing and sp for text. Never hardcode px.
+- Define all values as dimension resources in res/values/dimens.xml and reference them
+  from XML. Do not inline magic numbers.
+
+OVERSCAN SAFE AREA (mandatory)
+- Horizontal margin from screen edges: 48dp
+- Vertical margin from screen edges: 27dp
+- The banner sits at the bottom, so it must have 27dp margin from the bottom edge and
+  48dp from left and right edges. Content must never touch screen edges.
+
+BANNER CONTAINER
+- Anchored to bottom, full available width inside safe area (≈ 864dp wide).
+- Height: bottom 18–25% of screen → target 120dp (range 110–135dp). Use 120dp.
+- This is a SINGLE-ROW info banner: NO horizontal card list, NO scrolling, NO grid.
+- Background: vertical gradient, opaque black ~80% at the bottom fading to transparent
+  at the top, so text stays readable over live video.
+
+CONTENT LAYOUT (left to right, single row)
+- Channel number + channel logo on the left.
+  - Logo target box: 64dp x 64dp.
+  - Channel number text: 20sp, bold.
+- Middle/main column:
+  - Current program title: 24sp, bold, max 1 line with ellipsize=end.
+  - Time range + "Now" label (e.g. "20:00 – 21:00 • Now"): 16sp.
+  - Progress bar showing elapsed time of current program: height 4–6dp (use 4dp),
+    full width of this column.
+- "Next" info: e.g. "Next: <program name>" at 14–16sp (use 16sp), single line, ellipsized.
+
+TYPOGRAPHY RULES
+- Minimum text size anywhere in this banner is 12sp. Nothing smaller.
+- Keep existing fonts/colors unless they break contrast over the gradient.
+
+BEHAVIOR — DO NOT BREAK
+- Keep the existing auto-appear-on-channel-change behavior.
+- Keep auto-dismiss; if a timeout exists keep it (target 4–5s). Do not add card focus or
+  D-pad navigation inside this banner — it is non-interactive info only.
+- Do not interfere with the video playback surface behind it.
+
+ACCEPTANCE CRITERIA
+- All sizes come from dimens.xml in dp/sp; no hardcoded px remain in this component.
+- Banner height ≈ 120dp, anchored bottom, 48dp side / 27dp bottom safe margins.
+- Logo 64dp box, title 24sp bold, secondary 16sp, next 16sp, progress bar 4dp.
+- Single row, no scrolling list, gradient background present.
+- Renders correctly without clipping at 1080p; verify it also scales on 720p and 4K
+  because values are dp-based.
+- Channel-change trigger and auto-dismiss still work exactly as before.
+
+After implementing, show me a diff of the changed files and the final dimens.xml entries.
