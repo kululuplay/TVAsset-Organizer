@@ -16,27 +16,34 @@ options on top of it. When in doubt, restore the baseline decode/display config:
    - libVLC: `mp.attachViews(layout, null, subtitles, /*useTextureView=*/false)`.
    - ExoPlayer: `view_exo_player.xml` `app:surface_type="surface_view"`.
    A TextureView cannot show the Amlogic underlay plane → green/black + audio.
-2. **Direct rendering OFF.** Keep `--no-mediacodec-dr` + `--no-omxil-dr` (the
-   baseline had them). VLC then reads decoded frames into its own pictures and
-   renders via the `android_display` vout onto the SurfaceView.
-   **Why:** the OPPOSITE (DR on / opaque direct render) FROZE on this Amlogic box
-   — VLC logged `libvlc decoder: output: 17 unknown` then
-   `libvlc decoder: dequeue_in timeout: no input available for 2secs` (frozen
-   video, audio kept playing). A 1.1.x build that turned DR ON regressed this; the
-   1.1.0/1.1.1 comment claiming "DR-off reintroduces green (A/B-confirmed)" was
-   WRONG — that earlier green was the TextureView, not DR.
-3. **Display chroma: RV32 froze, RV16 is the current green fix (UNVERIFIED).**
-   Forcing `--android-display-chroma=RV32` pushed VLC onto an unrecognized
-   byte-buffer format (`output: 17 unknown`) + `dequeue_in timeout` freeze — do
-   NOT use RV32. BUT a device that decodes a HEALTHY frame and still greens (luma
-   ghost, wrong chroma) is a compositor NV12-plane fault, NOT decode/surface/window
-   (those logs are byte-identical to sticks that show video — see below). The only
-   lever that targets the plane is forcing the `android_display` vout to convert to
-   packed RGB. So the HW path now sets `--android-display-chroma=RV16` (lighter than
-   RV32; only valid because DR is OFF so frames are non-opaque). This is an
-   EXPERIMENT pending real-stick confirmation (green gone on Xiaomi AND no freeze on
-   the working Firestick, since the HW config is shared and untestable here). If
-   RV16 also freezes/greens, the proven-safe answer remains SOFTWARE decode.
+2. **libVLC direct rendering — history is contradictory; DR is now ON on the HW
+   path.** The v1.0.1 baseline had `--no-mediacodec-dr` + `--no-omxil-dr` (DR off),
+   and DR-on once FROZE this box (`output: 17 unknown` → `dequeue_in timeout`). BUT
+   DR-off greens on the Xiaomi compositor (see #3), and the freeze was observed
+   *with a forced display chroma also set*. Current direction: drop the chroma
+   override AND remove the no-dr flags so the Amlogic decoder renders straight onto
+   the SurfaceView underlay (its native HW path). `forceSoftware` sets
+   `avcodec-hw=none`, so DR is irrelevant on the software path. **If DR-on freezes
+   again** (watch for `output: 17 unknown` + `dequeue_in timeout`), libVLC HW is a
+   dead end on this box → rely on ExoPlayer (#3a) or SOFTWARE decode.
+3. **Display-chroma override (RV16/RV32) is a DEAD END for HW decode — CONFIRMED.**
+   On HARDWARE/MediaCodec decode the frames are opaque native buffers the Amlogic
+   compositor paints directly onto its video underlay plane; `--android-display-chroma`
+   only affects libVLC's own `android_display` vout, which never touches those
+   buffers. Real-stick log (Xiaomi, decoder=HARDWARE) with `--android-display-chroma=RV16`
+   set: output STAYED `output: 21 Biplanar 4:2:0 Y/UV` (1920x1080 + 720x576) — the
+   override had ZERO effect and the screen stayed green. RV32 additionally froze
+   (`output: 17 unknown`). Both removed. Do not reach for a chroma override to fix a
+   HW-decode green again.
+3a. **ExoPlayer/Media3 is the primary HW-green candidate on Amlogic.** ExoPlayer
+   hands the SurfaceView straight to MediaCodec (decode → underlay), which is the
+   box's native HW-video pipeline and is exactly what greens under libVLC's
+   `android_display` vout. So when libVLC HW greens, route to ExoPlayer instead of
+   SOFTWARE (which stutters on weak sticks). Selectable via Settings → Player Mode →
+   ExoPlayer. **Routing trap fixed:** `initialStage()` now checks
+   `PlayerMode.EXOPLAYER` BEFORE the `DecoderMode.SOFTWARE` default — otherwise the
+   Software default short-circuited to `VLC_SW` and ExoPlayer was never reachable.
+   Pending real-stick result: does ExoPlayer show real video (no green) on Xiaomi?
 4. **No deinterlace on the hardware path.** Software deinterlace (yadif/bob) can't
    touch opaque HW buffers; the Amlogic chip deinterlaces 1080i natively. Only add
    `--deinterlace=1` + `bob` when `forceSoftware` (raw I420) — and even that is

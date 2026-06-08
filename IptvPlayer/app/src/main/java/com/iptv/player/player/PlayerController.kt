@@ -93,15 +93,16 @@ class PlayerController(
 
     /** First stage to try, given the engine choice and decoder strategy. */
     private fun initialStage(): Stage = when {
-        decoderMode == DecoderMode.SOFTWARE -> Stage.VLC_SW
-        // AUTO and VLC both start directly on libVLC hardware. Starting on
-        // ExoPlayer and then falling back to libVLC (e.g. for MP2/AC-3 audio Exo
-        // can't decode) forces an EXO -> VLC SurfaceView swap, after which the
-        // Amlogic HW video decoder paints a GREEN frame on the fresh surface.
-        // Software video avoids the green but stutters on 1080p, so the only path
-        // that is both green-free AND smooth is to never swap: begin on VLC_HW.
-        // ExoPlayer is used only when the user explicitly selects it.
+        // An explicit ExoPlayer choice wins over EVERYTHING — including the
+        // SOFTWARE decoder default — so the user can actually reach Media3's
+        // native MediaCodec -> SurfaceView path. On Amlogic boxes (e.g. Xiaomi
+        // Stick) libVLC's android_display vout greens the hardware underlay;
+        // ExoPlayer hands the SurfaceView straight to MediaCodec, which is the
+        // box's native hardware-video pipeline and often shows real video.
         mode == PlayerMode.EXOPLAYER -> Stage.EXO
+        // Otherwise honour the decoder strategy: Software forces libVLC software
+        // decode; AUTO/Hardware (and PlayerMode.VLC) start on libVLC hardware.
+        decoderMode == DecoderMode.SOFTWARE -> Stage.VLC_SW
         else -> Stage.VLC_HW
     }
 

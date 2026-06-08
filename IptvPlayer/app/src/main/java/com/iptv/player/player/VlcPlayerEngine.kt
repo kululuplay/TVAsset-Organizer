@@ -12,14 +12,15 @@
  *     = false) so libVLC's AWindow handler is fully wired and the Amlogic-style
  *     hardware underlay video plane can actually be shown. TextureView CANNOT
  *     display that underlay and guarantees a green frame on real sticks.
- *   - Direct rendering OFF (--no-mediacodec-dr / --no-omxil-dr) to match the
- *     known-good v1.0.1 baseline AND so VLC owns real (non-opaque) frames it can
- *     colour-convert. On the HARDWARE path we then force the android_display vout
- *     to a packed RGB chroma (RV16) to fix the Amlogic compositor green underlay;
- *     RV32 produced "output: 17 unknown" + a freeze on this build, so RV16 first.
- *     Do NOT turn DR back on while a display chroma is forced — opaque buffers
- *     can't be converted and the pipeline stalls. Software deinterlace is applied
- *     ONLY on the forceSoftware path. See the Amlogic green-screen memory note.
+ *   - MediaCodec direct rendering LEFT ON (libVLC default) on the hardware path so
+ *     the Amlogic decoder renders straight onto the SurfaceView underlay (its
+ *     native hardware-video path). The old DR-off + android_display vout path could
+ *     not colour-convert NV12 on the Xiaomi compositor and stayed GREEN; RV16/RV32
+ *     display-chroma overrides had ZERO effect (log still showed "output: 21
+ *     Biplanar", never converted), so they were dropped. ExoPlayer (Media3) is the
+ *     other native MediaCodec->Surface path and is selectable as the engine.
+ *     Software deinterlace applies ONLY on the forceSoftware path. See the Amlogic
+ *     green-screen memory note.
  *   - forceSoftware: disable MediaCodec entirely for streams where the hardware
  *     decoder produced a green/blank frame.
  */
@@ -69,17 +70,14 @@ class VlcPlayerEngine(
             "--clock-synchro=0",
             // Hardware decode unless we've been told to force software.
             if (forceSoftware) "--avcodec-hw=none" else "--avcodec-hw=any",
-            // Disable MediaCodec/OMX direct rendering — this matches the known-good
-            // v1.0.1 baseline. VLC reads decoded frames into its own pictures and
-            // renders them via the android_display vout onto the SurfaceView. The
-            // opaque direct-rendering path FROZE on this Amlogic box: VLC logged
-            // "output: 17 unknown" then "dequeue_in timeout: no input available"
-            // (= frozen video while audio kept playing). Keeping DR OFF also lets
-            // VLC own real frames so the hardware-path RV16 display-chroma override
-            // below can colour-convert them; a chroma override with DR ON stalls
-            // (opaque buffers can't be converted) -- which is what RV32 + DR did.
-            "--no-mediacodec-dr",
-            "--no-omxil-dr",
+            // MediaCodec/OMX direct rendering is LEFT ON (libVLC default) on the
+            // hardware path: the Amlogic decoder then renders frames straight onto
+            // the SurfaceView underlay plane, which is how the box natively shows
+            // hardware video. The previous DR-off + android_display vout path could
+            // not colour-convert NV12 on this compositor and stayed GREEN (RV16/RV32
+            // chroma overrides had ZERO effect -- the log still showed "output: 21
+            // Biplanar", never converted). forceSoftware uses avcodec-hw=none so DR
+            // is irrelevant there.
             // Cut decode load so cheap TV boxes keep up, WITHOUT wrecking image
             // quality. "skiploopfilter=all" dropped the H.264/H.265 deblocking
             // filter on EVERY frame, so block errors on reference frames piled up
@@ -107,23 +105,6 @@ class VlcPlayerEngine(
         if (forceSoftware) {
             options.add("--deinterlace=1")
             options.add("--deinterlace-mode=bob")
-        }
-        // Amlogic compositor green-screen fix (HARDWARE path only). On some boxes
-        // (e.g. Xiaomi Stick) the hardware decoder produces a healthy NV12 frame
-        // (libVLC logs "output: 21 Biplanar ... 1280x720") but the compositor greens
-        // the video underlay: the luma plane shows as a faint ghost while the chroma
-        // plane is wrong. Device logs prove decode, SurfaceView (mIsSurfacTexture 0)
-        // and the AWindow handler are all correct -- they are byte-for-byte identical
-        // to sticks that display video fine (same "window: request not implemented"
-        // noise, same decoded frame), so the failure is purely at the NV12 display
-        // plane. Forcing the android_display vout to convert frames to a packed RGB
-        // chroma sidesteps that broken plane. This works ONLY because direct
-        // rendering is OFF above: with DR off VLC owns real (non-opaque) frames it
-        // can colour-convert. RV32 produced "output: 17 unknown" + a freeze on this
-        // libVLC build before, so we use the lighter RV16 first. The software path is
-        // left untouched (it decodes to I420, which already displays correctly).
-        if (!forceSoftware) {
-            options.add("--android-display-chroma=RV16")
         }
 
         val vlc = LibVLC(context, options)

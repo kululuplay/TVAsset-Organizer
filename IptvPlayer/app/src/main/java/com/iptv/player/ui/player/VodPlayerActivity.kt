@@ -278,15 +278,12 @@ class VodPlayerActivity : BaseActivity() {
             "--clock-synchro=0",
             // Hardware decode unless the user's Decoder setting forces software.
             if (forceSoftware) "--avcodec-hw=none" else "--avcodec-hw=any",
-            // Disable MediaCodec/OMX direct rendering (known-good v1.0.1 baseline):
-            // VLC renders decoded frames via the android_display vout onto the
-            // SurfaceView. Keeping DR OFF also lets VLC own real (non-opaque) frames
-            // so the hardware-path RV16 display-chroma override below can colour-
-            // convert them. RV32 + the opaque DR path froze playback on this Amlogic
-            // box ("output: 17 unknown" + "dequeue_in timeout"), so we use RV16 and
-            // keep DR off (a chroma override with DR ON would stall the same way).
-            "--no-mediacodec-dr",
-            "--no-omxil-dr",
+            // MediaCodec/OMX direct rendering LEFT ON (libVLC default) on the
+            // hardware path so the Amlogic decoder renders straight onto the
+            // SurfaceView underlay (its native hardware-video path). The DR-off +
+            // android_display vout path could not colour-convert NV12 on the Xiaomi
+            // compositor and stayed GREEN (RV16/RV32 chroma overrides had zero
+            // effect). forceSoftware uses avcodec-hw=none so DR is irrelevant there.
             // Cut decode load on weak boxes WITHOUT wrecking quality: "all" dropped
             // the H.264/H.265 deblocking filter on every frame, so block errors
             // propagated -> macroblocking/"rain" breakup with audio still fine.
@@ -306,15 +303,6 @@ class VodPlayerActivity : BaseActivity() {
         if (forceSoftware) {
             options.add("--deinterlace=1")
             options.add("--deinterlace-mode=bob")
-        }
-        // Amlogic compositor green-screen fix (HARDWARE path only) -- mirrors
-        // VlcPlayerEngine. Decode + SurfaceView are healthy but the NV12 underlay
-        // greens at the compositor on some boxes; forcing the android_display vout
-        // to a packed RGB chroma (RV16) sidesteps that broken plane. Works only with
-        // DR off (above). RV32 froze ("output: 17 unknown"), so RV16 first. Software
-        // path untouched (I420 displays fine).
-        if (!forceSoftware) {
-            options.add("--android-display-chroma=RV16")
         }
         val vlc = LibVLC(this, options)
         vlc.setUserAgent(AppInfo.USER_AGENT, AppInfo.USER_AGENT)
