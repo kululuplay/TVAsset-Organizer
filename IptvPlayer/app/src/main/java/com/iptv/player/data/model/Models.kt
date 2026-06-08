@@ -80,8 +80,12 @@ enum class DecoderMode {
     SOFTWARE;
 
     companion object {
+        // Default = AUTO: start on the hardware decoder (smooth on weak sticks
+        // like Firestick) and only drop to software libVLC when a stream greens /
+        // blanks or errors. SOFTWARE-as-default decoded everything on the CPU,
+        // which macroblocked high-bitrate channels on low-power boxes.
         fun fromName(value: String?): DecoderMode =
-            entries.firstOrNull { it.name == value } ?: SOFTWARE
+            entries.firstOrNull { it.name == value } ?: AUTO
     }
 }
 
