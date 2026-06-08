@@ -13,6 +13,12 @@ section and a **public IPv4** row under General Info.
   (the origin can be throttled / single-connection limited and would understate
   the customer's line). Use a large CDN file and stop on a ~10s timer; divide
   bytes-read by elapsed time for Mbps.
+  - Use SEVERAL geographically diverse keyless mirrors tried in order, not one or
+    two. Single hosts fail per-ISP: `speed.hetzner.de` can return
+    `UnknownHostException` (DNS) on some networks, and Cloudflare `__down` can be
+    WAF/403-challenged — so a 2-entry list (Cloudflare + Hetzner) dooms the whole
+    test for those customers. Current list: Cloudflare `__down` (anycast, first),
+    `proof.ovh.net`, `speedtest.tele2.net`, `speed.hetzner.de`.
 - **Public IPv4**: do NOT reuse the weather provider's `ipapi.co/json` for this —
   it can return the **IPv6** address. Use an IPv4-only plain-text endpoint and
   **validate with an IPv4 regex** before showing it (so an IPv6 reply or an HTML

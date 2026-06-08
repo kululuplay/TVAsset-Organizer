@@ -27,8 +27,16 @@ object SpeedTester {
     // never drains it within the window; we always stop on the timer. We try them
     // in order so a single CDN being unreachable/blocked on the customer's network
     // doesn't doom the whole test.
+    // Several geographically diverse mirrors: a single host failing DNS (e.g.
+    // speed.hetzner.de returning UnknownHostException on some ISPs) or being
+    // WAF-challenged (Cloudflare 403 on a bare network) must not doom the test.
+    // Cloudflare's anycast __down is first (closest PoP, most reliable globally);
+    // OVH, Tele2 and Hetzner are HTTPS fallbacks if the customer's network can't
+    // reach the one ahead of it.
     private val DOWNLOAD_URLS = listOf(
         "https://speed.cloudflare.com/__down?bytes=500000000",
+        "https://proof.ovh.net/files/1Gb.dat",
+        "https://speedtest.tele2.net/1GB.zip",
         "https://speed.hetzner.de/1GB.bin"
     )
     // Some CDN/WAF front-ends (notably Cloudflare) challenge or 403 requests that
