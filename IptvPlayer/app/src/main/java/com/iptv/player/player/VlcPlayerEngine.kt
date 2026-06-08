@@ -32,6 +32,7 @@ import android.os.Looper
 import android.view.ViewGroup
 import java.util.concurrent.atomic.AtomicBoolean
 import com.iptv.player.util.AppInfo
+import com.iptv.player.util.DeviceCaps
 import com.iptv.player.util.PlaybackLog
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
@@ -223,11 +224,24 @@ class VlcPlayerEngine(
             return
         }
 
-        // Hardware path: only the 1080p-class high-fps profile is green-prone; 4K
-        // must stay on hardware (software can't keep up with it).
-        val is1080pClass = !isUhd &&
-            (track.height >= GREEN_PRONE_MIN_HEIGHT || track.width >= GREEN_PRONE_MIN_WIDTH)
-        if (is1080pClass && fps >= GREEN_PRONE_MIN_FPS && claimRouting()) {
+        // Hardware path: 4K must always stay on hardware (software can't keep up).
+        // Below 4K, what counts as green-prone depends on the box:
+        //   - Amlogic: the libVLC hardware underlay greens on EVERY non-UHD profile
+        //     (1080i@25, 576p, 1080p@50…) through the box compositor — confirmed in
+        //     the field — and the failure is a display-plane issue with no runtime
+        //     signal, so we treat the whole non-UHD hardware path as green-prone and
+        //     drop to software (where avcodec-hw=none renders real, displayable
+        //     frames). ExoPlayer remains the box's working hardware-video path.
+        //   - Other boxes: only the classic 1080p@50/60 high-bitrate H.264 profile
+        //     trips the hardware decoder, so keep the narrow heuristic there.
+        val greenProneProfile = if (DeviceCaps.isAmlogic) {
+            !isUhd
+        } else {
+            !isUhd &&
+                (track.height >= GREEN_PRONE_MIN_HEIGHT || track.width >= GREEN_PRONE_MIN_WIDTH) &&
+                fps >= GREEN_PRONE_MIN_FPS
+        }
+        if (greenProneProfile && claimRouting()) {
             PlaybackLog.log(
                 context, engineName,
                 "green-prone HW profile ${track.width}x${track.height}@${fps}fps -> software fallback"

@@ -12,7 +12,11 @@
  *   VLC_SW ──error──▶ retry w/ backoff ──▶ fatal
  *
  * The ladder is shaped by PlayerMode (start engine) and DecoderMode (whether the
- * software stage is allowed / forced).
+ * software stage is allowed / forced). One override: a GREEN video failure always
+ * drops to the software stage even in HARDWARE mode — a green frame is unusable, so
+ * software is the only remaining way to show a picture. (On Amlogic boxes the
+ * libVLC hardware underlay greens on every non-UHD profile, so VlcPlayerEngine
+ * flags the whole non-UHD hardware path as green-prone there.)
  */
 package com.iptv.player.player
 
@@ -208,8 +212,11 @@ class PlayerController(
         return when (current) {
             Stage.EXO -> when (reason) {
                 // Hardware video greened: the hw H.264 decoder is the culprit, so
-                // skip VLC's hardware path and go straight to software.
-                Reason.VIDEO -> if (softwareAllowed) Stage.VLC_SW else Stage.VLC_HW
+                // skip VLC's hardware path and go straight to software. Green means
+                // hardware cannot produce a picture AT ALL, so this drop is allowed
+                // even in HARDWARE decoder mode — otherwise the user just stares at a
+                // green screen with no way out.
+                Reason.VIDEO -> Stage.VLC_SW
                 // Video is fine; let libVLC HARDWARE-decode the video and software-
                 // decode the audio codec. (Software video here removes the green on
                 // the EXO -> VLC swap but stutters on 1080p, so we keep hardware and
@@ -217,7 +224,14 @@ class PlayerController(
                 Reason.AUDIO, Reason.ERROR -> Stage.VLC_HW
                 Reason.SOFTWARE_SLOW -> null
             }
-            Stage.VLC_HW -> if (softwareAllowed) Stage.VLC_SW else null
+            // Green on the libVLC hardware path (Amlogic underlay etc.) always drops
+            // to software, regardless of decoder mode — a green frame is unusable, so
+            // software is the only remaining way to show a picture. Plain errors
+            // still honour the HARDWARE "no software" preference.
+            Stage.VLC_HW -> when (reason) {
+                Reason.VIDEO -> Stage.VLC_SW
+                else -> if (softwareAllowed) Stage.VLC_SW else null
+            }
             Stage.VLC_SW -> null
         }
     }
