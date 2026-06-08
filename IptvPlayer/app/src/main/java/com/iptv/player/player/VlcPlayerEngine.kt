@@ -304,6 +304,32 @@ class VlcPlayerEngine(
         }
     }
 
+    /**
+     * Detach the running player from its VLCVideoLayout and remove that layout
+     * from its parent, leaving playback (audio + decode) running. libVLC requires
+     * detachViews() before the views can be re-homed. The same layout instance is
+     * reused on re-attach so no new surface plumbing is created.
+     */
+    override fun detachVideo() {
+        mediaPlayer?.detachViews()
+        videoLayout?.let { (it.parent as? ViewGroup)?.removeView(it) }
+    }
+
+    /**
+     * Re-attach the existing VLCVideoLayout into [container] and re-wire libVLC's
+     * AWindow handler, without touching the Media/playback. Called after
+     * [detachVideo] (the controller inserts a short gap first so the old
+     * SurfaceView is torn down before the new one is composited — the Amlogic
+     * green-on-fresh-surface lesson).
+     */
+    override fun attachVideo(container: ViewGroup) {
+        val mp = mediaPlayer ?: return
+        val layout = videoLayout ?: return
+        (layout.parent as? ViewGroup)?.removeView(layout)
+        container.addView(layout)
+        mp.attachViews(layout, null, false, false)
+    }
+
     override fun play(url: String) {
         val vlc = libVlc ?: return
         val mp = mediaPlayer ?: return

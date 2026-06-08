@@ -30,14 +30,38 @@ import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.util.PlaybackLog
 
 class PlayerController(
-    private val context: Context,
-    private val container: ViewGroup,
+    // var (not val) so a handed-over controller can be re-homed onto the
+    // fullscreen player: context + container are reassigned on rebind() and the
+    // callback is swapped via setCallback() when ownership transfers.
+    private var context: Context,
+    private var container: ViewGroup,
     private val mode: PlayerMode,
     private val decoderMode: DecoderMode = DecoderMode.SOFTWARE,
     private val allowPassthrough: Boolean = false,
     private val bufferMode: BufferMode = BufferMode.NORMAL,
-    private val callback: Callback
+    private var callback: Callback
 ) {
+
+    /** Swap the UI callback (used when a preview controller is adopted by the player). */
+    fun setCallback(cb: Callback) { callback = cb }
+
+    /**
+     * Re-home the currently running engine's video surface onto [newContainer]
+     * WITHOUT restarting playback (no new Media, the stream socket stays open).
+     * Used to hand a live preview over to the fullscreen player seamlessly.
+     *
+     * The detach -> delay -> attach sequence mirrors the engine-swap timing: a
+     * SurfaceView's underlying surface is torn down asynchronously, so adding the
+     * surface to the new container in the same pass would race that teardown and
+     * green the fresh surface on Amlogic. Deferring the re-attach clears it.
+     */
+    fun rebind(newContainer: ViewGroup) {
+        context = newContainer.context
+        container = newContainer
+        val eng = engine ?: return
+        eng.detachVideo()
+        mainHandler.postDelayed({ eng.attachVideo(newContainer) }, ENGINE_SWAP_DELAY_MS)
+    }
 
     /** UI-facing events from the controller (already engine-agnostic). */
     interface Callback {

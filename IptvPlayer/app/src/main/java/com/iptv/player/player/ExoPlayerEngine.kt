@@ -308,6 +308,27 @@ class ExoPlayerEngine(
         }, NO_FRAME_TIMEOUT_MS)
     }
 
+    /**
+     * Remove the PlayerView from its parent while keeping the ExoPlayer instance
+     * attached to it, so decoding/buffering keep running during the hand-off. The
+     * same PlayerView is re-homed on [attachVideo] (no new surface inflation).
+     */
+    override fun detachVideo() {
+        playerView?.let { (it.parent as? ViewGroup)?.removeView(it) }
+    }
+
+    /**
+     * Re-add the existing PlayerView into [container] without recreating the
+     * player or the surface. Called after [detachVideo]; the controller inserts a
+     * short gap first so the old SurfaceView tears down before the new one is
+     * composited (Amlogic green-on-fresh-surface lesson).
+     */
+    override fun attachVideo(container: ViewGroup) {
+        val view = playerView ?: return
+        (view.parent as? ViewGroup)?.removeView(view)
+        container.addView(view)
+    }
+
     override fun play(url: String) {
         val exo = player ?: return
         resetHealth()

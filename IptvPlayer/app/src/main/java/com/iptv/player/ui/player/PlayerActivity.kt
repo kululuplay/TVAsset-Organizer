@@ -45,6 +45,12 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         const val EXTRA_CATEGORY_ID = "extra_category_id"
         /** When true, up/down zapping stays within the radio list, not Live TV. */
         const val EXTRA_RADIO_MODE = "extra_radio_mode"
+        /**
+         * When true, adopt the live preview's already-playing PlayerController
+         * (parked on ServiceLocator) instead of creating a fresh one — going
+         * fullscreen then continues the picture with no reconnect/re-buffer.
+         */
+        const val EXTRA_ADOPT_PREVIEW = "extra_adopt_preview"
         private const val OVERLAY_TIMEOUT = 4000L
         private const val LONG_PRESS_MS = 600L
     }
@@ -89,25 +95,44 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         }
         viewModel.radioMode = intent.getBooleanExtra(EXTRA_RADIO_MODE, false)
 
+        // Take the handed-over preview controller (if any) immediately so it is
+        // never left parked. Null when launched normally (Favorites/number-zap).
+        val adopted: PlayerController? =
+            if (intent.getBooleanExtra(EXTRA_ADOPT_PREVIEW, false))
+                ServiceLocator.consumePendingLiveController() else null
+
         lifecycleScope.launch {
-            val mode: PlayerMode = viewModel.playerMode()
             streamFormat = viewModel.streamFormat()
-            controller = PlayerController(
-                context = this@PlayerActivity,
-                container = binding.videoContainer,
-                mode = mode,
-                decoderMode = viewModel.decoderMode(),
-                allowPassthrough = viewModel.audioPassthrough(),
-                bufferMode = viewModel.bufferMode(),
-                callback = this@PlayerActivity
-            )
             val channel = viewModel.resolveChannel(channelId)
             if (channel == null) {
+                // Release the adopted connection so the hand-off can't orphan it.
+                adopted?.release()
                 Toast.makeText(this@PlayerActivity, R.string.error_unknown, Toast.LENGTH_SHORT).show()
                 finish()
                 return@launch
             }
-            startChannel(channel)
+            if (adopted != null) {
+                // Seamless hand-off: rebind the still-playing engine to this
+                // screen's surface and take ownership — no new play()/reconnect.
+                controller = adopted
+                controller.setCallback(this@PlayerActivity)
+                controller.rebind(binding.videoContainer)
+                currentChannel = channel
+                showOverlay(channel)
+                if (statsVisible) refreshStats()
+            } else {
+                val mode: PlayerMode = viewModel.playerMode()
+                controller = PlayerController(
+                    context = this@PlayerActivity,
+                    container = binding.videoContainer,
+                    mode = mode,
+                    decoderMode = viewModel.decoderMode(),
+                    allowPassthrough = viewModel.audioPassthrough(),
+                    bufferMode = viewModel.bufferMode(),
+                    callback = this@PlayerActivity
+                )
+                startChannel(channel)
+            }
         }
     }
 

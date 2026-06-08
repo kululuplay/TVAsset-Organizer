@@ -18,6 +18,7 @@
 - [D-pad focus after ListAdapter diff](recyclerview-focus-after-diff.md) — requestFocus in submitList commit callback+post; and NEVER notifyDataSetChanged from a focus listener (kills D-pad focus) — use payloaded notifyItemChanged.
 - [Favorites id namespaces](favorites-id-namespaces.md) — favorites table mixes channel/vod_/series_ ids; the channel INNER JOIN silently drops non-channel favorites.
 - [IPTV single-connection contract](iptv-single-connection.md) — one stream/socket max: stop-before-start, serialize transitions, release (not pause) on background, reuse engine + swap Media.
+- [Preview -> fullscreen hand-off](preview-fullscreen-handover.md) — transfer the running PlayerController (park on ServiceLocator, detach/gap/attach rebind, onStop skip-release); caption locked to playing channel, EPG follows focus; no release+reconnect.
 - [Player unit tests](player-unit-tests.md) — single-connection tests are pure-JVM via scheduler/engineFactory/coordinator seams; no Android SDK locally, they run only in CI.
 - [ExoPlayer→libVLC fallback for undecodable audio](player-engine-fallback.md) — Exo can play mute with no error (MP2/AC-3); force onError so VLC takes over.
 - [Dashboard keyless weather + signal](dashboard-keyless-weather.md) — real weather via IP geolocation + Open-Meteo, NO key/location perm; Wi-Fi RSSI needs ACCESS_WIFI_STATE + runCatching.

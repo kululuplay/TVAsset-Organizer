@@ -248,9 +248,11 @@ class HomeActivity : BaseActivity() {
         binding.epgList.layoutManager = LinearLayoutManager(this)
         binding.epgList.adapter = epgAdapter
 
-        // The preview surface opens the currently previewed channel.
+        // The preview surface goes fullscreen on the PLAYING channel (so a click
+        // after browsing other channel names still expands what's on screen),
+        // falling back to the focused channel when nothing is previewing yet.
         binding.previewCard.setOnClickListener {
-            currentInfoChannel?.let { openPlayer(it) }
+            (previewingChannel ?: currentInfoChannel)?.let { openPlayer(it) }
         }
     }
 
@@ -324,11 +326,26 @@ class HomeActivity : BaseActivity() {
     private var currentInfoChannel: Channel? = null
 
     /**
-     * The channel whose live video is playing in the preview surface. Set only
-     * when the user presses OK on a channel; null means the panel is info-only.
-     * A second OK on this same channel expands to full screen.
+     * The channel whose live video is actually playing in the preview surface.
+     * Set only when the user presses OK on a channel; null means the panel is
+     * info-only. A second OK on this same channel expands to full screen. The
+     * on-video caption stays bound to THIS channel while the user browses other
+     * channel names (whose guide loads into the EPG list independently).
      */
-    private var previewingChannelId: String? = null
+    private var previewingChannel: Channel? = null
+
+    /** The previewing channel's EPG, used to keep the on-video caption's now-playing fresh. */
+    private var captionPrograms: List<Program> = emptyList()
+
+    /** Loads the previewing channel's guide for the caption now-playing text. */
+    private var captionJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * True between handing the live controller to the fullscreen player and
+     * HomeActivity stopping, so onStop does NOT release the connection that the
+     * fullscreen player now owns (single-connection hand-off safety).
+     */
+    private var handingOverPreview = false
 
     private val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
 
@@ -336,14 +353,56 @@ class HomeActivity : BaseActivity() {
         // Re-selecting the channel already shown (e.g. the list re-emits on a favorite
         // toggle, or a refocus) shouldn't re-fetch its guide or rebuild the panel.
         if (channel.id == currentInfoChannel?.id && currentPrograms.isNotEmpty()) return
-        // Never let the preview video keep playing a channel the info panel has
-        // moved off of; preview only survives while we stay on its own channel.
-        if (previewingChannelId != null && previewingChannelId != channel.id) {
-            stopPreview()
-        }
+        // Browsing other channel names must NOT stop the live preview: the preview
+        // only switches/stops on an explicit OK (see onChannelClicked). Focus just
+        // moves the info/EPG panel; the on-video caption stays on the playing
+        // channel (bound below only while nothing is previewing).
         currentInfoChannel = channel
         binding.catchupHint.visibility =
             if (channel.catchupDays > 0) View.VISIBLE else View.GONE
+        // The on-video caption follows focus only while nothing is previewing.
+        // Once a preview is playing it stays locked to the playing channel so the
+        // caption can never describe a different channel than the picture shows.
+        if (previewingChannel == null) {
+            bindCaptionMeta(channel)
+            binding.previewProgram.text = ""
+        }
+        currentPrograms = emptyList()
+        epgAdapter.submitList(emptyList())
+        binding.epgEmpty.visibility = View.GONE
+
+        nowNextJob?.cancel()
+        nowNextJob = lifecycleScope.launch {
+            try {
+                // Debounce: rapid D-pad scrolling cancels this before the fetch fires,
+                // so only the channel the user settles on hits the provider/Room.
+                delay(EPG_DEBOUNCE_MS)
+                val programs = viewModel.programs(channel)
+                currentPrograms = programs
+                val now = System.currentTimeMillis()
+                // Caption now-playing follows focus only when nothing is previewing.
+                if (previewingChannel == null) {
+                    binding.previewProgram.text = nowPlayingLabel(programs, now)
+                }
+                epgAdapter.submitList(programs) {
+                    val idx = programs.indexOfFirst { it.isLiveAt(now) }
+                    if (idx >= 0) binding.epgList.scrollToPosition(idx)
+                }
+                binding.epgEmpty.visibility =
+                    if (programs.isEmpty()) View.VISIBLE else View.GONE
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                // Best-effort guide: never let an EPG fetch crash the UI coroutine.
+                currentPrograms = emptyList()
+                epgAdapter.submitList(emptyList())
+                binding.epgEmpty.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    /** Renders a channel's static metadata (number + logos + title) into the caption. */
+    private fun bindCaptionMeta(channel: Channel) {
         binding.previewNumber.text = channel.number?.toString() ?: ""
         binding.previewTitle.text = ChannelText.clean(channel.name)
         val placeholder = LogoPlaceholder.forName(this, channel.name)
@@ -358,37 +417,36 @@ class HomeActivity : BaseActivity() {
                 placeholder(placeholder); error(placeholder)
             }
         }
-        binding.previewProgram.text = ""
-        currentPrograms = emptyList()
-        epgAdapter.submitList(emptyList())
-        binding.epgEmpty.visibility = View.GONE
+    }
 
-        nowNextJob?.cancel()
-        nowNextJob = lifecycleScope.launch {
+    /** Formats the "now playing" caption line from [programs], or "" if none is live. */
+    private fun nowPlayingLabel(programs: List<Program>, now: Long): String {
+        val current = programs.firstOrNull { it.isLiveAt(now) } ?: return ""
+        return "${timeFmt.format(Date(current.startMs))} - " +
+            "${timeFmt.format(Date(current.stopMs))}  ${current.title}"
+    }
+
+    /**
+     * Locks the on-video caption (number/logo/title/now-playing) to the channel
+     * that is actually previewing, and fetches its guide so the caption's
+     * now-playing line is correct even while the user browses other channels (the
+     * EPG list below follows focus independently via showInfo).
+     */
+    private fun lockCaptionToPreview(channel: Channel) {
+        bindCaptionMeta(channel)
+        captionJob?.cancel()
+        captionPrograms = emptyList()
+        captionJob = lifecycleScope.launch {
             try {
-                // Debounce: rapid D-pad scrolling cancels this before the fetch fires,
-                // so only the channel the user settles on hits the provider/Room.
-                delay(EPG_DEBOUNCE_MS)
                 val programs = viewModel.programs(channel)
-                currentPrograms = programs
-                val now = System.currentTimeMillis()
-                val current = programs.firstOrNull { it.isLiveAt(now) }
-                binding.previewProgram.text = current?.let {
-                    "${timeFmt.format(Date(it.startMs))} - ${timeFmt.format(Date(it.stopMs))}  ${it.title}"
-                } ?: ""
-                epgAdapter.submitList(programs) {
-                    val idx = programs.indexOfFirst { it.isLiveAt(now) }
-                    if (idx >= 0) binding.epgList.scrollToPosition(idx)
-                }
-                binding.epgEmpty.visibility =
-                    if (programs.isEmpty()) View.VISIBLE else View.GONE
+                captionPrograms = programs
+                binding.previewProgram.text =
+                    nowPlayingLabel(programs, System.currentTimeMillis())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                // Best-effort guide: never let an EPG fetch crash the UI coroutine.
-                currentPrograms = emptyList()
-                epgAdapter.submitList(emptyList())
-                binding.epgEmpty.visibility = View.VISIBLE
+                captionPrograms = emptyList()
+                binding.previewProgram.text = ""
             }
         }
     }
@@ -409,19 +467,19 @@ class HomeActivity : BaseActivity() {
     }
 
     /**
-     * Re-evaluates the "live now" program for the previewed channel from the
-     * already-fetched EPG (no network) and refreshes the program caption + the
-     * EPG row dots, so the guide stays correct across program boundaries while
-     * the user lingers on one channel. Driven by a STARTED-scoped ticker.
+     * Re-evaluates the "live now" program from the already-fetched EPG (no
+     * network) and refreshes the caption + the EPG row dots, so the guide stays
+     * correct across program boundaries. The caption's now-playing tracks the
+     * PLAYING channel while previewing (else the focused channel); the EPG list
+     * dots always track the focused channel. Driven by a STARTED-scoped ticker.
      */
     private fun refreshNowNext() {
-        if (currentInfoChannel == null || currentPrograms.isEmpty()) return
         val now = System.currentTimeMillis()
-        val current = currentPrograms.firstOrNull { it.isLiveAt(now) }
-        binding.previewProgram.text = current?.let {
-            "${timeFmt.format(Date(it.startMs))} - ${timeFmt.format(Date(it.stopMs))}  ${it.title}"
-        } ?: ""
-        epgAdapter.refreshLiveState()
+        val captionSource = if (previewingChannel != null) captionPrograms else currentPrograms
+        if (captionSource.isNotEmpty()) {
+            binding.previewProgram.text = nowPlayingLabel(captionSource, now)
+        }
+        if (currentPrograms.isNotEmpty()) epgAdapter.refreshLiveState()
     }
 
     /**
@@ -487,14 +545,35 @@ class HomeActivity : BaseActivity() {
 
     private fun openPlayer(channel: Channel) {
         PinLockHelper.guard(this, isAdult = channel.isAdult()) {
-            // Free the preview socket before the full player connects (single-connection).
-            stopPreview()
-            val intent = Intent(this, PlayerActivity::class.java).apply {
-                putExtra(PlayerActivity.EXTRA_CHANNEL_ID, channel.id)
-                putExtra(PlayerActivity.EXTRA_CATEGORY_ID, lastSelectedCategoryId)
-                putExtra(PlayerActivity.EXTRA_RADIO_MODE, radioMode)
+            val controller = previewController
+            if (previewingChannel?.id == channel.id && controller != null) {
+                // Seamless fullscreen: hand the still-playing preview controller to
+                // PlayerActivity instead of releasing + reconnecting. Detach our
+                // refs first (without releasing) so onStop can't tear it down, mark
+                // the hand-off so onStop skips stopPreview, then park + launch.
+                handingOverPreview = true
+                previewController = null
+                previewingChannel = null
+                previewJob?.cancel()
+                captionJob?.cancel()
+                ServiceLocator.handOverLiveController(controller)
+                val intent = Intent(this, PlayerActivity::class.java).apply {
+                    putExtra(PlayerActivity.EXTRA_CHANNEL_ID, channel.id)
+                    putExtra(PlayerActivity.EXTRA_CATEGORY_ID, lastSelectedCategoryId)
+                    putExtra(PlayerActivity.EXTRA_RADIO_MODE, radioMode)
+                    putExtra(PlayerActivity.EXTRA_ADOPT_PREVIEW, true)
+                }
+                startActivity(intent)
+            } else {
+                // Free the preview socket before the full player connects (single-connection).
+                stopPreview()
+                val intent = Intent(this, PlayerActivity::class.java).apply {
+                    putExtra(PlayerActivity.EXTRA_CHANNEL_ID, channel.id)
+                    putExtra(PlayerActivity.EXTRA_CATEGORY_ID, lastSelectedCategoryId)
+                    putExtra(PlayerActivity.EXTRA_RADIO_MODE, radioMode)
+                }
+                startActivity(intent)
             }
-            startActivity(intent)
         }
     }
 
@@ -513,7 +592,7 @@ class HomeActivity : BaseActivity() {
      * screen. Navigating to another channel resets this (see onFocused).
      */
     private fun onChannelClicked(channel: Channel) {
-        if (previewingChannelId == channel.id && previewController != null) {
+        if (previewingChannel?.id == channel.id && previewController != null) {
             openPlayer(channel)
         } else {
             startPreviewFor(channel)
@@ -523,7 +602,10 @@ class HomeActivity : BaseActivity() {
     /** Starts the in-panel live preview for [channel] (explicit user action). */
     private fun startPreviewFor(channel: Channel) {
         currentInfoChannel = channel
-        previewingChannelId = channel.id
+        previewingChannel = channel
+        // Lock the on-video caption to the channel we're about to play so it stays
+        // correct even as the user browses other channel names afterwards.
+        lockCaptionToPreview(channel)
         previewJob?.cancel()
         binding.infoLogo.visibility = View.VISIBLE
         previewJob = lifecycleScope.launch { startPreview(channel) }
@@ -565,15 +647,30 @@ class HomeActivity : BaseActivity() {
     /** Stops + releases the preview so the single stream connection is freed. */
     private fun stopPreview() {
         previewJob?.cancel()
+        captionJob?.cancel()
         previewController?.release()
         previewController = null
-        previewingChannelId = null
+        previewingChannel = null
+        captionPrograms = emptyList()
         binding.infoLogo.visibility = View.VISIBLE
     }
 
     override fun onStop() {
         super.onStop()
-        stopPreview()
+        if (handingOverPreview) {
+            // The live controller was handed to the fullscreen player, which now
+            // owns the single connection. Don't release it; just clear our local
+            // preview state so a later return to Home starts a fresh preview.
+            handingOverPreview = false
+            previewJob?.cancel()
+            captionJob?.cancel()
+            previewController = null
+            previewingChannel = null
+            captionPrograms = emptyList()
+            binding.infoLogo.visibility = View.VISIBLE
+        } else {
+            stopPreview()
+        }
         // Stop any in-flight EPG fetch so the guide isn't loaded off-screen.
         nowNextJob?.cancel()
         // Drop any pending number-zap commit so a delayed lookup can't launch the

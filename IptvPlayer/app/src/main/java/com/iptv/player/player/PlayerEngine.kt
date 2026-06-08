@@ -13,6 +13,21 @@ interface PlayerEngine {
     /** Attach the engine's video surface into the given container. */
     fun bind(container: ViewGroup)
 
+    /**
+     * Detach the engine's video surface from its current container WITHOUT
+     * stopping playback (the stream socket stays open). Paired with [attachVideo]
+     * to hand the running engine over to a different container (preview ->
+     * fullscreen). No-op by default.
+     */
+    fun detachVideo() {}
+
+    /**
+     * Re-attach the engine's (already created) video surface into [container]
+     * without restarting playback. Must be called after [detachVideo]. No-op by
+     * default.
+     */
+    fun attachVideo(container: ViewGroup) {}
+
     /** Start (or restart) playback of a stream URL. */
     fun play(url: String)
 
