@@ -75,6 +75,12 @@ class HomeActivity : BaseActivity() {
     /** Last category actually selected; used to detect real category changes. */
     private var lastSelectedCategoryId: String? = null
 
+    /** Last channel row that held focus; restored when returning to the channel list. */
+    private var lastFocusedChannelId: String? = null
+
+    /** Set on START so the next channel-list emission restores focus to the row we left. */
+    private var pendingChannelFocusRestore = false
+
     /** Adult categories the user has already unlocked this session (avoid re-prompting). */
     private val unlockedCategories = mutableSetOf<String>()
 
@@ -244,7 +250,10 @@ class HomeActivity : BaseActivity() {
             // Press-to-preview model: navigating only refreshes the info/EPG
             // panel (the stop-if-different guard lives in showInfo so every
             // selection path is covered, not just row focus).
-            onFocused = { showInfo(it) },
+            onFocused = {
+                lastFocusedChannelId = it.id
+                showInfo(it)
+            },
             onClicked = { onChannelClicked(it) },
             onToggleFavorite = {
                 viewModel.toggleFavorite(it.id)
@@ -304,6 +313,14 @@ class HomeActivity : BaseActivity() {
                             if (pendingScrollReset) {
                                 pendingScrollReset = false
                                 binding.channelList.scrollToPosition(0)
+                            }
+                            // Returning to the channel list (e.g. back from the
+                            // fullscreen player) re-emits the list, which resets D-pad
+                            // focus to the top. Restore focus to the row we left from.
+                            if (pendingChannelFocusRestore && inChannelView) {
+                                pendingChannelFocusRestore = false
+                                val pos = channels.indexOfFirst { it.id == lastFocusedChannelId }
+                                if (pos >= 0) focusRow(binding.channelList, pos)
                             }
                             // While still browsing categories, preview the first channel
                             // of the focused category (like the reference design).
@@ -726,6 +743,10 @@ class HomeActivity : BaseActivity() {
 
     override fun onStart() {
         super.onStart()
+        // Coming back on-screen while drilled into a channel (e.g. from the fullscreen
+        // player, Settings, Catch-up): the channel list re-emits and resets D-pad focus
+        // to the top, so flag a restore to the row we left from on the next emission.
+        if (inChannelView) pendingChannelFocusRestore = true
         // Reverse hand-off: if the fullscreen player gave its live controller back
         // on BACK, re-adopt it into the preview surface so returning to Home keeps
         // the picture playing instead of a dead/closed preview. Null on a normal
