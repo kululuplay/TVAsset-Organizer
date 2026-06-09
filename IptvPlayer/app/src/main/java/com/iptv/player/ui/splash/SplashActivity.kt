@@ -28,7 +28,10 @@ import com.iptv.player.databinding.ActivitySplashBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.dashboard.DashboardActivity
 import com.iptv.player.ui.login.LoginActivity
+import com.iptv.player.ui.recovery.CrashRecoveryActivity
 import com.iptv.player.ui.wizard.WizardActivity
+import com.iptv.player.util.LaunchCrashGuard
+import com.iptv.player.util.Logger
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -184,6 +187,19 @@ class SplashActivity : BaseActivity() {
 
     /** Logged-in path: kick off the prefetch and stay on screen for ~5–6s. */
     private suspend fun runBrandedSplash() {
+        // If the previous launch armed the guard but never reached a stable home,
+        // it crashed on this exact path. Don't crash-loop with no way to read the
+        // trace: route to the recovery screen so the captured log can be shared.
+        if (LaunchCrashGuard.previousLaunchCrashed(this)) {
+            Logger.w("Splash", "Previous launch crashed before home — routing to recovery")
+            go(CrashRecoveryActivity::class.java)
+            return
+        }
+        // Arm the guard before any risky startup work; cleared only once the
+        // Dashboard has drawn its first frame (DashboardActivity.onCreate).
+        LaunchCrashGuard.markLaunchStarted(this)
+        Logger.i("Splash", "Branded splash start")
+
         // Backfill a profile for accounts that connected before profiles existed.
         ServiceLocator.repository.backfillProfileFromSource()
 

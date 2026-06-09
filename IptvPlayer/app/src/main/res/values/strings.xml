@@ -250,4 +250,12 @@
     <string name="expiry_expired_title">Your subscription has expired</string>
     <string name="expiry_expired_message">Your subscription period has ended, so you can no longer watch any content. To continue watching, please renew your subscription with your IPTV provider.</string>
     <string name="expiry_expired_date">Expired on %1$s</string>
+
+    <!-- Crash recovery screen (shown after a launch crash). -->
+    <string name="recovery_title">Something went wrong</string>
+    <string name="recovery_message">The app closed unexpectedly while starting up. Share this report so we can fix it, then try again.</string>
+    <string name="recovery_no_log">No crash details were recorded.</string>
+    <string name="recovery_share">Share report</string>
+    <string name="recovery_share_subject">Kululu IPTV crash report</string>
+    <string name="recovery_retry">Try again</string>
 </resources>

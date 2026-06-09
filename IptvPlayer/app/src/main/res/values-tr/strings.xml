@@ -292,4 +292,12 @@
     <string name="speedtest_msg_normal">HD yayınlar için yeterli.</string>
     <string name="speedtest_msg_good">Akıcı yayın için iyi bir hız.</string>
     <string name="speedtest_msg_excellent">Tüm içerikler için mükemmel, 4K dahil.</string>
+
+    <!-- Çökme kurtarma ekranı. -->
+    <string name="recovery_title">Bir sorun oluştu</string>
+    <string name="recovery_message">Uygulama başlatılırken beklenmedik şekilde kapandı. Sorunu giderebilmemiz için bu raporu paylaşın, ardından tekrar deneyin.</string>
+    <string name="recovery_no_log">Çökme ayrıntısı kaydedilmedi.</string>
+    <string name="recovery_share">Raporu paylaş</string>
+    <string name="recovery_share_subject">Kululu IPTV çökme raporu</string>
+    <string name="recovery_retry">Tekrar dene</string>
 </resources>

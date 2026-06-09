@@ -27,6 +27,8 @@ import com.iptv.player.ui.settings.SettingsActivity
 import com.iptv.player.ui.vod.VodActivity
 import com.iptv.player.update.ExpiryWarningPrompt
 import com.iptv.player.update.UpdatePrompt
+import com.iptv.player.util.LaunchCrashGuard
+import com.iptv.player.util.Logger
 import com.iptv.player.util.NetworkSignal
 import com.iptv.player.util.WeatherProvider
 import kotlinx.coroutines.launch
@@ -39,6 +41,7 @@ class DashboardActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Logger.i("Dashboard", "onCreate begin")
         binding = ActivityDashboardBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -52,6 +55,15 @@ class DashboardActivity : BaseActivity() {
         // its notice at launch, even when an update is available. If no expiry
         // dialog is due, fall back to the update prompt so the two never overlap.
         ExpiryWarningPrompt.maybeShow(this) { UpdatePrompt.maybeShow(this) }
+
+        // Clear the launch-crash guard once the home has drawn its first frame
+        // (this post runs after the first traversal and the initial onResume),
+        // proving the login -> splash -> home path completed without crashing.
+        binding.root.post {
+            LaunchCrashGuard.markLaunchSucceeded(this)
+            Logger.i("Dashboard", "launch confirmed stable")
+        }
+        Logger.i("Dashboard", "onCreate end")
     }
 
     override fun onResume() {

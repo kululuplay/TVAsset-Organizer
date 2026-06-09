@@ -35,6 +35,7 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.IptvPlayer"
+        android:largeHeap="true"
         android:usesCleartextTraffic="true">
 
         <!-- Launcher: branded splash, routes onward. -->
@@ -65,6 +66,12 @@
         <!-- Post-login launcher dashboard. -->
         <activity
             android:name=".ui.dashboard.DashboardActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <!-- Shown when a previous launch crashed before the home appeared. -->
+        <activity
+            android:name=".ui.recovery.CrashRecoveryActivity"
             android:exported="false"
             android:screenOrientation="landscape" />
 

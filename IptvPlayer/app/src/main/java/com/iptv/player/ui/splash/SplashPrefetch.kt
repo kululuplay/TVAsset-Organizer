@@ -13,6 +13,7 @@ package com.iptv.player.ui.splash
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.SourceConfig
+import com.iptv.player.util.Logger
 import com.iptv.player.util.NewContentNotifier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -110,8 +111,19 @@ object SplashPrefetch {
             block()
         } catch (e: CancellationException) {
             throw e // never swallow coroutine cancellation
-        } catch (_: Throwable) {
-            // Best-effort prefetch: ignore and move on.
+        } catch (e: OutOfMemoryError) {
+            // Never swallow OOM. Catching it here used to leave the heap exhausted
+            // so the *next* allocation (Dashboard inflation) crashed with a
+            // misleading trace — the classic low-RAM Fire/Sony "home never opens"
+            // failure. Log it and rethrow so the crash points at the real culprit
+            // and LaunchCrashGuard surfaces it on the next launch.
+            Logger.e(TAG, "Prefetch ran out of memory", e)
+            throw e
+        } catch (e: Exception) {
+            // Best-effort prefetch: ignore ordinary failures and move on.
+            Logger.w(TAG, "Prefetch stage failed (ignored): ${e.message}")
         }
     }
+
+    private const val TAG = "SplashPrefetch"
 }
