@@ -28,9 +28,8 @@ object CrashReporter {
 
     private const val TAG = "CrashReporter"
 
-    // Set to the published Replit crash-receiver URL. While it still contains the
-    // placeholder, reporting is disabled (no-op).
-    private const val ENDPOINT = "https://REPLACE_AFTER_DEPLOY.replit.app/api/crash"
+    // Published Replit crash-receiver URL.
+    private const val ENDPOINT = "https://asset-organizer-kululuaydin.replit.app/api/crash"
 
     // Shared key stamped on every report; must match the receiver's CRASH_INGEST_KEY.
     // NOT a real secret (it ships in the APK) — only deters casual spam.

@@ -4,6 +4,7 @@
 - [Focus-driven row recoloring](android-focus-row-recolor.md) — focusable parent row recolors on focus, but children need `android:duplicateParentState="true"` to follow the color selector.
 - [Android TV EditText focus trap](android-tv-edittext-focus-trap.md) — D-pad stuck on search box; land focus on content on load + intercept DPAD_DOWN/RIGHT on the EditText (nextFocus to non-focusable RecyclerView is unreliable).
 - [API21-safe vector launcher icons](android-vector-launcher-icons.md) — system-drawn icon VectorDrawables can't use inline gradients on API21-23; use flat fills + alpha.
+- [Gradient angle must be ×45](gradient-angle-multiple-of-45.md) — API≤28 GradientDrawable throws InflateException when a linear-gradient android:angle isn't a multiple of 45 (crashes layout inflation); Android 10+ tolerates it, so it passes on test devices.
 - [Kotlin trailing-lambda param order](kotlin-trailing-lambda-param-order.md) — required action lambda must stay LAST; appending a defaulted lambda after it breaks every trailing-lambda caller.
 - [In-app update checker via GitHub Releases](inapp-update-checker-github-releases.md) — needs a real Release (not CI artifacts; CI auto-publishes one) AND a public repo (releases API 404s on private); bump versionName to ship updates.
 - [Replit git can't push workflow changes](git-workflow-scope-push-block.md) — pushes touching .github/workflows are rejected (no `workflow` scope); revert workflow to origin & do the logic in app code instead.
