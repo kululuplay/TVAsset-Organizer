@@ -24,6 +24,7 @@ class SettingsViewModel : ViewModel() {
     val streamFormat: Flow<StreamFormat> = settings.streamFormat
     val bufferMode: Flow<BufferMode> = settings.bufferMode
     val audioPassthrough: Flow<Boolean> = settings.audioPassthrough
+    val debugOverlay: Flow<Boolean> = settings.debugOverlay
     val showClock: Flow<Boolean> = settings.showClock
     val screensaverMinutes: Flow<Int> = settings.screensaverMinutes
     val languageTag: Flow<String> = settings.languageTag
@@ -43,6 +44,9 @@ class SettingsViewModel : ViewModel() {
 
     fun setAudioPassthrough(enabled: Boolean) =
         viewModelScope.launch { settings.setAudioPassthrough(enabled) }
+
+    fun setDebugOverlay(enabled: Boolean) =
+        viewModelScope.launch { settings.setDebugOverlay(enabled) }
 
     fun setShowClock(enabled: Boolean) = viewModelScope.launch { settings.setShowClock(enabled) }
 

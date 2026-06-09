@@ -44,6 +44,7 @@ class SettingsStore(private val context: Context) {
         val LIVE_STREAM_FORMAT = stringPreferencesKey("live_stream_format")
         val BUFFER_MODE = stringPreferencesKey("buffer_mode")
         val AUDIO_PASSTHROUGH = booleanPreferencesKey("audio_passthrough")
+        val DEBUG_OVERLAY = booleanPreferencesKey("debug_overlay")
         val LAST_CHANNEL = stringPreferencesKey("last_channel")
         val RESUME_ON_LAUNCH = booleanPreferencesKey("resume_on_launch")
         val LANGUAGE = stringPreferencesKey("language")
@@ -141,6 +142,18 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setAudioPassthrough(enabled: Boolean) =
         context.dataStore.edit { it[Keys.AUDIO_PASSTHROUGH] = enabled }
+
+    /**
+     * On-screen Debug overlay (engine/stage/resolution + live PlaybackLog tail)
+     * shown on the live preview, fullscreen and VOD players. Default OFF — it is
+     * a diagnostics aid for reproducing green-screen / fallback issues.
+     */
+    val debugOverlay: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.DEBUG_OVERLAY] ?: false
+    }
+
+    suspend fun setDebugOverlay(enabled: Boolean) =
+        context.dataStore.edit { it[Keys.DEBUG_OVERLAY] = enabled }
 
     val aspectRatio: Flow<AspectRatio> = context.dataStore.data.map { prefs ->
         runCatching { AspectRatio.valueOf(prefs[Keys.ASPECT] ?: "") }

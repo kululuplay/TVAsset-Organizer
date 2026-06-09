@@ -21,7 +21,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.SeekBar
 import android.widget.Toast
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.iptv.player.R
 import com.iptv.player.cast.CastController
 import com.iptv.player.data.ServiceLocator
@@ -33,8 +35,11 @@ import com.iptv.player.data.model.ResumeMeta
 import com.iptv.player.databinding.ActivityVodPlayerBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.SleepTimer
+import com.iptv.player.player.StreamInfo
 import com.iptv.player.util.AppInfo
+import com.iptv.player.util.DebugOverlayBinder
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.videolan.libvlc.LibVLC
@@ -84,6 +89,7 @@ class VodPlayerActivity : BaseActivity() {
     private var libVlc: LibVLC? = null
     private var mediaPlayer: MediaPlayer? = null
     private var videoLayout: VLCVideoLayout? = null
+    private var debugBinder: DebugOverlayBinder? = null
 
     private var streamUrl: String? = null
     private var resumeId: String? = null
@@ -170,6 +176,37 @@ class VodPlayerActivity : BaseActivity() {
         initPlayer()
         // Controls start visible; auto-hide them after a few idle seconds.
         scheduleHideControls()
+
+        // On-screen Debug overlay (engine/stage + live PlaybackLog tail), gated by
+        // the Debug setting. VOD uses a raw libVLC MediaPlayer, so build StreamInfo
+        // from its current video track rather than a PlayerController.
+        debugBinder = DebugOverlayBinder(binding.debugOverlay) { vodStreamInfo() }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                try {
+                    settings.debugOverlay.collectLatest { debugBinder?.setEnabled(it) }
+                } finally {
+                    // Leaving STARTED: drop the listener + timer so a backgrounded
+                    // VOD player doesn't keep rendering the overlay off-screen.
+                    debugBinder?.setEnabled(false)
+                }
+            }
+        }
+    }
+
+    /** Build StreamInfo from the raw libVLC track (mirrors VlcPlayerEngine). */
+    private fun vodStreamInfo(): StreamInfo? {
+        val track = mediaPlayer?.currentVideoTrack ?: return null
+        val den = track.frameRateDen
+        val fps = if (den > 0) track.frameRateNum.toFloat() / den else 0f
+        return StreamInfo(
+            width = track.width,
+            height = track.height,
+            fps = fps,
+            codec = (track.codec as? String),
+            bitrateKbps = track.bitrate.takeIf { it > 0 }?.let { it / 1000 },
+            engine = "VLC"
+        )
     }
 
     override fun onUserInteraction() {
@@ -755,6 +792,7 @@ class VodPlayerActivity : BaseActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        debugBinder?.release()
         sleepTimer.release()
         castController.detach()
         handler.removeCallbacksAndMessages(null)

@@ -110,6 +110,22 @@
                 android:scaleType="fitCenter"
                 android:contentDescription="@string/now_playing" />
 
+            <!-- Debug overlay: engine/stage/resolution + live PlaybackLog tail.
+                 Gated by the Debug setting (hidden by default). -->
+            <TextView
+                android:id="@+id/debugOverlay"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|start"
+                android:layout_margin="@dimen/space_m"
+                android:padding="@dimen/space_s"
+                android:background="@drawable/bg_zap_banner"
+                android:fontFamily="monospace"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
+                android:lineSpacingExtra="1dp"
+                android:visibility="gone" />
+
             <!-- Catch-up hint chip: shown when the focused channel has an archive. -->
             <TextView
                 android:id="@+id/catchupHint"

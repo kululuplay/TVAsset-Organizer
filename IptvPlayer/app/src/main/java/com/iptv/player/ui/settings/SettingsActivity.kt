@@ -73,6 +73,7 @@ class SettingsActivity : BaseActivity() {
     private var streamFormatValue: TextView? = null
     private var bufferModeValue: TextView? = null
     private var passthroughSwitch: SwitchCompat? = null
+    private var debugOverlaySwitch: SwitchCompat? = null
 
     private var autoSyncEnabled = false
     private var autoSyncHours = 12
@@ -350,6 +351,15 @@ class SettingsActivity : BaseActivity() {
             viewModel.setAudioPassthrough(!passthroughSwitch!!.isChecked)
         }
         c.addView(passthroughRow)
+
+        // On-screen Debug overlay toggle (engine/stage/resolution + live log tail).
+        val debugRow = inflateMaster(c, getString(R.string.settings_debug_overlay))
+        debugOverlaySwitch = debugRow.findViewById<SwitchCompat>(R.id.mSwitch)
+            .also { it.visibility = View.VISIBLE }
+        debugRow.setOnClickListener {
+            viewModel.setDebugOverlay(!debugOverlaySwitch!!.isChecked)
+        }
+        c.addView(debugRow)
 
         // Share the on-device playback diagnostics log (green/no-audio causes).
         val logRow = inflateMaster(c, getString(R.string.settings_share_playback_log))
@@ -700,6 +710,9 @@ class SettingsActivity : BaseActivity() {
         }
         lifecycleScope.launch {
             viewModel.audioPassthrough.collectLatest { passthroughSwitch?.isChecked = it }
+        }
+        lifecycleScope.launch {
+            viewModel.debugOverlay.collectLatest { debugOverlaySwitch?.isChecked = it }
         }
         lifecycleScope.launch {
             viewModel.tmdbKey.collectLatest {

@@ -35,6 +35,7 @@ import com.iptv.player.ui.common.NumberZapInputHelper
 import com.iptv.player.ui.common.PinLockHelper
 import com.iptv.player.ui.common.isAdult
 import com.iptv.player.ui.player.PlayerActivity
+import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NewContentNotifier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
@@ -78,6 +79,7 @@ class HomeActivity : BaseActivity() {
 
     /** Live preview player bound to the preview card (one connection at a time). */
     private var previewController: PlayerController? = null
+    private var debugBinder: DebugOverlayBinder? = null
 
     /** Debounce job so scrolling channels doesn't thrash the single stream socket. */
     private var previewJob: kotlinx.coroutines.Job? = null
@@ -123,6 +125,20 @@ class HomeActivity : BaseActivity() {
         setupLists()
         observe()
         observeNewContent()
+
+        // On-screen Debug overlay over the live preview (engine/stage + log tail).
+        debugBinder = DebugOverlayBinder(binding.debugOverlay) { previewController?.streamInfo() }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                try {
+                    ServiceLocator.settings.debugOverlay.collectLatest { debugBinder?.setEnabled(it) }
+                } finally {
+                    // Leaving STARTED: drop the listener + timer so a stopped Home
+                    // doesn't keep rendering the overlay off-screen.
+                    debugBinder?.setEnabled(false)
+                }
+            }
+        }
     }
 
     /**
@@ -674,6 +690,11 @@ class HomeActivity : BaseActivity() {
             previewingChannel = channel
             lockCaptionToPreview(channel)
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        debugBinder?.release()
     }
 
     /** Stops + releases the preview so the single stream connection is freed. */

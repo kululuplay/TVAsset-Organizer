@@ -15,8 +15,10 @@ import android.os.Looper
 import android.view.KeyEvent
 import android.view.View
 import android.widget.Toast
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import coil.load
 import com.iptv.player.R
 import com.iptv.player.cast.CastController
@@ -28,10 +30,12 @@ import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.databinding.ActivityPlayerBinding
 import com.iptv.player.player.PlayerController
 import com.iptv.player.player.StreamInfo
+import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.SleepTimer
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -64,6 +68,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     }
 
     private lateinit var controller: PlayerController
+    private var debugBinder: DebugOverlayBinder? = null
     private var currentChannel: Channel? = null
     private val overlayHandler = Handler(Looper.getMainLooper())
     private val handoffCoverHandler = Handler(Looper.getMainLooper())
@@ -101,6 +106,23 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         setContentView(binding.root)
 
         castController.attach()
+
+        // On-screen Debug overlay (engine/stage + live PlaybackLog tail), gated by
+        // the Debug setting; separate from the MENU-toggled stats overlay.
+        debugBinder = DebugOverlayBinder(binding.debugOverlay) {
+            if (::controller.isInitialized) controller.streamInfo() else null
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                try {
+                    ServiceLocator.settings.debugOverlay.collectLatest { debugBinder?.setEnabled(it) }
+                } finally {
+                    // Leaving STARTED: drop the listener + timer so a backgrounded
+                    // player doesn't keep rendering the overlay off-screen.
+                    debugBinder?.setEnabled(false)
+                }
+            }
+        }
 
         val channelId = intent.getStringExtra(EXTRA_CHANNEL_ID)
         if (channelId == null) {
@@ -471,6 +493,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         overlayHandler.removeCallbacksAndMessages(null)
         handoffCoverHandler.removeCallbacksAndMessages(null)
         statsHandler.removeCallbacksAndMessages(null)
+        debugBinder?.release()
         // Don't release a controller we've handed back to Home — it owns it now.
         if (!handingBack && ::controller.isInitialized) controller.release()
     }

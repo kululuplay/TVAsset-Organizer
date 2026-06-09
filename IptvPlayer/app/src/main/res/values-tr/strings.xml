@@ -138,6 +138,7 @@
     <string name="settings_tmdb">TMDB API anahtarı</string>
     <string name="settings_tmdb_hint">İsteğe bağlı: film afişlerini ve detaylarını açar.</string>
     <string name="settings_screensaver">Boştayken ekran koruyucu</string>
+    <string name="settings_debug_overlay">Hata ayıklama katmanı (oynatıcı + önizleme)</string>
     <string name="settings_clock">Saati göster</string>
     <string name="settings_diagnostics">Tanılama</string>
     <string name="settings_about">Hakkında</string>

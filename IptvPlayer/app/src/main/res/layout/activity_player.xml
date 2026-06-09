@@ -181,4 +181,20 @@
         android:textSize="@dimen/text_body"
         android:lineSpacingExtra="2dp"
         android:visibility="gone" />
+
+    <!-- Debug overlay: engine/stage/resolution + live PlaybackLog tail. Gated by
+         the Debug setting; sits top|end so it never collides with statsOverlay. -->
+    <TextView
+        android:id="@+id/debugOverlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_margin="@dimen/safe_area_v"
+        android:padding="@dimen/space_m"
+        android:background="@drawable/bg_zap_banner"
+        android:fontFamily="monospace"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_caption"
+        android:lineSpacingExtra="1dp"
+        android:visibility="gone" />
 </FrameLayout>
