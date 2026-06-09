@@ -64,14 +64,23 @@ class PlayerController(
      * the output on the new surface and emits a frame event (this is exactly why a
      * channel zap already "fixed" the black picture). Single-connection is
      * preserved: every engine.play() stops the current stream before starting.
+     *
+     * Rapid back-and-forth hand-offs (preview -> fullscreen -> BACK within the
+     * ENGINE_SWAP_DELAY_MS window) would otherwise stack two delayed re-attaches
+     * that both run, churning surface ownership. We reuse the startGeneration token:
+     * each rebind bumps it, so only the latest delayed runnable executes, and we
+     * re-check the engine is still the active one before touching it. (A play() in
+     * between already clears the handler, so that path is covered too.)
      */
     fun rebind(newContainer: ViewGroup) {
         context = newContainer.context
         container = newContainer
         val eng = engine ?: return
         val url = currentUrl
+        val generation = ++startGeneration
         eng.detachVideo()
         mainHandler.postDelayed({
+            if (generation != startGeneration || eng !== engine) return@postDelayed
             eng.attachVideo(newContainer)
             if (url != null) eng.play(url)
         }, ENGINE_SWAP_DELAY_MS)
