@@ -3,3 +3,7 @@
 *.keystore
 *.b64
 keystore.properties
+
+# Node (crash-receiver backend)
+node_modules/
+npm-debug.log*

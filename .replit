@@ -1,9 +1,42 @@
-modules = ["python-3.11", "java-graalvm22.3"]
+modules = ["python-3.11", "java-graalvm22.3", "nodejs-20"]
 [agent]
 expertMode = true
 
 [nix]
+channel = "stable-25_05"
 
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 30000
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Crash Receiver"
+
+[[workflows.workflow]]
+name = "Crash Receiver"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "node crash-receiver/server.js"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["node", "crash-receiver/server.js"]

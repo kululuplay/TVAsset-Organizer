@@ -1,0 +1,16 @@
+{
+  "name": "workspace",
+  "version": "1.0.0",
+  "main": "crash-receiver/server.js",
+  "scripts": {
+    "start": "node crash-receiver/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "express": "^5.2.1",
+    "pg": "^8.21.0"
+  }
+}

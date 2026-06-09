@@ -24,6 +24,7 @@ object Logger {
     private const val FILE = "kululu-log.txt"
     private const val FILE_OLD = "kululu-log.1.txt"
     private const val SHARE_FILE = "kululu-log-share.txt"
+    private const val MARKER = "crash-pending.txt" // dropped on crash, consumed next launch
     private const val MAX_BYTES = 512 * 1024 // rotate at ~0.5 MB; keep one previous
 
     private val lock = Any()
@@ -107,6 +108,42 @@ object Logger {
         }
     }
 
+    /** True when the previous run crashed and its report has not been uploaded yet. */
+    fun hasPendingCrash(): Boolean =
+        logDir?.let { File(it, MARKER).exists() } ?: false
+
+    /** Marker contents ("<epochMillis>\n<summary>"), or null when there is none. */
+    fun crashSummary(): String? {
+        val dir = logDir ?: return null
+        return synchronized(lock) {
+            runCatching {
+                File(dir, MARKER).takeIf { it.exists() }?.readText()
+            }.getOrNull()
+        }
+    }
+
+    /** Clear the marker once a crash report has been delivered. */
+    fun clearPendingCrash() {
+        val dir = logDir ?: return
+        synchronized(lock) { runCatching { File(dir, MARKER).delete() } }
+    }
+
+    /** Drop a tiny marker so the next launch knows to upload the captured crash. */
+    private fun markCrashPending(throwable: Throwable) {
+        val dir = logDir ?: return
+        synchronized(lock) {
+            runCatching {
+                val summary =
+                    "${throwable.javaClass.name}: ${throwable.message ?: ""}".take(500)
+                FileWriter(File(dir, MARKER), false).use { w ->
+                    w.append(System.currentTimeMillis().toString())
+                        .append('\n')
+                        .append(summary)
+                }
+            }
+        }
+    }
+
     private fun installCrashHandler() {
         if (crashHandlerInstalled) return
         crashHandlerInstalled = true
@@ -115,6 +152,7 @@ object Logger {
             // Capture the crash before the process is torn down, then defer to the
             // platform handler so normal crash reporting / process death still happens.
             e("FATAL", "Uncaught exception on thread '${thread.name}'", throwable)
+            markCrashPending(throwable)
             previous?.uncaughtException(thread, throwable)
         }
     }

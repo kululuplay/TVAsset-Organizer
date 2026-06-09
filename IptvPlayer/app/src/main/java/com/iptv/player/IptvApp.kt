@@ -10,6 +10,7 @@ import android.app.Application
 import android.os.StrictMode
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.util.AnrWatchdog
+import com.iptv.player.util.CrashReporter
 import com.iptv.player.util.Logger
 import com.iptv.player.work.SyncScheduler
 import kotlinx.coroutines.CoroutineScope
@@ -29,6 +30,10 @@ class IptvApp : Application() {
         if (BuildConfig.DEBUG) enableStrictMode()
 
         ServiceLocator.init(this)
+
+        // If the last run crashed, quietly ship the captured report so we can see
+        // failures on users' devices (Fire TV / Sony) without any interaction.
+        CrashReporter.uploadPendingIfAny(this)
 
         // Watch for main-thread freezes (ANRs) and record their stack to the log.
         anrWatchdog = AnrWatchdog().also { it.start() }
