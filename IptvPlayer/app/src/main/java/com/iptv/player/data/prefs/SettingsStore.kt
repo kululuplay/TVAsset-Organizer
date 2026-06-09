@@ -74,6 +74,9 @@ class SettingsStore(private val context: Context) {
         // Persisted grid sort order for the Movies / Series browse screens.
         val CONTENT_SORT_VOD = stringPreferencesKey("content_sort_vod")
         val CONTENT_SORT_SERIES = stringPreferencesKey("content_sort_series")
+
+        // Stable per-install id used by the live-device heartbeat telemetry.
+        val DEVICE_ID = stringPreferencesKey("device_id")
     }
 
     // ---- Routing flags --------------------------------------------------
@@ -88,6 +91,19 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setWizardDone(done: Boolean) =
         context.dataStore.edit { it[Keys.WIZARD_DONE] = done }
+
+    /**
+     * Stable per-install device id for telemetry. Returns the persisted id, or
+     * persists and returns one produced by [generate] on first use. [generate]
+     * runs only when no id exists yet.
+     */
+    suspend fun getOrCreateDeviceId(generate: () -> String): String {
+        val existing = context.dataStore.data.map { it[Keys.DEVICE_ID] }.first()
+        if (!existing.isNullOrBlank()) return existing
+        val created = generate()
+        context.dataStore.edit { it[Keys.DEVICE_ID] = created }
+        return created
+    }
 
     // ---- Playback -------------------------------------------------------
 

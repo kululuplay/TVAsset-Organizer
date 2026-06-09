@@ -28,12 +28,10 @@ object CrashReporter {
 
     private const val TAG = "CrashReporter"
 
-    // Published Replit crash-receiver URL.
-    private const val ENDPOINT = "https://asset-organizer-kululuaydin.replit.app/api/crash"
-
-    // Shared key stamped on every report; must match the receiver's CRASH_INGEST_KEY.
-    // NOT a real secret (it ships in the APK) — only deters casual spam.
-    private const val INGEST_KEY = "kululu-crash-ingest-v1-7f3ab9c2"
+    // Crash-receiver endpoint + shared ingest key live in one place (Telemetry) so
+    // the base URL / key rotate in lockstep with the heartbeat reporter.
+    private val ENDPOINT = Telemetry.CRASH_ENDPOINT
+    private val INGEST_KEY = Telemetry.INGEST_KEY
 
     /**
      * If the previous run crashed, upload the captured report in the background
