@@ -90,6 +90,16 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     private var adoptedPreview = false
 
     /**
+     * Adopted preview controller consumed in onCreate but not yet transferred to
+     * [controller] — the channel resolve that precedes the assignment is async, so
+     * a fast BACK can destroy this activity mid-setup. Held here so onDestroy can
+     * still release it; otherwise the handed-over stream keeps decoding and playing
+     * audio in the background with nothing owning it (ghost audio after exit).
+     * Cleared once ownership transfers to [controller] (or the adopt path is dropped).
+     */
+    private var pendingAdopted: PlayerController? = null
+
+    /**
      * True once we've parked the controller for Home to re-adopt on BACK (the
      * reverse hand-off), so onStop/onDestroy must NOT pause or release it — Home
      * now owns the single live connection and keeps the picture going.
@@ -156,6 +166,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         val adopted: PlayerController? =
             if (intent.getBooleanExtra(EXTRA_ADOPT_PREVIEW, false))
                 ServiceLocator.consumePendingLiveController() else null
+        // Track it until ownership transfers to [controller] below, so a teardown
+        // during the async channel resolve still releases the handed-over stream.
+        pendingAdopted = adopted
 
         lifecycleScope.launch {
             streamFormat = viewModel.streamFormat()
@@ -163,6 +176,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             if (channel == null) {
                 // Release the adopted connection so the hand-off can't orphan it.
                 adopted?.release()
+                pendingAdopted = null
                 Toast.makeText(this@PlayerActivity, R.string.error_unknown, Toast.LENGTH_SHORT).show()
                 finish()
                 return@launch
@@ -172,6 +186,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
                 // screen's surface and take ownership — no new play()/reconnect.
                 adoptedPreview = true
                 controller = adopted
+                // Ownership transferred to [controller]; onDestroy now releases it
+                // via the ::controller path, so the pending reference is no longer needed.
+                pendingAdopted = null
                 controller.setCallback(this@PlayerActivity)
                 // The hand-off tears down and recreates the video surface, so the
                 // picture goes black for a beat (audio keeps playing) until the new
@@ -580,7 +597,14 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         statsHandler.removeCallbacksAndMessages(null)
         debugBinder?.release()
         // Don't release a controller we've handed back to Home — it owns it now.
-        if (!handingBack && ::controller.isInitialized) controller.release()
+        if (!handingBack) {
+            if (::controller.isInitialized) controller.release()
+            // Adopted preview controller torn down before onCreate finished wiring
+            // it to [controller]: release it so the handed-over stream can't keep
+            // decoding/playing audio in the background with no owner.
+            else pendingAdopted?.release()
+        }
+        pendingAdopted = null
     }
 
     // ---- Diagnostics overlay -------------------------------------------
