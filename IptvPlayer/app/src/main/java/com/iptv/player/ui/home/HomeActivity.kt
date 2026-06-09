@@ -11,6 +11,8 @@ package com.iptv.player.ui.home
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.widget.Toast
 import android.view.KeyEvent
@@ -88,6 +90,13 @@ class HomeActivity : BaseActivity() {
     private var previewController: PlayerController? = null
     private var debugBinder: DebugOverlayBinder? = null
 
+    /**
+     * Safety net for the reverse hand-off: if no fresh frame event arrives after
+     * re-adopting the handed-back controller, clear the channel logo so the
+     * preview never stays hidden behind it. Cancelled the moment a frame lands.
+     */
+    private val previewLogoHandler = Handler(Looper.getMainLooper())
+
     /** Debounce job so scrolling channels doesn't thrash the single stream socket. */
     private var previewJob: kotlinx.coroutines.Job? = null
 
@@ -107,6 +116,14 @@ class HomeActivity : BaseActivity() {
          * so only the channel the user settles on triggers a guide fetch.
          */
         private const val EPG_DEBOUNCE_MS = 200L
+
+        /**
+         * Safety cap for the reverse-hand-off channel-logo cover: if no fresh frame
+         * event arrives after re-adopting the handed-back controller, force-clear
+         * the logo so the preview can't stay hidden behind it. Mirrors the
+         * fullscreen player's hand-off cover timeout.
+         */
+        private const val HANDOFF_LOGO_TIMEOUT_MS = 6000L
     }
 
     private val zap by lazy {
@@ -656,6 +673,9 @@ class HomeActivity : BaseActivity() {
         // correct even as the user browses other channel names afterwards.
         lockCaptionToPreview(channel)
         previewJob?.cancel()
+        // Drop any pending reverse-hand-off logo timeout so it can't hide the logo
+        // of this freshly-started preview before its first frame lands.
+        previewLogoHandler.removeCallbacksAndMessages(null)
         binding.infoLogo.visibility = View.VISIBLE
         previewJob = lifecycleScope.launch { startPreview(channel) }
     }
@@ -693,12 +713,17 @@ class HomeActivity : BaseActivity() {
     private fun buildPreviewCallback() = object : PlayerController.Callback {
         override fun onBuffering() {}
         override fun onPlaying(engineName: String) {
+            previewLogoHandler.removeCallbacksAndMessages(null)
             binding.infoLogo.visibility = View.GONE
         }
         override fun onVideoResumed() {
+            previewLogoHandler.removeCallbacksAndMessages(null)
             binding.infoLogo.visibility = View.GONE
         }
         override fun onFatalError() {
+            // Playback failed: keep the logo up as the "can't play" state and drop
+            // the hand-off timeout so it can't later hide it and expose a black surface.
+            previewLogoHandler.removeCallbacksAndMessages(null)
             binding.infoLogo.visibility = View.VISIBLE
         }
         override fun onRetrying(attempt: Int) {}
@@ -716,6 +741,14 @@ class HomeActivity : BaseActivity() {
         previewController = controller
         controller.setCallback(buildPreviewCallback())
         binding.infoLogo.visibility = View.VISIBLE
+        // Safety net: rebind() restarts the stream and the fresh frame event hides
+        // the logo, but if that event never arrives, force-clear the logo so the
+        // preview can't stay hidden behind it indefinitely.
+        previewLogoHandler.removeCallbacksAndMessages(null)
+        previewLogoHandler.postDelayed(
+            { binding.infoLogo.visibility = View.GONE },
+            HANDOFF_LOGO_TIMEOUT_MS
+        )
         controller.rebind(binding.previewVideo)
         val channel = channelId?.let { id -> currentChannels.firstOrNull { it.id == id } }
         if (channel != null) {
@@ -727,11 +760,13 @@ class HomeActivity : BaseActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        previewLogoHandler.removeCallbacksAndMessages(null)
         debugBinder?.release()
     }
 
     /** Stops + releases the preview so the single stream connection is freed. */
     private fun stopPreview() {
+        previewLogoHandler.removeCallbacksAndMessages(null)
         previewJob?.cancel()
         captionJob?.cancel()
         previewController?.release()

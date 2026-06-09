@@ -47,21 +47,34 @@ class PlayerController(
     fun setCallback(cb: Callback) { callback = cb }
 
     /**
-     * Re-home the currently running engine's video surface onto [newContainer]
-     * WITHOUT restarting playback (no new Media, the stream socket stays open).
-     * Used to hand a live preview over to the fullscreen player seamlessly.
+     * Re-home the currently running engine onto [newContainer] for a live
+     * preview <-> fullscreen hand-off, then RESTART the stream on the same engine
+     * so the picture reliably reappears on the new surface.
      *
      * The detach -> delay -> attach sequence mirrors the engine-swap timing: a
      * SurfaceView's underlying surface is torn down asynchronously, so adding the
      * surface to the new container in the same pass would race that teardown and
      * green the fresh surface on Amlogic. Deferring the re-attach clears it.
+     *
+     * A bare re-attach (no new play) was NOT enough: the decoder's video output
+     * stayed bound to the old, now-destroyed surface, so audio kept playing but no
+     * frames composited (black video, esp. the Amlogic MediaCodec underlay) and no
+     * fresh Vout/first-frame event fired — leaving the hand-off cover / preview
+     * logo stuck until a timeout. Re-issuing play() on the SAME engine recreates
+     * the output on the new surface and emits a frame event (this is exactly why a
+     * channel zap already "fixed" the black picture). Single-connection is
+     * preserved: every engine.play() stops the current stream before starting.
      */
     fun rebind(newContainer: ViewGroup) {
         context = newContainer.context
         container = newContainer
         val eng = engine ?: return
+        val url = currentUrl
         eng.detachVideo()
-        mainHandler.postDelayed({ eng.attachVideo(newContainer) }, ENGINE_SWAP_DELAY_MS)
+        mainHandler.postDelayed({
+            eng.attachVideo(newContainer)
+            if (url != null) eng.play(url)
+        }, ENGINE_SWAP_DELAY_MS)
     }
 
     /** UI-facing events from the controller (already engine-agnostic). */

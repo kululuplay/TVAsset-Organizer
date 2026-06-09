@@ -334,6 +334,12 @@ class ExoPlayerEngine(
         val exo = player ?: return
         resetHealth()
         PlaybackLog.log(context, engineName, "play passthrough=$allowPassthrough")
+        // Stop before re-preparing: this method is also the hand-off restart path
+        // (preview <-> fullscreen), where a bare PlayerView re-add can leave the
+        // renderer audio-ready but video-stalled (black with sound). An explicit
+        // stop() deterministically resets the decoder/renderer onto the re-attached
+        // surface; on a fresh engine it's a harmless no-op.
+        exo.stop()
         exo.setMediaItem(MediaItem.fromUri(url))
         exo.playWhenReady = true
         exo.prepare()
