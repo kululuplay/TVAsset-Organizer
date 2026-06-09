@@ -77,6 +77,9 @@ class SettingsStore(private val context: Context) {
 
         // Stable per-install id used by the live-device heartbeat telemetry.
         val DEVICE_ID = stringPreferencesKey("device_id")
+
+        // Id of the most recent remote announcement already shown (dedup).
+        val LAST_ANNOUNCEMENT_ID = longPreferencesKey("last_announcement_id")
     }
 
     // ---- Routing flags --------------------------------------------------
@@ -104,6 +107,13 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[Keys.DEVICE_ID] = created }
         return created
     }
+
+    /** Id of the most recent remote announcement already shown (0 = none). */
+    suspend fun getLastShownAnnouncementId(): Long =
+        context.dataStore.data.first()[Keys.LAST_ANNOUNCEMENT_ID] ?: 0L
+
+    suspend fun setLastShownAnnouncementId(id: Long) =
+        context.dataStore.edit { it[Keys.LAST_ANNOUNCEMENT_ID] = id }
 
     // ---- Playback -------------------------------------------------------
 

@@ -15,6 +15,7 @@ import android.content.Context
 import android.os.Build
 import com.iptv.player.BuildConfig
 import com.iptv.player.data.ServiceLocator
+import kotlinx.coroutines.runBlocking
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -66,6 +67,10 @@ object CrashReporter {
             put("device", Build.DEVICE)
             put("androidVersion", Build.VERSION.RELEASE)
             put("apiLevel", Build.VERSION.SDK_INT)
+            // Tie this crash to the same device id the heartbeat reports so the ops
+            // panel can show per-device crash counts. Runs on the crash-upload
+            // daemon thread, so a short runBlocking here is acceptable.
+            put("deviceId", runBlocking { DeviceId.get(context) })
             if (occurredAtMillis != null) put("occurredAt", iso(occurredAtMillis))
             put("message", message)
             put("log", log)

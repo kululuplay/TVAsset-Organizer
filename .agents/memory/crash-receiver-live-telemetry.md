@@ -15,3 +15,15 @@ The `crash-receiver/` Node/Express service (workflow "Crash Receiver", Postgres,
 **Shared constants:** base URL + ingest key live in `util/Telemetry.kt` (both CrashReporter and HeartbeatReporter read it) so URL/key rotate in one place. Ingest key ships in the APK — not a real secret, only deters casual spam.
 
 **Rollout caveat:** only devices that install the NEW APK appear as live; existing installs stay invisible until updated. The server must be REPUBLISHED for /api/heartbeat to go live (initDb's ALTER runs on boot).
+
+**Now-playing (panel "Şu an"):** a `NowPlaying` singleton carries title+kind, sent in the heartbeat. Clear MUST use an owner token (the activity instance): VOD next-episode launches a NEW player activity and then finishes the OLD one, so the old screen's onStop would otherwise wipe the value the new screen just set. clear(owner) no-ops unless the caller still owns the slot.
+
+**Remote announcements (panel → all devices):** the /api/heartbeat 200 response carries `{announcement:{id,message}|null}`; the app surfaces it once. Two durable lessons:
+- **Parse the heartbeat response 204/null-safe.** Older servers return 204 (no body); gate on isSuccessful, blank-body early-return, runCatching the JSON, treat `announcement:null` as clear. A strict parser would break the whole loop against an old server.
+- **Dedup needs BOTH a persisted id AND an atomic in-memory claim.** The heartbeat-thread listener and onActivityResumed both call the show path; their suspending DataStore reads interleave on Main, so a persisted-id check alone double-shows. A `@Synchronized claim(id)` (compare-and-set on an in-memory high-water id) is the real guard; the persisted id only covers process restarts.
+- **Re-validate the activity AFTER the suspending DataStore writes, right before AlertDialog.show().** The settings read+write suspend (disk I/O); the activity can be destroyed (BACK/HOME) in between → `WindowManager$BadTokenException`. Re-check isFinishing/isDestroyed/still-front (and wrap show() in runCatching). Safe to skip the show: the id is already persisted, so it simply waits for the next safe resume.
+- Suppress the dialog over player/screensaver/trailer screens so it never interrupts viewing; it surfaces on the next safe onActivityResumed.
+
+**Per-device crash counts:** crash reports now send the same `deviceId` (CrashReporter calls the shared `DeviceId.get` via runBlocking on its crash-upload daemon thread); the panel LEFT JOINs crash_reports.device_id to show per-device crash count. `device_id` was added to crash_reports via the same ALTER trap above.
+
+**Geo + shared-IP:** heartbeat does a fire-and-forget IP geolocation (ip-api.com free http) with ip-keyed cache + in-flight set + negative cache, skipping private/loopback; the panel flags an IP shared by >1 distinct device_id (account-sharing signal). Geo is best-effort and conditional `UPDATE ... WHERE ip` so a slow lookup never blocks the heartbeat.

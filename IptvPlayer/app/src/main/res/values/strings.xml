@@ -63,6 +63,7 @@
     <string name="continue_empty">Nothing in progress yet. Start watching something and it will show up here.</string>
     <string name="favorites_empty">No favorites yet. Mark channels, movies or series as favorite and they will show up here.</string>
     <string name="now_playing">Now playing</string>
+    <string name="announcement_title">Announcement</string>
     <string name="up_next">Up next</string>
     <string name="epg_min_left">%1$d min left</string>
     <string name="epg_ending">Ending now</string>

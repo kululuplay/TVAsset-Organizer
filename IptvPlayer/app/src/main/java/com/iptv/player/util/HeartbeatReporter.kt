@@ -2,8 +2,10 @@
  * HeartbeatReporter.kt
  * Sends a lightweight "I'm alive" ping to the crash-receiver every minute while
  * the app is in the FOREGROUND, so the ops panel can show which devices are
- * watching right now (count, IP, model, app/Android version). The server upserts
- * one row per stable device id, so heartbeats never accumulate.
+ * watching right now (count, IP/city, model, app/Android version, and what's
+ * playing). The server upserts one row per stable device id, so heartbeats never
+ * accumulate. The 200 response carries the active operator announcement (if any),
+ * which we hand to AnnouncementCenter.
  *
  * Foreground-gated by IptvApp (started-activity count): Android TV keeps idle
  * processes alive for hours, so a bare process-alive loop would inflate the
@@ -15,7 +17,6 @@ package com.iptv.player.util
 
 import android.content.Context
 import android.os.Build
-import android.provider.Settings
 import com.iptv.player.BuildConfig
 import com.iptv.player.data.ServiceLocator
 import kotlinx.coroutines.Job
@@ -26,7 +27,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import java.util.UUID
 
 object HeartbeatReporter {
 
@@ -34,11 +34,6 @@ object HeartbeatReporter {
 
     /** How often to ping while foregrounded. */
     private const val INTERVAL_MS = 60_000L
-
-    // The notorious shared/duplicated ANDROID_ID some cheap clone boxes ship; if
-    // we see it (or null/blank) we fall back to a persisted random UUID so those
-    // devices don't all collapse into one row.
-    private const val BAD_ANDROID_ID = "9774d56d682e549c"
 
     @Volatile private var loopJob: Job? = null
 
@@ -63,7 +58,7 @@ object HeartbeatReporter {
 
     private suspend fun sendOnce(context: Context) {
         val json = JSONObject().apply {
-            put("deviceId", deviceId(context))
+            put("deviceId", DeviceId.get(context))
             put("appVersion", BuildConfig.VERSION_NAME)
             put("versionCode", BuildConfig.VERSION_CODE)
             put("manufacturer", Build.MANUFACTURER)
@@ -71,6 +66,8 @@ object HeartbeatReporter {
             put("device", Build.DEVICE)
             put("androidVersion", Build.VERSION.RELEASE)
             put("apiLevel", Build.VERSION.SDK_INT)
+            NowPlaying.title?.let { put("nowPlaying", it) }
+            NowPlaying.kind?.let { put("nowPlayingKind", it) }
         }
         val body = json.toString()
             .toRequestBody("application/json; charset=utf-8".toMediaType())
@@ -79,23 +76,20 @@ object HeartbeatReporter {
             .header("X-Kululu-Key", Telemetry.INGEST_KEY)
             .post(body)
             .build()
-        ServiceLocator.httpClient.newCall(request).execute().use { /* fire-and-forget */ }
-    }
-
-    /**
-     * Stable per-install id: ANDROID_ID when usable, otherwise a random UUID
-     * persisted in settings so it survives restarts (a factory reset producing a
-     * new id is acceptable).
-     */
-    private suspend fun deviceId(context: Context): String =
-        ServiceLocator.settings.getOrCreateDeviceId {
-            val androidId = runCatching {
-                Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
-            }.getOrNull()
-            if (androidId.isNullOrBlank() || androidId == BAD_ANDROID_ID) {
-                UUID.randomUUID().toString()
-            } else {
-                androidId
+        ServiceLocator.httpClient.newCall(request).execute().use { resp ->
+            if (!resp.isSuccessful) return
+            // Newer servers return 200 with {announcement:{id,message}|null}; older
+            // ones return 204 (no body). Parse defensively so neither breaks the loop.
+            val text = runCatching { resp.body?.string() }.getOrNull()
+            if (text.isNullOrBlank()) return
+            runCatching {
+                val obj = JSONObject(text).optJSONObject("announcement")
+                if (obj == null) {
+                    AnnouncementCenter.clear()
+                } else {
+                    AnnouncementCenter.update(obj.optLong("id"), obj.optString("message"))
+                }
             }
         }
+    }
 }

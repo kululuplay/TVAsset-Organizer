@@ -31,6 +31,7 @@ import com.iptv.player.databinding.ActivityPlayerBinding
 import com.iptv.player.player.PlayerController
 import com.iptv.player.player.StreamInfo
 import com.iptv.player.util.DebugOverlayBinder
+import com.iptv.player.util.NowPlaying
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.SleepTimer
@@ -447,6 +448,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         binding.overlayName.text = channel.name
         binding.overlayNumber.text = channel.number?.toString() ?: ""
         binding.overlayCategory.text = channel.categoryName ?: ""
+        // Report to the live-device ops panel what's playing (cleared in onStop).
+        NowPlaying.set(this, channel.name, "Canlı")
         loadEpg(channel)
         val placeholder = LogoPlaceholder.forName(this, channel.name)
         if (channel.logoUrl.isNullOrBlank()) {
@@ -579,11 +582,13 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         // Don't pause when handing the controller back to Home — it must keep
         // playing into the preview surface that Home re-adopted.
         if (!handingBack && ::controller.isInitialized) controller.pause()
+        NowPlaying.clear(this)
     }
 
     override fun onStart() {
         super.onStart()
         if (::controller.isInitialized) controller.resume()
+        currentChannel?.let { NowPlaying.set(this, it.name, "Canlı") }
     }
 
     override fun onDestroy() {

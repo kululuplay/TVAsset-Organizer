@@ -1,23 +1,28 @@
 /*
- * Kululu IPTV — crash receiver + live device telemetry
+ * Kululu IPTV — crash receiver + live device telemetry + ops panel
  * A tiny Express service the Android app talks to (no Google Play Services needed,
- * important for Fire TV sticks). Two jobs:
+ * important for Fire TV sticks). Jobs:
  *   1. Crash reports — the app silently POSTs a report on the next launch after a
  *      crash. Stored in Postgres, viewed through a password-protected panel.
- *   2. Live devices — while foregrounded the app sends a lightweight heartbeat
- *      every minute, so the panel shows which devices are online right now, their
- *      IP, model, app/Android version. Heartbeats UPSERT one row per device.
+ *   2. Live devices — while foregrounded the app sends a heartbeat every minute,
+ *      so the panel shows which devices are online now, their IP + city, model,
+ *      app/Android version and what they're watching. Heartbeats UPSERT one row
+ *      per device.
+ *   3. Remote announcement — an operator message set in the panel is returned in
+ *      every heartbeat response; the app shows it once as a banner/dialog.
  *
  * Endpoints:
- *   POST /api/crash            crash ingest (app -> server), guarded by X-Kululu-Key
- *   POST /api/heartbeat        live ping (app -> server), guarded by X-Kululu-Key
- *   GET  /                     HTML panel (HTTP Basic auth)
- *   GET  /api/crashes          JSON crash list (auth)
- *   GET  /api/devices          JSON device list (auth)
- *   POST /api/crashes/:id/delete   delete one crash (auth)
- *   POST /api/crashes/clear        delete all crashes (auth)
- *   POST /api/devices/clear        delete all devices (auth)
- *   GET  /healthz              health check
+ *   POST /api/crash               crash ingest (app -> server), X-Kululu-Key
+ *   POST /api/heartbeat           live ping (app -> server), X-Kululu-Key; returns announcement
+ *   GET  /                        HTML panel (HTTP Basic auth)
+ *   GET  /api/crashes             JSON crash list (auth)
+ *   GET  /api/devices             JSON device list (auth)
+ *   POST /api/announcement        set the active announcement (auth)
+ *   POST /api/announcement/clear  clear the active announcement (auth)
+ *   POST /api/crashes/:id/delete  delete one crash (auth)
+ *   POST /api/crashes/clear       delete all crashes (auth)
+ *   POST /api/devices/clear       delete all devices (auth)
+ *   GET  /healthz                 health check
  */
 const express = require("express");
 const { Pool } = require("pg");
@@ -29,6 +34,17 @@ const PORT = process.env.PORT || 5000;
 // Heartbeats arrive every 60s, so 3 min tolerates a couple of dropped beats on
 // flaky TV wifi without flapping the status.
 const ONLINE_WINDOW_MS = 3 * 60 * 1000;
+const ONLINE_WINDOW_SEC = Math.round(ONLINE_WINDOW_MS / 1000);
+
+// IP -> city/country cache so we don't hit the geolocation API on every beat.
+const GEO_TTL_MS = 24 * 3600 * 1000;
+const GEO_FAIL_RETRY_MS = 5 * 60 * 1000;
+const geoCache = new Map(); // ip -> { city, country, at }
+const geoInFlight = new Set();
+
+// Active operator announcement, cached in memory (refreshed on set/clear + boot)
+// so heartbeats never trigger a DB read.
+let activeAnnouncement = null; // { id, message } | null
 
 // Shared key the app stamps on every report. NOT a real secret (it ships inside
 // the APK and is extractable) — it only deters casual spam. Rotate by setting
@@ -74,16 +90,19 @@ async function initDb() {
       android_version TEXT,
       api_level INTEGER,
       message TEXT,
-      log TEXT
+      log TEXT,
+      ip TEXT,
+      device_id TEXT
     );
   `);
   await pool.query(
     `CREATE INDEX IF NOT EXISTS idx_crash_received ON crash_reports(received_at DESC);`,
   );
-  // CREATE TABLE IF NOT EXISTS never adds columns to an existing table, so the
-  // client IP must be added explicitly for already-deployed databases.
+  // CREATE TABLE IF NOT EXISTS never adds columns to an existing table, so any
+  // column added after first deploy must be ALTERed in explicitly.
+  await pool.query(`ALTER TABLE crash_reports ADD COLUMN IF NOT EXISTS ip TEXT;`);
   await pool.query(
-    `ALTER TABLE crash_reports ADD COLUMN IF NOT EXISTS ip TEXT;`,
+    `ALTER TABLE crash_reports ADD COLUMN IF NOT EXISTS device_id TEXT;`,
   );
   // One row per device, refreshed by heartbeats. first_seen is preserved across
   // upserts; last_seen drives the online/offline status in the panel.
@@ -99,15 +118,51 @@ async function initDb() {
       android_version TEXT,
       api_level INTEGER,
       app_version TEXT,
-      version_code INTEGER
+      version_code INTEGER,
+      now_playing TEXT,
+      now_playing_kind TEXT,
+      geo_city TEXT,
+      geo_country TEXT
     );
   `);
   await pool.query(
     `CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen DESC);`,
   );
+  await pool.query(
+    `ALTER TABLE devices ADD COLUMN IF NOT EXISTS now_playing TEXT;`,
+  );
+  await pool.query(
+    `ALTER TABLE devices ADD COLUMN IF NOT EXISTS now_playing_kind TEXT;`,
+  );
+  await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS geo_city TEXT;`);
+  await pool.query(
+    `ALTER TABLE devices ADD COLUMN IF NOT EXISTS geo_country TEXT;`,
+  );
+  // Operator announcement pushed to every device via the heartbeat response.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS announcements (
+      id SERIAL PRIMARY KEY,
+      message TEXT NOT NULL,
+      active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await refreshAnnouncementCache();
+}
+
+async function refreshAnnouncementCache() {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, message FROM announcements WHERE active = true ORDER BY id DESC LIMIT 1`,
+    );
+    activeAnnouncement = rows[0] || null;
+  } catch (e) {
+    console.error("announcement cache refresh failed", e);
+  }
 }
 
 app.use(express.json({ limit: "512kb" }));
+app.use(express.urlencoded({ extended: false }));
 app.set("trust proxy", true);
 
 function clip(v, max = 500) {
@@ -129,6 +184,73 @@ function clientIp(req) {
   return clip(ip, 64);
 }
 
+// Private / loopback / link-local addresses have no public geolocation.
+function isPublicIp(ip) {
+  if (!ip) return false;
+  if (ip === "127.0.0.1" || ip === "::1" || ip === "0.0.0.0") return false;
+  if (/^127\./.test(ip)) return false;
+  if (/^10\./.test(ip)) return false;
+  if (/^192\.168\./.test(ip)) return false;
+  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ip)) return false;
+  if (/^169\.254\./.test(ip)) return false;
+  if (ip.startsWith("fe80:") || ip.startsWith("fc") || ip.startsWith("fd")) {
+    return false;
+  }
+  return true;
+}
+
+function cachedGeo(ip) {
+  const e = geoCache.get(ip);
+  if (e && Date.now() - e.at < GEO_TTL_MS) return e;
+  return null;
+}
+
+async function fetchGeo(ip) {
+  const r = await fetch(
+    `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,city,country`,
+    { signal: AbortSignal.timeout(4000) },
+  );
+  const j = await r.json();
+  if (j && j.status === "success") {
+    return { city: clip(j.city, 80), country: clip(j.country, 80), at: Date.now() };
+  }
+  return { city: null, country: null, at: Date.now() }; // valid response, no geo
+}
+
+// Fire-and-forget: ensure every row with this IP has its city/country backfilled.
+// Cheap conditional UPDATE when already cached; one network lookup per new IP.
+async function applyGeo(ip) {
+  if (!isPublicIp(ip)) return;
+  let geo = cachedGeo(ip);
+  if (!geo) {
+    if (geoInFlight.has(ip)) return;
+    geoInFlight.add(ip);
+    try {
+      geo = await fetchGeo(ip);
+      geoCache.set(ip, geo);
+    } catch {
+      // Transient network error — retry sooner than the success TTL.
+      geoCache.set(ip, {
+        city: null,
+        country: null,
+        at: Date.now() - GEO_TTL_MS + GEO_FAIL_RETRY_MS,
+      });
+      geoInFlight.delete(ip);
+      return;
+    }
+    geoInFlight.delete(ip);
+  }
+  if (geo && geo.city) {
+    await pool
+      .query(
+        `UPDATE devices SET geo_city=$1, geo_country=$2
+           WHERE ip=$3 AND (geo_city IS DISTINCT FROM $1 OR geo_country IS DISTINCT FROM $2)`,
+        [geo.city, geo.country, ip],
+      )
+      .catch(() => {});
+  }
+}
+
 // ---- Crash ingest (app -> server) ----
 app.post("/api/crash", async (req, res) => {
   if ((req.get("X-Kululu-Key") || "") !== INGEST_KEY) {
@@ -139,8 +261,8 @@ app.post("/api/crash", async (req, res) => {
     await pool.query(
       `INSERT INTO crash_reports
         (occurred_at, app_version, version_code, manufacturer, model, device,
-         android_version, api_level, message, log, ip)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+         android_version, api_level, message, log, ip, device_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
       [
         b.occurredAt ? new Date(b.occurredAt) : null,
         clip(b.appVersion),
@@ -153,6 +275,7 @@ app.post("/api/crash", async (req, res) => {
         clip(b.message, 2000),
         clip(b.log, 200000),
         clientIp(req),
+        clip(b.deviceId, 128),
       ],
     );
     forwardTelegram(b).catch(() => {});
@@ -164,8 +287,8 @@ app.post("/api/crash", async (req, res) => {
 });
 
 // ---- Heartbeat ingest (app -> server) ----
-// Sent every ~60s while the app is foregrounded. Upserts one row per device so
-// the panel can show who is watching right now.
+// Sent every ~60s while the app is foregrounded. Upserts one row per device and
+// returns the active announcement (if any) for the app to surface.
 app.post("/api/heartbeat", async (req, res) => {
   if ((req.get("X-Kululu-Key") || "") !== INGEST_KEY) {
     return res.status(401).json({ error: "unauthorized" });
@@ -173,12 +296,14 @@ app.post("/api/heartbeat", async (req, res) => {
   const b = req.body || {};
   const deviceId = clip(b.deviceId, 128);
   if (!deviceId) return res.status(400).json({ error: "missing_device_id" });
+  const ip = clientIp(req);
   try {
     await pool.query(
       `INSERT INTO devices
         (device_id, last_seen, ip, manufacturer, model, device,
-         android_version, api_level, app_version, version_code)
-       VALUES ($1, now(), $2,$3,$4,$5,$6,$7,$8,$9)
+         android_version, api_level, app_version, version_code,
+         now_playing, now_playing_kind)
+       VALUES ($1, now(), $2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        ON CONFLICT (device_id) DO UPDATE SET
          last_seen = now(),
          ip = EXCLUDED.ip,
@@ -188,10 +313,12 @@ app.post("/api/heartbeat", async (req, res) => {
          android_version = EXCLUDED.android_version,
          api_level = EXCLUDED.api_level,
          app_version = EXCLUDED.app_version,
-         version_code = EXCLUDED.version_code`,
+         version_code = EXCLUDED.version_code,
+         now_playing = EXCLUDED.now_playing,
+         now_playing_kind = EXCLUDED.now_playing_kind`,
       [
         deviceId,
-        clientIp(req),
+        ip,
         clip(b.manufacturer),
         clip(b.model),
         clip(b.device),
@@ -199,9 +326,13 @@ app.post("/api/heartbeat", async (req, res) => {
         toInt(b.apiLevel),
         clip(b.appVersion),
         toInt(b.versionCode),
+        clip(b.nowPlaying, 200),
+        clip(b.nowPlayingKind, 40),
       ],
     );
-    return res.status(204).end();
+    res.status(200).json({ announcement: activeAnnouncement });
+    // Resolve location after responding so the heartbeat stays fast.
+    applyGeo(ip).catch(() => {});
   } catch (e) {
     console.error("heartbeat failed", e);
     return res.status(500).json({ error: "store_failed" });
@@ -246,10 +377,29 @@ app.get("/api/crashes", auth, async (req, res) => {
 
 app.get("/api/devices", auth, async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT *, (last_seen > now() - interval '${Math.round(ONLINE_WINDOW_MS / 1000)} seconds') AS online
+    `SELECT *, (last_seen > now() - interval '${ONLINE_WINDOW_SEC} seconds') AS online
        FROM devices ORDER BY last_seen DESC LIMIT 1000`,
   );
   res.json(rows);
+});
+
+// ---- Announcement management ----
+app.post("/api/announcement", auth, async (req, res) => {
+  const message = clip((req.body && req.body.message) || "", 500);
+  if (!message || !message.trim()) return res.redirect("/");
+  await pool.query(`UPDATE announcements SET active = false WHERE active = true`);
+  await pool.query(
+    `INSERT INTO announcements (message, active) VALUES ($1, true)`,
+    [message.trim()],
+  );
+  await refreshAnnouncementCache();
+  res.redirect("/");
+});
+
+app.post("/api/announcement/clear", auth, async (req, res) => {
+  await pool.query(`UPDATE announcements SET active = false WHERE active = true`);
+  await refreshAnnouncementCache();
+  res.redirect("/");
 });
 
 app.post("/api/crashes/:id/delete", auth, async (req, res) => {
@@ -312,8 +462,17 @@ app.get("/", auth, async (req, res) => {
   const [crashRes, deviceRes] = await Promise.all([
     pool.query(`SELECT * FROM crash_reports ORDER BY received_at DESC LIMIT 300`),
     pool.query(
-      `SELECT *, (last_seen > now() - interval '${Math.round(ONLINE_WINDOW_MS / 1000)} seconds') AS online
-         FROM devices ORDER BY (last_seen > now() - interval '${Math.round(ONLINE_WINDOW_MS / 1000)} seconds') DESC, last_seen DESC LIMIT 500`,
+      `SELECT d.*,
+              (d.last_seen > now() - interval '${ONLINE_WINDOW_SEC} seconds') AS online,
+              c.crash_count, c.last_crash
+         FROM devices d
+         LEFT JOIN (
+           SELECT device_id, count(*) AS crash_count, max(received_at) AS last_crash
+             FROM crash_reports WHERE device_id IS NOT NULL GROUP BY device_id
+         ) c ON c.device_id = d.device_id
+        ORDER BY (d.last_seen > now() - interval '${ONLINE_WINDOW_SEC} seconds') DESC,
+                 d.last_seen DESC
+        LIMIT 500`,
     ),
   ]);
   const rows = crashRes.rows;
@@ -323,18 +482,50 @@ app.get("/", auth, async (req, res) => {
   const last24 = rows.filter((r) => new Date(r.received_at).getTime() > dayAgo).length;
   const onlineCount = devices.filter((d) => d.online).length;
 
+  // Same-IP grouping = likely same household/account (multi-TV). Not proof of
+  // cross-home credential sharing, but a useful "this account is on N boxes" flag.
+  const ipDeviceCount = new Map();
+  for (const d of devices) {
+    if (!d.ip) continue;
+    if (!ipDeviceCount.has(d.ip)) ipDeviceCount.set(d.ip, new Set());
+    ipDeviceCount.get(d.ip).add(d.device_id);
+  }
+  const sharedIp = (ip) => (ip && ipDeviceCount.get(ip)?.size > 1) || false;
+
+  // Version distribution across registered devices.
+  const versionCounts = new Map();
+  for (const d of devices) {
+    const key = d.app_version || "?";
+    versionCounts.set(key, (versionCounts.get(key) || 0) + 1);
+  }
+  const versionChips = [...versionCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([v, n]) => `<span class="chip">v${esc(v)} <b>${n}</b></span>`)
+    .join("");
+
   const deviceRows = devices
     .map((d) => {
       const name = `${d.manufacturer || ""} ${d.model || ""}`.trim() || "Bilinmeyen cihaz";
-      const dot = d.online ? "on" : "off";
       const status = d.online ? "Çevrimiçi" : "Çevrimdışı";
+      const geo = [d.geo_city, d.geo_country].filter(Boolean).join(", ");
+      const shared = sharedIp(d.ip)
+        ? ` <span class="badge warn" title="Aynı IP'de ${ipDeviceCount.get(d.ip).size} cihaz">⚠ ${ipDeviceCount.get(d.ip).size}</span>`
+        : "";
+      const playing = d.online && d.now_playing
+        ? `<span class="play">▶ ${esc(d.now_playing)}</span>${d.now_playing_kind ? ` <span class="muted">${esc(d.now_playing_kind)}</span>` : ""}`
+        : '<span class="muted">—</span>';
+      const crash = d.crash_count
+        ? `<span class="badge err" title="Son: ${esc(fmt(d.last_crash))}">${d.crash_count}</span>`
+        : '<span class="muted">0</span>';
       return `
       <tr class="${d.online ? "online" : "offline"}">
-        <td><span class="dot ${dot}" title="${status}"></span>${status}</td>
+        <td><span class="dot ${d.online ? "on" : "off"}" title="${status}"></span>${status}</td>
         <td class="strong">${esc(name)}</td>
-        <td class="mono">${esc(d.ip || "—")}</td>
+        <td class="mono">${esc(d.ip || "—")}${shared}${geo ? `<div class="muted">${esc(geo)}</div>` : ""}</td>
+        <td>${playing}</td>
         <td>${versionLabel(d.app_version, d.version_code)}</td>
         <td>Android ${esc(d.android_version || "?")}${d.api_level ? " · API " + esc(d.api_level) : ""}</td>
+        <td>${crash}</td>
         <td title="${esc(fmt(d.last_seen))}">${esc(ago(d.last_seen))}</td>
         <td class="muted" title="${esc(fmt(d.first_seen))}">${esc(fmt(d.first_seen))}</td>
       </tr>`;
@@ -344,12 +535,22 @@ app.get("/", auth, async (req, res) => {
   const deviceSection = devices.length
     ? `<table class="devices">
         <thead><tr>
-          <th>Durum</th><th>Cihaz</th><th>IP adresi</th><th>Sürüm</th>
-          <th>Android</th><th>Son görülme</th><th>İlk görülme</th>
+          <th>Durum</th><th>Cihaz</th><th>IP / Konum</th><th>Şu an izliyor</th>
+          <th>Sürüm</th><th>Android</th><th>Çökme</th><th>Son görülme</th><th>İlk görülme</th>
         </tr></thead>
         <tbody>${deviceRows}</tbody>
       </table>`
     : '<div class="empty">Henüz bağlı cihaz yok. (Yalnızca güncel sürümü yükleyen cihazlar görünür.)</div>';
+
+  const announcementBox = activeAnnouncement
+    ? `<div class="ann-current">
+         <span class="ann-label">Aktif duyuru</span>
+         <span class="ann-msg">${esc(activeAnnouncement.message)}</span>
+         <form method="post" action="/api/announcement/clear" style="margin:0">
+           <button class="clearbtn" type="submit">Kaldır</button>
+         </form>
+       </div>`
+    : "";
 
   const cards = rows
     .map((r) => {
@@ -380,7 +581,7 @@ app.get("/", auth, async (req, res) => {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="60">
-<title>Kululu IPTV — Çökme Raporları</title>
+<title>Kululu IPTV — Çökme &amp; Cihaz Paneli</title>
 <style>
   :root { color-scheme: dark; }
   body { margin:0; background:#0E1116; color:#F5F7FA; font:14px/1.5 system-ui, sans-serif; }
@@ -393,19 +594,31 @@ app.get("/", auth, async (req, res) => {
   .actions { margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; }
   .actions a, .clearbtn { background:#1C232D; color:#F5F7FA; border:1px solid #2A3340; padding:8px 14px; border-radius:8px; text-decoration:none; cursor:pointer; font-size:13px; }
   .clearbtn { color:#E0533D; }
-  main { padding:16px 24px; max-width:1100px; }
+  main { padding:16px 24px; max-width:1200px; }
   section { margin-bottom:28px; }
   .empty { color:#5B6877; padding:24px 0; text-align:center; }
   .count-badge { background:#16331F; color:#2FBF71; border:1px solid #1f5a35; padding:2px 10px; border-radius:20px; font-size:12px; font-weight:600; }
+  .chip { background:#1C232D; color:#9AA7B4; padding:3px 10px; border-radius:20px; font-size:12px; margin-right:6px; }
+  .chip b { color:#3DA9FC; }
+  .ann { background:#161B22; border:1px solid #1C232D; border-radius:12px; padding:14px 16px; }
+  .ann textarea { width:100%; box-sizing:border-box; background:#0E1116; color:#F5F7FA; border:1px solid #2A3340; border-radius:8px; padding:10px; font:13px/1.4 system-ui, sans-serif; resize:vertical; min-height:54px; }
+  .ann .sendbtn { margin-top:8px; background:#1f5a35; color:#D6FBE5; border:1px solid #2FBF71; padding:8px 16px; border-radius:8px; cursor:pointer; font-size:13px; }
+  .ann-current { display:flex; align-items:center; gap:12px; background:#23301c; border:1px solid #3a5a2a; border-radius:10px; padding:10px 14px; margin-bottom:12px; }
+  .ann-label { color:#9fe6b8; font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+  .ann-msg { flex:1; color:#EAF7EE; }
   table { width:100%; border-collapse:collapse; background:#161B22; border:1px solid #1C232D; border-radius:12px; overflow:hidden; }
   thead th { text-align:left; font-size:12px; color:#9AA7B4; font-weight:600; padding:10px 12px; border-bottom:1px solid #1C232D; background:#12171E; }
-  tbody td { padding:10px 12px; border-bottom:1px solid #161B22; font-size:13px; }
+  tbody td { padding:10px 12px; border-bottom:1px solid #161B22; font-size:13px; vertical-align:top; }
   tbody tr:last-child td { border-bottom:none; }
   tbody tr.offline { opacity:.55; }
   tbody tr.online { background:rgba(47,191,113,.05); }
   .strong { font-weight:600; }
   .mono { font-family:monospace; }
   .muted { color:#5B6877; font-size:12px; }
+  .play { color:#FFB300; }
+  .badge { display:inline-block; padding:1px 7px; border-radius:20px; font-size:11px; font-weight:600; }
+  .badge.warn { background:#3a2f10; color:#FFC93C; border:1px solid #6a5410; }
+  .badge.err { background:#3a1714; color:#F2766A; border:1px solid #6a201a; }
   .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:7px; vertical-align:middle; }
   .dot.on { background:#2FBF71; box-shadow:0 0 0 3px rgba(47,191,113,.18); }
   .dot.off { background:#5B6877; }
@@ -440,7 +653,16 @@ app.get("/", auth, async (req, res) => {
 </header>
 <main>
   <section>
+    <h2>Duyuru</h2>
+    ${announcementBox}
+    <form class="ann" method="post" action="/api/announcement">
+      <textarea name="message" maxlength="500" placeholder="Tüm cihazlara gönderilecek mesaj (ör. 'Yarın 02:00-04:00 arası bakım yapılacaktır')"></textarea>
+      <button class="sendbtn" type="submit">Duyuruyu yayınla</button>
+    </form>
+  </section>
+  <section>
     <h2>Canlı Cihazlar <span class="count-badge">${onlineCount} çevrimiçi</span></h2>
+    ${versionChips ? `<div style="margin-bottom:12px">${versionChips}</div>` : ""}
     ${deviceSection}
   </section>
   <section>

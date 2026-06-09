@@ -38,6 +38,7 @@ import com.iptv.player.ui.common.SleepTimer
 import com.iptv.player.player.StreamInfo
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.DebugOverlayBinder
+import com.iptv.player.util.NowPlaying
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -105,6 +106,9 @@ class VodPlayerActivity : BaseActivity() {
     // Set once we rebuild on hardware for a UHD/4K stream, so it happens at most once.
     private var uhdEscalated = false
 
+    // Label for the live-device "now playing" panel (Film / Dizi / Geri Sar).
+    private var nowKind = "Film"
+
     // Position to jump to once playback actually starts (resume support). VLC only
     // accepts a seek after the first Playing event, so we defer it until then.
     private var pendingSeekMs = 0L
@@ -153,6 +157,16 @@ class VodPlayerActivity : BaseActivity() {
         if (streamUrl.isNullOrBlank()) {
             finish()
             return
+        }
+
+        // Report to the live-device ops panel what's playing (cleared in onStop).
+        nowKind = when (ResumeKind.fromRaw(intent.getStringExtra(EXTRA_RESUME_TYPE))) {
+            ResumeKind.MOVIE -> "Film"
+            ResumeKind.EPISODE -> "Dizi"
+            ResumeKind.CATCHUP -> "Geri Sar"
+        }
+        intent.getStringExtra(EXTRA_TITLE)?.takeIf { it.isNotBlank() }?.let {
+            NowPlaying.set(this, it, nowKind)
         }
 
         // Build the metadata persisted alongside the resume position. Falls back to
@@ -562,6 +576,8 @@ class VodPlayerActivity : BaseActivity() {
             episodeNumber = next.episodeNumber
         )
         binding.titleText.text = next.title
+        nowKind = "Dizi"
+        NowPlaying.set(this, next.title, nowKind)
         // Fresh playback session: re-evaluate the track hint and never resume.
         trackHintShown = false
         autoResume = false
@@ -782,12 +798,20 @@ class VodPlayerActivity : BaseActivity() {
 
     // ---- Lifecycle ------------------------------------------------------
 
+    override fun onStart() {
+        super.onStart()
+        binding.titleText.text?.toString()?.takeIf { it.isNotBlank() }?.let {
+            NowPlaying.set(this, it, nowKind)
+        }
+    }
+
     override fun onStop() {
         super.onStop()
         persistResume()
         handler.removeCallbacks(progressRunnable)
         handler.removeCallbacks(saveRunnable)
         mediaPlayer?.pause()
+        NowPlaying.clear(this)
     }
 
     override fun onDestroy() {
