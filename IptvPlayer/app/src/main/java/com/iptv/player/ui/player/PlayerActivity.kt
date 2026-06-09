@@ -57,6 +57,13 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         const val EXTRA_ADOPT_PREVIEW = "extra_adopt_preview"
         private const val OVERLAY_TIMEOUT = 4000L
         private const val LONG_PRESS_MS = 600L
+        /**
+         * Settle window for CH+/CH- zapping. Each press advances the channel and
+         * updates the overlay instantly, but the actual stream only starts after the
+         * user pauses this long — so rapid taps don't churn mp.stop()/mp.play() on
+         * the engine (the libVLC/Amlogic stop-restart overlap that froze the picture).
+         */
+        private const val ZAP_DEBOUNCE_MS = 280L
         // Safety cap for the preview->fullscreen black-gap cover, in case the
         // engine never emits a fresh video-output event after the surface swap.
         private const val HANDOFF_COVER_TIMEOUT_MS = 6000L
@@ -70,6 +77,10 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     private lateinit var controller: PlayerController
     private var debugBinder: DebugOverlayBinder? = null
     private var currentChannel: Channel? = null
+    // Debounced CH+/CH- zapping: the target channel the user is scrolling toward,
+    // started only once they settle (see requestZap / ZAP_DEBOUNCE_MS).
+    private val zapHandler = Handler(Looper.getMainLooper())
+    private var pendingZapChannel: Channel? = null
     private val overlayHandler = Handler(Looper.getMainLooper())
     private val handoffCoverHandler = Handler(Looper.getMainLooper())
     private var okDownTime = 0L
@@ -182,6 +193,46 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         }
     }
 
+    /**
+     * Handle one CH+/CH- press: advance the channel pointer and update the overlay
+     * instantly so scrolling feels responsive, but defer the actual stream start
+     * until the user settles for [ZAP_DEBOUNCE_MS]. This collapses a burst of taps
+     * into a single [startChannel], avoiding the rapid stop/restart that intermittently
+     * froze the libVLC decoder on Amlogic boxes.
+     */
+    private fun requestZap(delta: Int) {
+        val target = (if (delta > 0) viewModel.next() else viewModel.previous()) ?: return
+        pendingZapChannel = target
+        previewZapOverlay(target)
+        zapHandler.removeCallbacksAndMessages(null)
+        zapHandler.postDelayed({
+            // Guard the lifecycle: don't start a stream if we've left the foreground
+            // or are tearing down between the press and this settle.
+            if (isFinishing || isDestroyed || handingBack) return@postDelayed
+            if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@postDelayed
+            val ch = pendingZapChannel ?: return@postDelayed
+            pendingZapChannel = null
+            if (ch.id != currentChannel?.id) startChannel(ch)
+        }, ZAP_DEBOUNCE_MS)
+    }
+
+    /**
+     * Lightweight overlay update shown while the user is still scrolling channels:
+     * the name/number/category and a placeholder logo, with EPG cleared so no stale
+     * programme text lingers. The real logo + EPG load only on settle via [showOverlay].
+     */
+    private fun previewZapOverlay(channel: Channel) {
+        binding.overlayName.text = channel.name
+        binding.overlayNumber.text = channel.number?.toString() ?: ""
+        binding.overlayCategory.text = channel.categoryName ?: ""
+        binding.overlayLogo.setImageDrawable(LogoPlaceholder.forName(this, channel.name))
+        epgJob?.cancel()
+        clearEpg()
+        binding.infoOverlay.visibility = View.VISIBLE
+        overlayHandler.removeCallbacksAndMessages(null)
+        overlayHandler.postDelayed({ hideOverlay() }, OVERLAY_TIMEOUT)
+    }
+
     private fun startChannel(channel: Channel) {
         currentChannel = channel
         controller.play(applyStreamFormat(channel.streamUrl))
@@ -216,13 +267,14 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_CHANNEL_UP -> {
-                // CH+ / UP -> next channel.
-                viewModel.next()?.let { startChannel(it) }
+                // CH+ / UP -> next channel. Ignore auto-repeat (held key) so a long
+                // press doesn't runaway-zap; discrete taps are collapsed by requestZap.
+                if (event.repeatCount == 0) requestZap(+1)
                 return true
             }
             KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_CHANNEL_DOWN -> {
-                // CH- / DOWN -> previous channel.
-                viewModel.previous()?.let { startChannel(it) }
+                // CH- / DOWN -> previous channel (same auto-repeat/debounce handling).
+                if (event.repeatCount == 0) requestZap(-1)
                 return true
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
@@ -288,6 +340,10 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
      */
     private fun handBackPreviewIfPossible() {
         if (!adoptedPreview || !::controller.isInitialized) return
+        // Drop any pending debounced zap so it can't start a stream on the
+        // controller after we've handed it back to Home.
+        zapHandler.removeCallbacksAndMessages(null)
+        pendingZapChannel = null
         handingBack = true
         ServiceLocator.handOverLiveController(controller, currentChannel?.id)
     }
@@ -475,6 +531,10 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     override fun onStop() {
         super.onStop()
+        // Drop any pending debounced zap so it can't start a stream after we've
+        // backgrounded (it would re-open playback while not visible).
+        zapHandler.removeCallbacksAndMessages(null)
+        pendingZapChannel = null
         // Don't pause when handing the controller back to Home — it must keep
         // playing into the preview surface that Home re-adopted.
         if (!handingBack && ::controller.isInitialized) controller.pause()
@@ -490,6 +550,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         epgJob?.cancel()
         sleepTimer.release()
         castController.detach()
+        zapHandler.removeCallbacksAndMessages(null)
         overlayHandler.removeCallbacksAndMessages(null)
         handoffCoverHandler.removeCallbacksAndMessages(null)
         statsHandler.removeCallbacksAndMessages(null)
