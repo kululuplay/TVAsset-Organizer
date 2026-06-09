@@ -196,6 +196,16 @@
     <string name="diag_send_logs">Send logs</string>
     <string name="diag_passed">Passed</string>
     <string name="diag_failed">Failed</string>
+    <string name="diag_peering">Peering test (3 min)</string>
+    <string name="diag_peering_server">Our server</string>
+    <string name="diag_peering_running">Test running… %1$d s left</string>
+    <string name="diag_peering_detail">avg %1$d ms · jitter %2$d ms · loss %3$d%% (%4$d/%5$d)</string>
+    <string name="diag_peering_unreachable">unreachable</string>
+    <string name="diag_peering_ok">No problem — the connection to all targets is healthy.</string>
+    <string name="diag_peering_peering">Routing/peering issue toward our server (the reference points are fine).</string>
+    <string name="diag_peering_local">Your internet/Wi-Fi connection looks unstable.</string>
+    <string name="diag_peering_down">Our server is reachable but its service is not responding.</string>
+    <string name="diag_peering_inconclusive">Inconclusive — not enough samples. Please try again.</string>
 
     <!-- Account info -->
     <string name="account_status">Status</string>

@@ -122,7 +122,9 @@ async function initDb() {
       now_playing TEXT,
       now_playing_kind TEXT,
       geo_city TEXT,
-      geo_country TEXT
+      geo_country TEXT,
+      last_nettest TEXT,
+      last_nettest_at TIMESTAMPTZ
     );
   `);
   await pool.query(
@@ -137,6 +139,12 @@ async function initDb() {
   await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS geo_city TEXT;`);
   await pool.query(
     `ALTER TABLE devices ADD COLUMN IF NOT EXISTS geo_country TEXT;`,
+  );
+  await pool.query(
+    `ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_nettest TEXT;`,
+  );
+  await pool.query(
+    `ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_nettest_at TIMESTAMPTZ;`,
   );
   // Operator announcement pushed to every device via the heartbeat response.
   await pool.query(`
@@ -339,6 +347,34 @@ app.post("/api/heartbeat", async (req, res) => {
   }
 });
 
+// ---- Peering / network-quality test result (app -> server) ----
+// One human-readable line per device summarising its last in-app peering test
+// (run from Settings -> Diagnostics). Upserted so it survives even if the device
+// row predates the column, and never accumulates.
+app.post("/api/nettest", async (req, res) => {
+  if ((req.get("X-Kululu-Key") || "") !== INGEST_KEY) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  const b = req.body || {};
+  const deviceId = clip(b.deviceId, 128);
+  if (!deviceId) return res.status(400).json({ error: "missing_device_id" });
+  const summary = clip(b.summary, 1000);
+  try {
+    await pool.query(
+      `INSERT INTO devices (device_id, last_nettest, last_nettest_at)
+       VALUES ($1, $2, now())
+       ON CONFLICT (device_id) DO UPDATE SET
+         last_nettest = EXCLUDED.last_nettest,
+         last_nettest_at = now()`,
+      [deviceId, summary],
+    );
+    return res.status(204).end();
+  } catch (e) {
+    console.error("nettest failed", e);
+    return res.status(500).json({ error: "store_failed" });
+  }
+});
+
 async function forwardTelegram(b) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
   const text =
@@ -517,6 +553,9 @@ app.get("/", auth, async (req, res) => {
       const crash = d.crash_count
         ? `<span class="badge err" title="Son: ${esc(fmt(d.last_crash))}">${d.crash_count}</span>`
         : '<span class="muted">0</span>';
+      const nettest = d.last_nettest
+        ? `<span title="${esc(fmt(d.last_nettest_at))}">${esc(d.last_nettest)}</span><div class="muted">${esc(ago(d.last_nettest_at))}</div>`
+        : '<span class="muted">—</span>';
       return `
       <tr class="${d.online ? "online" : "offline"}">
         <td><span class="dot ${d.online ? "on" : "off"}" title="${status}"></span>${status}</td>
@@ -526,6 +565,7 @@ app.get("/", auth, async (req, res) => {
         <td>${versionLabel(d.app_version, d.version_code)}</td>
         <td>Android ${esc(d.android_version || "?")}${d.api_level ? " · API " + esc(d.api_level) : ""}</td>
         <td>${crash}</td>
+        <td class="nettest">${nettest}</td>
         <td title="${esc(fmt(d.last_seen))}">${esc(ago(d.last_seen))}</td>
         <td class="muted" title="${esc(fmt(d.first_seen))}">${esc(fmt(d.first_seen))}</td>
       </tr>`;
@@ -536,7 +576,7 @@ app.get("/", auth, async (req, res) => {
     ? `<table class="devices">
         <thead><tr>
           <th>Durum</th><th>Cihaz</th><th>IP / Konum</th><th>Şu an izliyor</th>
-          <th>Sürüm</th><th>Android</th><th>Çökme</th><th>Son görülme</th><th>İlk görülme</th>
+          <th>Sürüm</th><th>Android</th><th>Çökme</th><th>Ağ testi</th><th>Son görülme</th><th>İlk görülme</th>
         </tr></thead>
         <tbody>${deviceRows}</tbody>
       </table>`

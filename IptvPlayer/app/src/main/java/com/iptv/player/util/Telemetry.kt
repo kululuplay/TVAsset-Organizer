@@ -21,4 +21,7 @@ object Telemetry {
 
     /** Live-device heartbeat ingest (sent periodically while foregrounded). */
     const val HEARTBEAT_ENDPOINT = "$BASE_URL/api/heartbeat"
+
+    /** Network-quality (peering) test result upload, shown per device in the panel. */
+    const val NETTEST_ENDPOINT = "$BASE_URL/api/nettest"
 }

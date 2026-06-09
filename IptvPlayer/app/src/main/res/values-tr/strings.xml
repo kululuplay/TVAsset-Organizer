@@ -165,6 +165,16 @@
     <string name="diag_send_logs">Günlükleri gönder</string>
     <string name="diag_passed">Başarılı</string>
     <string name="diag_failed">Başarısız</string>
+    <string name="diag_peering">Peering testi (3 dk)</string>
+    <string name="diag_peering_server">Sunucumuz</string>
+    <string name="diag_peering_running">Test sürüyor… %1$d sn kaldı</string>
+    <string name="diag_peering_detail">ort %1$d ms · jitter %2$d ms · kayıp %%%3$d (%4$d/%5$d)</string>
+    <string name="diag_peering_unreachable">erişilemiyor</string>
+    <string name="diag_peering_ok">Sorun yok — tüm hedeflere bağlantı sağlıklı.</string>
+    <string name="diag_peering_peering">Bize giden yolda (peering/rota) sorun var; referans noktaları iyi.</string>
+    <string name="diag_peering_local">İnternet/Wi-Fi bağlantınız dengesiz görünüyor.</string>
+    <string name="diag_peering_down">Sunucumuza erişiliyor ancak servis yanıt vermiyor.</string>
+    <string name="diag_peering_inconclusive">Sonuç belirsiz — yeterli örnek yok. Lütfen tekrar deneyin.</string>
 
     <string name="account_status">Durum</string>
     <string name="account_active">Aktif</string>
