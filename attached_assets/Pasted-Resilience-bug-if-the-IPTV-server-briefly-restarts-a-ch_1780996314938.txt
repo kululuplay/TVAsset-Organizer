@@ -1,0 +1,10 @@
+Resilience bug: if the IPTV server briefly restarts a channel (the stream drops for ~2–3 seconds and then comes back online), the app does NOT recover. The player gets stuck on the error and never reconnects on its own — I have to manually switch channels to watch again. Fix the auto-reconnect so the player recovers by itself when the stream comes back. Implement for BOTH engines (libVLC and ExoPlayer) and for live TV:
+
+On stream error/end/disconnect, automatically retry the SAME channel without user action. Listen for the player's error/ended/stopped events (libVLC EncounteredError/EndReached, ExoPlayer onPlayerError/STATE_IDLE) and re-prepare/restart the same stream URL.
+Retry repeatedly with backoff, not just once. A 2–3 second server restart needs several attempts. Retry e.g. after 1s, 2s, 3s, 5s… and keep trying for a reasonable window (e.g. up to ~30–60s) so a short server hiccup is always recovered. Don't give up after a single failed attempt.
+Show a non-blocking "reconnecting" indicator (the simple "stream not responding, retrying" message) while it retries, and clear it automatically once playback resumes. Do not freeze on a dead frame or a permanent error screen.
+Stop retrying cleanly when appropriate: if the user changes channel or leaves the player, cancel the pending retries. If the retry window fully expires with no success, show a clear message and offer a manual retry — but the common 2–3s case must recover automatically well before that.
+Single-connection safety: each retry must fully release the previous failed connection before opening the new one (stop → release → reconnect, sequential, one connection at a time) so retries never stack two connections and trigger the "account in use on another device" error.
+Reset the retry counter on successful playback so a later, separate drop gets a fresh full set of retry attempts.
+
+Verify on the real stick: start a channel, simulate/observe a brief server-side stream restart (stream drops ~2–3s then returns) → the app must reconnect to the same channel automatically and resume, with no manual channel change needed.
