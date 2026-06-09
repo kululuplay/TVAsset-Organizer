@@ -154,8 +154,12 @@ class VodDetailActivity : BaseActivity() {
         val placeholder = LogoPlaceholder.forName(this, item.name)
         if (item.posterUrl.isNullOrBlank()) {
             binding.detailBackdrop.setImageDrawable(placeholder)
+            binding.detailPoster.setImageDrawable(placeholder)
         } else {
             binding.detailBackdrop.load(item.posterUrl) {
+                placeholder(placeholder); error(placeholder)
+            }
+            binding.detailPoster.load(item.posterUrl) {
                 placeholder(placeholder); error(placeholder)
             }
         }
@@ -179,11 +183,27 @@ class VodDetailActivity : BaseActivity() {
         binding.trailerButton.visibility =
             if (item.trailerUrl.isNullOrBlank()) View.GONE else View.VISIBLE
 
-        val cast = CastAdapter.parse(item.cast).take(12)
-        castAdapter.submitList(cast)
-        val showCast = cast.isNotEmpty()
-        binding.castLabel.visibility = if (showCast) View.VISIBLE else View.GONE
-        binding.castList.visibility = if (showCast) View.VISIBLE else View.GONE
+        loadCast(item)
+    }
+
+    /**
+     * Renders the cast row: instantly with the source's names, then upgrades to
+     * TMDB head-shots in the background. A failure just leaves the names visible.
+     */
+    private fun loadCast(item: VodItem) {
+        lifecycleScope.launch {
+            val cast = try {
+                repo.castFor(item.name, item.tmdbId, item.cast, isMovie = true)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                emptyList()
+            }
+            castAdapter.submitList(cast)
+            val showCast = cast.isNotEmpty()
+            binding.castLabel.visibility = if (showCast) View.VISIBLE else View.GONE
+            binding.castList.visibility = if (showCast) View.VISIBLE else View.GONE
+        }
     }
 
     /** Seconds -> "H:MM:SS" (or "M:SS" when under an hour). */

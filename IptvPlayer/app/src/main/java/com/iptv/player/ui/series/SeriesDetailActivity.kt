@@ -48,6 +48,7 @@ class SeriesDetailActivity : BaseActivity() {
     private lateinit var seasonAdapter: SeasonAdapter
     private lateinit var episodeAdapter: EpisodeAdapter
     private val similarAdapter = SimilarAdapter(onClicked = { openSimilar(it) })
+    private val castAdapter = CastAdapter()
 
     private var seriesId: String? = null
     private var seriesName: String = ""
@@ -107,6 +108,10 @@ class SeriesDetailActivity : BaseActivity() {
         binding.similarList.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.similarList.adapter = similarAdapter
+
+        binding.castList.layoutManager =
+            LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        binding.castList.adapter = castAdapter
     }
 
     /** Per-episode progress + the last-watched episode for a one-tap Play resume. */
@@ -172,7 +177,28 @@ class SeriesDetailActivity : BaseActivity() {
             if (series != null) {
                 bindHeader(series)
                 loadSimilar(series)
+                loadCast(series)
             }
+        }
+    }
+
+    /**
+     * Renders the cast row: instantly with the source's names, then upgrades to
+     * TMDB head-shots in the background. A failure just leaves the names visible.
+     */
+    private fun loadCast(series: Series) {
+        lifecycleScope.launch {
+            val cast = try {
+                repo.castFor(series.name, series.tmdbId, series.cast, isMovie = false)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                emptyList()
+            }
+            castAdapter.submitList(cast)
+            val show = cast.isNotEmpty()
+            binding.castLabel.visibility = if (show) View.VISIBLE else View.GONE
+            binding.castList.visibility = if (show) View.VISIBLE else View.GONE
         }
     }
 
@@ -214,8 +240,12 @@ class SeriesDetailActivity : BaseActivity() {
         val placeholder = LogoPlaceholder.forName(this, series.name)
         if (series.posterUrl.isNullOrBlank()) {
             binding.detailBackdrop.setImageDrawable(placeholder)
+            binding.detailPoster.setImageDrawable(placeholder)
         } else {
             binding.detailBackdrop.load(series.posterUrl) {
+                placeholder(placeholder); error(placeholder)
+            }
+            binding.detailPoster.load(series.posterUrl) {
                 placeholder(placeholder); error(placeholder)
             }
         }

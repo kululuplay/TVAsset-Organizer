@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Cast member: circular initial avatar + name. Display only (not focusable). -->
+<!-- Cast member: circular head-shot over a colored initial fallback + name.
+     Display only (not focusable). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="84dp"
     android:layout_height="wrap_content"
@@ -7,15 +8,28 @@
     android:gravity="center_horizontal"
     android:layout_marginEnd="@dimen/space_m">
 
-    <TextView
-        android:id="@+id/castInitial"
+    <FrameLayout
         android:layout_width="64dp"
-        android:layout_height="64dp"
-        android:background="@drawable/bg_cast_circle"
-        android:gravity="center"
-        android:textColor="@color/text_primary"
-        android:textSize="@dimen/text_title"
-        android:textStyle="bold" />
+        android:layout_height="64dp">
+
+        <TextView
+            android:id="@+id/castInitial"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_cast_circle"
+            android:gravity="center"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_title"
+            android:textStyle="bold" />
+
+        <ImageView
+            android:id="@+id/castPhoto"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:visibility="gone"
+            android:contentDescription="@null" />
+    </FrameLayout>
 
     <TextView
         android:id="@+id/castName"

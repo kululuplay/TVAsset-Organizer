@@ -37,6 +37,7 @@ import com.iptv.player.data.model.ContentSort
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.util.NewContentNotifier
 import com.iptv.player.data.model.ContinueItem
+import com.iptv.player.data.model.CastMember
 import com.iptv.player.data.model.DiagnosticResult
 import com.iptv.player.data.model.FavoriteItem
 import com.iptv.player.data.model.FavoriteKind
@@ -1373,6 +1374,47 @@ class IptvRepository(
                 rating = item.rating ?: result.voteAverage
             )
         }.getOrDefault(item)
+    }
+
+    /**
+     * Cast list for a detail screen. Falls back to the source's comma-separated
+     * names (no photos) and upgrades to TMDB head-shots when a key is available
+     * and the title can be resolved. Network failures degrade gracefully to the
+     * name-only list so the cast row always renders something.
+     */
+    suspend fun castFor(
+        name: String,
+        tmdbId: String?,
+        rawCast: String?,
+        isMovie: Boolean
+    ): List<CastMember> = withContext(Dispatchers.IO) {
+        val fallback = rawCast?.split(",")
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?.map { CastMember(it, null) }
+            ?: emptyList()
+
+        val key = settings.getTmdbKey()
+        if (key.isBlank()) return@withContext fallback
+
+        runCatching {
+            val api = retrofitBuilder.baseUrl(TmdbApi.BASE_URL).build().create(TmdbApi::class.java)
+            val id = tmdbId?.takeIf { it.isNotBlank() } ?: run {
+                val results = if (isMovie) api.searchMovie(key, name).results
+                else api.searchTv(key, name).results
+                results?.firstOrNull()?.id?.toString()
+            } ?: return@runCatching fallback
+
+            val credits = if (isMovie) api.movieCredits(id, key) else api.tvCredits(id, key)
+            val people = credits.cast.orEmpty()
+                .sortedBy { it.order ?: Int.MAX_VALUE }
+                .mapNotNull { c ->
+                    val n = c.name?.trim().orEmpty()
+                    if (n.isEmpty()) null else CastMember(n, TmdbApi.profileUrl(c.profilePath))
+                }
+                .take(15)
+            if (people.isNotEmpty()) people else fallback
+        }.getOrDefault(fallback)
     }
 
     // ---- Mapping helpers ------------------------------------------------

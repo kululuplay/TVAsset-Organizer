@@ -43,6 +43,12 @@ data class Series(
     var isFavorite: Boolean = false
 )
 
+/** A cast member shown on detail screens: name + optional head-shot URL. */
+data class CastMember(
+    val name: String,
+    val photoUrl: String? = null
+)
+
 data class Season(
     val seriesId: String,
     val seasonNumber: Int,

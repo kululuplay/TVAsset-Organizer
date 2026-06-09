@@ -9,11 +9,15 @@
     android:layout_height="match_parent"
     android:background="@color/bg_root">
 
+    <!-- Dimmed, full-bleed ambiance. We only have a portrait poster, so this is
+         kept faint; the crisp poster is shown on the right via detailPoster
+         instead of stretching this one (which looked over-zoomed). -->
     <ImageView
         android:id="@+id/detailBackdrop"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:scaleType="centerCrop"
+        android:alpha="0.18"
         android:contentDescription="@string/nav_series"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -43,6 +47,18 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         app:layout_constraintGuide_percent="0.62" />
+
+    <!-- Crisp poster (2:3, no crop) in the right column, mirroring the cards. -->
+    <ImageView
+        android:id="@+id/detailPoster"
+        android:layout_width="150dp"
+        android:layout_height="225dp"
+        android:layout_marginTop="@dimen/safe_area_v"
+        android:scaleType="fitCenter"
+        android:contentDescription="@string/nav_series"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="@id/heroGuideline"
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <!-- Top-left info block -->
     <LinearLayout
@@ -219,8 +235,9 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Bottom: seasons + episodes rail -->
+    <!-- Bottom: cast row, then seasons + episodes rail -->
     <LinearLayout
+        android:id="@+id/bottomBlock"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -229,6 +246,25 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:id="@+id/castLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/detail_cast"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/detail_section_text"
+            android:textStyle="bold"
+            android:layout_marginBottom="@dimen/space_s"
+            android:visibility="gone" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/castList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="@dimen/space_m"
+            android:clipToPadding="false"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/seasonsLabel"
@@ -294,7 +330,7 @@
         android:visibility="gone"
         app:layout_constraintStart_toStartOf="@id/heroGuideline"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toBottomOf="@id/detailPoster" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/similarList"
@@ -309,5 +345,8 @@
         android:visibility="gone"
         app:layout_constraintStart_toStartOf="@id/heroGuideline"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/similarLabel" />
+        app:layout_constraintTop_toBottomOf="@id/similarLabel"
+        app:layout_constraintBottom_toTopOf="@id/bottomBlock"
+        app:layout_constrainedHeight="true"
+        app:layout_constraintVertical_bias="0" />
 </androidx.constraintlayout.widget.ConstraintLayout>
