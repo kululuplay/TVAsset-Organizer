@@ -27,6 +27,7 @@ import android.view.ViewGroup
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
+import com.iptv.player.util.DeviceCaps
 import com.iptv.player.util.PlaybackLog
 
 class PlayerController(
@@ -156,9 +157,18 @@ class PlayerController(
         // ExoPlayer hands the SurfaceView straight to MediaCodec, which is the
         // box's native hardware-video pipeline and often shows real video.
         mode == PlayerMode.EXOPLAYER -> Stage.EXO
-        // Otherwise honour the decoder strategy: Software forces libVLC software
-        // decode; AUTO/Hardware (and PlayerMode.VLC) start on libVLC hardware.
+        // Software decoder choice always forces libVLC software decode.
         decoderMode == DecoderMode.SOFTWARE -> Stage.VLC_SW
+        // Amlogic boxes: libVLC's hardware underlay greens out on EVERY non-UHD
+        // profile (confirmed in the field — VLC logs "output: 17 unknown") and the
+        // runtime green detection is unreliable there (currentVideoTrack often reads
+        // 0x0/null, so the reactive software fallback never fires). So skip the green
+        // VLC hardware path entirely: AUTO starts on ExoPlayer — the box's working
+        // native MediaCodec -> SurfaceView hardware-video path (hardware quality, no
+        // green; audio-incompatible channels drop to VLC_SW in nextStage). An explicit
+        // VLC choice honours libVLC but starts software, the only non-green VLC path.
+        DeviceCaps.isAmlogic -> if (mode == PlayerMode.VLC) Stage.VLC_SW else Stage.EXO
+        // Other boxes: AUTO/Hardware (and PlayerMode.VLC) start on libVLC hardware.
         else -> Stage.VLC_HW
     }
 
@@ -269,11 +279,13 @@ class PlayerController(
                 // even in HARDWARE decoder mode — otherwise the user just stares at a
                 // green screen with no way out.
                 Reason.VIDEO -> Stage.VLC_SW
-                // Video is fine; let libVLC HARDWARE-decode the video and software-
-                // decode the audio codec. (Software video here removes the green on
-                // the EXO -> VLC swap but stutters on 1080p, so we keep hardware and
-                // recommend PlayerMode.VLC for the affected channels instead.)
-                Reason.AUDIO, Reason.ERROR -> Stage.VLC_HW
+                // Video is fine; let libVLC software-decode the audio codec. On
+                // Amlogic the libVLC HARDWARE path greens out, so go straight to
+                // VLC_SW there (a green picture is worse than software-decoded video).
+                // Elsewhere keep libVLC HARDWARE video + software audio: software video
+                // would stutter on 1080p, so we recommend PlayerMode.VLC for those.
+                Reason.AUDIO, Reason.ERROR ->
+                    if (DeviceCaps.isAmlogic) Stage.VLC_SW else Stage.VLC_HW
                 Reason.SOFTWARE_SLOW -> null
             }
             // Green on the libVLC hardware path (Amlogic underlay etc.) always drops
