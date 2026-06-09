@@ -19,6 +19,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
@@ -541,22 +542,37 @@ class HomeActivity : BaseActivity() {
 
     /** Moves focus into the channel list, always landing on the first channel. */
     private fun focusFirstChannel() {
-        binding.channelList.scrollToPosition(0)
-        binding.channelList.post {
-            (binding.channelList.findViewHolderForAdapterPosition(0)?.itemView
-                ?: binding.channelList).requestFocus()
-        }
+        focusRow(binding.channelList, 0)
     }
 
     /** Moves focus onto a given category row. */
     private fun focusCategory(id: String) {
         val pos = (0 until categoryAdapter.itemCount)
             .firstOrNull { categoryAdapter.currentList.getOrNull(it)?.id == id } ?: 0
-        binding.categoryList.scrollToPosition(pos)
-        binding.categoryList.post {
-            (binding.categoryList.findViewHolderForAdapterPosition(pos)?.itemView
-                ?: binding.categoryList).requestFocus()
-        }
+        focusRow(binding.categoryList, pos)
+    }
+
+    /**
+     * Focuses the row at [pos] in [list], retrying until it is laid out. When the
+     * left pane was just toggled from GONE to VISIBLE the relayout is still pending,
+     * so a single post() finds no view holder yet and the old code fell back to
+     * list.requestFocus() — which lands on the FIRST visible child, snapping focus
+     * back to the top category instead of the one we left from. Re-posting until the
+     * target holder exists (bounded) lands focus on the correct row.
+     */
+    private fun focusRow(list: RecyclerView, pos: Int, attempts: Int = 10) {
+        list.scrollToPosition(pos)
+        list.post(object : Runnable {
+            private var remaining = attempts
+            override fun run() {
+                val holder = list.findViewHolderForAdapterPosition(pos)
+                when {
+                    holder != null -> holder.itemView.requestFocus()
+                    remaining-- > 0 -> list.post(this)
+                    else -> list.requestFocus()
+                }
+            }
+        })
     }
 
     private fun openPlayer(channel: Channel) {

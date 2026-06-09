@@ -15,6 +15,7 @@
 - [Cache-first detail screens](cache-first-detail-screens.md) — VOD/Series detail must render Room cache first then refresh network in bg; provider detail APIs can take ~20s.
 - [Speed test fails: bare app UA blocked by CDN/WAF](speedtest-cdn-user-agent.md) — Cloudflare 403s the "KULULUPLAY" UA; send a browser UA, only stamp app UA when absent, add endpoint fallback + dedicated client w/ callTimeout.
 - [Category list change-animation steals focus](category-list-change-animation-focus.md) — fast category browsing exits to Dashboard; live count updates + RecyclerView change anims detach focused row. Disable supportsChangeAnimations.
+- [D-pad focus after pane GONE->VISIBLE](focus-after-pane-visibility-toggle.md) — restoring focus to a non-first row after a visibility toggle needs bounded-retry post until the holder exists; single post + RecyclerView.requestFocus fallback silently lands on row 0.
 - [D-pad focus after ListAdapter diff](recyclerview-focus-after-diff.md) — requestFocus in submitList commit callback+post; and NEVER notifyDataSetChanged from a focus listener (kills D-pad focus) — use payloaded notifyItemChanged.
 - [Favorites id namespaces](favorites-id-namespaces.md) — favorites table mixes channel/vod_/series_ ids; the channel INNER JOIN silently drops non-channel favorites.
 - [IPTV single-connection contract](iptv-single-connection.md) — one stream/socket max: stop-before-start, serialize transitions, release (not pause) on background, reuse engine + swap Media.
