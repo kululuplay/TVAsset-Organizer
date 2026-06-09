@@ -118,6 +118,15 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
         castController.attach()
 
+        // Manual retry after the reconnect window expired: re-open the same
+        // channel and reset the reconnect state.
+        binding.retryButton.setOnClickListener {
+            binding.errorOverlay.visibility = View.GONE
+            binding.bufferingLabel.setText(R.string.buffering)
+            binding.bufferingIndicator.visibility = View.VISIBLE
+            if (::controller.isInitialized) controller.retry()
+        }
+
         // On-screen Debug overlay (engine/stage + live PlaybackLog tail), gated by
         // the Debug setting; separate from the MENU-toggled stats overlay.
         debugBinder = DebugOverlayBinder(binding.debugOverlay) {
@@ -235,6 +244,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     private fun startChannel(channel: Channel) {
         currentChannel = channel
+        // A new channel cancels any reconnect-failed state from the previous one.
+        binding.errorOverlay.visibility = View.GONE
         controller.play(applyStreamFormat(channel.streamUrl))
         showOverlay(channel)
         if (statsVisible) refreshStats()
@@ -504,27 +515,40 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     // ---- Controller callbacks ------------------------------------------
 
     override fun onBuffering() {
+        binding.errorOverlay.visibility = View.GONE
+        binding.bufferingLabel.setText(R.string.buffering)
         binding.bufferingIndicator.visibility = View.VISIBLE
     }
 
     override fun onPlaying(engineName: String) {
+        binding.errorOverlay.visibility = View.GONE
         binding.bufferingIndicator.visibility = View.GONE
     }
 
     override fun onVideoResumed() {
-        // First real frame on the (re)attached surface — clear the hand-off cover.
+        // First real frame on the (re)attached surface — clear the hand-off cover
+        // and any reconnect indicator the moment playback genuinely resumes.
         handoffCoverHandler.removeCallbacksAndMessages(null)
+        binding.errorOverlay.visibility = View.GONE
         binding.bufferingIndicator.visibility = View.GONE
     }
 
     override fun onRetrying(attempt: Int) {
+        // Non-blocking "stream not responding, retrying…" indicator over the
+        // picture while the controller re-opens the same channel. Cleared
+        // automatically by onPlaying / onVideoResumed once playback resumes.
+        binding.errorOverlay.visibility = View.GONE
+        binding.bufferingLabel.setText(R.string.error_stream_not_responding)
         binding.bufferingIndicator.visibility = View.VISIBLE
-        Toast.makeText(this, R.string.error_stream_not_responding, Toast.LENGTH_SHORT).show()
     }
 
     override fun onFatalError() {
+        // Reconnect window elapsed with no recovery: replace the spinner with a
+        // clear message and a focusable manual-retry button.
         binding.bufferingIndicator.visibility = View.GONE
-        Toast.makeText(this, R.string.error_cannot_connect, Toast.LENGTH_LONG).show()
+        binding.errorMessage.setText(R.string.error_cannot_connect)
+        binding.errorOverlay.visibility = View.VISIBLE
+        binding.retryButton.requestFocus()
     }
 
     // ---- Lifecycle ------------------------------------------------------

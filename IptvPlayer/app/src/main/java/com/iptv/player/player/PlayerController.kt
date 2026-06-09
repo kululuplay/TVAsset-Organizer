@@ -23,6 +23,7 @@ package com.iptv.player.player
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.ViewGroup
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.DecoderMode
@@ -40,6 +41,10 @@ class PlayerController(
     private val decoderMode: DecoderMode = DecoderMode.AUTO,
     private val allowPassthrough: Boolean = false,
     private val bufferMode: BufferMode = BufferMode.NORMAL,
+    // Live TV gets the same-channel auto-reconnect loop (a dropped/ended live
+    // stream re-opens itself); set false for any non-live reuse so a stream that
+    // legitimately ends is not endlessly re-opened.
+    private val isLive: Boolean = true,
     private var callback: Callback
 ) {
 
@@ -115,15 +120,34 @@ class PlayerController(
     private var currentUrl: String? = null
     private var stage = Stage.EXO
     private val triedStages = mutableSetOf<Stage>()
-    private var retryCount = 0
     // Bumped on every (re)start so a delayed engine creation that has been
     // superseded becomes a no-op. Guards the SurfaceView-swap handoff gap.
     private var startGeneration = 0
 
+    // True once the CURRENT stage produced confirmed playback (onPlaying /
+    // onVideoOutput). A plain ERROR after this is a mid-stream DROP, not a
+    // startup decode problem, so it reconnects the same stage instead of walking
+    // the decode-fallback ladder onto another engine. Reset on every (re)start.
+    private var playbackConfirmed = false
+
     private var audioDelayMs = 0L
     private var subtitleDelayMs = 0L
 
-    private val maxRetries = 4
+    // ---- Live-TV auto-reconnect -------------------------------------------
+    // Layered ABOVE the decode-fallback ladder: once the ladder has no untried
+    // engine/decode path left (or a working live stream drops or ends), this
+    // loop re-opens the SAME channel with a backoff schedule bounded by a total
+    // window, so a brief server restart (~2-3s) recovers by itself. Each retry
+    // fully releases the previous connection (stop -> release) before the next,
+    // so two connections never stack. The schedule + window reset on confirmed
+    // playback, so a later, separate drop gets a fresh full set of attempts.
+    private val reconnectHandler = Handler(Looper.getMainLooper())
+    private var reconnectAttempt = 0
+    private var reconnectWindowStartMs = 0L
+    private var reconnecting = false
+    // Guards against stacking: a single drop can fire BOTH EncounteredError and
+    // EndReached; only one attempt may be scheduled/in-flight at a time.
+    private var reconnectPending = false
 
     /** True when the active engine can apply audio/subtitle delay (libVLC). */
     val supportsDelay: Boolean get() = engine?.supportsDelay == true
@@ -144,8 +168,11 @@ class PlayerController(
     fun play(url: String) {
         // Cancel any pending retry from a previous stream so zapping is clean.
         mainHandler.removeCallbacksAndMessages(null)
+        // A new channel cancels any in-flight reconnect so it can't fire against
+        // the stale stream or open a second connection.
+        resetReconnect()
         currentUrl = url
-        retryCount = 0
+        playbackConfirmed = false
         val initial = initialStage()
 
         // Fast zap: when the next stream would start on the very same stage the
@@ -199,6 +226,8 @@ class PlayerController(
     private fun startStage(target: Stage) {
         triedStages.add(target)
         stage = target
+        // Fresh (re)start: this stage has not confirmed playback yet.
+        playbackConfirmed = false
         val useVlc = target != Stage.EXO
         val forceSoftware = target == Stage.VLC_SW
         startEngine(useVlc, forceSoftware)
@@ -250,11 +279,30 @@ class PlayerController(
         override fun onBuffering() = post { callback.onBuffering() }
 
         override fun onPlaying() = post {
-            retryCount = 0
+            // Stream is running again: a confirmed-playback signal clears any
+            // in-flight reconnect and resets the window so a later, separate drop
+            // gets a fresh full set of attempts.
+            playbackConfirmed = true
+            resetReconnect()
             callback.onPlaying(engine?.engineName ?: "")
         }
 
-        override fun onVideoOutput() = post { callback.onVideoResumed() }
+        override fun onVideoOutput() = post {
+            // Real frame on screen: the most reliable "playback genuinely resumed"
+            // signal — clear the reconnect window/overlay here too.
+            playbackConfirmed = true
+            resetReconnect()
+            callback.onVideoResumed()
+        }
+
+        override fun onEnded() = post {
+            // A live stream should not end; the server closed/restarted it. Treat
+            // as a drop and reconnect the same channel. (Non-live ignores it.)
+            if (isLive) {
+                PlaybackLog.log(context, "Controller", "live stream ended -> reconnect")
+                engageReconnect()
+            }
+        }
 
         override fun onError(message: String?) = post { handleFailure(Reason.ERROR) }
         override fun onAudioUnavailable() = post { handleFailure(Reason.AUDIO) }
@@ -263,27 +311,89 @@ class PlayerController(
     }
 
     private fun handleFailure(reason: Reason) {
-        val next = nextStage(stage, reason)
-        if (next != null && next !in triedStages) {
-            PlaybackLog.log(context, "Controller", "fallback $stage --$reason--> $next")
-            retryCount = 0
-            startStage(next)
+        // A plain ERROR after the stream already played — or while a reconnect
+        // episode is already under way — is a stream DROP, not a startup decode
+        // problem: skip the decode-fallback ladder (which would needlessly switch
+        // a working stream onto another engine, or fight the reconnect by hopping
+        // engines on each failed attempt) and just reconnect the same stage.
+        // VIDEO (green) / AUDIO (silent) / SOFTWARE_SLOW (4K) are decode-quality
+        // problems the ladder must still handle even after the first frame, since
+        // their detection fires only once playback has begun.
+        val dropAfterPlay = reason == Reason.ERROR && (playbackConfirmed || reconnecting)
+        if (!dropAfterPlay) {
+            val next = nextStage(stage, reason)
+            if (next != null && next !in triedStages) {
+                PlaybackLog.log(context, "Controller", "fallback $stage --$reason--> $next")
+                startStage(next)
+                return
+            }
+        }
+
+        // No further engine/decode path (or a confirmed-playback drop): hand off
+        // to the bounded live-TV reconnect loop.
+        engageReconnect()
+    }
+
+    /**
+     * A live stream dropped/ended with no further decode path to try. Re-open the
+     * SAME channel on the current stage with a backoff schedule bounded by a total
+     * window, until it recovers (onPlaying / onVideoOutput resets the state) or the
+     * window elapses (then a fatal error with a manual-retry UI). For non-live this
+     * degrades to the previous behaviour: a single fatal error, no reconnect loop.
+     */
+    private fun engageReconnect() {
+        if (!isLive) {
+            PlaybackLog.log(context, "Controller", "fatal after $stage (non-live, no reconnect)")
+            callback.onFatalError()
+            return
+        }
+        // An attempt is already scheduled/in-flight: don't stack a second one
+        // (EncounteredError + EndReached can both fire for the same drop).
+        if (reconnectPending) return
+
+        val now = SystemClock.elapsedRealtime()
+        if (!reconnecting) {
+            reconnecting = true
+            reconnectWindowStartMs = now
+            reconnectAttempt = 0
+        }
+        if (now - reconnectWindowStartMs >= RECONNECT_WINDOW_MS) {
+            PlaybackLog.log(context, "Controller", "reconnect window elapsed -> fatal")
+            resetReconnect()
+            callback.onFatalError()
             return
         }
 
-        // No further engine/decode path: retry the same stage with backoff
-        // (handles transient network errors) before giving up.
-        if (retryCount < maxRetries) {
-            retryCount++
-            callback.onRetrying(retryCount)
-            val delay = (1000L * (1 shl (retryCount - 1))).coerceAtMost(8000L)
-            mainHandler.postDelayed({
-                currentUrl?.let { engine?.play(it) }
-            }, delay)
-        } else {
-            PlaybackLog.log(context, "Controller", "fatal after $stage ($reason)")
-            callback.onFatalError()
-        }
+        val delay = RECONNECT_BACKOFF_MS[reconnectAttempt.coerceAtMost(RECONNECT_BACKOFF_MS.size - 1)]
+        reconnectAttempt++
+        reconnectPending = true
+        PlaybackLog.log(context, "Controller", "reconnect attempt $reconnectAttempt in ${delay}ms (stage=$stage)")
+        callback.onRetrying(reconnectAttempt)
+        reconnectHandler.postDelayed({
+            reconnectPending = false
+            // Single-connection: startStage -> startEngine fully releases the old
+            // engine (stop -> release) before recreating + replaying the same URL.
+            currentUrl?.let { startStage(stage) }
+        }, delay)
+    }
+
+    /**
+     * Restart the current channel immediately and reset the reconnect state. Used
+     * by the UI's manual "retry" action after the window expired.
+     */
+    fun retry() {
+        val url = currentUrl ?: return
+        PlaybackLog.log(context, "Controller", "manual retry")
+        play(url)
+    }
+
+    /** Cancel any in-flight reconnect and clear its schedule/window state. */
+    private fun resetReconnect() {
+        reconnectHandler.removeCallbacksAndMessages(null)
+        reconnecting = false
+        reconnectPending = false
+        reconnectAttempt = 0
+        reconnectWindowStartMs = 0L
     }
 
     /** The stage to advance to, or null when no more paths are available. */
@@ -327,12 +437,22 @@ class PlayerController(
     /** Current video stream info for the diagnostics overlay, or null. */
     fun streamInfo(): StreamInfo? = engine?.getStreamInfo()
 
-    fun pause() = engine?.pause()
+    fun pause() {
+        // Backgrounded: cancel pending reconnects so we don't open a connection
+        // off-screen. A drop while backgrounded is recovered by a manual retry /
+        // zap on return, never by a hidden background reconnect.
+        resetReconnect()
+        engine?.pause()
+    }
     fun resume() = engine?.resume()
-    fun stop() = engine?.stop()
+    fun stop() {
+        resetReconnect()
+        engine?.stop()
+    }
 
     fun release() {
         mainHandler.removeCallbacksAndMessages(null)
+        resetReconnect()
         releaseEngine()
     }
 
@@ -355,5 +475,21 @@ class PlayerController(
          * during a fallback (e.g. EXO -> VLC). Short enough to stay snappy.
          */
         private const val ENGINE_SWAP_DELAY_MS = 250L
+
+        /**
+         * Backoff between live-TV reconnect attempts. Front-loaded (1s, 2s, 3s,
+         * 5s) so the common ~2-3s server restart recovers within the first couple
+         * of attempts, then settles at 8s for a longer outage. The last value is
+         * reused for any further attempts within the window.
+         */
+        private val RECONNECT_BACKOFF_MS = longArrayOf(1000L, 2000L, 3000L, 5000L, 8000L)
+
+        /**
+         * Total live-TV reconnect window. Attempts keep firing until this elapses
+         * from the first attempt, then a fatal error with a manual-retry UI is
+         * shown. ~45s comfortably covers a brief server restart while still giving
+         * up in reasonable time on a genuinely dead stream.
+         */
+        private const val RECONNECT_WINDOW_MS = 45_000L
     }
 }

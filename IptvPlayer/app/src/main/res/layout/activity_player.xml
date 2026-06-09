@@ -37,6 +37,41 @@
             android:layout_marginTop="@dimen/space_s" />
     </LinearLayout>
 
+    <!-- Reconnect-failed overlay: shown only when the bounded auto-reconnect
+         window elapses with no recovery. Offers a manual retry of the same
+         channel. Stays hidden while reconnect attempts are still in flight. -->
+    <LinearLayout
+        android:id="@+id/errorOverlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingHorizontal="@dimen/space_l"
+        android:paddingVertical="@dimen/space_m"
+        android:background="@drawable/bg_zap_banner"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/errorMessage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/error_cannot_connect"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_body"
+            android:gravity="center" />
+
+        <Button
+            android:id="@+id/retryButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/action_retry"
+            android:textColor="@color/text_primary"
+            android:layout_marginTop="@dimen/space_m"
+            android:focusable="true"
+            android:focusableInTouchMode="true" />
+    </LinearLayout>
+
     <!-- Zapping / info overlay -->
     <LinearLayout
         android:id="@+id/infoOverlay"
