@@ -179,8 +179,9 @@ class PlayerController(
         // current engine is already running, keep that engine alive and just swap
         // the stream on it. This skips the full release + re-create of a fresh
         // LibVLC/ExoPlayer instance AND the ENGINE_SWAP_DELAY_MS surface-handoff
-        // guard, so channel changes are near-instant — and because the SurfaceView
-        // is retained (no teardown), it sidesteps the swap-gap green frame too.
+        // guard. The SurfaceView is retained (no teardown), so it sidesteps the
+        // swap-gap green frame — but the decoder is still cleanly reconfigured for
+        // the new stream (reset below) so a resolution change can't freeze it.
         // Only the steady state qualifies: if the current stream had already
         // fallen back to a different stage, drop through to a clean restart so the
         // new channel still gets the full hardware-first fallback ladder.
@@ -188,8 +189,17 @@ class PlayerController(
         if (reusable != null && stage == initial) {
             triedStages.clear()
             triedStages.add(initial)
-            PlaybackLog.log(context, "Controller", "fast-zap reuse stage=$initial")
-            reusable.play(url)
+            // reset=true: a zap to a DIFFERENT-resolution stream must reconfigure
+            // the decoder. ExoPlayer's no-stop swap can leave the Amlogic OMX codec
+            // locked to the previous channel's geometry (e.g. 1080p<->720x576), so
+            // the new size never renders and the picture freezes on the differing
+            // channel. A clean stop()+prepare on the SAME engine rebuilds the codec
+            // for the new size WITHOUT recreating the SurfaceView (no Amlogic green).
+            // Still far cheaper than a full engine release+recreate: no new player
+            // instance, no ENGINE_SWAP surface-handoff gap. (libVLC already rebuilds
+            // a fresh Media + stop()s every play(), so reset is a no-op there.)
+            PlaybackLog.log(context, "Controller", "fast-zap reuse stage=$initial reset")
+            reusable.play(url, reset = true)
             return
         }
 

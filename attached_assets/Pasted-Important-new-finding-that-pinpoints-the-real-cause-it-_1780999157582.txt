@@ -1,0 +1,14 @@
+Important new finding that pinpoints the real cause — it is NOT codec or surface-recreation, it is a RESOLUTION-CHANGE reconfigure bug. Observed behavior in fullscreen when zapping with CH+/-:
+
+If I go fullscreen on a Full HD (1080p) channel → all 1080p channels play fine, but 720x576 channels FREEZE.
+If I go fullscreen on a 720x576 channel → all 720x576 channels play fine, but 1080p channels FREEZE.
+
+So the channel that freezes is always the one whose resolution DIFFERS from the resolution that was active when entering fullscreen. Diagnosis: when zapping to a channel with a DIFFERENT video resolution, the decoder/surface is NOT being reconfigured to the new dimensions — it stays locked to the first channel's resolution, so the differently-sized stream can't render and freezes. Fix:
+
+On every channel change, reconfigure the player for the new stream's resolution. When the new channel's video size differs from the current one, the video output surface and decoder must be reset to the new dimensions (re-prepare the video pipeline / re-attach output at the new size), not kept fixed at the previous channel's resolution.
+Handle the video-size-changed signal. Listen for the resolution change (ExoPlayer onVideoSizeChanged, libVLC track/vout size change) and update the SurfaceView/output layout to the new width/height so the surface matches the incoming stream. The frozen frame means new frames aren't being accepted into a wrongly-sized surface.
+This likely interacts with the earlier "don't recreate the surface" fix. We previously kept the surface fixed across the preview→fullscreen transition to avoid green/restart on Amlogic. But a CH+/- zap to a different resolution genuinely DOES need the decoder reconfigured. Distinguish the two cases: a preview→fullscreen transition of the SAME stream must NOT recreate the surface; a channel CHANGE to a different-resolution stream MUST reconfigure the decoder/surface for the new size. Don't let the surface-preservation logic block the resolution reconfigure on channel change.
+Apply to both engines (libVLC and ExoPlayer) and keep single-connection safety (stop → release → start the new stream cleanly).
+Capture a device log while zapping between a 1080p and a 720x576 channel in fullscreen (video size changed events, decoder reconfigure, surface size, any MediaCodec error) to confirm the reconfigure now happens on resolution change.
+
+Verify on the real stick: enter fullscreen on a 1080p channel, then CH+/- to a 720x576 channel → it must play (not freeze); enter fullscreen on a 720x576 channel, then zap to 1080p → it must also play. Mixed-resolution zapping must work in both directions.

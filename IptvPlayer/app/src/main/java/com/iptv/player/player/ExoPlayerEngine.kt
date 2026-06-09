@@ -334,15 +334,19 @@ class ExoPlayerEngine(
         val exo = player ?: return
         resetHealth()
         PlaybackLog.log(context, engineName, "play passthrough=$allowPassthrough reset=$reset")
-        // Only the hand-off restart path (preview <-> fullscreen) needs an explicit
-        // stop(): a bare PlayerView re-add can leave the renderer audio-ready but
-        // video-stalled (black with sound), so stop() deterministically resets the
-        // decoder/renderer onto the re-attached surface.
+        // reset=true (channel-change zap AND preview<->fullscreen hand-off): stop()
+        // before swapping the media so ExoPlayer rebuilds the video codec for the
+        // new stream. This is REQUIRED for correctness across a resolution change: a
+        // no-stop setMediaItem+prepare can leave the Amlogic OMX decoder locked to
+        // the previous channel's geometry (1080p<->720x576), so the new size never
+        // renders and the picture freezes. stop() resets only the decoder/renderer
+        // onto the SAME, already-attached SurfaceView — the surface is NOT recreated,
+        // so there's no Amlogic green. It also fixes the hand-off "renderer
+        // audio-ready but video-stalled (black with sound)" case.
         //
-        // The fast-zap path (reset=false) must NOT stop(): on Amlogic, stop()
-        // fully tears down and recreates the OMX hardware decoder (~600ms), which
-        // is exactly the channel-change stutter. setMediaItem + prepare on the live
-        // player swaps the stream while reusing the decoder.
+        // The codec reconfigure costs a short black gap (~600ms on Amlogic OMX) on a
+        // zap, but that is far better than a permanently frozen picture on every
+        // channel whose resolution differs from the one fullscreen started on.
         if (reset) exo.stop()
         exo.setMediaItem(MediaItem.fromUri(url))
         exo.playWhenReady = true
