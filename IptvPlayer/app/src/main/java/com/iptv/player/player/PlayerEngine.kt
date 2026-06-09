@@ -100,6 +100,16 @@ interface PlayerListener {
     fun onError(message: String?) {}
 
     /**
+     * A hardware-decoder failure specifically (ExoPlayer ERROR_CODE_DECODING_FAILED
+     * / DECODER_INIT_FAILED / unsupported-format, i.e. a videoCodecError), as
+     * opposed to a network/source drop. Some hardware decoders (e.g. the Amlogic
+     * MPEG2 decoder) render a frame then die ~1.5s later and would loop forever if
+     * the controller just reconnected the same hardware decoder. The controller
+     * counts these and, after a couple, forces the stream onto software decode.
+     */
+    fun onDecodeError(message: String?) {}
+
+    /**
      * The media has an audio track but this engine can't decode/output it, so
      * playback is silent even though video may be fine (e.g. AC-3/E-AC-3/MP2 with
      * no MediaCodec audio decoder and passthrough disabled). The controller falls

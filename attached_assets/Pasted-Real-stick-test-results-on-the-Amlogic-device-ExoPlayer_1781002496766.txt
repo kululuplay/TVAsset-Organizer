@@ -1,0 +1,15 @@
+Real-stick test results on the Amlogic device:
+
+ExoPlayer + Hardware → everything works perfectly, no issues at all (including UHD).
+libVLC + Hardware → everything works EXCEPT some UHD (4K) channels stutter.
+Auto mode → causes problems.
+
+Conclusion: on this Amlogic hardware, ExoPlayer + Hardware is clearly the best path — it plays all channels flawlessly. libVLC is good but stutters on UHD. So fix the Auto logic to prefer the proven-best path instead of making mixed/wrong choices:
+
+Make Auto prefer ExoPlayer + Hardware on Amlogic devices. Since ExoPlayer+Hardware handles everything cleanly here, Auto should default to ExoPlayer with hardware decode on Amlogic SoCs, rather than routing some channels to libVLC or software where they break.
+Fix whatever Auto is currently doing wrong. Describe/inspect the current Auto decision logic: what makes it pick libVLC vs ExoPlayer, and hardware vs software, per channel? It's currently producing problems that neither "ExoPlayer+Hardware" nor "libVLC+Hardware" alone produce — so Auto is making a bad selection (likely falling to libVLC or software on channels that ExoPlayer+Hardware would play fine). Make Auto's default path = the path that tested best (ExoPlayer+Hardware).
+Keep the per-stream fallbacks as exceptions, not the default. Only deviate from ExoPlayer+Hardware for a specific stream if it actually fails (e.g. the MPEG2 720x576 decode-loop or H.264 1080p50 cases we handled) — fall that single stream back to software, then return to ExoPlayer+Hardware on the next channel. Do NOT let Auto pre-emptively scatter channels across engines/decoders.
+UHD on libVLC: since libVLC stutters on UHD but ExoPlayer doesn't, if Auto ever does use libVLC, route UHD channels to ExoPlayer. But simplest is item 1 — default Auto to ExoPlayer+Hardware.
+Confirm the manual options still work: the user can still explicitly pick ExoPlayer/libVLC and Hardware/Software in Settings; Auto just needs a sane, tested default.
+
+Verify on the real stick: with the player set to Auto, all channels (SD, HD, UHD, MPEG2) play correctly — matching the flawless behavior of ExoPlayer+Hardware — with no stutter and no problems.

@@ -112,7 +112,7 @@ class PlayerController(
     private enum class Stage { EXO, VLC_HW, VLC_SW }
 
     /** Why the current stage failed, so we pick the right next stage. */
-    private enum class Reason { ERROR, AUDIO, VIDEO, SOFTWARE_SLOW }
+    private enum class Reason { ERROR, AUDIO, VIDEO, SOFTWARE_SLOW, DECODE }
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -129,6 +129,27 @@ class PlayerController(
     // startup decode problem, so it reconnects the same stage instead of walking
     // the decode-fallback ladder onto another engine. Reset on every (re)start.
     private var playbackConfirmed = false
+
+    // When the current stage's playback was confirmed (first frame / onPlaying),
+    // so we can tell a stream that played stably for a while from one that died a
+    // second or two after rendering its first frame (the Amlogic MPEG2 hardware
+    // decoder loop). 0 = not confirmed on this stage yet.
+    private var stageStartMs = 0L
+
+    // Consecutive HARDWARE decode failures on the current stream. A hardware
+    // decoder that renders a frame then dies ~1.5s later would otherwise reconnect
+    // to the SAME dead decoder forever; after MAX_QUICK_DECODE_FAILURES of these we
+    // force the stream onto software decode instead. NOT cleared by resetReconnect:
+    // a brief first frame must not reset it (that is exactly what made the counter
+    // restart every loop). Cleared on a new channel, a genuine stage change, and a
+    // stretch of stable playback.
+    private var quickDecodeFailures = 0
+
+    // Fires once the current stage has played for STABLE_PLAYBACK_MS without
+    // failing: only THEN is playback treated as truly recovered (reconnect window
+    // + quick-failure counter reset). Kept separate from the reconnect/engine-swap
+    // handlers so a brief first frame can't mark a looping stream as recovered.
+    private val stableHandler = Handler(Looper.getMainLooper())
 
     private var audioDelayMs = 0L
     private var subtitleDelayMs = 0L
@@ -171,6 +192,10 @@ class PlayerController(
         // A new channel cancels any in-flight reconnect so it can't fire against
         // the stale stream or open a second connection.
         resetReconnect()
+        // New channel: drop the stable-playback timer and the quick-decode-failure
+        // count from the previous stream so they can't bleed into this one.
+        stableHandler.removeCallbacksAndMessages(null)
+        quickDecodeFailures = 0
         currentUrl = url
         playbackConfirmed = false
         val initial = initialStage()
@@ -234,10 +259,16 @@ class PlayerController(
     }
 
     private fun startStage(target: Stage) {
+        // A GENUINE stage change (ladder move / escalation) starts a fresh decoder,
+        // so reset the quick-decode-failure count. A reconnect replay of the SAME
+        // stage keeps it, so a 1.5s-then-fail loop still escalates after a couple.
+        if (target != stage) quickDecodeFailures = 0
         triedStages.add(target)
         stage = target
-        // Fresh (re)start: this stage has not confirmed playback yet.
+        // Fresh (re)start: this stage has not confirmed playback yet, so cancel the
+        // previous stable-playback timer (re-armed on the next confirmed frame).
         playbackConfirmed = false
+        stableHandler.removeCallbacksAndMessages(null)
         val useVlc = target != Stage.EXO
         val forceSoftware = target == Stage.VLC_SW
         startEngine(useVlc, forceSoftware)
@@ -289,20 +320,13 @@ class PlayerController(
         override fun onBuffering() = post { callback.onBuffering() }
 
         override fun onPlaying() = post {
-            // Stream is running again: a confirmed-playback signal clears any
-            // in-flight reconnect and resets the window so a later, separate drop
-            // gets a fresh full set of attempts.
-            playbackConfirmed = true
-            resetReconnect()
             callback.onPlaying(engine?.engineName ?: "")
+            onPlaybackProgress()
         }
 
         override fun onVideoOutput() = post {
-            // Real frame on screen: the most reliable "playback genuinely resumed"
-            // signal — clear the reconnect window/overlay here too.
-            playbackConfirmed = true
-            resetReconnect()
             callback.onVideoResumed()
+            onPlaybackProgress()
         }
 
         override fun onEnded() = post {
@@ -315,12 +339,66 @@ class PlayerController(
         }
 
         override fun onError(message: String?) = post { handleFailure(Reason.ERROR) }
+        override fun onDecodeError(message: String?) = post { handleFailure(Reason.DECODE) }
         override fun onAudioUnavailable() = post { handleFailure(Reason.AUDIO) }
         override fun onVideoInvalid() = post { handleFailure(Reason.VIDEO) }
         override fun onSoftwareTooSlow() = post { handleFailure(Reason.SOFTWARE_SLOW) }
     }
 
+    /**
+     * Called on the first confirmed playback (onPlaying / onVideoOutput) of the
+     * current stage. We mark playback confirmed and arm the stable-playback timer
+     * but deliberately do NOT reset the reconnect window or the quick-decode-failure
+     * counter yet: a stream that renders one frame then dies ~1.5s later (the
+     * Amlogic MPEG2 hardware decoder loop) must not look "recovered", or the retry
+     * counter restarts every loop and escalation to software never fires. Only
+     * surviving [STABLE_PLAYBACK_MS] counts as a genuine recovery.
+     */
+    private fun onPlaybackProgress() {
+        if (playbackConfirmed) return
+        playbackConfirmed = true
+        stageStartMs = SystemClock.elapsedRealtime()
+        stableHandler.removeCallbacksAndMessages(null)
+        stableHandler.postDelayed({
+            PlaybackLog.log(context, "Controller", "stable playback ${STABLE_PLAYBACK_MS}ms -> recovered")
+            quickDecodeFailures = 0
+            resetReconnect()
+        }, STABLE_PLAYBACK_MS)
+    }
+
     private fun handleFailure(reason: Reason) {
+        // Repeated hardware DECODE failures must not loop on the same dead decoder.
+        // Two shapes of this failure:
+        //   - DECODE: ExoPlayer reported a decoder-specific error (videoCodecError /
+        //     ERROR_CODE_DECODING_FAILED). Definitive.
+        //   - ERROR on a hardware stage that only played BRIEFLY: the same failure
+        //     surfaced without a decode-specific code (e.g. the Amlogic MPEG2 hw
+        //     decoder rendering a frame then dying ~1.5s later), which would
+        //     otherwise reconnect to the same hardware decoder forever.
+        // Count these; after MAX_QUICK_DECODE_FAILURES force THIS stream onto
+        // software decode (startStage -> startEngine fully releases the old
+        // connection first, so single-connection is preserved). The counter is NOT
+        // reset by a brief first frame, so a 1.5s-then-fail loop escalates instead
+        // of restarting the retry count every cycle.
+        val quickHwFailure = reason == Reason.DECODE ||
+            (reason == Reason.ERROR && isHardwareStage(stage) && playedBriefly())
+        if (quickHwFailure) {
+            quickDecodeFailures++
+            PlaybackLog.log(
+                context, "Controller",
+                "hw decode fail #$quickDecodeFailures stage=$stage reason=$reason"
+            )
+            if (quickDecodeFailures >= MAX_QUICK_DECODE_FAILURES && Stage.VLC_SW !in triedStages) {
+                PlaybackLog.log(context, "Controller", "repeated hw decode fail -> force software")
+                startStage(Stage.VLC_SW)
+                return
+            }
+            // Below the threshold (or software already tried): reconnect the same
+            // stage but KEEP the count so the next quick failure escalates.
+            engageReconnect()
+            return
+        }
+
         // A plain ERROR after the stream already played — or while a reconnect
         // episode is already under way — is a stream DROP, not a startup decode
         // problem: skip the decode-fallback ladder (which would needlessly switch
@@ -343,6 +421,15 @@ class PlayerController(
         // to the bounded live-TV reconnect loop.
         engageReconnect()
     }
+
+    private fun isHardwareStage(s: Stage): Boolean = s == Stage.EXO || s == Stage.VLC_HW
+
+    /**
+     * True when the current stage rendered a frame but did NOT survive the stable
+     * window — the signature of a hardware decoder that plays ~1.5s then fails.
+     */
+    private fun playedBriefly(): Boolean =
+        playbackConfirmed && (SystemClock.elapsedRealtime() - stageStartMs) < STABLE_PLAYBACK_MS
 
     /**
      * A live stream dropped/ended with no further decode path to try. Re-open the
@@ -430,6 +517,10 @@ class PlayerController(
                 // would stutter on 1080p, so we recommend PlayerMode.VLC for those.
                 Reason.AUDIO, Reason.ERROR ->
                     if (DeviceCaps.isAmlogic) Stage.VLC_SW else Stage.VLC_HW
+                // A hardware decoder failure always drops straight to software
+                // (handleFailure normally escalates DECODE directly, this covers
+                // any fall-through so the enum `when` stays exhaustive).
+                Reason.DECODE -> Stage.VLC_SW
                 Reason.SOFTWARE_SLOW -> null
             }
             // Green on the libVLC hardware path (Amlogic underlay etc.) always drops
@@ -462,6 +553,7 @@ class PlayerController(
 
     fun release() {
         mainHandler.removeCallbacksAndMessages(null)
+        stableHandler.removeCallbacksAndMessages(null)
         resetReconnect()
         releaseEngine()
     }
@@ -501,5 +593,20 @@ class PlayerController(
          * up in reasonable time on a genuinely dead stream.
          */
         private const val RECONNECT_WINDOW_MS = 45_000L
+
+        /**
+         * How long a stage must play without failing before it counts as genuinely
+         * recovered (reconnect window + quick-decode-failure counter reset). Longer
+         * than the ~1.5s the Amlogic MPEG2 hardware decoder survives before failing,
+         * so that loop never looks recovered and escalation to software still fires.
+         */
+        private const val STABLE_PLAYBACK_MS = 10_000L
+
+        /**
+         * Quick hardware decode failures tolerated before forcing the stream onto
+         * software decode. 2 = one retry on the same hardware decoder (a transient
+         * glitch may recover) before giving up on it.
+         */
+        private const val MAX_QUICK_DECODE_FAILURES = 2
     }
 }

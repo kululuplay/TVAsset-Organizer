@@ -1,0 +1,15 @@
+New device log reveals a real problem on the specific 720x576 MPEG2 channel (decoder OMX.amlogic.mpeg2.decoder.awesome2). It enters a failure LOOP: it renders the first frame, plays ~1.5 seconds, then videoCodecError null + onPlayerError ERROR_CODE_DECODING_FAILED, the reconnect fires (reconnect attempt 1), it reconnects to the SAME hardware MPEG2 decoder, renders ~1.5s again, fails again — repeating forever. So the user sees ~1.5s of video, then a break, on repeat.
+Two findings:
+
+GOOD: the auto-reconnect feature works (attempts fire).
+BAD: reconnect keeps retrying the SAME failing hardware decoder and never escalates to software, so it loops. Also the attempt counter resets to "attempt 1" on each brief first-frame, so escalation/backoff never triggers.
+
+Fix:
+
+Extend the per-stream software-fallback rule to cover this failure. We already auto-route problematic H.264 1080p50 to software. Now: when a stream repeatedly fails hardware decode (videoCodecError / ERROR_CODE_DECODING_FAILED) shortly after rendering, automatically fall back to SOFTWARE decode for THAT stream instead of retrying hardware in a loop. This must cover MPEG2 720x576 (SD MPEG2 is light — software decode won't stutter).
+Fix the escalation logic so it doesn't loop on hardware. A brief onRenderedFirstFrame that fails ~1.5s later must NOT reset the retry counter to "attempt 1". Count repeated quick failures; after 2 hardware failures on the same stream within a short window, switch that stream to software decode (don't keep reconnecting to hardware). Only treat playback as truly "recovered" (and reset the counter) if it plays stably for a longer period (e.g. >10s), not just one frame.
+Detect MPEG2 at stream start and consider routing it to software proactively on this Amlogic hardware, since the MPEG2 hardware decoder is proving unreliable here (fails after ~1.5s). SD MPEG2 software decode is cheap. Test whether proactive MPEG2→software is cleaner than reactive fallback.
+Apply to both engines and keep single-connection safety (each retry/fallback fully releases the previous connection first).
+Capture a fresh log on this MPEG2 channel after the fix to confirm it lands on software decode and plays continuously (no more 1.5s loop).
+
+Verify on the real stick: stay on the 720x576 MPEG2 channel for 30+ seconds — it must play continuously without the repeating ~1.5s break, by falling back to software decode for that stream.

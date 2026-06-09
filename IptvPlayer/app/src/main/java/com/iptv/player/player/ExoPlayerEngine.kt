@@ -49,6 +49,7 @@ import androidx.media3.ui.PlayerView
 import com.iptv.player.R
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.util.AppInfo
+import com.iptv.player.util.DeviceCaps
 import com.iptv.player.util.PlaybackLog
 
 class ExoPlayerEngine(
@@ -152,7 +153,13 @@ class ExoPlayerEngine(
 
             override fun onPlayerError(error: PlaybackException) {
                 PlaybackLog.log(context, engineName, "onPlayerError ${error.errorCodeName}")
-                listener?.onError(error.errorCodeName)
+                // Distinguish a hardware-DECODER failure (videoCodecError /
+                // ERROR_CODE_DECODING_FAILED etc.) from a network/source drop. The
+                // Amlogic MPEG2 decoder renders a frame then fails decoding ~1.5s in;
+                // routing it through onDecodeError lets the controller escalate to
+                // software instead of looping the reconnect on the same dead decoder.
+                if (isDecoderError(error.errorCode)) listener?.onDecodeError(error.errorCodeName)
+                else listener?.onError(error.errorCodeName)
             }
         })
 
@@ -281,6 +288,20 @@ class ExoPlayerEngine(
      */
     private fun maybeFlagGreenProneProfile(format: Format) {
         if (videoReported) return
+        // Proactive MPEG2 -> software on Amlogic. The Amlogic hardware MPEG2 decoder
+        // (OMX.amlogic.mpeg2.decoder) is unreliable on this box: it renders a frame,
+        // plays ~1.5s, then fails with ERROR_CODE_DECODING_FAILED and loops. SD MPEG2
+        // is light, so route it to libVLC software decode the moment we see the codec
+        // — before the glitch — rather than waiting for the reactive failure counter.
+        if (DeviceCaps.isAmlogic && format.sampleMimeType == MimeTypes.VIDEO_MPEG2) {
+            videoReported = true
+            PlaybackLog.log(
+                context, engineName,
+                "Amlogic MPEG2 ${format.width}x${format.height} -> proactive software fallback"
+            )
+            listener?.onVideoInvalid()
+            return
+        }
         val h264 = format.sampleMimeType == MimeTypes.VIDEO_H264
         val is1080p = format.height >= GREEN_PRONE_MIN_HEIGHT || format.width >= GREEN_PRONE_MIN_WIDTH
         // frameRate is Format.NO_VALUE (-1f) when unknown, so the >= check already
@@ -295,6 +316,20 @@ class ExoPlayerEngine(
             )
             listener?.onVideoInvalid()
         }
+    }
+
+    /**
+     * True for ExoPlayer error codes that mean the (hardware) video decoder failed
+     * — distinct from a network/source drop. These are the failures that loop on
+     * the same dead decoder, so the controller escalates them to software decode.
+     */
+    private fun isDecoderError(code: Int): Boolean = when (code) {
+        PlaybackException.ERROR_CODE_DECODING_FAILED,
+        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+        PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+        PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+        PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES -> true
+        else -> false
     }
 
     private fun scheduleNoFrameCheck() {
