@@ -82,7 +82,9 @@ class PlayerController(
         mainHandler.postDelayed({
             if (generation != startGeneration || eng !== engine) return@postDelayed
             eng.attachVideo(newContainer)
-            if (url != null) eng.play(url)
+            // reset=true: hand-off needs a deterministic decoder/renderer reset
+            // onto the re-attached surface (bare re-add can stall video).
+            if (url != null) eng.play(url, reset = true)
         }, ENGINE_SWAP_DELAY_MS)
     }
 

@@ -28,8 +28,16 @@ interface PlayerEngine {
      */
     fun attachVideo(container: ViewGroup) {}
 
-    /** Start (or restart) playback of a stream URL. */
-    fun play(url: String)
+    /**
+     * Start (or restart) playback of a stream URL.
+     *
+     * [reset] requests a deterministic decoder/renderer teardown before the new
+     * stream (used by the preview<->fullscreen hand-off, where a bare surface
+     * re-attach can leave video stalled). The default false keeps the fast-zap
+     * path lightweight: swapping the stream on a live engine must NOT tear down
+     * and recreate the hardware decoder, or every channel change stutters.
+     */
+    fun play(url: String, reset: Boolean = false)
 
     fun pause()
     fun resume()

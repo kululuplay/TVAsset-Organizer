@@ -339,7 +339,9 @@ class VlcPlayerEngine(
         mp.attachViews(layout, null, false, false)
     }
 
-    override fun play(url: String) {
+    // reset is unused for libVLC: a Media can't be reused, so play() always builds
+    // a fresh Media and stop()s first regardless (single-connection contract).
+    override fun play(url: String, reset: Boolean) {
         val vlc = libVlc ?: return
         val mp = mediaPlayer ?: return
         greenCheckDone.set(false)

@@ -330,16 +330,20 @@ class ExoPlayerEngine(
         container.addView(view)
     }
 
-    override fun play(url: String) {
+    override fun play(url: String, reset: Boolean) {
         val exo = player ?: return
         resetHealth()
-        PlaybackLog.log(context, engineName, "play passthrough=$allowPassthrough")
-        // Stop before re-preparing: this method is also the hand-off restart path
-        // (preview <-> fullscreen), where a bare PlayerView re-add can leave the
-        // renderer audio-ready but video-stalled (black with sound). An explicit
-        // stop() deterministically resets the decoder/renderer onto the re-attached
-        // surface; on a fresh engine it's a harmless no-op.
-        exo.stop()
+        PlaybackLog.log(context, engineName, "play passthrough=$allowPassthrough reset=$reset")
+        // Only the hand-off restart path (preview <-> fullscreen) needs an explicit
+        // stop(): a bare PlayerView re-add can leave the renderer audio-ready but
+        // video-stalled (black with sound), so stop() deterministically resets the
+        // decoder/renderer onto the re-attached surface.
+        //
+        // The fast-zap path (reset=false) must NOT stop(): on Amlogic, stop()
+        // fully tears down and recreates the OMX hardware decoder (~600ms), which
+        // is exactly the channel-change stutter. setMediaItem + prepare on the live
+        // player swaps the stream while reusing the decoder.
+        if (reset) exo.stop()
         exo.setMediaItem(MediaItem.fromUri(url))
         exo.playWhenReady = true
         exo.prepare()
