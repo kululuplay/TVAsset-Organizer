@@ -277,14 +277,25 @@ class ExoPlayerEngine(
     }
 
     /**
-     * The Amlogic hardware H.264 decoder greens out on the demanding 1080p@50fps
-     * (high frame-rate / high-bitrate) profile while handling normal channels fine.
-     * The no-frame watchdog can't catch it: the decoder DOES push a (green) frame,
-     * so onRenderedFirstFrame fires and the watchdog is satisfied. Detect that one
-     * profile from the input format instead and trigger the per-stream software
-     * fallback (onVideoInvalid -> controller restarts this stream on libVLC SW).
-     * One-shot per stream (guarded by [videoReported]); every other stream — lower
-     * resolution, lower frame rate, or non-H.264 — stays on hardware untouched.
+     * Proactive per-stream software fallback for profiles a hardware decoder is
+     * known to mishandle, detected from the input format (the no-frame watchdog
+     * can't catch a decoder that pushes a green/garbage frame — onRenderedFirstFrame
+     * fires and satisfies it). One-shot per stream (guarded by [videoReported]).
+     *
+     * Two cases:
+     *  - Amlogic + MPEG2: the OMX.amlogic.mpeg2.decoder genuinely fails (renders
+     *    ~1.5s then ERROR_CODE_DECODING_FAILED), so route it to libVLC SW up front.
+     *  - Non-Amlogic + H.264 1080p@high-fps: a green-prone profile on some hardware
+     *    decoders.
+     *
+     * The H.264 heuristic is INTENTIONALLY SKIPPED on Amlogic: real-device testing
+     * proved ExoPlayer's MediaCodec->Surface path plays every H.264 profile there
+     * flawlessly (incl. 1080p@50 and UHD) — the old greening was a libVLC vout
+     * problem, not a MediaCodec one. Pre-emptively bouncing those streams to libVLC
+     * also dragged UHD onto the stuttering libVLC HW path. On Amlogic we keep the
+     * proven ExoPlayer+HW path and deviate only REACTIVELY (onDecodeError / no-frame
+     * watchdog / quick-decode-failure counter). Do NOT reintroduce a proactive
+     * Amlogic H.264 downgrade here.
      */
     private fun maybeFlagGreenProneProfile(format: Format) {
         if (videoReported) return
@@ -302,6 +313,17 @@ class ExoPlayerEngine(
             listener?.onVideoInvalid()
             return
         }
+        // The proactive H.264 1080p@50 downgrade is DISABLED on Amlogic. Real-device
+        // testing on the Amlogic stick shows ExoPlayer's native MediaCodec->Surface
+        // pipeline plays every H.264 profile flawlessly, including 1080p@50 and UHD —
+        // the greening was a libVLC-vout problem, not a MediaCodec one. Pre-emptively
+        // bouncing these working streams to libVLC SW also dragged UHD onto the
+        // libVLC HW path (via the SOFTWARE_SLOW escalation), which is exactly where
+        // UHD stutters. So on Amlogic we keep the proven ExoPlayer+HW path and only
+        // deviate REACTIVELY when a stream actually fails (onDecodeError / no-frame
+        // watchdog) or for the genuinely broken MPEG2 codec handled above. The
+        // proactive heuristic stays for non-Amlogic devices running explicit ExoPlayer.
+        if (DeviceCaps.isAmlogic) return
         val h264 = format.sampleMimeType == MimeTypes.VIDEO_H264
         val is1080p = format.height >= GREEN_PRONE_MIN_HEIGHT || format.width >= GREEN_PRONE_MIN_WIDTH
         // frameRate is Format.NO_VALUE (-1f) when unknown, so the >= check already

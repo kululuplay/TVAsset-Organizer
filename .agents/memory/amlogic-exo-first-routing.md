@@ -1,15 +1,31 @@
 ---
-name: Amlogic deterministic EXO-first routing
-description: Why Amlogic boxes must pick the start engine by hardware detection, not runtime green detection
+name: Amlogic AUTO = ExoPlayer + Hardware (proven best path)
+description: On Amlogic, AUTO must default to ExoPlayer+HW and only deviate reactively; do NOT pre-emptively scatter channels to libVLC/software
 ---
 
-On Amlogic boxes the libVLC hardware underlay greens out on EVERY non-UHD profile (VLC logs `output: 17 unknown`). The reactive runtime green detection (keyed on libVLC `currentVideoTrack` width/height/fps) is UNRELIABLE there — `currentVideoTrack` frequently reads 0x0/null, so the "green-prone -> software fallback" routing never fires and the box stays green on every channel.
+Real-device testing on the Amlogic stick (definitive, supersedes earlier
+green-screen theories about ExoPlayer):
+- **ExoPlayer + Hardware = flawless for EVERYTHING**, including 1080p@50 and UHD/4K.
+  The native MediaCodec->SurfaceView pipeline is the box's proper hardware path.
+- **libVLC + Hardware** works EXCEPT some UHD channels stutter.
+- The old "Amlogic H.264 1080p@50 greens out" finding was a **libVLC vout** problem,
+  NOT a MediaCodec one. Do not apply it to the ExoPlayer path on Amlogic.
 
-**Rule:** route the start engine deterministically by `DeviceCaps.isAmlogic`, do NOT rely on runtime track reads to escape green.
-- AUTO on Amlogic -> start ExoPlayer (MediaCodec->SurfaceView, the box's working hardware-video path, no green; EXO renders to its own Surface so the libVLC format-17 issue doesn't apply).
-- Explicit VLC choice on Amlogic -> start VLC_SW (only non-green libVLC path).
-- EXO audio/error fallback on Amlogic -> VLC_SW, NEVER VLC_HW (VLC_HW greens).
+**Rule:** On Amlogic, AUTO (PlayerMode.AUTO + DecoderMode.AUTO) starts on EXO
+(initialStage already does this) and STAYS there. Deviate from ExoPlayer+HW only
+REACTIVELY, per single stream:
+- genuine decode failure (onDecodeError / no-frame watchdog / quick-decode-failure
+  counter) → that one stream to VLC_SW, back to EXO on the next channel;
+- the genuinely-broken MPEG2 codec (proactive MPEG2->SW is fine — it actually fails).
 
-**Why:** field logcat showed 44s + many zaps with AUTO starting VLC_HW, green every channel, zero fallback lines. User picked EXO-first (hardware quality, avoids the macroblocking that full-software-default causes on weak sticks).
+**Why pre-emptive routing was the bug:** `ExoPlayerEngine.maybeFlagGreenProneProfile`
+proactively bounced H.264 1080p+high-fps (incl. UHD) off ExoPlayer via onVideoInvalid
+→ VLC_SW → (UHD can't SW-decode) onSoftwareTooSlow → VLC_HW = libVLC hardware, the
+exact path that stutters on UHD. So AUTO turned perfectly-working ExoPlayer channels
+into stuttering libVLC ones. Fix: `if (DeviceCaps.isAmlogic) return` before the H.264
+heuristic — keep the heuristic only for non-Amlogic explicit-ExoPlayer users.
 
-**How to apply:** in `PlayerController.initialStage()` the `DeviceCaps.isAmlogic` branch must sit AFTER the explicit-EXOPLAYER and SOFTWARE-decoder branches but BEFORE the generic VLC_HW `else`. `DeviceCaps.isAmlogic` returns false in pure-JVM unit tests (no Android Build/MediaCodecList), so non-Amlogic ladder tests keep the VLC_HW behavior.
+**How to apply:** never add a PROACTIVE (format-detection, pre-failure) engine/decoder
+downgrade on the Amlogic ExoPlayer path except for codecs that genuinely always fail
+there (MPEG2). Manual Settings choices (explicit ExoPlayer/libVLC + Hardware/Software)
+are unaffected — only AUTO's default heuristics changed.
