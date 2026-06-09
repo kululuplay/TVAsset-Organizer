@@ -80,6 +80,15 @@ class HomeActivity : BaseActivity() {
     /** Last channel row that held focus; restored when returning to the channel list. */
     private var lastFocusedChannelId: String? = null
 
+    /**
+     * The channel actually playing when we left for the fullscreen player. On
+     * return it takes priority over [lastFocusedChannelId] so the list lands on
+     * the channel the user is watching (CH+/- zapping may have changed it inside
+     * the player), not the row they originally opened or last browsed. Consumed
+     * once on the next channel-list emission.
+     */
+    private var pendingPlayingChannelId: String? = null
+
     /** Set on START so the next channel-list emission restores focus to the row we left. */
     private var pendingChannelFocusRestore = false
 
@@ -336,8 +345,16 @@ class HomeActivity : BaseActivity() {
                             // focus to the top. Restore focus to the row we left from.
                             if (pendingChannelFocusRestore && inChannelView) {
                                 pendingChannelFocusRestore = false
-                                val pos = channels.indexOfFirst { it.id == lastFocusedChannelId }
-                                if (pos >= 0) focusRow(binding.channelList, pos)
+                                // Prefer the actually-playing channel (set on a
+                                // hand-back from fullscreen) over the last-browsed
+                                // row, then fall back to it for non-player returns.
+                                val targetId = pendingPlayingChannelId ?: lastFocusedChannelId
+                                pendingPlayingChannelId = null
+                                val pos = channels.indexOfFirst { it.id == targetId }
+                                if (pos >= 0) {
+                                    lastFocusedChannelId = targetId
+                                    focusRow(binding.channelList, pos, center = true)
+                                }
                             }
                             // While still browsing categories, preview the first channel
                             // of the focused category (like the reference design).
@@ -574,9 +591,19 @@ class HomeActivity : BaseActivity() {
         lastSelectedCategoryId?.let { focusCategory(it) }
     }
 
-    /** Moves focus into the channel list, always landing on the first channel. */
+    /**
+     * Moves focus into the channel list. Lands on the currently-playing channel
+     * (the in-panel preview) when it's in this category, so re-opening the list
+     * after browsing returns to what's actually playing rather than the top row.
+     * Falls back to the first channel when nothing is playing in this category.
+     */
     private fun focusFirstChannel() {
-        focusRow(binding.channelList, 0)
+        val playingId = previewingChannel?.id
+        val pos = playingId
+            ?.let { id -> currentChannels.indexOfFirst { it.id == id } }
+            ?.takeIf { it >= 0 }
+            ?: 0
+        focusRow(binding.channelList, pos, center = pos > 0)
     }
 
     /** Moves focus onto a given category row. */
@@ -594,14 +621,25 @@ class HomeActivity : BaseActivity() {
      * back to the top category instead of the one we left from. Re-posting until the
      * target holder exists (bounded) lands focus on the correct row.
      */
-    private fun focusRow(list: RecyclerView, pos: Int, attempts: Int = 10) {
+    private fun focusRow(list: RecyclerView, pos: Int, attempts: Int = 10, center: Boolean = false) {
         list.scrollToPosition(pos)
         list.post(object : Runnable {
             private var remaining = attempts
             override fun run() {
                 val holder = list.findViewHolderForAdapterPosition(pos)
                 when {
-                    holder != null -> holder.itemView.requestFocus()
+                    holder != null -> {
+                        // Center the target row in the viewport when asked, so the
+                        // restored/playing channel sits mid-list with rows visible
+                        // above and below it (not pinned to the top edge).
+                        if (center) {
+                            (list.layoutManager as? LinearLayoutManager)?.let { lm ->
+                                val offset = (list.height - holder.itemView.height) / 2
+                                lm.scrollToPositionWithOffset(pos, offset.coerceAtLeast(0))
+                            }
+                        }
+                        holder.itemView.requestFocus()
+                    }
                     remaining-- > 0 -> list.post(this)
                     else -> list.requestFocus()
                 }
@@ -788,6 +826,11 @@ class HomeActivity : BaseActivity() {
         // start (nothing parked), so this is a no-op except after a player BACK.
         val handedBack = ServiceLocator.consumePendingLiveController() ?: return
         val channelId = ServiceLocator.consumePendingLiveChannelId()
+        // Land focus on the channel that was actually playing in fullscreen (zap
+        // may have changed it), not the row originally opened. Only meaningful when
+        // returning into the channel list (which arms the restore above); otherwise
+        // null it so a stale id can't jump focus on a later unrelated return.
+        pendingPlayingChannelId = if (inChannelView) channelId else null
         reAdoptHandedBackPreview(handedBack, channelId)
     }
 
