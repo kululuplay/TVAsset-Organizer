@@ -179,11 +179,21 @@ class VodActivity : BaseActivity() {
         } else {
             cat.name
         }
+        // "You may like" always shows highest-rated first regardless of the sort
+        // control, so the sort chip would be a no-op there — hide it to avoid a
+        // misleading label and a pointless grid reload.
+        binding.sortButton.visibility =
+            if (cat.id == VodViewModel.CAT_POPULAR) View.GONE else View.VISIBLE
     }
 
     private fun observe() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // Mask adult posters from the very first paging bind. adultLocked
+                // otherwise stays false until onResume's async read lands, so adult
+                // artwork/titles could flash unmasked on entry before then.
+                val settings = ServiceLocator.settings
+                vodAdapter.adultLocked = settings.lockAdult.first() && settings.hasPin()
                 launch {
                     viewModel.categories.collectLatest { cats ->
                         val firstLoad = categoryAdapter.currentList.isEmpty()

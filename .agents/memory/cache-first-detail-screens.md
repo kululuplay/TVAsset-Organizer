@@ -22,3 +22,26 @@ once. A user reported ~20s blank/spinner before this was fixed.
 - Show a spinner only on a cold open with no cache. When cache is already on
   screen, the background refresh updates the DB but must NOT disrupt the view.
 - Network failure must never close/blank an already-shown page.
+
+## Per-pass enrichment jobs must be cancellable (stale-overwrite trap)
+
+The cache-first flow calls `showItem()` TWICE in the normal case (once for the
+cached record, once for the enriched/detailed one). Each `showItem` kicks off
+secondary enrichment coroutines (cast row, "Similar"/related rail). If those are
+fire-and-forget `lifecycleScope.launch {}`, BOTH passes race:
+
+- pass 1 (cached) has `tmdbId=null`/`cast=null` → falls back to a name-search.
+- pass 2 (detailed) has the real `tmdbId` → accurate lookup.
+
+Whichever finishes LAST wins `submitList`. If the slower cached pass lands last it
+overwrites the accurate cast/similar with wrong-movie/name-search results (or an
+empty fallback that hides the row).
+
+**Fix:** hold a `Job?` per enrichment stream (e.g. `castJob`, `similarJob`),
+`?.cancel()` it at the top of each loader, then reassign the new launch. Because
+the cache-first `load()` runs sequentially, pass 2 always cancels pass 1's job
+before relaunching, so the accurate result wins.
+
+**Where:** done in `VodDetailActivity` (Movies). `SeriesDetailActivity` shares the
+same cache-first pattern and likely has the same latent race — fix it there too if
+you touch the Series detail screen.

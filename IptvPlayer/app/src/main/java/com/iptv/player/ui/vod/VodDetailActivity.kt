@@ -27,6 +27,7 @@ import com.iptv.player.ui.common.SimilarCard
 import com.iptv.player.ui.player.VodPlayerActivity
 import com.iptv.player.ui.trailer.TrailerActivity
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class VodDetailActivity : BaseActivity() {
@@ -44,6 +45,13 @@ class VodDetailActivity : BaseActivity() {
     private var current: VodItem? = null
     private var hasResume = false
     private var isFavorite = false
+
+    // The cached pass and the detailed pass each kick off cast/similar enrichment.
+    // Tracked so a re-load cancels the previous (cached) coroutine before starting
+    // the detailed one — otherwise the slower cached pass could land last and
+    // overwrite the accurate (tmdbId-based) cast/similar with name-search results.
+    private var castJob: Job? = null
+    private var similarJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -123,7 +131,8 @@ class VodDetailActivity : BaseActivity() {
 
     /** Loads other movies from the same category into the "Similar" rail. */
     private fun loadSimilar(item: VodItem) {
-        lifecycleScope.launch {
+        similarJob?.cancel()
+        similarJob = lifecycleScope.launch {
             val similar = try {
                 repo.similarMovies(item)
             } catch (ce: CancellationException) {
@@ -191,7 +200,8 @@ class VodDetailActivity : BaseActivity() {
      * TMDB head-shots in the background. A failure just leaves the names visible.
      */
     private fun loadCast(item: VodItem) {
-        lifecycleScope.launch {
+        castJob?.cancel()
+        castJob = lifecycleScope.launch {
             val cast = try {
                 repo.castFor(item.name, item.tmdbId, item.cast, isMovie = true)
             } catch (ce: CancellationException) {

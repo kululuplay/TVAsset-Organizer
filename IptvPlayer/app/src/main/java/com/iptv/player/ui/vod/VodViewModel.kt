@@ -40,7 +40,6 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
     companion object {
         const val CAT_ALL = "__all__"
         const val CAT_POPULAR = "__popular__"
-        const val RECENT_LIMIT = 20
     }
 
     private val _refreshing = MutableStateFlow(false)
@@ -63,7 +62,10 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
                         CAT_ALL,
                         getApplication<Application>().getString(R.string.cat_recently_added),
                         ContentType.VOD,
-                        count = cats.sumOf { it.count ?: 0 }.coerceAtMost(RECENT_LIMIT)
+                        // The "Recently added" grid is the whole cache sorted newest
+                        // first (unbounded), so the badge must show the real total —
+                        // capping it to a fixed number made the count contradict the grid.
+                        count = cats.sumOf { it.count ?: 0 }
                     )
                 )
                 // "You may like" — top-rated movies across the whole catalog, so

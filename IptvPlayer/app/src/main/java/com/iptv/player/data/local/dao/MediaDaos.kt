@@ -96,7 +96,7 @@ interface VodDao {
     fun pagingByCategory(categoryId: String): PagingSource<Int, VodEntity>
 
     // ---- Sorted variants (A-Z / rating / year) for the list sort control ----
-    @Query("SELECT * FROM vod WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY name")
+    @Query("SELECT * FROM vod WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY name COLLATE NOCASE")
     fun pagingAllByName(hidden: List<String>): PagingSource<Int, VodEntity>
 
     @Query("SELECT * FROM vod WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY rating DESC, name")
@@ -105,7 +105,7 @@ interface VodDao {
     @Query("SELECT * FROM vod WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY releaseDate DESC, name")
     fun pagingAllByYear(hidden: List<String>): PagingSource<Int, VodEntity>
 
-    @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY name")
+    @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY name COLLATE NOCASE")
     fun pagingCategoryByName(categoryId: String): PagingSource<Int, VodEntity>
 
     @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY rating DESC, name")
