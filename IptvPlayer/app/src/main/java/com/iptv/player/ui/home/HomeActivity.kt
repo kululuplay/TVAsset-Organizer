@@ -365,6 +365,11 @@ class HomeActivity : BaseActivity() {
                     viewModel.channels.collectLatest { channels ->
                         currentChannels = channels
                         channelAdapter.submitList(channels) {
+                            // While the validation fullscreen spike is expanded, don't
+                            // touch focus or the preview: a focus jump or clearPreview()
+                            // (which releases the controller) would black out the video
+                            // mid-fullscreen. The list itself is still submitted above.
+                            if (fsSpikeExpanded) return@submitList
                             if (pendingScrollReset) {
                                 pendingScrollReset = false
                                 binding.channelList.scrollToPosition(0)
@@ -778,6 +783,13 @@ class HomeActivity : BaseActivity() {
         binding.root.clipToPadding = true
         // Do NOT clear FLAG_KEEP_SCREEN_ON: BaseActivity holds it app-wide.
         fsSpikeExpanded = false
+        // Hiding the panes dropped D-pad focus; restore it on an interactive
+        // collapse (BACK/MENU) so the user isn't left with nothing focused. Skip
+        // during onStop (not resumed), where we only reset transform/visibility.
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            if (inChannelView) focusFirstChannel()
+            else lastSelectedCategoryId?.let { focusCategory(it) }
+        }
     }
 
     /** Opens the catch-up/archive browser, pre-focusing the previewed channel. */
@@ -798,7 +810,18 @@ class HomeActivity : BaseActivity() {
         if (previewingChannel?.id == channel.id && previewController != null) {
             openPlayer(channel)
         } else {
-            startPreviewFor(channel)
+            // Gate the preview for adult channels surfaced in Favorites/Recent,
+            // which are never category-locked, so the first OK can't play their
+            // live video PIN-free. Skip the prompt inside an adult category the
+            // user already unlocked (drillIntoCategory) so we don't re-ask per
+            // channel; a real locked category can't be browsed without unlocking.
+            if (channel.isAdult() && lastSelectedCategoryId !in unlockedCategories) {
+                PinLockHelper.guard(this, isAdult = true) {
+                    startPreviewFor(channel)
+                }
+            } else {
+                startPreviewFor(channel)
+            }
         }
     }
 
@@ -892,11 +915,28 @@ class HomeActivity : BaseActivity() {
             HANDOFF_LOGO_TIMEOUT_MS
         )
         controller.rebind(binding.previewVideo)
-        val channel = channelId?.let { id -> currentChannels.firstOrNull { it.id == id } }
-        if (channel != null) {
-            currentInfoChannel = channel
-            previewingChannel = channel
-            lockCaptionToPreview(channel)
+        // The played channel may sit OUTSIDE the current category: fullscreen CH+/-
+        // zaps through the full live list, so currentChannels (one category) can
+        // miss it. Try the in-memory list first, then fall back to a repository
+        // lookup so previewingChannel is set and the caption stays locked to the
+        // channel actually on screen instead of drifting to follow focus.
+        val local = channelId?.let { id -> currentChannels.firstOrNull { it.id == id } }
+        if (local != null) {
+            currentInfoChannel = local
+            previewingChannel = local
+            lockCaptionToPreview(local)
+        } else if (channelId != null) {
+            lifecycleScope.launch {
+                val ch = runCatching { ServiceLocator.repository.getChannel(channelId) }.getOrNull()
+                // Only apply if this handed-back controller is still the live preview
+                // and nothing newer claimed it, so a late lookup can't clobber fresh
+                // state (e.g. the user started a different preview meanwhile).
+                if (ch != null && previewController === controller && previewingChannel == null) {
+                    currentInfoChannel = ch
+                    previewingChannel = ch
+                    lockCaptionToPreview(ch)
+                }
+            }
         }
     }
 
