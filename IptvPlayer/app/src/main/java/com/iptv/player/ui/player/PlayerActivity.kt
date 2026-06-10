@@ -44,9 +44,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     companion object {
         const val EXTRA_CHANNEL_ID = "extra_channel_id"
-        // Kept for caller compatibility (Home/Favorites pass a category to scope
-        // channel zapping); this restored player zaps the full live list and
-        // simply ignores the extra.
+        // Scopes up/down zapping. CAT_FAVORITES (from the Favorites screen / Home
+        // favorites rail) confines zapping to the favorite live channels; any other
+        // id (or null) zaps the full live list. Read into PlayerViewModel.categoryId.
         const val EXTRA_CATEGORY_ID = "extra_category_id"
         /** When true, up/down zapping stays within the radio list, not Live TV. */
         const val EXTRA_RADIO_MODE = "extra_radio_mode"
@@ -161,6 +161,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             return
         }
         viewModel.radioMode = intent.getBooleanExtra(EXTRA_RADIO_MODE, false)
+        // Scope up/down zapping to the favorites list when launched from the
+        // Favorites screen (CAT_FAVORITES); null/other ids keep the full live list.
+        viewModel.categoryId = intent.getStringExtra(EXTRA_CATEGORY_ID)
 
         // Take the handed-over preview controller (if any) immediately so it is
         // never left parked. Null when launched normally (Favorites/number-zap).

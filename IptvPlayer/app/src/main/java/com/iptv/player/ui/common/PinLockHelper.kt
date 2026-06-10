@@ -14,6 +14,7 @@ import androidx.lifecycle.lifecycleScope
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Category
 import com.iptv.player.data.model.Channel
+import com.iptv.player.data.model.FavoriteItem
 import com.iptv.player.data.model.Series
 import com.iptv.player.data.model.VodItem
 import kotlinx.coroutines.flow.first
@@ -85,3 +86,7 @@ fun Series.isAdult(): Boolean =
 
 /** True when the category name looks like adult content. */
 fun Category.isAdult(): Boolean = PinLockHelper.looksAdult(name)
+
+/** True when the favorite itself, or its source category, looks like adult content. */
+fun FavoriteItem.isAdult(): Boolean =
+    PinLockHelper.looksAdult(title) || PinLockHelper.looksAdult(categoryName)

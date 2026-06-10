@@ -14,6 +14,7 @@ import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.model.StreamFormat
+import com.iptv.player.ui.home.HomeViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -29,8 +30,21 @@ class PlayerViewModel : ViewModel() {
     /** When true, zapping stays within the radio list (Radio folder playback). */
     var radioMode: Boolean = false
 
+    /**
+     * Category scope for up/down zapping. When set to [HomeViewModel.CAT_FAVORITES]
+     * (the Favorites screen entry point), zapping cycles only through the favorite
+     * live channels instead of the full live list. Null = full list.
+     */
+    var categoryId: String? = null
+
     suspend fun loadPlaylist() {
-        playlist = repo.observeChannels(ContentType.LIVE, radio = radioMode).first()
+        playlist = if (categoryId == HomeViewModel.CAT_FAVORITES) {
+            // Favorite live channels only: observeFavorites() INNER JOINs channels
+            // (so movies/series are excluded already); drop radio like the Home rail.
+            repo.observeFavorites().first().filterNot { it.isRadio }
+        } else {
+            repo.observeChannels(ContentType.LIVE, radio = radioMode).first()
+        }
     }
 
     suspend fun playerMode(): PlayerMode = settings.playerMode.first()

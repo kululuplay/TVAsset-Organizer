@@ -24,11 +24,13 @@ import com.iptv.player.data.model.FavoriteKind
 import com.iptv.player.databinding.ActivityFavoritesBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.PinLockHelper
+import com.iptv.player.ui.common.isAdult
 import com.iptv.player.ui.home.HomeViewModel
 import com.iptv.player.ui.player.PlayerActivity
 import com.iptv.player.ui.series.SeriesDetailActivity
 import com.iptv.player.ui.vod.VodDetailActivity
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class FavoritesActivity : BaseActivity() {
@@ -47,6 +49,17 @@ class FavoritesActivity : BaseActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // Pick up the parental-lock setting BEFORE the first bind so adult
+                // posters/titles are masked from the start. Re-checked on every
+                // return to STARTED so toggling the lock in Settings takes effect:
+                // this is a plain ListAdapter, so a content-equal re-emit won't
+                // rebind — force a rebind when the lock state actually changed.
+                val settings = ServiceLocator.settings
+                val locked = settings.lockAdult.first() && settings.hasPin()
+                if (adapter.adultLocked != locked) {
+                    adapter.adultLocked = locked
+                    adapter.notifyDataSetChanged()
+                }
                 ServiceLocator.repository.observeAllFavorites()
                     .collectLatest { items ->
                         adapter.submitList(items)
@@ -60,11 +73,9 @@ class FavoritesActivity : BaseActivity() {
     }
 
     private fun open(item: FavoriteItem) {
-        // Mirror the parental gating used by the other entry points: an item is adult
-        // if its title OR its category name looks adult. Always guard before opening.
-        val isAdult = PinLockHelper.looksAdult(item.title) ||
-            PinLockHelper.looksAdult(item.categoryName)
-        PinLockHelper.guard(this, isAdult = isAdult) {
+        // Mirror the parental gating used by the other entry points (same isAdult
+        // heuristic the grid masks with). Always guard before opening.
+        PinLockHelper.guard(this, isAdult = item.isAdult()) {
             when (item.kind) {
                 FavoriteKind.CHANNEL -> startActivity(
                     Intent(this, PlayerActivity::class.java)
