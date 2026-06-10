@@ -14,8 +14,8 @@ import android.view.View
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.paging.LoadState
-import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.iptv.player.data.ServiceLocator
 import com.iptv.player.databinding.ActivitySearchBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.PinLockHelper
@@ -29,6 +29,7 @@ import com.iptv.player.ui.series.SeriesDetailActivity
 import com.iptv.player.ui.vod.VodAdapter
 import com.iptv.player.ui.vod.VodDetailActivity
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -65,6 +66,18 @@ class SearchActivity : BaseActivity() {
         binding.dateText.text = DateFormat
             .getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
             .format(Date())
+        // Re-sync adult masking in case the parental lock was toggled in Settings
+        // while we were away. Paging-safe rebind only (never notify* a Paging adapter).
+        lifecycleScope.launch {
+            val locked = ServiceLocator.settings.lockAdult.first() &&
+                ServiceLocator.settings.hasPin()
+            if (movieAdapter.adultLocked != locked) {
+                movieAdapter.adultLocked = locked
+                seriesAdapter.adultLocked = locked
+                movieAdapter.refreshVisible(binding.movieGrid)
+                seriesAdapter.refreshVisible(binding.seriesGrid)
+            }
+        }
     }
 
     private fun setupLists() {
@@ -119,9 +132,21 @@ class SearchActivity : BaseActivity() {
                 updateEmptyState()
             }
         }
+        // Mask adult posters/titles from the very first paging bind: read the
+        // parental-lock setting BEFORE starting the movie/series submitData
+        // collectors, in the SAME coroutine, so the DataStore read can't race the
+        // first bind and leak adult artwork. Changes while away are handled in
+        // onResume via refreshVisible (notify* is unsafe on a Paging adapter).
         lifecycleScope.launch {
-            viewModel.movies.collectLatest { data ->
-                movieAdapter.submitData(data)
+            val locked = ServiceLocator.settings.lockAdult.first() &&
+                ServiceLocator.settings.hasPin()
+            movieAdapter.adultLocked = locked
+            seriesAdapter.adultLocked = locked
+            launch {
+                viewModel.movies.collectLatest { data -> movieAdapter.submitData(data) }
+            }
+            launch {
+                viewModel.series.collectLatest { data -> seriesAdapter.submitData(data) }
             }
         }
         lifecycleScope.launch {
@@ -130,11 +155,6 @@ class SearchActivity : BaseActivity() {
                     hasMovies = movieAdapter.itemCount > 0
                     updateEmptyState()
                 }
-            }
-        }
-        lifecycleScope.launch {
-            viewModel.series.collectLatest { data ->
-                seriesAdapter.submitData(data)
             }
         }
         lifecycleScope.launch {
