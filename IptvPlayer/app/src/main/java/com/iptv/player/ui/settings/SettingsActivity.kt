@@ -37,6 +37,7 @@ import com.iptv.player.databinding.ActivitySettingsBinding
 import com.iptv.player.ui.content.ContentManagerActivity
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.PinPromptDialog
+import com.iptv.player.ui.diagnostics.DiagnosticsActivity
 import com.iptv.player.ui.login.LoginActivity
 import com.iptv.player.ui.profiles.ProfilesActivity
 import com.iptv.player.util.LocaleManager
@@ -148,6 +149,9 @@ class SettingsActivity : BaseActivity() {
 
         addActionRow(c, getString(R.string.settings_profiles)) {
             startActivity(Intent(this, ProfilesActivity::class.java))
+        }
+        addActionRow(c, getString(R.string.settings_diagnostics)) {
+            startActivity(Intent(this, DiagnosticsActivity::class.java))
         }
         addActionRow(c, getString(R.string.settings_about)) {
             startActivity(Intent(this, AboutActivity::class.java))
