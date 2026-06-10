@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modern post-login launcher. Top bar: brand (left) + a status cluster (right)
-     with a network-signal chip, the live clock/date, a real-weather pill and the
-     Refresh/Exit actions. Body (scrollable): a centered "what to watch?" prompt,
-     a primary row of five gradient cards (Live / Movies / Series / Settings /
-     Favorites) and a secondary row (Continue / Playlists / Search / Account) -
-     every existing destination is kept. Below them a "Newly added" horizontal
-     poster rail (hidden until it has content). Footer: active source + expiry.
-     Fully D-pad driven; cards scale + brand-pink ring on focus. -->
+<!-- Post-login launcher home, redesigned reference-style. A slim brand bar (logo +
+     name on the left, a network-signal chip and Refresh on the right). Below it a
+     hero header that pairs a left-aligned "what to watch?" prompt with a large,
+     right-aligned clock/date and weather read-out (the signature element). Then two
+     rows of gradient destination cards (Live hero / Movies / Series / Radio, and
+     Favorites / Continue / Search / Settings) covering every section. Footer keeps
+     the contact chips, account and version. Fully D-pad driven; cards scale + show a
+     brand-pink ring on focus. All view IDs are preserved for DashboardActivity. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -16,7 +16,7 @@
     android:paddingHorizontal="@dimen/safe_area_h"
     android:paddingVertical="@dimen/safe_area_v">
 
-    <!-- ===== Top bar ===== -->
+    <!-- ===== Top bar: brand (left) + status cluster (right) ===== -->
     <LinearLayout
         android:id="@+id/topBar"
         android:layout_width="0dp"
@@ -29,10 +29,10 @@
 
         <!-- Brand -->
         <ImageView
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
             android:background="@drawable/bg_logo_badge"
-            android:padding="8dp"
+            android:padding="9dp"
             android:src="@drawable/ic_tv"
             android:tint="@color/text_primary"
             android:contentDescription="@string/app_name" />
@@ -44,7 +44,8 @@
             android:textColor="@color/text_primary"
             android:textSize="@dimen/text_title"
             android:textStyle="bold"
-            android:layout_marginStart="@dimen/space_s" />
+            android:letterSpacing="0.01"
+            android:layout_marginStart="@dimen/space_m" />
 
         <Space
             android:layout_width="0dp"
@@ -81,63 +82,7 @@
                 android:textStyle="bold" />
         </LinearLayout>
 
-        <!-- Clock + date -->
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="end"
-            android:layout_marginEnd="@dimen/space_m">
-
-            <com.iptv.player.ui.common.ClockView
-                android:id="@+id/clock"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_big_title"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/dateText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_caption" />
-        </LinearLayout>
-
-        <!-- Weather pill -->
-        <LinearLayout
-            android:id="@+id/weatherPill"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:background="@drawable/bg_time_chip"
-            android:paddingHorizontal="@dimen/space_m"
-            android:paddingVertical="@dimen/space_s"
-            android:layout_marginEnd="@dimen/space_m">
-
-            <ImageView
-                android:id="@+id/weatherIcon"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_weather_clouds"
-                android:tint="@color/text_primary"
-                android:contentDescription="@string/weather_unavailable" />
-
-            <TextView
-                android:id="@+id/weatherText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/space_s"
-                android:text="@string/weather_unavailable"
-                android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_caption"
-                android:textStyle="bold"
-                android:maxLines="1" />
-        </LinearLayout>
-
-        <!-- Actions -->
+        <!-- Refresh -->
         <ImageButton
             android:id="@+id/btnRefresh"
             style="@style/Widget.Iptv.IconButton"
@@ -150,7 +95,7 @@
         android:id="@+id/scrollBody"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginTop="@dimen/space_m"
+        android:layout_marginTop="@dimen/space_l"
         android:clipToPadding="false"
         android:fillViewport="true"
         android:scrollbars="none"
@@ -164,30 +109,100 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Prompt -->
-            <TextView
+            <!-- Hero header: prompt (left) + big clock/weather read-out (right) -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_s"
-                android:gravity="start"
-                android:text="@string/dash_prompt_title"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_big_title"
-                android:textStyle="bold" />
+                android:orientation="horizontal"
+                android:gravity="bottom"
+                android:baselineAligned="false">
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_xs"
-                android:gravity="start"
-                android:text="@string/dash_prompt_subtitle"
-                android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_caption" />
+                <!-- Prompt -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/dash_prompt_title"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_big_title"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_xs"
+                        android:text="@string/dash_prompt_subtitle"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="@dimen/text_caption" />
+                </LinearLayout>
+
+                <!-- Clock / weather read-out -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="end"
+                    android:layout_marginStart="@dimen/space_l">
+
+                    <!-- Weather -->
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="@dimen/space_xs">
+
+                        <ImageView
+                            android:id="@+id/weatherIcon"
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:src="@drawable/ic_weather_clouds"
+                            android:tint="@color/text_primary"
+                            android:contentDescription="@string/weather_unavailable" />
+
+                        <TextView
+                            android:id="@+id/weatherText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/space_s"
+                            android:text="@string/weather_unavailable"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="@dimen/text_caption"
+                            android:textStyle="bold"
+                            android:maxLines="1" />
+                    </LinearLayout>
+
+                    <!-- Time -->
+                    <com.iptv.player.ui.common.ClockView
+                        android:id="@+id/clock"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="end"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_clock"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.01"
+                        android:includeFontPadding="false" />
+
+                    <TextView
+                        android:id="@+id/dateText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="end"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="@dimen/text_caption" />
+                </LinearLayout>
+            </LinearLayout>
 
             <!-- Primary row: content destinations, with Live TV as a wide hero. -->
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="196dp"
+                android:layout_height="190dp"
                 android:orientation="horizontal"
                 android:layout_marginTop="@dimen/space_l">
 
@@ -226,7 +241,7 @@
             <!-- Secondary row: personal + utility destinations, four even cards. -->
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="156dp"
+                android:layout_height="150dp"
                 android:orientation="horizontal"
                 android:layout_marginTop="@dimen/space_m">
 
