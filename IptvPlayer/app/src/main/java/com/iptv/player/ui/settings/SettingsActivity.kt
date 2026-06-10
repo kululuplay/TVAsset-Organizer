@@ -303,8 +303,18 @@ class SettingsActivity : BaseActivity() {
             icon.imageTintList = null
             icon.visibility = View.VISIBLE
             row.setOnClickListener {
-                viewModel.setLanguageTag(tag)
-                recreate()
+                // Already the active language: nothing to do (avoids a needless recreate).
+                if (ServiceLocator.settings.languageTagBlocking() == tag) {
+                    return@setOnClickListener
+                }
+                // Persist FIRST, then recreate. setLanguageTag updates the synchronous
+                // locale mirror that BaseActivity.attachBaseContext reads; recreating
+                // before that write lands made the first tap apply the OLD locale and
+                // only the second tap "stick". Awaiting the write fixes the 2-tap bug.
+                lifecycleScope.launch {
+                    ServiceLocator.settings.setLanguageTag(tag)
+                    recreate()
+                }
             }
             c.addView(row)
             languageRows[tag] = row

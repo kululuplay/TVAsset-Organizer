@@ -225,10 +225,12 @@ class SettingsStore(private val context: Context) {
         context.dataStore.data.first()[Keys.LANGUAGE] ?: ""
 
     suspend fun setLanguageTag(tag: String) {
-        context.dataStore.edit { it[Keys.LANGUAGE] = tag }
-        // Mirror to plain prefs so BaseActivity.attachBaseContext can read it
+        // Mirror to plain prefs FIRST so BaseActivity.attachBaseContext can read it
         // synchronously (DataStore is suspend-only and cannot run on that path).
+        // Writing the mirror before the DataStore suspend point guarantees a caller
+        // that recreates right after this returns sees the new locale immediately.
         localePrefs.edit().putString(Keys.LANGUAGE.name, tag).apply()
+        context.dataStore.edit { it[Keys.LANGUAGE] = tag }
     }
 
     /**
