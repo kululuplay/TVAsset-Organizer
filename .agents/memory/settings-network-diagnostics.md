@@ -38,3 +38,17 @@ cancellation never leaves the controls stuck in the "running/disabled" state.
 **How to apply:** any future "run a network job from a TV settings panel" should
 cancel on leaving the panel + onPause and clean its UI in finally, not only on the
 success path.
+
+## Focus-driven panel rebuilds re-fire their network fetches
+The Settings master-detail rail swaps panels **on FOCUS**, and the General-info
+panel **rebuilds itself (removeAllViews + relaunch)** every time its row gains
+focus — and the General row is the first row, crossed on every D-pad pass. So any
+network call kicked off inside a panel's build (here: public-IP lookup + a full
+Xtream `authenticate`) gets spammed once per pass and stale launches write into
+just-removed views. Hold the build's fetches in a single cancellable Job field and
+**cancel-before-relaunch** at the top of the build (mirror the speed-test Job).
+
+**Why:** repeated credential-bearing Xtream authenticate calls can trip the
+provider's connection/rate limits, and uncancelled launches race the view rebuild.
+**How to apply:** when a focus-swapped panel rebuilds and fires network work, gate
+it behind a cancel-before-relaunch Job rather than a bare `lifecycleScope.launch`.

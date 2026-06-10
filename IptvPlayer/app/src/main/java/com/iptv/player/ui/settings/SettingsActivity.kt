@@ -78,10 +78,13 @@ class SettingsActivity : BaseActivity() {
 
     private var autoSyncEnabled = false
     private var autoSyncHours = 12
-    private var generalLoaded = false
 
     // Running download speed-test coroutine (cancelled when leaving the panel).
     private var speedTestJob: kotlinx.coroutines.Job? = null
+
+    // General-info network fetches (public IP + account); cancelled and relaunched
+    // each time the General panel is rebuilt so a D-pad pass doesn't pile up calls.
+    private var generalJob: kotlinx.coroutines.Job? = null
 
     // PIN entry state.
     private val pinBoxViews = mutableListOf<TextView>()
@@ -253,9 +256,6 @@ class SettingsActivity : BaseActivity() {
         // Public IPv4 (home WAN address, for support) merged into the account
         // section instead of a separate Network Info block at the bottom.
         val ipValue = addInfoRow(c, getString(R.string.settings_public_ip), "…")
-        lifecycleScope.launch {
-            ipValue.text = PublicIpProvider.fetchIpv4() ?: "—"
-        }
 
         addSectionHeader(c, getString(R.string.settings_device_info))
         val version = runCatching {
@@ -265,7 +265,13 @@ class SettingsActivity : BaseActivity() {
         addInfoRow(c, getString(R.string.settings_device), "${Build.MANUFACTURER} ${Build.MODEL}")
         addInfoRow(c, getString(R.string.settings_android), "Android ${Build.VERSION.RELEASE}")
 
-        lifecycleScope.launch {
+        // Focusing the General row rebuilds these rows; cancel the previous fetches
+        // so repeated D-pad passes don't spam the public-IP lookup and a full Xtream
+        // authenticate (provider connection/rate limits), and so a stale launch can't
+        // write into the just-removed rows. IP + account run in parallel under one job.
+        generalJob?.cancel()
+        generalJob = lifecycleScope.launch {
+            launch { ipValue.text = PublicIpProvider.fetchIpv4() ?: "—" }
             val config = ServiceLocator.settings.getSourceConfig()
             val info = config?.let { ServiceLocator.repository.getAccountInfo(it) }
             if (info == null) {
@@ -289,7 +295,6 @@ class SettingsActivity : BaseActivity() {
             val maxText = info.maxConnections?.toString() ?: getString(R.string.account_unlimited)
             connValue.text = getString(R.string.account_connections_value, active, maxText)
         }
-        generalLoaded = true
     }
 
     private fun buildLanguagePanel() {
