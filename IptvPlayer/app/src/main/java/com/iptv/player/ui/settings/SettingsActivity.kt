@@ -743,7 +743,7 @@ class SettingsActivity : BaseActivity() {
             if (it == 0) getString(R.string.settings_screensaver_off)
             else getString(R.string.settings_minutes, it)
         }.toTypedArray()
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
             .setTitle(R.string.settings_screensaver)
             .setItems(labels) { _, which -> viewModel.setScreensaverMinutes(options[which]) }
             .show()
@@ -759,7 +759,7 @@ class SettingsActivity : BaseActivity() {
     private fun showAutoSyncIntervalDialog() {
         val options = listOf(6, 12, 24, 48)
         val labels = options.map { getString(R.string.settings_every_hours, it) }.toTypedArray()
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
             .setTitle(R.string.settings_auto_sync_interval)
             .setItems(labels) { _, which ->
                 val hours = options[which]
@@ -770,7 +770,7 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun confirmLogout() {
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
             .setMessage(R.string.settings_logout_confirm)
             .setPositiveButton(R.string.settings_logout) { _, _ ->
                 lifecycleScope.launch {
@@ -804,7 +804,7 @@ class SettingsActivity : BaseActivity() {
     private fun showDecoderModeDialog() {
         val modes = listOf(DecoderMode.AUTO, DecoderMode.HARDWARE, DecoderMode.SOFTWARE)
         val labels = modes.map { decoderModeLabel(it) }.toTypedArray()
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
             .setTitle(R.string.settings_decoder_mode)
             .setItems(labels) { _, which -> viewModel.setDecoderMode(modes[which]) }
             .show()
@@ -820,7 +820,7 @@ class SettingsActivity : BaseActivity() {
     private fun showStreamFormatDialog() {
         val formats = listOf(StreamFormat.TS, StreamFormat.HLS)
         val labels = formats.map { streamFormatLabel(it) }.toTypedArray()
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
             .setTitle(R.string.settings_stream_format)
             .setItems(labels) { _, which -> viewModel.setStreamFormat(formats[which]) }
             .show()
@@ -837,7 +837,7 @@ class SettingsActivity : BaseActivity() {
     private fun showBufferModeDialog() {
         val modes = listOf(BufferMode.LOW, BufferMode.NORMAL, BufferMode.HIGH)
         val labels = modes.map { bufferModeLabel(it) }.toTypedArray()
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
             .setTitle(R.string.settings_buffer)
             .setItems(labels) { _, which -> viewModel.setBufferMode(modes[which]) }
             .show()

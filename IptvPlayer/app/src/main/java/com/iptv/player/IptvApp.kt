@@ -10,6 +10,9 @@ import android.app.Activity
 import android.app.Application
 import android.os.Bundle
 import android.os.StrictMode
+import android.view.LayoutInflater
+import android.view.View
+import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.ui.player.PlayerActivity
@@ -122,11 +125,16 @@ class IptvApp : Application() {
             // already persisted, so a missed show simply waits for the next resume.
             if (!isShowable(activity)) return@launch
             runCatching {
-                AlertDialog.Builder(activity)
-                    .setTitle(R.string.announcement_title)
-                    .setMessage(ann.message)
-                    .setPositiveButton(android.R.string.ok, null)
-                    .show()
+                val view = LayoutInflater.from(activity)
+                    .inflate(R.layout.dialog_announcement, null, false)
+                view.findViewById<TextView>(R.id.annMessage).text = ann.message
+                val dialog = AlertDialog.Builder(activity, R.style.ThemeOverlay_Iptv_Dialog)
+                    .setView(view)
+                    .create()
+                val ok = view.findViewById<View>(R.id.annOkButton)
+                ok.setOnClickListener { dialog.dismiss() }
+                dialog.show()
+                ok.requestFocus()
             }.onFailure { Logger.w("IptvApp", "announcement dialog failed: ${it.message}") }
         }
     }

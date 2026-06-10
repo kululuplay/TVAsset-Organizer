@@ -58,4 +58,33 @@
         <item name="android:padding">@dimen/space_s</item>
         <item name="android:focusable">true</item>
     </style>
+
+    <!-- Modern standard dialogs (Settings option lists + confirmations): a dark
+         rounded glass surface, readable list items, bold accent buttons and a
+         cinematic scrim — so the default white system dialog never shows. -->
+    <style name="ThemeOverlay.Iptv.AlertDialog" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/bg_dialog</item>
+        <item name="android:backgroundDimAmount">0.72</item>
+        <item name="colorAccent">@color/accent</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="android:textColorAlertDialogListItem">@color/text_primary</item>
+        <item name="textColorAlertDialogListItem">@color/text_primary</item>
+        <item name="colorControlHighlight">#33FF5FB0</item>
+        <item name="buttonBarButtonStyle">@style/Widget.Iptv.Dialog.Button</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.Iptv.Dialog.Button.Primary</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.Iptv.Dialog.Button</item>
+    </style>
+
+    <style name="Widget.Iptv.Dialog.Button" parent="Widget.AppCompat.Button.ButtonBar.AlertDialog">
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">@dimen/text_caption</item>
+    </style>
+
+    <style name="Widget.Iptv.Dialog.Button.Primary" parent="Widget.AppCompat.Button.ButtonBar.AlertDialog">
+        <item name="android:textColor">@color/brand_pink</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">@dimen/text_caption</item>
+    </style>
 </resources>

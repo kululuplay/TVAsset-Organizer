@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Modern operator announcement dialog (pushed from the Crash & Device panel).
+     Brand badge + bell, title, scrollable message and a single primary OK CTA.
+     Shown via ThemeOverlay.Iptv.Dialog (transparent window) so only this rounded
+     card is visible. The OK button is D-pad focusable for TV. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="520dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_dialog"
+    android:gravity="center_horizontal"
+    android:padding="@dimen/space_l">
+
+    <ImageView
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:background="@drawable/bg_logo_badge"
+        android:padding="18dp"
+        android:src="@drawable/ic_announcement"
+        android:contentDescription="@null"
+        android:tint="@color/text_primary" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_m"
+        android:text="@string/announcement_title"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_title"
+        android:textStyle="bold"
+        android:gravity="center" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_m"
+        android:maxHeight="240dp"
+        android:fadeScrollbars="false">
+
+        <TextView
+            android:id="@+id/annMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_body"
+            android:gravity="center"
+            android:lineSpacingMultiplier="1.15" />
+    </ScrollView>
+
+    <TextView
+        android:id="@+id/annOkButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_l"
+        android:minWidth="200dp"
+        android:background="@drawable/bg_button_primary"
+        android:focusable="true"
+        android:gravity="center"
+        android:paddingHorizontal="@dimen/space_l"
+        android:paddingVertical="@dimen/space_m"
+        android:text="@string/action_ok"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_body"
+        android:textStyle="bold" />
+</LinearLayout>
