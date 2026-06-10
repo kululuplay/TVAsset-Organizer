@@ -121,6 +121,7 @@ async function initDb() {
       version_code INTEGER,
       now_playing TEXT,
       now_playing_kind TEXT,
+      username TEXT,
       geo_city TEXT,
       geo_country TEXT,
       last_nettest TEXT,
@@ -135,6 +136,9 @@ async function initDb() {
   );
   await pool.query(
     `ALTER TABLE devices ADD COLUMN IF NOT EXISTS now_playing_kind TEXT;`,
+  );
+  await pool.query(
+    `ALTER TABLE devices ADD COLUMN IF NOT EXISTS username TEXT;`,
   );
   await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS geo_city TEXT;`);
   await pool.query(
@@ -310,8 +314,8 @@ app.post("/api/heartbeat", async (req, res) => {
       `INSERT INTO devices
         (device_id, last_seen, ip, manufacturer, model, device,
          android_version, api_level, app_version, version_code,
-         now_playing, now_playing_kind)
-       VALUES ($1, now(), $2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         now_playing, now_playing_kind, username)
+       VALUES ($1, now(), $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
        ON CONFLICT (device_id) DO UPDATE SET
          last_seen = now(),
          ip = EXCLUDED.ip,
@@ -323,7 +327,10 @@ app.post("/api/heartbeat", async (req, res) => {
          app_version = EXCLUDED.app_version,
          version_code = EXCLUDED.version_code,
          now_playing = EXCLUDED.now_playing,
-         now_playing_kind = EXCLUDED.now_playing_kind`,
+         now_playing_kind = EXCLUDED.now_playing_kind,
+         -- Keep the last known username if a beat omits it (M3U sources / logged
+         -- out) so the panel doesn't lose the account-to-device mapping.
+         username = COALESCE(EXCLUDED.username, devices.username)`,
       [
         deviceId,
         ip,
@@ -336,6 +343,9 @@ app.post("/api/heartbeat", async (req, res) => {
         toInt(b.versionCode),
         clip(b.nowPlaying, 200),
         clip(b.nowPlayingKind, 40),
+        // Blank -> null so the COALESCE preserve-on-omit also covers a blank beat
+        // (a logged-out box) instead of wiping the last known account mapping.
+        clip(b.username && String(b.username).trim() ? b.username : null, 120),
       ],
     );
     res.status(200).json({ announcement: activeAnnouncement });
@@ -543,6 +553,9 @@ app.get("/", auth, async (req, res) => {
     .map((d) => {
       const name = `${d.manufacturer || ""} ${d.model || ""}`.trim() || "Bilinmeyen cihaz";
       const status = d.online ? "Çevrimiçi" : "Çevrimdışı";
+      const user = d.username
+        ? `<span class="strong">${esc(d.username)}</span>`
+        : '<span class="muted">—</span>';
       const geo = [d.geo_city, d.geo_country].filter(Boolean).join(", ");
       const shared = sharedIp(d.ip)
         ? ` <span class="badge warn" title="Aynı IP'de ${ipDeviceCount.get(d.ip).size} cihaz">⚠ ${ipDeviceCount.get(d.ip).size}</span>`
@@ -560,6 +573,7 @@ app.get("/", auth, async (req, res) => {
       <tr class="${d.online ? "online" : "offline"}">
         <td><span class="dot ${d.online ? "on" : "off"}" title="${status}"></span>${status}</td>
         <td class="strong">${esc(name)}</td>
+        <td>${user}</td>
         <td class="mono">${esc(d.ip || "—")}${shared}${geo ? `<div class="muted">${esc(geo)}</div>` : ""}</td>
         <td>${playing}</td>
         <td>${versionLabel(d.app_version, d.version_code)}</td>
@@ -575,7 +589,7 @@ app.get("/", auth, async (req, res) => {
   const deviceSection = devices.length
     ? `<table class="devices">
         <thead><tr>
-          <th>Durum</th><th>Cihaz</th><th>IP / Konum</th><th>Şu an izliyor</th>
+          <th>Durum</th><th>Cihaz</th><th>Kullanıcı</th><th>IP / Konum</th><th>Şu an izliyor</th>
           <th>Sürüm</th><th>Android</th><th>Çökme</th><th>Ağ testi</th><th>Son görülme</th><th>İlk görülme</th>
         </tr></thead>
         <tbody>${deviceRows}</tbody>

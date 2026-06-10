@@ -68,6 +68,12 @@ object HeartbeatReporter {
             put("apiLevel", Build.VERSION.SDK_INT)
             NowPlaying.title?.let { put("nowPlaying", it) }
             NowPlaying.kind?.let { put("nowPlayingKind", it) }
+            // The portal login this box is connected with, so the ops panel can tie
+            // a live device to an account. Blank for M3U-URL sources (no login).
+            runCatching { ServiceLocator.settings.getSourceConfig()?.username }
+                .getOrNull()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { put("username", it) }
         }
         val body = json.toString()
             .toRequestBody("application/json; charset=utf-8".toMediaType())
