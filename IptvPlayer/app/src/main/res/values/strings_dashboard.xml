@@ -29,6 +29,21 @@
     <string name="dash_sub_search">Find anything</string>
     <string name="dash_sub_radio">Radio stations</string>
 
+    <!-- Request & complaint (Home card + dialog) -->
+    <string name="dash_request">Request &amp; Feedback</string>
+    <string name="dash_sub_request">Channels, films &amp; issues</string>
+    <string name="request_title">Request &amp; Feedback</string>
+    <string name="request_subtitle">Tell us what to add or report a problem. We read every message.</string>
+    <string name="request_type_channel">Live channel</string>
+    <string name="request_type_movie">Movie</string>
+    <string name="request_type_series">Series</string>
+    <string name="request_type_complaint">Complaint</string>
+    <string name="request_message_hint">Write your request or complaint…</string>
+    <string name="request_send">Send</string>
+    <string name="request_empty">Please write a message first.</string>
+    <string name="request_sent">Thanks! Your message has been sent.</string>
+    <string name="request_failed">Couldn\'t send. Check your connection and try again.</string>
+
     <!-- Weather pill -->
     <string name="weather_unavailable">Weather unavailable</string>
     <string name="weather_temp_format">%1$d°</string>

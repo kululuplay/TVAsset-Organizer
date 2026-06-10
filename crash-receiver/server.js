@@ -11,11 +11,15 @@
  *   3. Remote announcements — operator messages set in the panel are returned in
  *      heartbeat responses; the app shows each once. Messages can be global, or
  *      targeted to one account (username) or one device.
+ *   4. Requests & complaints — the app's Home "İstek & Şikayet" dialog POSTs a
+ *      typed request (live channel / movie / series / complaint). Stored and
+ *      shown in the panel, where the operator can mark it handled or delete it.
  *
  * Endpoints:
  *   POST /api/crash               crash ingest (app -> server), X-Kululu-Key
  *   POST /api/heartbeat           live ping (app -> server), X-Kululu-Key; returns announcement
  *   POST /api/nettest             network-test result (app -> server), X-Kululu-Key
+ *   POST /api/request             user request/complaint (app -> server), X-Kululu-Key
  *   GET  /                        HTML panel (HTTP Basic auth)
  *   GET  /device/:id              per-device detail: watch / nettest / crash history (auth)
  *   GET  /api/crashes             JSON crash list (auth)
@@ -25,6 +29,9 @@
  *   POST /api/crashes/:id/delete  delete one crash (auth)
  *   POST /api/crashes/clear       delete all crashes (auth)
  *   POST /api/devices/clear       delete all devices (auth)
+ *   POST /api/requests/:id/done   toggle a request handled/new (auth)
+ *   POST /api/requests/:id/delete delete one request (auth)
+ *   POST /api/requests/clear-done delete all handled requests (auth)
  *   GET  /healthz                 health check
  */
 const express = require("express");
@@ -213,6 +220,27 @@ async function initDb() {
   `);
   await pool.query(
     `CREATE INDEX IF NOT EXISTS idx_nettest_log_device ON nettest_log(device_id, at DESC);`,
+  );
+  // User requests / complaints from the app's Home "İstek & Şikayet" dialog. New
+  // table, so CREATE IF NOT EXISTS is enough (no prod ALTER needed). status:
+  // 'new' until the operator marks it 'done' in the panel.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS requests (
+      id SERIAL PRIMARY KEY,
+      device_id TEXT,
+      username TEXT,
+      type TEXT NOT NULL DEFAULT 'other',
+      message TEXT NOT NULL,
+      app_version TEXT,
+      version_code INTEGER,
+      manufacturer TEXT,
+      model TEXT,
+      status TEXT NOT NULL DEFAULT 'new',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_requests_created ON requests(status, created_at DESC);`,
   );
   await refreshAnnouncementCache();
 }
@@ -488,6 +516,50 @@ app.post("/api/nettest", async (req, res) => {
   }
 });
 
+// ---- User request / complaint (app -> server) ----
+// The Home "İstek & Şikayet" dialog posts a typed request. Validated, clipped and
+// stored; surfaced in the panel and (best-effort) forwarded to Telegram.
+const REQUEST_TYPES = ["channel", "movie", "series", "complaint"];
+app.post("/api/request", async (req, res) => {
+  if ((req.get("X-Kululu-Key") || "") !== INGEST_KEY) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  const b = req.body || {};
+  const message = clip(b.message, 2000);
+  if (!message || !message.trim()) {
+    return res.status(400).json({ error: "missing_message" });
+  }
+  const type = REQUEST_TYPES.includes(b.type) ? b.type : "other";
+  const username = clip(typeof b.username === "string" ? b.username.trim() || null : null, 120);
+  const manufacturer = clip(b.manufacturer, 80);
+  const model = clip(b.model, 80);
+  try {
+    await pool.query(
+      `INSERT INTO requests
+         (device_id, username, type, message, app_version, version_code, manufacturer, model)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        clip(b.deviceId, 128),
+        username,
+        type,
+        message.trim(),
+        clip(b.appVersion, 40),
+        toInt(b.versionCode),
+        manufacturer,
+        model,
+      ],
+    );
+    // Best-effort nudge to the operator; never blocks the response.
+    forwardRequestTelegram({ type, message: message.trim(), username, manufacturer, model }).catch(
+      () => {},
+    );
+    return res.status(204).end();
+  } catch (e) {
+    console.error("request store failed", e);
+    return res.status(500).json({ error: "store_failed" });
+  }
+});
+
 async function sendTelegram(text) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
   await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -502,6 +574,26 @@ async function forwardTelegram(b) {
     `🛑 Kululu çökme\n` +
       `${b.manufacturer || "?"} ${b.model || ""} · Android ${b.androidVersion || "?"} · v${b.appVersion || "?"}\n` +
       `${String(b.message || "").slice(0, 500)}`,
+  );
+}
+
+// Operator-facing labels for each request type (panel + Telegram).
+const REQUEST_TYPE_LABEL = {
+  channel: "📺 Canlı kanal",
+  movie: "🎬 Film",
+  series: "📺 Dizi",
+  complaint: "⚠️ Şikayet",
+  other: "📝 İstek",
+};
+
+async function forwardRequestTelegram(r) {
+  const who = [r.username, `${r.manufacturer || ""} ${r.model || ""}`.trim()]
+    .filter(Boolean)
+    .join(" · ");
+  await sendTelegram(
+    `${REQUEST_TYPE_LABEL[r.type] || REQUEST_TYPE_LABEL.other} — Kululu isteği\n` +
+      `${who ? who + "\n" : ""}` +
+      `${String(r.message || "").slice(0, 800)}`,
   );
 }
 
@@ -628,6 +720,23 @@ async function runRetention() {
       console.error(`[retention] ${table} sweep failed`, e);
     }
   }
+  // Requests: prune only HANDLED rows by the log window; pending requests are
+  // kept until the operator handles or deletes them (never auto-dropped).
+  if (RETENTION_LOG_DAYS) {
+    try {
+      const r = await pool.query(
+        `DELETE FROM requests
+          WHERE status = 'done' AND created_at < now() - make_interval(days => $1)`,
+        [RETENTION_LOG_DAYS],
+      );
+      if (r.rowCount)
+        console.log(
+          `[retention] requests: pruned ${r.rowCount} handled rows older than ${RETENTION_LOG_DAYS}d`,
+        );
+    } catch (e) {
+      console.error("[retention] requests sweep failed", e);
+    }
+  }
 }
 
 app.get("/healthz", (req, res) => res.status(200).send("ok"));
@@ -705,6 +814,29 @@ app.post("/api/devices/clear", auth, async (req, res) => {
   res.redirect("/");
 });
 
+// ---- Request / complaint management ----
+app.post("/api/requests/:id/done", auth, async (req, res) => {
+  // Toggle handled <-> new so a mis-click is reversible.
+  await pool.query(
+    `UPDATE requests
+        SET status = CASE WHEN status = 'done' THEN 'new' ELSE 'done' END
+      WHERE id = $1`,
+    [toInt(req.params.id)],
+  );
+  res.redirect("/");
+});
+
+app.post("/api/requests/:id/delete", auth, async (req, res) => {
+  await pool.query(`DELETE FROM requests WHERE id = $1`, [toInt(req.params.id)]);
+  res.redirect("/");
+});
+
+app.post("/api/requests/clear-done", auth, async (req, res) => {
+  // Only handled rows; pending requests are never bulk-deleted by accident.
+  await pool.query(`DELETE FROM requests WHERE status = 'done'`);
+  res.redirect("/");
+});
+
 const esc = (s) =>
   String(s ?? "").replace(
     /[&<>"']/g,
@@ -745,8 +877,15 @@ function versionLabel(v, code) {
 }
 
 app.get("/", auth, async (req, res) => {
-  const [crashRes, deviceRes, topChannelsRes, accountsRes, crashSigRes, crashVerRes] =
-    await Promise.all([
+  const [
+    crashRes,
+    deviceRes,
+    topChannelsRes,
+    accountsRes,
+    crashSigRes,
+    crashVerRes,
+    requestsRes,
+  ] = await Promise.all([
       pool.query(`SELECT * FROM crash_reports ORDER BY received_at DESC LIMIT 300`),
       pool.query(
         `SELECT d.*,
@@ -807,6 +946,15 @@ app.get("/", auth, async (req, res) => {
                 count(DISTINCT device_id) AS crashed_devices
            FROM crash_reports
           GROUP BY coalesce(NULLIF(app_version,''),'?')`,
+      ),
+      // User requests / complaints — newest first, unhandled on top.
+      pool.query(
+        `SELECT r.*,
+                trim(coalesce(d.manufacturer,'') || ' ' || coalesce(d.model,'')) AS device_name
+           FROM requests r
+           LEFT JOIN devices d ON d.device_id = r.device_id
+          ORDER BY (r.status = 'new') DESC, r.created_at DESC
+          LIMIT 200`,
       ),
     ]);
   const rows = crashRes.rows;
@@ -1025,6 +1173,53 @@ app.get("/", auth, async (req, res) => {
        </div>`
     : "";
 
+  // ---- User requests / complaints ----
+  const requests = requestsRes.rows;
+  const pendingRequests = requests.filter((r) => r.status === "new").length;
+  const REQ_TYPE_BADGE = {
+    channel: '<span class="rtype rtype-channel">📺 Canlı kanal</span>',
+    movie: '<span class="rtype rtype-movie">🎬 Film</span>',
+    series: '<span class="rtype rtype-series">📺 Dizi</span>',
+    complaint: '<span class="rtype rtype-complaint">⚠️ Şikayet</span>',
+    other: '<span class="rtype rtype-other">📝 İstek</span>',
+  };
+  const requestRows = requests
+    .map((r) => {
+      const dev = (r.device_name || "").trim();
+      const who = r.username
+        ? `<span class="strong">${esc(r.username)}</span>`
+        : dev
+          ? esc(dev)
+          : '<span class="muted">Bilinmeyen</span>';
+      const link = r.device_id
+        ? `<a class="devlink" href="/device/${encodeURIComponent(r.device_id)}">${who}</a>`
+        : who;
+      const done = r.status === "done";
+      return `
+      <div class="req ${done ? "done" : "new"}">
+        <div class="req-head">
+          ${REQ_TYPE_BADGE[r.type] || REQ_TYPE_BADGE.other}
+          <span class="req-who">${link}</span>
+          ${dev && r.username ? `<span class="muted">${esc(dev)}</span>` : ""}
+          ${r.app_version ? `<span class="pill">v${esc(r.app_version)}</span>` : ""}
+          <span class="time" title="${esc(fmt(r.created_at))}">${esc(ago(r.created_at))}</span>
+        </div>
+        <div class="req-msg">${esc(r.message)}</div>
+        <div class="req-actions">
+          <form method="post" action="/api/requests/${r.id}/done" style="margin:0">
+            <button class="${done ? "undonebtn" : "donebtn"}" type="submit">${done ? "↩ Geri al" : "✓ Çözüldü"}</button>
+          </form>
+          <form method="post" action="/api/requests/${r.id}/delete" style="margin:0" onsubmit="return confirm('Bu istek silinsin mi?')">
+            <button class="clearbtn" type="submit">Sil</button>
+          </form>
+        </div>
+      </div>`;
+    })
+    .join("");
+  const requestsSection = requests.length
+    ? requestRows
+    : '<div class="empty">Henüz istek veya şikayet yok.</div>';
+
   res.send(`<!doctype html>
 <html lang="tr"><head>
 <meta charset="utf-8">
@@ -1098,12 +1293,30 @@ app.get("/", auth, async (req, res) => {
   .ann-list { display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
   .ann-targets { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
   .ann-targets input { flex:1; min-width:220px; background:#0E1116; color:#F5F7FA; border:1px solid #2A3340; border-radius:8px; padding:8px 10px; font:13px system-ui, sans-serif; }
+  .req { background:#161B22; border:1px solid #1C232D; border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .req.new { border-left:3px solid #FFB300; }
+  .req.done { opacity:.6; }
+  .req-head { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .req-head .time { margin-left:auto; }
+  .req-who { font-size:13px; }
+  .req-msg { margin:10px 0; color:#EAF0F6; font-size:14px; white-space:pre-wrap; word-break:break-word; }
+  .req-actions { display:flex; gap:8px; }
+  .req-actions button { border:1px solid #2A3340; background:#1C232D; color:#F5F7FA; padding:6px 14px; border-radius:8px; cursor:pointer; font-size:12px; }
+  .donebtn { color:#9fe6b8; border-color:#2FBF71 !important; }
+  .undonebtn { color:#9AA7B4; }
+  .req-pending { background:#3a2f10; color:#FFC93C; border:1px solid #6a5410; }
+  .rtype { display:inline-block; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:700; }
+  .rtype-channel { background:#10283f; color:#5BB0F5; border:1px solid #1d4a73; }
+  .rtype-movie { background:#2a1840; color:#C39BF5; border:1px solid #4a2d73; }
+  .rtype-series { background:#10302e; color:#5BE0D0; border:1px solid #1d6359; }
+  .rtype-complaint { background:#3a1714; color:#F2766A; border:1px solid #6a201a; }
+  .rtype-other { background:#1C232D; color:#9AA7B4; border:1px solid #2A3340; }
 </style></head>
 <body>
 <header>
   <h1>Kululu IPTV — Çökme &amp; Cihaz Paneli</h1>
   <div class="stats">
-    <span class="live">● Canlı <b class="live">${onlineCount}</b></span> · Kayıtlı cihaz <b>${devices.length}</b> · Toplam çökme <b>${rows.length}</b> · Son 24 saat <b>${last24}</b>
+    <span class="live">● Canlı <b class="live">${onlineCount}</b></span> · Kayıtlı cihaz <b>${devices.length}</b> · Toplam çökme <b>${rows.length}</b> · Son 24 saat <b>${last24}</b> · Bekleyen istek <b>${pendingRequests}</b>
   </div>
   <div class="actions">
     <a href="/">↻ Yenile</a>
@@ -1112,6 +1325,9 @@ app.get("/", auth, async (req, res) => {
     </form>
     <form method="post" action="/api/crashes/clear" style="display:inline" onsubmit="return confirm('Tüm çökme raporları silinsin mi?')">
       <button class="clearbtn" type="submit">Çökmeleri temizle</button>
+    </form>
+    <form method="post" action="/api/requests/clear-done" style="display:inline" onsubmit="return confirm('Çözülmüş tüm istekler silinsin mi?')">
+      <button class="clearbtn" type="submit">Çözülen istekleri temizle</button>
     </form>
   </div>
 </header>
@@ -1128,6 +1344,10 @@ app.get("/", auth, async (req, res) => {
       <button class="sendbtn" type="submit">Duyuruyu yayınla</button>
       <div class="muted" style="margin-top:6px">Uygulama her cihaza yalnızca <b>en son yayınlanan</b> ilgili mesajı gösterir. Bu yüzden hedefli duyuruyu, genel duyurudan <b>sonra</b> yayınlayın — aksi halde sonradan yayınlanan genel duyuru hedefli mesajı gölgeler.</div>
     </form>
+  </section>
+  <section>
+    <h2>İstekler &amp; Şikayetler ${pendingRequests ? `<span class="count-badge req-pending">${pendingRequests} bekliyor</span>` : ""}</h2>
+    ${requestsSection}
   </section>
   <section>
     <h2>Canlı Cihazlar <span class="count-badge">${onlineCount} çevrimiçi</span></h2>
@@ -1157,7 +1377,7 @@ app.get("/", auth, async (req, res) => {
 // ---- Per-device detail page: crash / nettest / watch history ----
 app.get("/device/:id", auth, async (req, res) => {
   const deviceId = clip(req.params.id, 128);
-  const [devRes, crashRes, nettestRes, watchRes] = await Promise.all([
+  const [devRes, crashRes, nettestRes, watchRes, requestsRes] = await Promise.all([
     pool.query(
       `SELECT *, (last_seen > now() - interval '${ONLINE_WINDOW_SEC} seconds') AS online
          FROM devices WHERE device_id = $1`,
@@ -1173,6 +1393,10 @@ app.get("/device/:id", auth, async (req, res) => {
     ),
     pool.query(
       `SELECT * FROM watch_log WHERE device_id = $1 ORDER BY at DESC LIMIT 100`,
+      [deviceId],
+    ),
+    pool.query(
+      `SELECT * FROM requests WHERE device_id = $1 ORDER BY created_at DESC LIMIT 50`,
       [deviceId],
     ),
   ]);
@@ -1247,6 +1471,25 @@ app.get("/device/:id", auth, async (req, res) => {
         })
         .join("")}</tbody></table>`
     : '<div class="empty">Çökme geçmişi yok.</div>';
+  const REQ_LABEL = {
+    channel: "📺 Canlı kanal",
+    movie: "🎬 Film",
+    series: "📺 Dizi",
+    complaint: "⚠️ Şikayet",
+    other: "📝 İstek",
+  };
+  const requestRows = requestsRes.rows.length
+    ? `<table><thead><tr><th>Zaman</th><th>Tür</th><th>Mesaj</th><th>Durum</th></tr></thead><tbody>${requestsRes.rows
+        .map(
+          (r) => `<tr>
+        <td title="${esc(fmt(r.created_at))}">${esc(ago(r.created_at))}<div class="muted">${esc(fmt(r.created_at))}</div></td>
+        <td>${esc(REQ_LABEL[r.type] || REQ_LABEL.other)}</td>
+        <td style="white-space:pre-wrap;word-break:break-word">${esc(r.message)}</td>
+        <td>${r.status === "done" ? '<span class="muted">Çözüldü</span>' : '<span class="play">Bekliyor</span>'}</td>
+      </tr>`,
+        )
+        .join("")}</tbody></table>`
+    : '<div class="empty">İstek / şikayet yok.</div>';
   res.send(`<!doctype html>
 <html lang="tr"><head>
 <meta charset="utf-8">
@@ -1281,6 +1524,7 @@ app.get("/device/:id", auth, async (req, res) => {
       <button type="submit" style="background:#1f5a35;color:#D6FBE5;border:1px solid #2FBF71;padding:9px 18px;border-radius:8px;cursor:pointer">Gönder</button>
     </form>
   </section>
+  <section><h2>İstek &amp; Şikayet geçmişi</h2>${requestRows}</section>
   <section><h2>İzleme geçmişi</h2>${watchRows}</section>
   <section><h2>Ağ testi geçmişi</h2>${nettestRows}</section>
   <section><h2>Çökme geçmişi</h2>${crashRows}</section>

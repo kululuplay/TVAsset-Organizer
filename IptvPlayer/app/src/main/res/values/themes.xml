@@ -87,4 +87,23 @@
         <item name="android:textStyle">bold</item>
         <item name="android:textSize">@dimen/text_caption</item>
     </style>
+
+    <!-- Single-select request-type chip (Home İstek & Şikayet dialog): even-width,
+         D-pad focusable, fills brand-pink when selected (see bg_chip). -->
+    <style name="Widget.Iptv.RequestChip" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:background">@drawable/bg_chip</item>
+        <item name="android:focusable">true</item>
+        <item name="android:clickable">true</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingHorizontal">@dimen/space_s</item>
+        <item name="android:paddingVertical">@dimen/space_m</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">@dimen/text_caption</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+    </style>
 </resources>

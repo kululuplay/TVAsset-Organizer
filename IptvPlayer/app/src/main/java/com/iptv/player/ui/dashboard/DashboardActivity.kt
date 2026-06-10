@@ -19,6 +19,7 @@ import com.iptv.player.data.ServiceLocator
 import com.iptv.player.databinding.ActivityDashboardBinding
 import com.iptv.player.databinding.ItemDashboardCardBinding
 import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.ui.common.RequestDialog
 import com.iptv.player.ui.favorites.FavoritesActivity
 import com.iptv.player.ui.home.HomeActivity
 import com.iptv.player.ui.search.SearchActivity
@@ -104,6 +105,9 @@ class DashboardActivity : BaseActivity() {
         }
         configCard(binding.tileSearch, R.drawable.ic_search, R.drawable.bg_badge_search,
             R.string.action_search, R.string.dash_sub_search) { open(SearchActivity::class.java) }
+        // İstek & Şikayet: opens a modal that posts to the crash-receiver ops panel.
+        configCard(binding.tileRequest, R.drawable.ic_feedback, R.drawable.bg_badge_request,
+            R.string.dash_request, R.string.dash_sub_request) { RequestDialog.show(this) }
     }
 
     /**

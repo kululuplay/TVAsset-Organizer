@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Modern Home "İstek & Şikayet" dialog: brand badge, title + subtitle, a row of
+     four D-pad selectable type chips (live channel / movie / series / complaint),
+     a multiline message box and two CTAs (cancel + send). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="560dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_dialog"
+    android:padding="@dimen/space_l">
+
+    <ImageView
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:layout_gravity="center_horizontal"
+        android:background="@drawable/bg_badge_request"
+        android:padding="20dp"
+        android:src="@drawable/ic_feedback"
+        android:contentDescription="@null"
+        android:tint="@color/text_primary" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_m"
+        android:text="@string/request_title"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_title"
+        android:textStyle="bold"
+        android:gravity="center" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_xs"
+        android:text="@string/request_subtitle"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_caption"
+        android:gravity="center" />
+
+    <!-- Type selector: four D-pad focusable chips, single-select. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_l"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <TextView
+            android:id="@+id/chipChannel"
+            style="@style/Widget.Iptv.RequestChip"
+            android:layout_marginEnd="@dimen/space_s"
+            android:text="@string/request_type_channel" />
+
+        <TextView
+            android:id="@+id/chipMovie"
+            style="@style/Widget.Iptv.RequestChip"
+            android:layout_marginEnd="@dimen/space_s"
+            android:text="@string/request_type_movie" />
+
+        <TextView
+            android:id="@+id/chipSeries"
+            style="@style/Widget.Iptv.RequestChip"
+            android:layout_marginEnd="@dimen/space_s"
+            android:text="@string/request_type_series" />
+
+        <TextView
+            android:id="@+id/chipComplaint"
+            style="@style/Widget.Iptv.RequestChip"
+            android:text="@string/request_type_complaint" />
+    </LinearLayout>
+
+    <EditText
+        android:id="@+id/requestMessage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_m"
+        android:background="@drawable/bg_input"
+        android:gravity="top|start"
+        android:hint="@string/request_message_hint"
+        android:inputType="textMultiLine|textCapSentences"
+        android:minLines="3"
+        android:maxLines="6"
+        android:minHeight="110dp"
+        android:padding="@dimen/space_m"
+        android:textColor="@color/text_primary"
+        android:textColorHint="@color/text_muted"
+        android:textSize="@dimen/text_body" />
+
+    <!-- CTAs: cancel (secondary) + send (primary). D-pad focusable. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_l"
+        android:orientation="horizontal"
+        android:gravity="center">
+
+        <TextView
+            android:id="@+id/requestCancel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="@dimen/space_m"
+            android:background="@drawable/bg_button"
+            android:focusable="true"
+            android:gravity="center"
+            android:paddingHorizontal="@dimen/space_l"
+            android:paddingVertical="@dimen/space_m"
+            android:text="@string/action_cancel"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_body" />
+
+        <TextView
+            android:id="@+id/requestSend"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/bg_button_primary"
+            android:drawableStart="@drawable/ic_feedback"
+            android:drawablePadding="@dimen/space_s"
+            android:focusable="true"
+            android:gravity="center"
+            android:paddingHorizontal="@dimen/space_l"
+            android:paddingVertical="@dimen/space_m"
+            android:text="@string/request_send"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_body"
+            android:textStyle="bold" />
+    </LinearLayout>
+</LinearLayout>

@@ -24,6 +24,21 @@
     <string name="dash_sub_search">Alles finden</string>
     <string name="dash_sub_radio">Radiosender</string>
 
+    <!-- Anfrage & Beschwerde (Startbildschirm-Karte + Dialog) -->
+    <string name="dash_request">Anfrage &amp; Feedback</string>
+    <string name="dash_sub_request">Sender, Filme &amp; Probleme</string>
+    <string name="request_title">Anfrage &amp; Feedback</string>
+    <string name="request_subtitle">Sagen Sie uns, was wir hinzufügen sollen, oder melden Sie ein Problem. Wir lesen jede Nachricht.</string>
+    <string name="request_type_channel">Sender</string>
+    <string name="request_type_movie">Film</string>
+    <string name="request_type_series">Serie</string>
+    <string name="request_type_complaint">Beschwerde</string>
+    <string name="request_message_hint">Schreiben Sie Ihre Anfrage oder Beschwerde…</string>
+    <string name="request_send">Senden</string>
+    <string name="request_empty">Bitte schreiben Sie zuerst eine Nachricht.</string>
+    <string name="request_sent">Danke! Ihre Nachricht wurde gesendet.</string>
+    <string name="request_failed">Senden fehlgeschlagen. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.</string>
+
     <!-- Weather pill -->
     <string name="weather_unavailable">Wetter nicht verfügbar</string>
     <string name="weather_temp_format">%1$d°</string>

@@ -26,6 +26,21 @@
     <string name="dash_sub_search">Her şeyi bul</string>
     <string name="dash_sub_radio">Radyo istasyonları</string>
 
+    <!-- İstek & Şikayet (Ana ekran kartı + diyalog) -->
+    <string name="dash_request">İstek &amp; Şikayet</string>
+    <string name="dash_sub_request">Kanal, film &amp; sorunlar</string>
+    <string name="request_title">İstek &amp; Şikayet</string>
+    <string name="request_subtitle">Eklenmesini istediğinizi yazın ya da bir sorunu bildirin. Her mesajı okuyoruz.</string>
+    <string name="request_type_channel">Canlı kanal</string>
+    <string name="request_type_movie">Film</string>
+    <string name="request_type_series">Dizi</string>
+    <string name="request_type_complaint">Şikayet</string>
+    <string name="request_message_hint">İstek veya şikayetinizi yazın…</string>
+    <string name="request_send">Gönder</string>
+    <string name="request_empty">Lütfen önce bir mesaj yazın.</string>
+    <string name="request_sent">Teşekkürler! Mesajınız gönderildi.</string>
+    <string name="request_failed">Gönderilemedi. Bağlantınızı kontrol edip tekrar deneyin.</string>
+
     <!-- Weather pill -->
     <string name="weather_unavailable">Hava durumu yok</string>
     <string name="weather_temp_format">%1$d°</string>

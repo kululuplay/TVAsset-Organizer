@@ -24,4 +24,7 @@ object Telemetry {
 
     /** Network-quality (peering) test result upload, shown per device in the panel. */
     const val NETTEST_ENDPOINT = "$BASE_URL/api/nettest"
+
+    /** User request / complaint submitted from the Home dialog, shown in the panel. */
+    const val REQUEST_ENDPOINT = "$BASE_URL/api/request"
 }

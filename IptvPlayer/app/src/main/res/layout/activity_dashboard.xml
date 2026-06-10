@@ -238,7 +238,7 @@
                     android:layout_weight="1" />
             </LinearLayout>
 
-            <!-- Secondary row: personal + utility destinations, four even cards. -->
+            <!-- Secondary row: personal + utility destinations, five even cards. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="150dp"
@@ -271,6 +271,14 @@
 
                 <include
                     android:id="@+id/tileSettings"
+                    layout="@layout/item_dashboard_card"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="@dimen/space_m" />
+
+                <include
+                    android:id="@+id/tileRequest"
                     layout="@layout/item_dashboard_card"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
