@@ -27,4 +27,10 @@ object Telemetry {
 
     /** User request / complaint submitted from the Home dialog, shown in the panel. */
     const val REQUEST_ENDPOINT = "$BASE_URL/api/request"
+
+    /** This device's own request history (shown in the Home İstek & Şikayet dialog). */
+    const val REQUESTS_MINE_ENDPOINT = "$BASE_URL/api/requests/mine"
+
+    /** Acknowledge resolved-request popups so the server stops re-sending them. */
+    const val REQUESTS_ACK_ENDPOINT = "$BASE_URL/api/requests/ack"
 }

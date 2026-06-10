@@ -52,6 +52,52 @@
             android:layout_height="wrap_content"
             android:layout_weight="1" />
 
+        <!-- Weather pill (moved up next to the status cluster) -->
+        <LinearLayout
+            android:id="@+id/weatherChip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/bg_time_chip"
+            android:paddingHorizontal="@dimen/space_m"
+            android:paddingVertical="@dimen/space_s"
+            android:layout_marginEnd="@dimen/space_m">
+
+            <ImageView
+                android:id="@+id/weatherIcon"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:src="@drawable/ic_weather_clouds"
+                android:tint="@color/text_primary"
+                android:contentDescription="@string/weather_unavailable" />
+
+            <TextView
+                android:id="@+id/weatherText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/space_s"
+                android:text="@string/weather_unavailable"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_caption"
+                android:textStyle="bold"
+                android:maxLines="1" />
+        </LinearLayout>
+
+        <!-- Date pill -->
+        <TextView
+            android:id="@+id/dateText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_time_chip"
+            android:paddingHorizontal="@dimen/space_m"
+            android:paddingVertical="@dimen/space_s"
+            android:layout_marginEnd="@dimen/space_m"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_caption"
+            android:textStyle="bold"
+            android:maxLines="1" />
+
         <!-- Network signal chip -->
         <LinearLayout
             android:id="@+id/signalChip"
@@ -141,62 +187,19 @@
                         android:textSize="@dimen/text_caption" />
                 </LinearLayout>
 
-                <!-- Clock / weather read-out -->
-                <LinearLayout
+                <!-- Clock read-out: hidden by default; the user turns it on in
+                     Settings (weather + date now live in the top status cluster). -->
+                <com.iptv.player.ui.common.ClockView
+                    android:id="@+id/clock"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
                     android:gravity="end"
-                    android:layout_marginStart="@dimen/space_l">
-
-                    <!-- Weather -->
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:layout_marginBottom="@dimen/space_xs">
-
-                        <ImageView
-                            android:id="@+id/weatherIcon"
-                            android:layout_width="22dp"
-                            android:layout_height="22dp"
-                            android:src="@drawable/ic_weather_clouds"
-                            android:tint="@color/text_primary"
-                            android:contentDescription="@string/weather_unavailable" />
-
-                        <TextView
-                            android:id="@+id/weatherText"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="@dimen/space_s"
-                            android:text="@string/weather_unavailable"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="@dimen/text_caption"
-                            android:textStyle="bold"
-                            android:maxLines="1" />
-                    </LinearLayout>
-
-                    <!-- Time -->
-                    <com.iptv.player.ui.common.ClockView
-                        android:id="@+id/clock"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="end"
-                        android:textColor="@color/text_primary"
-                        android:textSize="@dimen/text_clock"
-                        android:textStyle="bold"
-                        android:letterSpacing="0.01"
-                        android:includeFontPadding="false" />
-
-                    <TextView
-                        android:id="@+id/dateText"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="end"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="@dimen/text_caption" />
-                </LinearLayout>
+                    android:layout_marginStart="@dimen/space_l"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_clock"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.01"
+                    android:includeFontPadding="false" />
             </LinearLayout>
 
             <!-- Primary row: content destinations, with Live TV as a wide hero. -->
@@ -238,10 +241,12 @@
                     android:layout_weight="1" />
             </LinearLayout>
 
-            <!-- Secondary row: personal + utility destinations, five even cards. -->
+            <!-- Secondary row: personal + utility destinations, five even cards.
+                 Taller than the primary cards' label area so two-line titles
+                 ("İzlemeye Devam Et", "İstek & Şikayet") never clip. -->
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="150dp"
+                android:layout_height="180dp"
                 android:orientation="horizontal"
                 android:layout_marginTop="@dimen/space_m">
 

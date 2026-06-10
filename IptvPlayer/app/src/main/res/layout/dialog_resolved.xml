@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Resolved-request confirmation, auto-shown when the operator marks the user's
+     request "done" on the panel. Success (emerald) badge + check, a title and
+     body whose wording depends on the request type, the user's original request
+     quoted for context, and a single primary OK CTA. Shown via the transparent
+     ThemeOverlay.Iptv.Dialog so only this rounded card is visible. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="520dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_dialog"
+    android:gravity="center_horizontal"
+    android:padding="@dimen/space_l">
+
+    <ImageView
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:background="@drawable/bg_badge_success"
+        android:padding="18dp"
+        android:src="@drawable/ic_check"
+        android:contentDescription="@null"
+        android:tint="@color/text_primary" />
+
+    <TextView
+        android:id="@+id/resolvedTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_m"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_title"
+        android:textStyle="bold"
+        android:gravity="center" />
+
+    <TextView
+        android:id="@+id/resolvedMessage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_s"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_body"
+        android:gravity="center"
+        android:lineSpacingMultiplier="1.15" />
+
+    <!-- The user's original request text, quoted for context. -->
+    <TextView
+        android:id="@+id/resolvedRequestLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_m"
+        android:text="@string/resolved_request_label"
+        android:textColor="@color/text_muted"
+        android:textSize="@dimen/text_caption"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/resolvedOriginal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_xs"
+        android:background="@drawable/bg_time_chip"
+        android:padding="@dimen/space_m"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_caption"
+        android:maxLines="4"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/resolvedOkButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_l"
+        android:minWidth="200dp"
+        android:background="@drawable/bg_button_primary"
+        android:focusable="true"
+        android:gravity="center"
+        android:paddingHorizontal="@dimen/space_l"
+        android:paddingVertical="@dimen/space_m"
+        android:text="@string/action_ok"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_body"
+        android:textStyle="bold" />
+</LinearLayout>

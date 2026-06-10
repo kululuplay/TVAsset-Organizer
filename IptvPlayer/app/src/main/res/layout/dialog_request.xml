@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Modern Home "İstek & Şikayet" dialog: brand badge, title + subtitle, a row of
      four D-pad selectable type chips (live channel / movie / series / complaint),
-     a multiline message box and two CTAs (cancel + send). -->
+     a multiline message box and two CTAs (cancel + send). The chips + input + the
+     user's sent-request history live in a height-capped ScrollView so the on-screen
+     keyboard (with SOFT_INPUT_ADJUST_RESIZE set on the window) can never hide the
+     text being typed; the CTAs stay pinned below it. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="560dp"
     android:layout_height="wrap_content"
@@ -38,56 +41,100 @@
         android:textSize="@dimen/text_caption"
         android:gravity="center" />
 
-    <!-- Type selector: four D-pad focusable chips, single-select. -->
-    <LinearLayout
+    <com.iptv.player.ui.common.MaxHeightScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/space_l"
-        android:orientation="horizontal"
-        android:baselineAligned="false">
+        android:maxHeight="380dp"
+        android:fadeScrollbars="false"
+        android:scrollbarStyle="outsideOverlay">
 
-        <TextView
-            android:id="@+id/chipChannel"
-            style="@style/Widget.Iptv.RequestChip"
-            android:layout_marginEnd="@dimen/space_s"
-            android:text="@string/request_type_channel" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/chipMovie"
-            style="@style/Widget.Iptv.RequestChip"
-            android:layout_marginEnd="@dimen/space_s"
-            android:text="@string/request_type_movie" />
+            <!-- Type selector: four D-pad focusable chips, single-select. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:baselineAligned="false">
 
-        <TextView
-            android:id="@+id/chipSeries"
-            style="@style/Widget.Iptv.RequestChip"
-            android:layout_marginEnd="@dimen/space_s"
-            android:text="@string/request_type_series" />
+                <TextView
+                    android:id="@+id/chipChannel"
+                    style="@style/Widget.Iptv.RequestChip"
+                    android:layout_marginEnd="@dimen/space_s"
+                    android:text="@string/request_type_channel" />
 
-        <TextView
-            android:id="@+id/chipComplaint"
-            style="@style/Widget.Iptv.RequestChip"
-            android:text="@string/request_type_complaint" />
-    </LinearLayout>
+                <TextView
+                    android:id="@+id/chipMovie"
+                    style="@style/Widget.Iptv.RequestChip"
+                    android:layout_marginEnd="@dimen/space_s"
+                    android:text="@string/request_type_movie" />
 
-    <EditText
-        android:id="@+id/requestMessage"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_m"
-        android:background="@drawable/bg_input"
-        android:gravity="top|start"
-        android:hint="@string/request_message_hint"
-        android:inputType="textMultiLine|textCapSentences"
-        android:minLines="3"
-        android:maxLines="6"
-        android:minHeight="110dp"
-        android:padding="@dimen/space_m"
-        android:textColor="@color/text_primary"
-        android:textColorHint="@color/text_muted"
-        android:textSize="@dimen/text_body" />
+                <TextView
+                    android:id="@+id/chipSeries"
+                    style="@style/Widget.Iptv.RequestChip"
+                    android:layout_marginEnd="@dimen/space_s"
+                    android:text="@string/request_type_series" />
 
-    <!-- CTAs: cancel (secondary) + send (primary). D-pad focusable. -->
+                <TextView
+                    android:id="@+id/chipComplaint"
+                    style="@style/Widget.Iptv.RequestChip"
+                    android:text="@string/request_type_complaint" />
+            </LinearLayout>
+
+            <EditText
+                android:id="@+id/requestMessage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_m"
+                android:background="@drawable/bg_input"
+                android:gravity="top|start"
+                android:hint="@string/request_message_hint"
+                android:imeOptions="flagNoExtractUi|actionDone"
+                android:inputType="textMultiLine|textCapSentences"
+                android:minLines="3"
+                android:maxLines="6"
+                android:minHeight="110dp"
+                android:padding="@dimen/space_m"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_muted"
+                android:textSize="@dimen/text_body" />
+
+            <!-- Sent-request history (populated in code; hidden until loaded). -->
+            <TextView
+                android:id="@+id/requestHistoryHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_l"
+                android:text="@string/request_history_title"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/requestHistoryEmpty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_s"
+                android:text="@string/request_history_empty"
+                android:textColor="@color/text_muted"
+                android:textSize="@dimen/text_caption"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/requestHistory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:orientation="vertical" />
+        </LinearLayout>
+    </com.iptv.player.ui.common.MaxHeightScrollView>
+
+    <!-- CTAs: cancel (secondary) + send (primary). D-pad focusable, pinned below. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

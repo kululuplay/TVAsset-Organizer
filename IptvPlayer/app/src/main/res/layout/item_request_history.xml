@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One row of the user's request history in the İstek & Şikayet dialog: a status
+     badge (Pending / Resolved, colour set in code) plus the type and the message.
+     Non-focusable — it's read-only reference, D-pad skips straight to the CTAs. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingVertical="@dimen/space_s">
+
+    <TextView
+        android:id="@+id/histStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_time_chip"
+        android:paddingHorizontal="@dimen/space_s"
+        android:paddingVertical="2dp"
+        android:textSize="@dimen/text_caption"
+        android:textStyle="bold"
+        android:maxLines="1" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="@dimen/space_m"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/histType"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_muted"
+            android:textSize="@dimen/text_caption"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/histMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_caption"
+            android:maxLines="2"
+            android:ellipsize="end" />
+    </LinearLayout>
+</LinearLayout>

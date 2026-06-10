@@ -52,4 +52,73 @@ object RequestReporter {
                 ServiceLocator.httpClient.newCall(request).execute().use { it.isSuccessful }
             }.getOrDefault(false)
         }
+
+    /** A single past request of this device, newest first, for the Home history list. */
+    data class MyRequest(
+        val id: Long,
+        val type: String,
+        val message: String,
+        val status: String,
+        val createdAt: String,
+    )
+
+    /**
+     * Fetches this device's own request history from the crash-receiver. Newest
+     * first, capped server-side. Runs on IO and returns an empty list on any error.
+     */
+    suspend fun fetchMine(context: Context): List<MyRequest> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val app = context.applicationContext
+                val deviceId = java.net.URLEncoder.encode(DeviceId.get(app), "UTF-8")
+                val request = Request.Builder()
+                    .url("${Telemetry.REQUESTS_MINE_ENDPOINT}?deviceId=$deviceId")
+                    .header("X-Kululu-Key", Telemetry.INGEST_KEY)
+                    .get()
+                    .build()
+                ServiceLocator.httpClient.newCall(request).execute().use { resp ->
+                    if (!resp.isSuccessful) return@use emptyList<MyRequest>()
+                    val text = resp.body?.string()
+                    if (text.isNullOrBlank()) return@use emptyList<MyRequest>()
+                    val arr = JSONObject(text).optJSONArray("requests")
+                        ?: return@use emptyList<MyRequest>()
+                    buildList {
+                        for (i in 0 until arr.length()) {
+                            val o = arr.optJSONObject(i) ?: continue
+                            add(
+                                MyRequest(
+                                    id = o.optLong("id"),
+                                    type = o.optString("type"),
+                                    message = o.optString("message"),
+                                    status = o.optString("status"),
+                                    createdAt = o.optString("createdAt"),
+                                )
+                            )
+                        }
+                    }
+                }
+            }.getOrDefault(emptyList())
+        }
+
+    /**
+     * Acknowledges resolved-request popups so the server flips notified=true and
+     * stops re-sending them in the heartbeat. Best-effort; returns success.
+     */
+    suspend fun ack(context: Context, ids: List<Long>): Boolean =
+        withContext(Dispatchers.IO) {
+            if (ids.isEmpty()) return@withContext true
+            runCatching {
+                val app = context.applicationContext
+                val payload = JSONObject().apply {
+                    put("deviceId", DeviceId.get(app))
+                    put("ids", org.json.JSONArray(ids))
+                }
+                val request = Request.Builder()
+                    .url(Telemetry.REQUESTS_ACK_ENDPOINT)
+                    .header("X-Kululu-Key", Telemetry.INGEST_KEY)
+                    .post(payload.toString().toRequestBody(JSON))
+                    .build()
+                ServiceLocator.httpClient.newCall(request).execute().use { it.isSuccessful }
+            }.getOrDefault(false)
+        }
 }

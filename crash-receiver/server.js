@@ -242,6 +242,19 @@ async function initDb() {
   await pool.query(
     `CREATE INDEX IF NOT EXISTS idx_requests_created ON requests(status, created_at DESC);`,
   );
+  // Resolved-notify: the app checks each heartbeat for requests the operator
+  // marked 'done' and pops the user a confirmation, then acks. Added via ALTER
+  // because deployed DBs already have the table (the CREATE above no-ops there).
+  // DEFAULT true first so EXISTING rows backfill as already-notified (no popup
+  // storm for history on the next beat); then flip the default to false so NEW
+  // requests start un-notified and surface once resolved.
+  await pool.query(
+    `ALTER TABLE requests ADD COLUMN IF NOT EXISTS notified BOOLEAN NOT NULL DEFAULT true;`,
+  );
+  await pool.query(`ALTER TABLE requests ALTER COLUMN notified SET DEFAULT false;`);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_requests_device ON requests(device_id, created_at DESC);`,
+  );
   await refreshAnnouncementCache();
 }
 
@@ -470,7 +483,28 @@ app.post("/api/heartbeat", async (req, res) => {
         uname,
       ],
     );
-    res.status(200).json({ announcement: pickAnnouncement(deviceId, uname) });
+    // Resolved-request notifications for this device: requests the operator
+    // marked 'done' that the app hasn't been told about yet. Best-effort and
+    // isolated so a lookup failure can never break the heartbeat.
+    let resolvedRequests = [];
+    try {
+      const rr = await pool.query(
+        `SELECT id, type, message FROM requests
+          WHERE device_id = $1 AND status = 'done' AND notified = false
+          ORDER BY id ASC LIMIT 10`,
+        [deviceId],
+      );
+      resolvedRequests = rr.rows.map((r) => ({
+        id: r.id,
+        type: r.type,
+        message: clip(r.message, 200),
+      }));
+    } catch (e) {
+      console.error("resolved-requests lookup failed", e);
+    }
+    const payload = { announcement: pickAnnouncement(deviceId, uname) };
+    if (resolvedRequests.length) payload.resolvedRequests = resolvedRequests;
+    res.status(200).json(payload);
     // Resolve location after responding so the heartbeat stays fast.
     applyGeo(ip).catch(() => {});
   } catch (e) {
@@ -557,6 +591,61 @@ app.post("/api/request", async (req, res) => {
   } catch (e) {
     console.error("request store failed", e);
     return res.status(500).json({ error: "store_failed" });
+  }
+});
+
+// ---- App: the user's own request history (shown in the İstek & Şikayet dialog) ----
+// Device-scoped (no per-user auth): the unguessable device id + shared ingest key
+// match the trust model of /api/heartbeat and /api/request.
+app.get("/api/requests/mine", async (req, res) => {
+  if ((req.get("X-Kululu-Key") || "") !== INGEST_KEY) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  const deviceId = clip(req.query.deviceId, 128);
+  if (!deviceId) return res.status(400).json({ error: "missing_device_id" });
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, type, message, status, created_at
+         FROM requests WHERE device_id = $1
+         ORDER BY id DESC LIMIT 20`,
+      [deviceId],
+    );
+    return res.status(200).json({
+      requests: rows.map((r) => ({
+        id: r.id,
+        type: r.type,
+        message: r.message,
+        status: r.status,
+        createdAt: r.created_at,
+      })),
+    });
+  } catch (e) {
+    console.error("requests/mine failed", e);
+    return res.status(500).json({ error: "query_failed" });
+  }
+});
+
+// ---- App: acknowledge resolved-request popups so the server stops re-sending ----
+app.post("/api/requests/ack", async (req, res) => {
+  if ((req.get("X-Kululu-Key") || "") !== INGEST_KEY) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  const b = req.body || {};
+  const deviceId = clip(b.deviceId, 128);
+  const ids = Array.isArray(b.ids)
+    ? b.ids.map((x) => toInt(x)).filter((n) => n != null)
+    : [];
+  if (!deviceId || ids.length === 0) return res.status(204).end();
+  try {
+    await pool.query(
+      `UPDATE requests SET notified = true
+        WHERE device_id = $1 AND id = ANY($2::int[])`,
+      [deviceId, ids],
+    );
+    return res.status(204).end();
+  } catch (e) {
+    console.error("requests/ack failed", e);
+    return res.status(500).json({ error: "ack_failed" });
   }
 });
 
@@ -816,10 +905,13 @@ app.post("/api/devices/clear", auth, async (req, res) => {
 
 // ---- Request / complaint management ----
 app.post("/api/requests/:id/done", auth, async (req, res) => {
-  // Toggle handled <-> new so a mis-click is reversible.
+  // Toggle handled <-> new so a mis-click is reversible. Reset notified on every
+  // toggle: marking done re-arms the user's "resolved" popup; reverting clears
+  // it (harmless while status='new', and lets a later re-resolve notify again).
   await pool.query(
     `UPDATE requests
-        SET status = CASE WHEN status = 'done' THEN 'new' ELSE 'done' END
+        SET status = CASE WHEN status = 'done' THEN 'new' ELSE 'done' END,
+            notified = false
       WHERE id = $1`,
     [toInt(req.params.id)],
   );

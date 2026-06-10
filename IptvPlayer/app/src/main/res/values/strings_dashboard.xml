@@ -59,4 +59,18 @@
     <string name="signal_good">Good</string>
     <string name="signal_weak">Weak</string>
     <string name="signal_offline">Offline</string>
+
+    <!-- Request history (sent-request list inside the İstek & Şikayet dialog) -->
+    <string name="request_history_title">Your requests</string>
+    <string name="request_history_empty">You haven\'t sent any requests yet.</string>
+    <string name="request_status_new">Pending</string>
+    <string name="request_status_done">Resolved</string>
+    <string name="request_type_other">Other</string>
+
+    <!-- Resolved-request popup (operator marked the request done) -->
+    <string name="resolved_title_added">Your request was added</string>
+    <string name="resolved_body_added">We reviewed your request and added the content. Enjoy watching!</string>
+    <string name="resolved_title_complaint">Your issue is resolved</string>
+    <string name="resolved_body_complaint">We reviewed your report and resolved it. Thank you!</string>
+    <string name="resolved_request_label">Your request</string>
 </resources>

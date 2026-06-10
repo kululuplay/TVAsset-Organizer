@@ -89,13 +89,39 @@ object HeartbeatReporter {
             val text = runCatching { resp.body?.string() }.getOrNull()
             if (text.isNullOrBlank()) return
             runCatching {
-                val obj = JSONObject(text).optJSONObject("announcement")
+                val root = JSONObject(text)
+                val obj = root.optJSONObject("announcement")
                 if (obj == null) {
                     AnnouncementCenter.clear()
                 } else {
                     AnnouncementCenter.update(obj.optLong("id"), obj.optString("message"))
                 }
+                // Requests the operator just marked "done" for this device. The
+                // server keeps re-sending each until we ACK it, so an un-shown one
+                // survives suppression/process-death; ResolvedRequestCenter dedups.
+                val arr = root.optJSONArray("resolvedRequests")
+                if (arr == null || arr.length() == 0) {
+                    ResolvedRequestCenter.clear()
+                } else {
+                    val list = buildList {
+                        for (i in 0 until arr.length()) {
+                            val o = arr.optJSONObject(i) ?: continue
+                            add(
+                                ResolvedRequestCenter.ResolvedRequest(
+                                    id = o.optLong("id"),
+                                    type = o.optString("type"),
+                                    message = o.optString("message"),
+                                )
+                            )
+                        }
+                    }
+                    ResolvedRequestCenter.update(list)
+                }
             }
+            // Retry the ACK for resolutions already shown this process whose ack
+            // didn't land (server still lists them) so it stops re-sending.
+            val retry = ResolvedRequestCenter.shownButPending()
+            if (retry.isNotEmpty()) runCatching { RequestReporter.ack(context, retry) }
         }
     }
 }

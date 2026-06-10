@@ -18,7 +18,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:padding="@dimen/space_l">
+        android:padding="@dimen/space_m">
 
         <ImageView
             android:id="@+id/cardIcon"
@@ -44,7 +44,7 @@
             android:textColor="@color/text_primary"
             android:textSize="@dimen/text_body"
             android:textStyle="bold"
-            android:maxLines="1"
+            android:maxLines="2"
             android:ellipsize="end" />
 
         <TextView

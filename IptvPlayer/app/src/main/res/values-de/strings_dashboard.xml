@@ -56,4 +56,18 @@
     <string name="signal_offline">Offline</string>
     <string name="dash_user">Benutzer: %1$s</string>
     <string name="dash_version">Version %1$s</string>
+
+    <!-- Anfrageverlauf (Liste gesendeter Anfragen im Anfrage & Feedback-Dialog) -->
+    <string name="request_history_title">Ihre Anfragen</string>
+    <string name="request_history_empty">Sie haben noch keine Anfrage gesendet.</string>
+    <string name="request_status_new">Ausstehend</string>
+    <string name="request_status_done">Erledigt</string>
+    <string name="request_type_other">Sonstige</string>
+
+    <!-- Benachrichtigung bei erledigter Anfrage (vom Betreiber abgeschlossen) -->
+    <string name="resolved_title_added">Ihre Anfrage wurde hinzugefügt</string>
+    <string name="resolved_body_added">Wir haben Ihre Anfrage geprüft und den Inhalt hinzugefügt. Viel Spaß!</string>
+    <string name="resolved_title_complaint">Ihr Anliegen wurde gelöst</string>
+    <string name="resolved_body_complaint">Wir haben Ihre Meldung geprüft und gelöst. Vielen Dank!</string>
+    <string name="resolved_request_label">Ihre Anfrage</string>
 </resources>

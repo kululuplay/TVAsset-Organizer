@@ -24,6 +24,8 @@ import com.iptv.player.util.AnrWatchdog
 import com.iptv.player.util.CrashReporter
 import com.iptv.player.util.HeartbeatReporter
 import com.iptv.player.util.Logger
+import com.iptv.player.util.RequestReporter
+import com.iptv.player.util.ResolvedRequestCenter
 import com.iptv.player.work.SyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +44,9 @@ class IptvApp : Application() {
 
     /** Highest announcement id already shown this process (concurrency guard). */
     @Volatile private var shownAnnouncementId = 0L
+
+    /** Guards against two dialogs (announcement + resolved) stacking on one resume. */
+    @Volatile private var dialogInFlight = false
 
     override fun onCreate() {
         super.onCreate()
@@ -66,6 +71,12 @@ class IptvApp : Application() {
             currentActivityRef?.get()?.let { maybeShowAnnouncement(it) }
         }
 
+        // When a heartbeat reports the operator resolved one of this device's
+        // requests, pop a confirmation on the next safe screen (then ACK it).
+        ResolvedRequestCenter.setListener {
+            currentActivityRef?.get()?.let { maybeShowResolved(it) }
+        }
+
         // Live-device telemetry: ping the ops panel every minute WHILE foregrounded
         // so we can see who is watching right now (count, IP, model, version).
         // Gated on the started-activity count because Android TV keeps idle
@@ -83,6 +94,7 @@ class IptvApp : Application() {
             override fun onActivityResumed(activity: Activity) {
                 currentActivityRef = WeakReference(activity)
                 maybeShowAnnouncement(activity)
+                maybeShowResolved(activity)
             }
 
             override fun onActivityPaused(activity: Activity) {
@@ -107,7 +119,8 @@ class IptvApp : Application() {
      * Show the pending remote announcement once, on a safe (non-player) screen.
      * Suppressed over the players / screensaver / trailer so we never interrupt
      * viewing — it surfaces on the next safe resume instead. Deduped by a persisted
-     * id (across restarts) plus an in-memory guard (against concurrent shows).
+     * id (across restarts) plus an in-memory guard (against concurrent shows). The
+     * shared dialog slot is claimed FIRST so it can't stack with a resolved popup.
      */
     private fun maybeShowAnnouncement(activity: Activity) {
         if (AnnouncementCenter.pending == null) return
@@ -117,13 +130,14 @@ class IptvApp : Application() {
             if (!isShowable(activity)) return@launch
             val settings = ServiceLocator.settings
             if (ann.id <= settings.getLastShownAnnouncementId()) return@launch
-            // Atomic last line of defence so two resumes can't both pop the dialog.
-            if (!claimAnnouncement(ann.id)) return@launch
+            // Grab the one dialog slot before consuming anything; if a resolved
+            // popup is already up, bail and re-deliver on the next safe resume.
+            if (!claimDialog()) return@launch
+            if (!claimAnnouncement(ann.id)) { releaseDialog(); return@launch }
             settings.setLastShownAnnouncementId(ann.id)
-            // The two DataStore calls above suspend (disk I/O); the activity may have
-            // gone away meanwhile, so re-check before touching its window. id is
-            // already persisted, so a missed show simply waits for the next resume.
-            if (!isShowable(activity)) return@launch
+            // The DataStore write above suspends (disk I/O); the activity may have
+            // gone away meanwhile, so re-check before touching its window.
+            if (!isShowable(activity)) { releaseDialog(); return@launch }
             runCatching {
                 val view = LayoutInflater.from(activity)
                     .inflate(R.layout.dialog_announcement, null, false)
@@ -133,10 +147,74 @@ class IptvApp : Application() {
                     .create()
                 val ok = view.findViewById<View>(R.id.annOkButton)
                 ok.setOnClickListener { dialog.dismiss() }
+                dialog.setOnDismissListener { releaseDialog() }
                 dialog.show()
                 ok.requestFocus()
-            }.onFailure { Logger.w("IptvApp", "announcement dialog failed: ${it.message}") }
+            }.onFailure {
+                releaseDialog()
+                Logger.w("IptvApp", "announcement dialog failed: ${it.message}")
+            }
         }
+    }
+
+    /**
+     * Show the newest just-resolved request once, on a safe screen, then ACK it so
+     * the server stops re-sending. Mirrors the announcement flow: same suppression,
+     * same single dialog slot. Dedup is in-memory (ResolvedRequestCenter) backed by
+     * the server's `notified` flag, so an un-shown one re-arrives on the next
+     * heartbeat — surviving player-suppression, resume races and process death.
+     */
+    private fun maybeShowResolved(activity: Activity) {
+        if (ResolvedRequestCenter.nextUnshown() == null) return
+        if (isSuppressedScreen(activity)) return
+        CoroutineScope(Dispatchers.Main).launch {
+            val rr = ResolvedRequestCenter.nextUnshown() ?: return@launch
+            if (!isShowable(activity)) return@launch
+            if (!claimDialog()) return@launch
+            val shown = runCatching {
+                val view = LayoutInflater.from(activity)
+                    .inflate(R.layout.dialog_resolved, null, false)
+                val isContent = rr.type == "channel" || rr.type == "movie" || rr.type == "series"
+                view.findViewById<TextView>(R.id.resolvedTitle).setText(
+                    if (isContent) R.string.resolved_title_added else R.string.resolved_title_complaint
+                )
+                view.findViewById<TextView>(R.id.resolvedMessage).setText(
+                    if (isContent) R.string.resolved_body_added else R.string.resolved_body_complaint
+                )
+                view.findViewById<TextView>(R.id.resolvedOriginal).text = rr.message
+                val dialog = AlertDialog.Builder(activity, R.style.ThemeOverlay_Iptv_Dialog)
+                    .setView(view)
+                    .create()
+                val ok = view.findViewById<View>(R.id.resolvedOkButton)
+                ok.setOnClickListener { dialog.dismiss() }
+                dialog.setOnDismissListener { releaseDialog() }
+                dialog.show()
+                ok.requestFocus()
+                true
+            }.getOrElse {
+                releaseDialog()
+                Logger.w("IptvApp", "resolved dialog failed: ${it.message}")
+                false
+            }
+            if (shown) {
+                // Mark + ACK only after a real show; a failed ACK is retried by the
+                // heartbeat loop (server keeps listing it until notified=true).
+                ResolvedRequestCenter.markShown(rr.id)
+                runCatching { RequestReporter.ack(this@IptvApp, listOf(rr.id)) }
+            }
+        }
+    }
+
+    @Synchronized
+    private fun claimDialog(): Boolean {
+        if (dialogInFlight) return false
+        dialogInFlight = true
+        return true
+    }
+
+    @Synchronized
+    private fun releaseDialog() {
+        dialogInFlight = false
     }
 
     @Synchronized

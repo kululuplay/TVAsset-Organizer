@@ -56,4 +56,18 @@
     <string name="signal_good">İyi</string>
     <string name="signal_weak">Zayıf</string>
     <string name="signal_offline">Çevrimdışı</string>
+
+    <!-- İstek geçmişi (İstek & Şikayet penceresindeki gönderilen istek listesi) -->
+    <string name="request_history_title">Gönderdiğiniz istekler</string>
+    <string name="request_history_empty">Henüz bir istek göndermediniz.</string>
+    <string name="request_status_new">Beklemede</string>
+    <string name="request_status_done">Çözüldü</string>
+    <string name="request_type_other">Diğer</string>
+
+    <!-- Çözüldü bildirimi (operatör isteği tamamladığında) -->
+    <string name="resolved_title_added">İsteğiniz eklendi</string>
+    <string name="resolved_body_added">Talebiniz değerlendirildi ve içerik eklendi. İyi seyirler!</string>
+    <string name="resolved_title_complaint">Şikayetiniz çözüldü</string>
+    <string name="resolved_body_complaint">Bildiriminiz incelendi ve çözüme kavuşturuldu. Teşekkürler!</string>
+    <string name="resolved_request_label">Talebiniz</string>
 </resources>
