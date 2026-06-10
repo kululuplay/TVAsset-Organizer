@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Content manager hub: pick Live TV / Movies / Series to edit categories and
-     (for Live) channels. A branded header sits above the section tiles, which are
-     added programmatically into sectionContainer. Scrollable for smaller panels. -->
+     (for Live) channels. An editorial header (gradient badge + uppercase overline
+     + large title + helper line + brand hairline) sits above the section tiles,
+     which are added programmatically into sectionContainer. Scrollable for small
+     panels. -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -17,19 +19,18 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- Branded header: gradient badge + title + helper line. -->
+        <!-- Editorial header: gradient badge + overline / title / helper line. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="@dimen/space_l">
+            android:gravity="center_vertical">
 
             <ImageView
-                android:layout_width="@dimen/badge_medium"
-                android:layout_height="@dimen/badge_medium"
+                android:layout_width="@dimen/badge_hero"
+                android:layout_height="@dimen/badge_hero"
                 android:background="@drawable/bg_badge_settings"
-                android:padding="@dimen/space_s"
+                android:padding="@dimen/space_l"
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_sort"
                 android:tint="@color/text_primary"
@@ -39,15 +40,26 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="@dimen/space_m"
+                android:layout_marginStart="@dimen/space_l"
                 android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/content_manager_overline"
+                    android:textAllCaps="true"
+                    android:textColor="@color/accent"
+                    android:textSize="@dimen/text_small"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.18" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_xs"
                     android:text="@string/content_manager_title"
                     android:textColor="@color/text_primary"
-                    android:textSize="@dimen/text_title"
+                    android:textSize="@dimen/text_big_title"
                     android:textStyle="bold" />
 
                 <TextView
@@ -59,6 +71,14 @@
                     android:textSize="@dimen/text_caption" />
             </LinearLayout>
         </LinearLayout>
+
+        <!-- Brand hairline that anchors the header to the tile list below. -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:layout_marginTop="@dimen/space_l"
+            android:layout_marginBottom="@dimen/space_l"
+            android:background="@drawable/bg_hairline_gradient" />
 
         <LinearLayout
             android:id="@+id/sectionContainer"

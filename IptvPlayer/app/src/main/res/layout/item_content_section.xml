@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Content manager hub tile, in the dashboard's editorial card language: a
      gradient icon badge (colour set per content type in code), a title + helper
-     subtitle, and a trailing chevron. Frosted-glass surface, brand-pink focus
-     ring, and a gentle scale on focus for clear 10-foot D-pad feedback. -->
+     subtitle, and a trailing "Edit" pill that lights up with the brand gradient
+     on focus. Frosted-glass surface, brand-pink focus ring, and a gentle scale on
+     focus for clear 10-foot D-pad feedback. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@drawable/bg_tile_surface"
@@ -20,14 +20,14 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:padding="@dimen/space_m">
+        android:padding="@dimen/space_l">
 
         <ImageView
             android:id="@+id/csIcon"
             android:layout_width="@dimen/badge_medium"
             android:layout_height="@dimen/badge_medium"
             android:background="@drawable/bg_badge_live"
-            android:padding="@dimen/space_s"
+            android:padding="@dimen/space_m"
             android:scaleType="fitCenter"
             android:tint="@color/text_primary"
             android:contentDescription="@null" />
@@ -36,7 +36,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="@dimen/space_m"
+            android:layout_marginStart="@dimen/space_l"
             android:orientation="vertical">
 
             <TextView
@@ -44,7 +44,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_body"
+                android:textSize="24sp"
                 android:textStyle="bold"
                 android:maxLines="1"
                 android:ellipsize="end" />
@@ -60,13 +60,36 @@
                 android:ellipsize="end" />
         </LinearLayout>
 
-        <ImageView
-            android:id="@+id/csArrow"
+        <!-- Trailing "Edit" pill. duplicateParentState so it follows the tile's
+             focus state and lights up with the brand gradient. -->
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/space_s"
-            android:src="@drawable/ic_arrow_right"
-            app:tint="@color/text_secondary"
-            android:contentDescription="@null" />
+            android:layout_marginStart="@dimen/space_m"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/bg_pill_action"
+            android:duplicateParentState="true"
+            android:paddingStart="@dimen/space_m"
+            android:paddingEnd="@dimen/space_m"
+            android:paddingTop="@dimen/space_s"
+            android:paddingBottom="@dimen/space_s">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/content_manager_edit"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
+                android:textStyle="bold" />
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginStart="@dimen/space_xs"
+                android:src="@drawable/ic_arrow_right"
+                android:tint="@color/text_primary"
+                android:contentDescription="@null" />
+        </LinearLayout>
     </LinearLayout>
 </FrameLayout>

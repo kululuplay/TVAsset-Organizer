@@ -35,6 +35,8 @@
     <string name="content_manager_movies_hint">Movie categories</string>
     <string name="content_manager_series">Series</string>
     <string name="content_manager_series_hint">Series categories</string>
+    <string name="content_manager_overline">Management</string>
+    <string name="content_manager_edit">Edit</string>
     <string name="category_manager_title_live">Live TV categories</string>
     <string name="category_manager_title_movies">Movie categories</string>
     <string name="category_manager_title_series">Series categories</string>

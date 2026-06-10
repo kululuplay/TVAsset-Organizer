@@ -34,6 +34,8 @@
     <string name="content_manager_movies_hint">Film kategorileri</string>
     <string name="content_manager_series">Diziler</string>
     <string name="content_manager_series_hint">Dizi kategorileri</string>
+    <string name="content_manager_overline">Yönetim</string>
+    <string name="content_manager_edit">Düzenle</string>
     <string name="category_manager_title_live">Canlı TV kategorileri</string>
     <string name="category_manager_title_movies">Film kategorileri</string>
     <string name="category_manager_title_series">Dizi kategorileri</string>
