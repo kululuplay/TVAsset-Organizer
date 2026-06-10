@@ -13,7 +13,9 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.graphics.drawable.Drawable
 import android.view.View
+import android.view.WindowManager
 import android.widget.Toast
 import android.view.KeyEvent
 import androidx.lifecycle.Lifecycle
@@ -98,6 +100,15 @@ class HomeActivity : BaseActivity() {
     /** Live preview player bound to the preview card (one connection at a time). */
     private var previewController: PlayerController? = null
     private var debugBinder: DebugOverlayBinder? = null
+
+    /**
+     * TEMP — seamless preview->fullscreen validation spike. Whether the live
+     * preview surface is currently scaled up to fill the window. See
+     * expandFullscreenSpike() for what this validates on the box.
+     */
+    private var fsSpikeExpanded = false
+    private val fsSpikeHidden = mutableListOf<View>()
+    private var fsSpikeSavedForeground: Drawable? = null
 
     /**
      * Safety net for the reverse hand-off: if no fresh frame event arrives after
@@ -208,7 +219,26 @@ class HomeActivity : BaseActivity() {
      * around inside the lists. Other keys fall through to normal handling.
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // --- TEMP: seamless-fullscreen validation spike ---
+        // While the spike fullscreen is active, swallow every key so the browse UI
+        // underneath can't react; BACK/MENU collapse back to the small preview.
+        if (fsSpikeExpanded) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 &&
+                (event.keyCode == KeyEvent.KEYCODE_BACK || event.keyCode == KeyEvent.KEYCODE_MENU)
+            ) {
+                collapseFullscreenSpike()
+            }
+            return true
+        }
         if (event.action == KeyEvent.ACTION_DOWN) {
+            // MENU (Fire TV options / Sony action-menu button) on a PLAYING preview
+            // runs the in-place scale-to-fullscreen spike (no reconnect, no restart).
+            if (event.keyCode == KeyEvent.KEYCODE_MENU && event.repeatCount == 0 &&
+                previewController != null && previewingChannel != null
+            ) {
+                expandFullscreenSpike()
+                return true
+            }
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT -> when {
                     // Drill back to categories from the channel list (mirrors Back).
@@ -681,6 +711,76 @@ class HomeActivity : BaseActivity() {
         }
     }
 
+    // ---------------------------------------------------------------------------
+    // TEMP: seamless preview -> fullscreen validation spike (Amlogic surface test)
+    // Goal: prove the live preview surface can scale to fullscreen WITHOUT a
+    // reconnect/restart (no rebind, no play()) and without greening / underlay
+    // misalignment on the box. A View scale transform never resizes the
+    // SurfaceView buffer, so the surface is not recreated (the green/restart
+    // trigger) and playback never stops. Additive only: the normal
+    // OK -> PlayerActivity fullscreen is untouched. Removed once the real
+    // in-place fullscreen lands.
+    // ---------------------------------------------------------------------------
+    private fun hideForSpike(v: View) {
+        if (v.visibility == View.VISIBLE) {
+            v.visibility = View.INVISIBLE
+            fsSpikeHidden.add(v)
+        }
+    }
+
+    private fun expandFullscreenSpike() {
+        val v = binding.previewVideo
+        if (fsSpikeExpanded || v.width == 0 || v.height == 0) return
+        // Let the scaled surface paint past every ancestor's bounds.
+        binding.root.clipChildren = false
+        binding.root.clipToPadding = false
+        binding.rightPane.clipChildren = false
+        binding.previewCard.clipChildren = false
+        // Drop the preview card's focus ring so it can't float over the video.
+        fsSpikeSavedForeground = binding.previewCard.foreground
+        binding.previewCard.foreground = null
+        // Hide everything except the video so nothing composites over the surface
+        // hole and the underlay shows edge-to-edge.
+        fsSpikeHidden.clear()
+        hideForSpike(binding.leftPane)
+        (binding.epgList.parent as? View)?.let { hideForSpike(it) }
+        for (i in 0 until binding.previewCard.childCount) {
+            val c = binding.previewCard.getChildAt(i)
+            if (c !== v) hideForSpike(c)
+        }
+        // Scale + translate the video's current rect to fill the whole window.
+        val loc = IntArray(2)
+        v.getLocationInWindow(loc)
+        val decor = window.decorView
+        v.pivotX = 0f
+        v.pivotY = 0f
+        v.scaleX = decor.width.toFloat() / v.width
+        v.scaleY = decor.height.toFloat() / v.height
+        v.translationX = -loc[0].toFloat()
+        v.translationY = -loc[1].toFloat()
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        fsSpikeExpanded = true
+    }
+
+    private fun collapseFullscreenSpike() {
+        if (!fsSpikeExpanded) return
+        val v = binding.previewVideo
+        v.scaleX = 1f
+        v.scaleY = 1f
+        v.translationX = 0f
+        v.translationY = 0f
+        fsSpikeHidden.forEach { it.visibility = View.VISIBLE }
+        fsSpikeHidden.clear()
+        binding.previewCard.foreground = fsSpikeSavedForeground
+        fsSpikeSavedForeground = null
+        binding.previewCard.clipChildren = true
+        binding.rightPane.clipChildren = true
+        binding.root.clipChildren = true
+        binding.root.clipToPadding = true
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        fsSpikeExpanded = false
+    }
+
     /** Opens the catch-up/archive browser, pre-focusing the previewed channel. */
     private fun openCatchup() {
         val intent = Intent(this, CatchupActivity::class.java)
@@ -836,6 +936,9 @@ class HomeActivity : BaseActivity() {
 
     override fun onStop() {
         super.onStop()
+        // Reset the validation spike's transform/visibility so returning on-screen
+        // isn't stuck in the expanded test state.
+        if (fsSpikeExpanded) collapseFullscreenSpike()
         if (handingOverPreview) {
             // The live controller was handed to the fullscreen player, which now
             // owns the single connection. Don't release it; just clear our local
