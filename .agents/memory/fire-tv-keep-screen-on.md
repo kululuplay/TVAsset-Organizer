@@ -1,33 +1,42 @@
 ---
-name: Fire TV keep-screen-on / standby
-description: Why the app drops to standby while watching and where keep-screen-on must be held
+name: Keep-screen-on / no standby (app-wide)
+description: Why the app went to standby while open and how no-sleep is enforced app-wide on all devices
 ---
 
-# Fire TV / Android TV standby while watching
+# No screensaver / sleep while the app is open (all devices)
 
-The app dropping to standby/screensaver after ~5-10 min of playback is the
-**system** screensaver/sleep, NOT any in-app timer. The cure is holding
-keep-screen-on while content is on screen.
+The app dropping to standby/screensaver after ~5-10 min is the **system**
+screensaver/sleep, NOT any in-app timer. The user requires NO screensaver/sleep
+on **all** devices (Fire TV, Sony, generic Android TV, phones/tablets), app-wide
+— not just on player screens.
 
-**Rule:** every video playback surface must hold keep-screen-on.
-- Live fullscreen (`activity_player.xml`) and VOD (`activity_vod_player.xml`)
-  use declarative `android:keepScreenOn="true"` on the root. Catch-up plays
-  through `VodPlayerActivity`, so it's covered by the VOD root.
-- The Home live preview is play-state-gated: set `previewVideo.keepScreenOn`
-  true on play (onPlaying/onVideoResumed), false on stop/fatal — so Home only
-  pins the display awake while a preview is actually rendering.
+**Rule (current policy):** keep-screen-on is held **app-wide** in
+`BaseActivity.onCreate` via `window.addFlags(FLAG_KEEP_SCREEN_ON)`. Nearly every
+Activity extends `BaseActivity`, so the whole app stays awake while foreground.
+`CrashRecoveryActivity` deliberately bypasses `BaseActivity` (for the
+locale/density override), so it sets the same flag directly.
 
-**Why:** no playback screen held `FLAG_KEEP_SCREEN_ON`. View/window
-keep-screen-on only applies while that window is visible, so it auto-releases
-on background — no wake-lock to leak.
+**Do NOT** add `clearFlags(FLAG_KEEP_SCREEN_ON)` anywhere — it defeats the
+app-wide hold. Two such calls were removed (Home fullscreen-spike collapse,
+Diagnostics peering finally). Per-screen `android:keepScreenOn` on the player
+layouts and the Home preview's view-level `previewVideo.keepScreenOn` toggles
+are now redundant but harmless and were left in place.
+
+**Why it's safe:** `FLAG_KEEP_SCREEN_ON` is a window attribute, not a wake lock
+— it only has effect while the window is visible and is dropped automatically
+when the app is backgrounded, so nothing leaks and there's no background battery
+drain. A client-set window flag is preserved across view-level `keepScreenOn`
+toggles, so `previewVideo.keepScreenOn = false` does NOT clear the
+BaseActivity-held window flag.
+
+**Limits to set expectations:** the flag only blocks the inactivity
+screensaver/sleep. It cannot stop HDMI-CEC power-off, the remote power button, or
+an explicit "Sleep" from a TV's quick-settings. On phones/tablets it keeps the
+display lit on every screen until the app is exited (real battery cost) — this is
+what the user asked for.
 
 **Trap — dead code that misleads standby debugging:** `PlayerScreenGuard`
-(claims in its header to manage keep-screen-on for the players), `IdleWatcher`,
+(its header claims to manage keep-screen-on for the players), `IdleWatcher`,
 `ScreensaverActivity`, and `MiniPlayerView` all exist but are **never
-instantiated**. Do not assume keep-screen-on is handled because
-`PlayerScreenGuard` exists, and do not chase an in-app screensaver as the cause.
-
-**How to apply:** when adding a new screen that renders video for long stretches
-(e.g. a trailer/WebView player, a new mini-player), add keep-screen-on there too;
-declarative XML on the player root is the lowest-risk form (no imports, auto
-released on background).
+instantiated**. Don't assume keep-screen-on lives in `PlayerScreenGuard`, and
+don't chase an in-app screensaver as the cause.

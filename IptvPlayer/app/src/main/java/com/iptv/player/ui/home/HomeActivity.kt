@@ -15,7 +15,6 @@ import android.os.Handler
 import android.os.Looper
 import android.graphics.drawable.Drawable
 import android.view.View
-import android.view.WindowManager
 import android.widget.Toast
 import android.view.KeyEvent
 import androidx.lifecycle.Lifecycle
@@ -758,7 +757,7 @@ class HomeActivity : BaseActivity() {
         v.scaleY = decor.height.toFloat() / v.height
         v.translationX = -loc[0].toFloat()
         v.translationY = -loc[1].toFloat()
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Screen-on is held app-wide by BaseActivity; nothing to toggle here.
         fsSpikeExpanded = true
     }
 
@@ -777,7 +776,7 @@ class HomeActivity : BaseActivity() {
         binding.rightPane.clipChildren = true
         binding.root.clipChildren = true
         binding.root.clipToPadding = true
-        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Do NOT clear FLAG_KEEP_SCREEN_ON: BaseActivity holds it app-wide.
         fsSpikeExpanded = false
     }
 

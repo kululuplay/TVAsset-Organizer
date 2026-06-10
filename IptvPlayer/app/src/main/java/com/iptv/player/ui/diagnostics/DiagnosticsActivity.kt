@@ -135,7 +135,7 @@ class DiagnosticsActivity : BaseActivity() {
             } catch (_: CancellationException) {
                 // User left the screen mid-test; leave the partial UI as-is.
             } finally {
-                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                // Keep-screen-on is held app-wide by BaseActivity; don't drop it.
                 peeringRunning = false
             }
         }

@@ -12,6 +12,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import com.iptv.player.R
@@ -26,6 +27,9 @@ class CrashRecoveryActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // This screen bypasses BaseActivity, so apply the app-wide no-sleep
+        // policy here too: never let the device sleep while it is showing.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         binding = ActivityCrashRecoveryBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
