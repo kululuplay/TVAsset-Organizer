@@ -853,16 +853,21 @@ class HomeActivity : BaseActivity() {
         override fun onPlaying(engineName: String) {
             previewLogoHandler.removeCallbacksAndMessages(null)
             binding.infoLogo.visibility = View.GONE
+            // Live preview is rendering: hold the screen on so a long watch on the
+            // Home preview never lets Fire TV / Android TV slip into standby.
+            binding.previewVideo.keepScreenOn = true
         }
         override fun onVideoResumed() {
             previewLogoHandler.removeCallbacksAndMessages(null)
             binding.infoLogo.visibility = View.GONE
+            binding.previewVideo.keepScreenOn = true
         }
         override fun onFatalError() {
             // Playback failed: keep the logo up as the "can't play" state and drop
             // the hand-off timeout so it can't later hide it and expose a black surface.
             previewLogoHandler.removeCallbacksAndMessages(null)
             binding.infoLogo.visibility = View.VISIBLE
+            binding.previewVideo.keepScreenOn = false
         }
         override fun onRetrying(attempt: Int) {}
     }
@@ -912,6 +917,9 @@ class HomeActivity : BaseActivity() {
         previewingChannel = null
         captionPrograms = emptyList()
         binding.infoLogo.visibility = View.VISIBLE
+        // Preview is gone: release the screen-on hold so we're not pinning the
+        // display awake when nothing is playing on Home.
+        binding.previewVideo.keepScreenOn = false
     }
 
     override fun onStart() {
