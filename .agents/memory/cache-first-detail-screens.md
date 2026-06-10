@@ -42,6 +42,8 @@ empty fallback that hides the row).
 the cache-first `load()` runs sequentially, pass 2 always cancels pass 1's job
 before relaunching, so the accurate result wins.
 
-**Where:** done in `VodDetailActivity` (Movies). `SeriesDetailActivity` shares the
-same cache-first pattern and likely has the same latent race — fix it there too if
-you touch the Series detail screen.
+**Where:** done in `VodDetailActivity` (Movies). `SeriesDetailActivity` is EXEMPT —
+verified single-pass: `loadHeader()` is its only caller of `loadCast()`/`loadSimilar()`
+and runs exactly once from cache (`getSeriesCached`), with no second network
+"detailed" re-render. So there is no race there; do NOT add castJob/similarJob to
+Series detail — it would be dead defensive code.

@@ -216,7 +216,7 @@ interface SeriesDao {
     fun pagingByCategory(categoryId: String): PagingSource<Int, SeriesEntity>
 
     // ---- Sorted variants (A-Z / rating / year) for the list sort control ----
-    @Query("SELECT * FROM series WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY name")
+    @Query("SELECT * FROM series WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY name COLLATE NOCASE")
     fun pagingAllByName(hidden: List<String>): PagingSource<Int, SeriesEntity>
 
     @Query("SELECT * FROM series WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY rating DESC, name")
@@ -225,7 +225,7 @@ interface SeriesDao {
     @Query("SELECT * FROM series WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY releaseDate DESC, name")
     fun pagingAllByYear(hidden: List<String>): PagingSource<Int, SeriesEntity>
 
-    @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY name")
+    @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY name COLLATE NOCASE")
     fun pagingCategoryByName(categoryId: String): PagingSource<Int, SeriesEntity>
 
     @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY rating DESC, name")
