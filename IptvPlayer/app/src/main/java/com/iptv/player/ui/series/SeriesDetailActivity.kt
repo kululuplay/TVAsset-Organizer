@@ -13,6 +13,7 @@ import android.view.View
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
@@ -57,6 +58,9 @@ class SeriesDetailActivity : BaseActivity() {
     private var currentSeason: Season? = null
     private var latestResume: ContinueItem? = null
     private var isFavorite = false
+    // The "Similar" rail is the last focusable rail; it only exists once data
+    // arrives, so episode cards must learn to drop down into it only when it shows.
+    private var similarVisible = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,6 +83,13 @@ class SeriesDetailActivity : BaseActivity() {
         loadFavorite(id)
         loadSeasons(id)
         loadResumeState(id)
+
+        // Open at the top with Play focused; otherwise the ScrollView can auto-scroll
+        // to whichever rail grabs focus first as the lists populate.
+        binding.scrollBody.post {
+            binding.scrollBody.scrollTo(0, 0)
+            binding.playButton.requestFocus()
+        }
     }
 
     private fun setupLists() {
@@ -108,10 +119,46 @@ class SeriesDetailActivity : BaseActivity() {
         binding.similarList.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.similarList.adapter = similarAdapter
+        // Same focus-stability guard the season/episode rails use.
+        (binding.similarList.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
+            ?.supportsChangeAnimations = false
 
         binding.castList.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.castList.adapter = castAdapter
+
+        setupFocusLinks()
+    }
+
+    /**
+     * Vertical D-pad traversal between the stacked horizontal rails. Focus lands on
+     * the rails' item views, not the RecyclerViews, so a plain geometry search can
+     * stall when a card is scrolled off-axis. We stamp nextFocusUp/Down onto each
+     * card as it attaches so Up/Down always hop to the neighbouring rail. The cast
+     * rail is display-only and is skipped entirely (episodes -> similar).
+     */
+    private fun setupFocusLinks() {
+        attachVerticalFocus(binding.seasonList) {
+            it.nextFocusUpId = R.id.playButton
+            it.nextFocusDownId = R.id.episodeList
+        }
+        attachVerticalFocus(binding.episodeList) {
+            it.nextFocusUpId = R.id.seasonList
+            it.nextFocusDownId = if (similarVisible) R.id.similarList else View.NO_ID
+        }
+        attachVerticalFocus(binding.similarList) {
+            it.nextFocusUpId = R.id.episodeList
+            it.nextFocusDownId = View.NO_ID
+        }
+    }
+
+    private fun attachVerticalFocus(list: RecyclerView, stamp: (View) -> Unit) {
+        list.addOnChildAttachStateChangeListener(
+            object : RecyclerView.OnChildAttachStateChangeListener {
+                override fun onChildViewAttachedToWindow(view: View) = stamp(view)
+                override fun onChildViewDetachedFromWindow(view: View) {}
+            }
+        )
     }
 
     /** Per-episode progress + the last-watched episode for a one-tap Play resume. */
@@ -219,6 +266,14 @@ class SeriesDetailActivity : BaseActivity() {
             val show = cards.isNotEmpty()
             binding.similarLabel.visibility = if (show) View.VISIBLE else View.GONE
             binding.similarList.visibility = if (show) View.VISIBLE else View.GONE
+
+            // Newly attached episode cards pick this up via setupFocusLinks(); also
+            // re-point the cards that are already on screen so Down reaches Similar.
+            similarVisible = show
+            val downId = if (show) R.id.similarList else View.NO_ID
+            for (i in 0 until binding.episodeList.childCount) {
+                binding.episodeList.getChildAt(i).nextFocusDownId = downId
+            }
         }
     }
 

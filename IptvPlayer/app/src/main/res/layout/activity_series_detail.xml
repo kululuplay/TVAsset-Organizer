@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Series detail hero: full-bleed backdrop with a left scrim. Title, rating,
-     year, duration, genres, plot (+ more) and Play / Trailer / favorite sit on
-     the left; the Seasons chips and the episode rail span the bottom. -->
+<!-- Series detail: a faint full-bleed backdrop sits behind a D-pad scrolling page
+     (matching the Dashboard's proven ScrollView pattern). The hero (title, rating,
+     year, genre, plot + more, Play / Trailer / favorite, and the poster) is the
+     first scroll item; the Seasons chips, episode rail, Cast and Similar rails
+     stack below it. Because everything lives in one bounded, scrolling column the
+     sections can never paint over each other regardless of title/plot length. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -9,9 +12,8 @@
     android:layout_height="match_parent"
     android:background="@color/bg_root">
 
-    <!-- Dimmed, full-bleed ambiance. We only have a portrait poster, so this is
-         kept faint; the crisp poster is shown on the right via detailPoster
-         instead of stretching this one (which looked over-zoomed). -->
+    <!-- Dimmed, full-bleed ambiance behind the scrolling content. The crisp poster
+         is shown in the hero via detailPoster instead of stretching this one. -->
     <ImageView
         android:id="@+id/detailBackdrop"
         android:layout_width="0dp"
@@ -33,320 +35,311 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <View
+    <ScrollView
+        android:id="@+id/scrollBody"
         android:layout_width="0dp"
-        android:layout_height="360dp"
-        android:background="@drawable/bg_scrim_bottom"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <androidx.constraintlayout.widget.Guideline
-        android:id="@+id/heroGuideline"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        app:layout_constraintGuide_percent="0.62" />
-
-    <!-- Crisp poster (2:3, no crop) in the right column, mirroring the cards. -->
-    <ImageView
-        android:id="@+id/detailPoster"
-        android:layout_width="150dp"
-        android:layout_height="225dp"
-        android:layout_marginTop="@dimen/safe_area_v"
-        android:scaleType="fitCenter"
-        android:contentDescription="@string/nav_series"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="@id/heroGuideline"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- Top-left info block -->
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:scrollbars="none"
         android:paddingHorizontal="@dimen/safe_area_h"
         android:paddingTop="@dimen/safe_area_v"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="@id/heroGuideline">
-
-        <TextView
-            android:id="@+id/detailTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/detail_title_text"
-            android:textStyle="bold"
-            android:maxLines="2"
-            android:ellipsize="end" />
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginTop="@dimen/space_m">
-
-            <LinearLayout
-                android:id="@+id/ratingStars"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginEnd="@dimen/space_m">
-
-                <ImageView android:id="@+id/star1" android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_star_outline" android:contentDescription="@string/detail_rating" />
-                <ImageView android:id="@+id/star2" android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
-                <ImageView android:id="@+id/star3" android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
-                <ImageView android:id="@+id/star4" android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
-                <ImageView android:id="@+id/star5" android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
-            </LinearLayout>
-
-            <TextView
-                android:id="@+id/detailYear"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_time_chip"
-                android:paddingHorizontal="@dimen/space_s"
-                android:paddingVertical="2dp"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/detail_meta_text"
-                android:textStyle="bold"
-                android:visibility="gone" />
-
-            <TextView
-                android:id="@+id/detailDuration"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/space_m"
-                android:drawableStart="@drawable/ic_clock"
-                android:drawablePadding="@dimen/space_xs"
-                android:gravity="center_vertical"
-                android:textColor="@color/text_secondary"
-                android:textSize="@dimen/detail_meta_text"
-                android:visibility="gone" />
-
-            <TextView
-                android:id="@+id/detailGenre"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/space_m"
-                android:textColor="@color/text_secondary"
-                android:textSize="@dimen/detail_meta_text"
-                android:maxLines="1"
-                android:ellipsize="end"
-                android:visibility="gone" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/detailPlot"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_m"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/detail_meta_text"
-            android:lineSpacingMultiplier="1.2"
-            android:maxLines="3"
-            android:ellipsize="end" />
-
-        <TextView
-            android:id="@+id/detailMore"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_xs"
-            android:background="@drawable/bg_pill_dark"
-            android:focusable="true"
-            android:focusableInTouchMode="false"
-            android:paddingHorizontal="@dimen/space_m"
-            android:paddingVertical="@dimen/space_xs"
-            android:text="@string/detail_more"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_caption"
-            android:visibility="gone" />
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginTop="@dimen/space_l">
-
-            <LinearLayout
-                android:id="@+id/playButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:background="@drawable/bg_pill_light"
-                android:focusable="true"
-                android:focusableInTouchMode="false"
-                android:nextFocusDown="@id/seasonList"
-                android:paddingHorizontal="@dimen/space_l"
-                android:paddingVertical="@dimen/space_m">
-
-                <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/ic_play"
-                    android:tint="#101820"
-                    android:layout_marginEnd="@dimen/space_s"
-                    android:contentDescription="@null" />
-
-                <TextView
-                    android:id="@+id/playLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/detail_play"
-                    android:textColor="#101820"
-                    android:textSize="@dimen/detail_action_text"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
-            <TextView
-                android:id="@+id/trailerButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/space_m"
-                android:background="@drawable/bg_pill_dark"
-                android:focusable="true"
-                android:focusableInTouchMode="false"
-                android:gravity="center_vertical"
-                android:paddingHorizontal="@dimen/space_l"
-                android:paddingVertical="@dimen/space_m"
-                android:text="@string/detail_trailer"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/detail_action_text"
-                android:textStyle="bold"
-                android:visibility="gone" />
-
-            <ImageView
-                android:id="@+id/favoriteButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/space_m"
-                android:background="@drawable/bg_pill_dark"
-                android:focusable="true"
-                android:focusableInTouchMode="false"
-                android:padding="@dimen/space_m"
-                android:nextFocusRight="@id/similarList"
-                android:src="@drawable/ic_heart"
-                android:contentDescription="@string/section_favorites" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <!-- Bottom: cast row, then seasons + episodes rail -->
-    <LinearLayout
-        android:id="@+id/bottomBlock"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingHorizontal="@dimen/safe_area_h"
         android:paddingBottom="@dimen/safe_area_v"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <TextView
-            android:id="@+id/castLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/detail_cast"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/detail_section_text"
-            android:textStyle="bold"
-            android:layout_marginBottom="@dimen/space_s"
-            android:visibility="gone" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/castList"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="@dimen/space_m"
-            android:clipToPadding="false"
-            android:visibility="gone" />
+            android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/seasonsLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/detail_seasons"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/detail_section_text"
-            android:textStyle="bold"
-            android:layout_marginBottom="@dimen/space_s" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/seasonList"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:nextFocusUp="@id/playButton"
-            android:nextFocusDown="@id/episodeList"
-            android:clipToPadding="false" />
-
-        <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_m">
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/episodeList"
+            <!-- ===== Hero: info (left) + poster (right) ===== -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:nextFocusUp="@id/seasonList"
+                android:orientation="horizontal"
+                android:baselineAligned="false">
+
+                <!-- Left info / actions -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="@dimen/space_l"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/detailTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/detail_title_text"
+                        android:textStyle="bold"
+                        android:maxLines="2"
+                        android:ellipsize="end" />
+
+                    <!-- Rating + year + duration + genres -->
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="@dimen/space_m">
+
+                        <LinearLayout
+                            android:id="@+id/ratingStars"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginEnd="@dimen/space_m">
+
+                            <ImageView android:id="@+id/star1" android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_star_outline" android:contentDescription="@string/detail_rating" />
+                            <ImageView android:id="@+id/star2" android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
+                            <ImageView android:id="@+id/star3" android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
+                            <ImageView android:id="@+id/star4" android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
+                            <ImageView android:id="@+id/star5" android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_star_outline" android:layout_marginStart="2dp" android:contentDescription="@null" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/detailYear"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_time_chip"
+                            android:paddingHorizontal="@dimen/space_s"
+                            android:paddingVertical="2dp"
+                            android:textColor="@color/text_primary"
+                            android:textSize="@dimen/detail_meta_text"
+                            android:textStyle="bold"
+                            android:visibility="gone" />
+
+                        <TextView
+                            android:id="@+id/detailDuration"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/space_m"
+                            android:drawableStart="@drawable/ic_clock"
+                            android:drawablePadding="@dimen/space_xs"
+                            android:gravity="center_vertical"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="@dimen/detail_meta_text"
+                            android:visibility="gone" />
+
+                        <TextView
+                            android:id="@+id/detailGenre"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/space_m"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="@dimen/detail_meta_text"
+                            android:maxLines="1"
+                            android:ellipsize="end"
+                            android:visibility="gone" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/detailPlot"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_m"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/detail_meta_text"
+                        android:lineSpacingMultiplier="1.2"
+                        android:maxLines="3"
+                        android:ellipsize="end" />
+
+                    <TextView
+                        android:id="@+id/detailMore"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_s"
+                        android:background="@drawable/bg_pill_dark"
+                        android:focusable="true"
+                        android:focusableInTouchMode="false"
+                        android:nextFocusDown="@id/playButton"
+                        android:paddingHorizontal="@dimen/space_m"
+                        android:paddingVertical="@dimen/space_xs"
+                        android:text="@string/detail_more"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_caption"
+                        android:visibility="gone" />
+
+                    <!-- Actions -->
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="@dimen/space_l">
+
+                        <LinearLayout
+                            android:id="@+id/playButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:background="@drawable/bg_pill_light"
+                            android:focusable="true"
+                            android:focusableInTouchMode="false"
+                            android:nextFocusDown="@id/seasonList"
+                            android:paddingHorizontal="@dimen/space_l"
+                            android:paddingVertical="@dimen/space_m">
+
+                            <ImageView
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:src="@drawable/ic_play"
+                                android:tint="#101820"
+                                android:layout_marginEnd="@dimen/space_s"
+                                android:contentDescription="@null" />
+
+                            <TextView
+                                android:id="@+id/playLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/detail_play"
+                                android:textColor="#101820"
+                                android:textSize="@dimen/detail_action_text"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/trailerButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/space_m"
+                            android:background="@drawable/bg_pill_dark"
+                            android:focusable="true"
+                            android:focusableInTouchMode="false"
+                            android:gravity="center_vertical"
+                            android:nextFocusDown="@id/seasonList"
+                            android:paddingHorizontal="@dimen/space_l"
+                            android:paddingVertical="@dimen/space_m"
+                            android:text="@string/detail_trailer"
+                            android:textColor="@color/text_primary"
+                            android:textSize="@dimen/detail_action_text"
+                            android:textStyle="bold"
+                            android:visibility="gone" />
+
+                        <ImageView
+                            android:id="@+id/favoriteButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/space_m"
+                            android:background="@drawable/bg_pill_dark"
+                            android:focusable="true"
+                            android:focusableInTouchMode="false"
+                            android:nextFocusDown="@id/seasonList"
+                            android:padding="@dimen/space_m"
+                            android:src="@drawable/ic_heart"
+                            android:contentDescription="@string/section_favorites" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Crisp poster (2:3, no crop), mirroring the grid cards. -->
+                <ImageView
+                    android:id="@+id/detailPoster"
+                    android:layout_width="200dp"
+                    android:layout_height="300dp"
+                    android:scaleType="fitCenter"
+                    android:contentDescription="@string/nav_series" />
+            </LinearLayout>
+
+            <!-- ===== Seasons ===== -->
+            <TextView
+                android:id="@+id/seasonsLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_l"
+                android:text="@string/detail_seasons"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/detail_section_text"
+                android:textStyle="bold" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/seasonList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_s"
+                android:nextFocusUp="@id/playButton"
+                android:nextFocusDown="@id/episodeList"
                 android:clipToPadding="false" />
 
-            <ProgressBar
-                android:id="@+id/loading"
-                android:layout_width="wrap_content"
+            <!-- ===== Episodes ===== -->
+            <FrameLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:visibility="gone" />
+                android:layout_marginTop="@dimen/space_l">
 
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/episodeList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:nextFocusUp="@id/seasonList"
+                    android:clipToPadding="false" />
+
+                <ProgressBar
+                    android:id="@+id/loading"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/emptyState"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="@string/empty_channels"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="@dimen/detail_meta_text"
+                    android:visibility="gone" />
+            </FrameLayout>
+
+            <!-- ===== Cast (display-only; D-pad skips this rail) ===== -->
             <TextView
-                android:id="@+id/emptyState"
+                android:id="@+id/castLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:text="@string/empty_channels"
-                android:textColor="@color/text_secondary"
-                android:textSize="@dimen/detail_meta_text"
+                android:layout_marginTop="@dimen/space_l"
+                android:text="@string/detail_cast"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/detail_section_text"
+                android:textStyle="bold"
                 android:visibility="gone" />
-        </FrameLayout>
-    </LinearLayout>
 
-    <!-- "Similar" rail in the empty top-right column. -->
-    <TextView
-        android:id="@+id/similarLabel"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="@dimen/space_l"
-        android:layout_marginEnd="@dimen/safe_area_h"
-        android:layout_marginTop="@dimen/safe_area_v"
-        android:text="@string/detail_similar"
-        android:textColor="@color/text_primary"
-        android:textSize="@dimen/detail_section_text"
-        android:textStyle="bold"
-        android:visibility="gone"
-        app:layout_constraintStart_toStartOf="@id/heroGuideline"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/detailPoster" />
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/castList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_s"
+                android:clipToPadding="false"
+                android:focusable="false"
+                android:descendantFocusability="blocksDescendants"
+                android:visibility="gone" />
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/similarList"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_s"
-        android:layout_marginStart="@dimen/space_l"
-        android:layout_marginEnd="@dimen/safe_area_h"
-        android:clipToPadding="false"
-        android:nextFocusLeft="@id/playButton"
-        android:nextFocusDown="@id/seasonList"
-        android:visibility="gone"
-        app:layout_constraintStart_toStartOf="@id/heroGuideline"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/similarLabel"
-        app:layout_constraintBottom_toTopOf="@id/bottomBlock"
-        app:layout_constrainedHeight="true"
-        app:layout_constraintVertical_bias="0" />
+            <!-- ===== Similar ===== -->
+            <TextView
+                android:id="@+id/similarLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_l"
+                android:text="@string/detail_similar"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/detail_section_text"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/similarList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_s"
+                android:nextFocusUp="@id/episodeList"
+                android:clipToPadding="false"
+                android:visibility="gone" />
+        </LinearLayout>
+    </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>
