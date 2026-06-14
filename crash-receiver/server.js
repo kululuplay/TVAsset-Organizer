@@ -209,6 +209,42 @@ async function initDb() {
   await pool.query(
     `CREATE INDEX IF NOT EXISTS idx_watch_log_device ON watch_log(device_id, at DESC);`,
   );
+  // Stability telemetry: one row per discrete field failure (player stall /
+  // reconnect / fallback / start-fail / fatal, an ANR freeze, or a suspected
+  // abnormal exit). Piggybacked on the heartbeat and spooled to disk on the app
+  // so events survive an OOM-kill or native crash before the next beat. Brand new
+  // table, so no ALTER backfill is needed. Pruned by retention (RETENTION_LOG_DAYS).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS telemetry_events (
+      id SERIAL PRIMARY KEY,
+      received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      occurred_at TIMESTAMPTZ,
+      device_id TEXT NOT NULL,
+      app_version TEXT,
+      version_code INTEGER,
+      manufacturer TEXT,
+      model TEXT,
+      device TEXT,
+      android_version TEXT,
+      api_level INTEGER,
+      type TEXT NOT NULL,
+      severity TEXT,
+      now_playing TEXT,
+      now_playing_kind TEXT,
+      engine TEXT,
+      stage TEXT,
+      details TEXT
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_telemetry_received ON telemetry_events(received_at DESC);`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_telemetry_type ON telemetry_events(type, received_at DESC);`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_telemetry_device ON telemetry_events(device_id, received_at DESC);`,
+  );
   // Network-test history (the devices.last_nettest column is last-only).
   await pool.query(`
     CREATE TABLE IF NOT EXISTS nettest_log (
@@ -483,6 +519,93 @@ app.post("/api/heartbeat", async (req, res) => {
         uname,
       ],
     );
+    // ---- Stability telemetry events piggybacked on this beat ----
+    // The app spools discrete field failures (player stall/reconnect/fallback/
+    // start-fail/fatal, an ANR freeze, a suspected abnormal exit) to disk and
+    // drains them here. Best-effort + fully isolated: a failure must never break
+    // the heartbeat or delay the announcement response. Capped to bound a bad
+    // client. Device metadata is taken from THIS beat (the app omits it per event).
+    const events = Array.isArray(b.events) ? b.events.slice(0, 50) : [];
+    if (events.length) {
+      try {
+        const values = [];
+        const tuples = [];
+        let p = 1;
+        for (const ev of events) {
+          if (!ev || typeof ev !== "object") continue;
+          const type = clip(ev.type, 40);
+          if (!type) continue;
+          const occurredAt =
+            ev.t != null && Number.isFinite(Number(ev.t))
+              ? new Date(Number(ev.t))
+              : null;
+          tuples.push(
+            `($${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++})`,
+          );
+          values.push(
+            occurredAt,
+            deviceId,
+            clip(b.appVersion),
+            toInt(b.versionCode),
+            clip(b.manufacturer),
+            clip(b.model),
+            clip(b.device),
+            clip(b.androidVersion),
+            toInt(b.apiLevel),
+            type,
+            clip(ev.sev, 16),
+            clip(ev.ch, 200),
+            clip(ev.kind, 40),
+            clip(ev.engine, 24),
+            clip(ev.stage, 24),
+            // ANR details carry a clipped main-thread stack (~8KB app-side); keep it
+            // usable. Other event details stay tightly clipped.
+            clip(ev.detail, type === "anr" ? 8192 : 500),
+          );
+        }
+        if (tuples.length) {
+          await pool.query(
+            `INSERT INTO telemetry_events
+              (occurred_at, device_id, app_version, version_code, manufacturer,
+               model, device, android_version, api_level, type, severity,
+               now_playing, now_playing_kind, engine, stage, details)
+             VALUES ${tuples.join(",")}`,
+            values,
+          );
+        }
+      } catch (e) {
+        console.error("telemetry_events insert failed", e);
+      }
+    }
+    // A non-zero dropped counter means this device's spool overflowed (a failure
+    // storm) and lost events; record ONE synthetic marker so the burst is visible
+    // even though the individual events are gone. Isolated + best-effort.
+    const eventsDropped = toInt(b.eventsDropped);
+    if (eventsDropped > 0) {
+      try {
+        await pool.query(
+          `INSERT INTO telemetry_events
+            (device_id, app_version, version_code, manufacturer, model, device,
+             android_version, api_level, type, severity, details)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+          [
+            deviceId,
+            clip(b.appVersion),
+            toInt(b.versionCode),
+            clip(b.manufacturer),
+            clip(b.model),
+            clip(b.device),
+            clip(b.androidVersion),
+            toInt(b.apiLevel),
+            "events_dropped",
+            "warn",
+            `${eventsDropped} olay taştı (spool overflow)`,
+          ],
+        );
+      } catch (e) {
+        console.error("events_dropped insert failed", e);
+      }
+    }
     // Resolved-request notifications for this device: requests the operator
     // marked 'done' that the app hasn't been told about yet. Best-effort and
     // isolated so a lookup failure can never break the heartbeat.
@@ -554,6 +677,21 @@ app.post("/api/nettest", async (req, res) => {
 // The Home "İstek & Şikayet" dialog posts a typed request. Validated, clipped and
 // stored; surfaced in the panel and (best-effort) forwarded to Telegram.
 const REQUEST_TYPES = ["channel", "movie", "series", "complaint"];
+
+// Human labels for stability event types in the panel. Unknown types fall back
+// to the raw key so a new app-side event type still shows up (just unlabelled).
+const TELEMETRY_LABELS = {
+  stall: "Donma (stall)",
+  reconnect: "Yeniden bağlanma",
+  fallback: "Motor değişimi",
+  start_timeout: "Başlatma zaman aşımı",
+  force_sw: "Yazılım decode'a düşüş",
+  fatal: "Ölümcül hata",
+  anr: "Arayüz donması (ANR)",
+  suspected_abnormal_exit: "Şüpheli ani kapanma",
+  events_dropped: "Olay taşması (spool overflow)",
+};
+const telemetryLabel = (t) => TELEMETRY_LABELS[t] || t || "—";
 app.post("/api/request", async (req, res) => {
   if ((req.get("X-Kululu-Key") || "") !== INGEST_KEY) {
     return res.status(401).json({ error: "unauthorized" });
@@ -793,6 +931,7 @@ async function runRetention() {
     ["crash_reports", "received_at", RETENTION_CRASH_DAYS],
     ["watch_log", "at", RETENTION_LOG_DAYS],
     ["nettest_log", "at", RETENTION_LOG_DAYS],
+    ["telemetry_events", "received_at", RETENTION_LOG_DAYS],
   ];
   for (const [table, col, days] of sweeps) {
     if (!days) continue; // 0 = disabled
@@ -977,6 +1116,8 @@ app.get("/", auth, async (req, res) => {
     crashSigRes,
     crashVerRes,
     requestsRes,
+    stabilityTypeRes,
+    stabilityChanRes,
   ] = await Promise.all([
       pool.query(`SELECT * FROM crash_reports ORDER BY received_at DESC LIMIT 300`),
       pool.query(
@@ -1047,6 +1188,23 @@ app.get("/", auth, async (req, res) => {
            LEFT JOIN devices d ON d.device_id = r.device_id
           ORDER BY (r.status = 'new') DESC, r.created_at DESC
           LIMIT 200`,
+      ),
+      // Stability events by type over the last 7 days — the fleet failure mix.
+      pool.query(
+        `SELECT type, count(*) AS n, count(DISTINCT device_id) AS devices,
+                max(received_at) AS last_at
+           FROM telemetry_events
+          WHERE received_at > now() - interval '7 days'
+          GROUP BY type ORDER BY n DESC LIMIT 20`,
+      ),
+      // Content generating the most failures over the last 7 days — where to look.
+      pool.query(
+        `SELECT now_playing AS title, count(*) AS n, count(DISTINCT device_id) AS devices,
+                string_agg(DISTINCT type, ', ') AS types
+           FROM telemetry_events
+          WHERE received_at > now() - interval '7 days'
+            AND now_playing IS NOT NULL AND now_playing <> ''
+          GROUP BY now_playing ORDER BY n DESC LIMIT 15`,
       ),
     ]);
   const rows = crashRes.rows;
@@ -1312,6 +1470,39 @@ app.get("/", auth, async (req, res) => {
     ? requestRows
     : '<div class="empty">Henüz istek veya şikayet yok.</div>';
 
+  // ---- Fleet stability (last 7 days) ----
+  const stabilityTypeTable = stabilityTypeRes.rows.length
+    ? `<table class="agg">
+         <thead><tr><th>Olay türü</th><th>Adet</th><th>Cihaz</th><th>Son</th></tr></thead>
+         <tbody>${stabilityTypeRes.rows
+           .map(
+             (s) => `<tr>
+             <td class="strong">${esc(telemetryLabel(s.type))}</td>
+             <td>${s.n}</td>
+             <td class="muted">${s.devices}</td>
+             <td class="muted" title="${esc(fmt(s.last_at))}">${esc(ago(s.last_at))}</td>
+           </tr>`,
+           )
+           .join("")}</tbody>
+       </table>`
+    : '<div class="empty">Son 7 günde stabilite olayı yok.</div>';
+  const stabilityChanTable = stabilityChanRes.rows.length
+    ? `<table class="agg">
+         <thead><tr><th>#</th><th>Kanal / İçerik</th><th>Olay</th><th>Cihaz</th><th>Türler</th></tr></thead>
+         <tbody>${stabilityChanRes.rows
+           .map(
+             (c, i) => `<tr>
+             <td class="muted">${i + 1}</td>
+             <td class="strong">${esc(c.title)}</td>
+             <td>${c.n}</td>
+             <td class="muted">${c.devices}</td>
+             <td class="muted">${esc((c.types || "").split(", ").map(telemetryLabel).join(", "))}</td>
+           </tr>`,
+           )
+           .join("")}</tbody>
+       </table>`
+    : "";
+
   res.send(`<!doctype html>
 <html lang="tr"><head>
 <meta charset="utf-8">
@@ -1455,6 +1646,11 @@ app.get("/", auth, async (req, res) => {
     ${accountsSection}
   </section>
   <section>
+    <h2>Stabilite Olayları <span class="muted">(son 7 gün)</span></h2>
+    ${stabilityTypeTable}
+    ${stabilityChanTable ? `<h3 style="font-size:14px;margin:18px 0 8px;color:#9AA7B4">En çok sorun çıkaran içerikler</h3>${stabilityChanTable}` : ""}
+  </section>
+  <section>
     <h2>Çökme Özeti</h2>
     ${crashSummarySection || '<div class="empty">Henüz çökme yok.</div>'}
   </section>
@@ -1466,10 +1662,66 @@ app.get("/", auth, async (req, res) => {
 </body></html>`);
 });
 
+// ---- Stability telemetry summary (auth, JSON) ----
+// Fleet-wide view of field failures for diagnosis: counts by type, worst content,
+// worst device models, and the most recent events over a window (?days=7, 1-90).
+app.get("/api/telemetry/summary", auth, async (req, res) => {
+  const days = Math.min(Math.max(toInt(req.query.days) || 7, 1), 90);
+  try {
+    const [byType, byChannel, byModel, recent] = await Promise.all([
+      pool.query(
+        `SELECT type, count(*)::int AS n, count(DISTINCT device_id)::int AS devices,
+                max(received_at) AS last_at
+           FROM telemetry_events
+          WHERE received_at > now() - make_interval(days => $1)
+          GROUP BY type ORDER BY n DESC`,
+        [days],
+      ),
+      pool.query(
+        `SELECT now_playing AS title, count(*)::int AS n,
+                count(DISTINCT device_id)::int AS devices,
+                string_agg(DISTINCT type, ', ') AS types
+           FROM telemetry_events
+          WHERE received_at > now() - make_interval(days => $1)
+            AND now_playing IS NOT NULL AND now_playing <> ''
+          GROUP BY now_playing ORDER BY n DESC LIMIT 30`,
+        [days],
+      ),
+      pool.query(
+        `SELECT trim(coalesce(manufacturer,'') || ' ' || coalesce(model,'')) AS model,
+                count(*)::int AS n, count(DISTINCT device_id)::int AS devices
+           FROM telemetry_events
+          WHERE received_at > now() - make_interval(days => $1)
+          GROUP BY 1 ORDER BY n DESC LIMIT 30`,
+        [days],
+      ),
+      pool.query(
+        `SELECT received_at, occurred_at, device_id, app_version, model, type,
+                severity, now_playing, engine, stage, details
+           FROM telemetry_events
+          WHERE received_at > now() - make_interval(days => $1)
+          ORDER BY received_at DESC LIMIT 200`,
+        [days],
+      ),
+    ]);
+    res.json({
+      windowDays: days,
+      byType: byType.rows,
+      byChannel: byChannel.rows,
+      byModel: byModel.rows,
+      recent: recent.rows,
+    });
+  } catch (e) {
+    console.error("telemetry summary failed", e);
+    res.status(500).json({ error: "query_failed" });
+  }
+});
+
 // ---- Per-device detail page: crash / nettest / watch history ----
 app.get("/device/:id", auth, async (req, res) => {
   const deviceId = clip(req.params.id, 128);
-  const [devRes, crashRes, nettestRes, watchRes, requestsRes] = await Promise.all([
+  const [devRes, crashRes, nettestRes, watchRes, requestsRes, telemetryRes] =
+    await Promise.all([
     pool.query(
       `SELECT *, (last_seen > now() - interval '${ONLINE_WINDOW_SEC} seconds') AS online
          FROM devices WHERE device_id = $1`,
@@ -1489,6 +1741,11 @@ app.get("/device/:id", auth, async (req, res) => {
     ),
     pool.query(
       `SELECT * FROM requests WHERE device_id = $1 ORDER BY created_at DESC LIMIT 50`,
+      [deviceId],
+    ),
+    pool.query(
+      `SELECT * FROM telemetry_events WHERE device_id = $1
+        ORDER BY received_at DESC LIMIT 100`,
       [deviceId],
     ),
   ]);
@@ -1549,6 +1806,19 @@ app.get("/device/:id", auth, async (req, res) => {
         )
         .join("")}</tbody></table>`
     : '<div class="empty">Ağ testi geçmişi yok.</div>';
+  const telemetryRows = telemetryRes.rows.length
+    ? `<table><thead><tr><th>Zaman</th><th>Olay</th><th>Kanal</th><th>Motor / Aşama</th><th>Ayrıntı</th></tr></thead><tbody>${telemetryRes.rows
+        .map(
+          (t) => `<tr>
+        <td title="${esc(fmt(t.received_at))}">${esc(ago(t.received_at))}<div class="muted">${esc(fmt(t.received_at))}</div></td>
+        <td class="strong">${esc(telemetryLabel(t.type))}</td>
+        <td class="play">${t.now_playing ? "▶ " + esc(t.now_playing) : "—"}</td>
+        <td class="muted">${esc([t.engine, t.stage].filter(Boolean).join(" / ") || "—")}</td>
+        <td class="muted">${esc(t.details || "—")}</td>
+      </tr>`,
+        )
+        .join("")}</tbody></table>`
+    : '<div class="empty">Stabilite olayı yok.</div>';
   const crashRows = crashRes.rows.length
     ? `<table><thead><tr><th>Zaman</th><th>Sürüm</th><th>Hata</th></tr></thead><tbody>${crashRes.rows
         .map((r) => {
@@ -1619,6 +1889,7 @@ app.get("/device/:id", auth, async (req, res) => {
   <section><h2>İstek &amp; Şikayet geçmişi</h2>${requestRows}</section>
   <section><h2>İzleme geçmişi</h2>${watchRows}</section>
   <section><h2>Ağ testi geçmişi</h2>${nettestRows}</section>
+  <section><h2>Stabilite olayları</h2>${telemetryRows}</section>
   <section><h2>Çökme geçmişi</h2>${crashRows}</section>
 </main>
 </body></html>`);

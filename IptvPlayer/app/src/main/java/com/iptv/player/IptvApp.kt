@@ -19,6 +19,7 @@ import com.iptv.player.ui.player.PlayerActivity
 import com.iptv.player.ui.player.VodPlayerActivity
 import com.iptv.player.ui.screensaver.ScreensaverActivity
 import com.iptv.player.ui.trailer.TrailerActivity
+import com.iptv.player.util.AbnormalExitDetector
 import com.iptv.player.util.AnnouncementCenter
 import com.iptv.player.util.AnrWatchdog
 import com.iptv.player.util.CrashReporter
@@ -26,6 +27,7 @@ import com.iptv.player.util.HeartbeatReporter
 import com.iptv.player.util.Logger
 import com.iptv.player.util.RequestReporter
 import com.iptv.player.util.ResolvedRequestCenter
+import com.iptv.player.util.StabilityTelemetry
 import com.iptv.player.work.SyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,12 +60,32 @@ class IptvApp : Application() {
 
         ServiceLocator.init(this)
 
+        // Load any stability events spooled by a previous run so they ship on the
+        // next beat (set up before we record the abnormal-exit check below).
+        StabilityTelemetry.init(this)
+
+        // Sample the pending-crash flag BEFORE the uploader runs — uploadPendingIfAny
+        // clears the marker asynchronously, which would otherwise race the abnormal-
+        // exit check below and mis-attribute a real Java crash as an abnormal exit.
+        val hadPendingCrash = Logger.hasPendingCrash()
+
         // If the last run crashed, quietly ship the captured report so we can see
         // failures on users' devices (Fire TV / Sony) without any interaction.
         CrashReporter.uploadPendingIfAny(this)
 
-        // Watch for main-thread freezes (ANRs) and record their stack to the log.
-        anrWatchdog = AnrWatchdog().also { it.start() }
+        // Native libVLC/MediaCodec crashes and OOM-kills never reach the Java crash
+        // handler. If the previous session died mid-playback without a clean stop
+        // (and there was no Java crash explaining it), record one suspected
+        // abnormal-exit event.
+        AbnormalExitDetector.detectAndReport(this, hadPendingCrash)
+
+        // Watch for main-thread freezes (ANRs): log the stack and ship one (rate-
+        // limited) telemetry event so chronic freezes are visible in the field.
+        anrWatchdog = AnrWatchdog(
+            onAnr = { stack ->
+                StabilityTelemetry.record(type = "anr", severity = "fatal", detail = stack)
+            }
+        ).also { it.start() }
 
         // When a heartbeat brings a fresh announcement, try to show it right away
         // on whatever screen is in front (else it surfaces on the next safe resume).
@@ -88,7 +110,12 @@ class IptvApp : Application() {
 
             override fun onActivityStopped(activity: Activity) {
                 startedActivities = (startedActivities - 1).coerceAtLeast(0)
-                if (startedActivities == 0) HeartbeatReporter.stop()
+                if (startedActivities == 0) {
+                    HeartbeatReporter.stop()
+                    // Orderly background stop: the next launch must NOT read this as
+                    // an abnormal exit. (A native crash / OOM-kill skips this path.)
+                    AbnormalExitDetector.markCleanStop(this@IptvApp)
+                }
             }
 
             override fun onActivityResumed(activity: Activity) {

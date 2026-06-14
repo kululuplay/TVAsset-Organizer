@@ -30,6 +30,7 @@ import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.util.DeviceCaps
 import com.iptv.player.util.PlaybackLog
+import com.iptv.player.util.StabilityTelemetry
 
 class PlayerController(
     // var (not val) so a handed-over controller can be re-homed onto the
@@ -424,6 +425,20 @@ class PlayerController(
     }
 
     /**
+     * Ship one stability telemetry event tagged with the current engine/stage and
+     * what is playing. Best-effort (never throws) so it can sit on any code path.
+     */
+    private fun recordStability(type: String, severity: String, detail: String? = null) {
+        StabilityTelemetry.record(
+            type = type,
+            engine = engine?.engineName,
+            stage = stage.name,
+            severity = severity,
+            detail = detail,
+        )
+    }
+
+    /**
      * Arm the startup / reconnect-attempt timeout. If this (re)start does not reach
      * confirmed playback within [STARTUP_TIMEOUT_MS] — a connection that opens but
      * silently delivers no data, so no error event ever fires — treat it as an
@@ -438,6 +453,7 @@ class PlayerController(
         watchdogHandler.postDelayed({
             if (gen != watchdogGen || playbackConfirmed) return@postDelayed
             PlaybackLog.log(context, "Controller", "no playback within ${STARTUP_TIMEOUT_MS}ms -> treat as error")
+            recordStability("start_timeout", "warn")
             handleFailure(Reason.ERROR)
         }, STARTUP_TIMEOUT_MS)
     }
@@ -478,6 +494,7 @@ class PlayerController(
             }
             if (now - lastProgressAtMs >= STALL_TIMEOUT_MS) {
                 PlaybackLog.log(context, "Controller", "live stall (no progress ${STALL_TIMEOUT_MS}ms) -> reconnect")
+                recordStability("stall", "warn")
                 cancelWatchdog()
                 engageReconnect()
                 return@postDelayed
@@ -510,6 +527,7 @@ class PlayerController(
             )
             if (quickDecodeFailures >= MAX_QUICK_DECODE_FAILURES && Stage.VLC_SW !in triedStages) {
                 PlaybackLog.log(context, "Controller", "repeated hw decode fail -> force software")
+                recordStability("force_sw", "warn", "after $quickDecodeFailures hw decode fails (stage=$stage)")
                 startStage(Stage.VLC_SW)
                 return
             }
@@ -532,6 +550,7 @@ class PlayerController(
             val next = nextStage(stage, reason)
             if (next != null && next !in triedStages) {
                 PlaybackLog.log(context, "Controller", "fallback $stage --$reason--> $next")
+                recordStability("fallback", "warn", "$stage --$reason--> $next")
                 startStage(next)
                 return
             }
@@ -564,6 +583,7 @@ class PlayerController(
         cancelWatchdog()
         if (!isLive) {
             PlaybackLog.log(context, "Controller", "fatal after $stage (non-live, no reconnect)")
+            recordStability("fatal", "fatal", "non-live, no further decode path (stage=$stage)")
             callback.onFatalError()
             return
         }
@@ -576,9 +596,13 @@ class PlayerController(
             reconnecting = true
             reconnectWindowStartMs = now
             reconnectAttempt = 0
+            // One event per reconnect EPISODE (not per attempt) so a flaky stream
+            // doesn't flood the spool with a row for every backoff retry.
+            recordStability("reconnect", "warn", "stage=$stage")
         }
         if (now - reconnectWindowStartMs >= RECONNECT_WINDOW_MS) {
             PlaybackLog.log(context, "Controller", "reconnect window elapsed -> fatal")
+            recordStability("fatal", "fatal", "reconnect window elapsed after $reconnectAttempt attempts (stage=$stage)")
             resetReconnect()
             callback.onFatalError()
             return

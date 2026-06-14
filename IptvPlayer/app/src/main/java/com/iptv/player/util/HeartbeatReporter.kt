@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 
 object HeartbeatReporter {
@@ -34,6 +35,9 @@ object HeartbeatReporter {
 
     /** How often to ping while foregrounded. */
     private const val INTERVAL_MS = 60_000L
+
+    /** Max stability events drained per beat (server also caps; keeps the body small). */
+    private const val MAX_EVENTS_PER_BEAT = 20
 
     @Volatile private var loopJob: Job? = null
 
@@ -57,6 +61,15 @@ object HeartbeatReporter {
     }
 
     private suspend fun sendOnce(context: Context) {
+        // Refresh the "session alive" marker each beat so the next launch can tell a
+        // clean exit from an abnormal one (native crash / OOM-kill mid-playback).
+        AbnormalExitDetector.markAlive(context, NowPlaying.title)
+        // Drain a bounded batch of spooled stability events onto this beat; keep the
+        // references so we only clear them after the server confirms (200).
+        val pendingEvents = StabilityTelemetry.snapshot(MAX_EVENTS_PER_BEAT)
+        // How many events the spool had to drop to overflow before this beat — the
+        // server records one synthetic marker so a failure storm stays visible.
+        val droppedBefore = StabilityTelemetry.snapshotDropped()
         val json = JSONObject().apply {
             put("deviceId", DeviceId.get(context))
             put("appVersion", BuildConfig.VERSION_NAME)
@@ -74,6 +87,10 @@ object HeartbeatReporter {
                 .getOrNull()
                 ?.takeIf { it.isNotBlank() }
                 ?.let { put("username", it) }
+            if (pendingEvents.isNotEmpty()) {
+                put("events", JSONArray().apply { pendingEvents.forEach { put(it) } })
+            }
+            if (droppedBefore > 0) put("eventsDropped", droppedBefore)
         }
         val body = json.toString()
             .toRequestBody("application/json; charset=utf-8".toMediaType())
@@ -84,6 +101,10 @@ object HeartbeatReporter {
             .build()
         ServiceLocator.httpClient.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) return
+            // The beat landed: drop the events we just shipped (older servers simply
+            // ignore the unknown field, so this stays backward compatible).
+            if (pendingEvents.isNotEmpty()) StabilityTelemetry.confirmUploaded(pendingEvents)
+            if (droppedBefore > 0) StabilityTelemetry.confirmDropped(droppedBefore)
             // Newer servers return 200 with {announcement:{id,message}|null}; older
             // ones return 204 (no body). Parse defensively so neither breaks the loop.
             val text = runCatching { resp.body?.string() }.getOrNull()
