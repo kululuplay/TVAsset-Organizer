@@ -421,6 +421,11 @@ class ExoPlayerEngine(
     override fun resume() { player?.playWhenReady = true }
     override fun stop() { player?.stop() }
 
+    // Read on the main thread (Media3 requires it); the controller's stall
+    // watchdog polls from a main-looper Handler. Advances during live playback,
+    // freezes on a silent source stall.
+    override fun playbackPositionMs(): Long = player?.currentPosition ?: -1L
+
     override fun release() {
         handler.removeCallbacksAndMessages(null)
         player?.release()

@@ -83,13 +83,28 @@ class PlayerController(
         val eng = engine ?: return
         val url = currentUrl
         val generation = ++startGeneration
+        // The replay below is a restart boundary for the watchdog: drop the stall
+        // poll now — its position baseline belongs to the pre-handoff surface, and
+        // the reissued play() resets the engine clock toward 0, which the old
+        // baseline would read as "no progress" and false-trigger a reconnect.
+        cancelWatchdog()
         eng.detachVideo()
         mainHandler.postDelayed({
             if (generation != startGeneration || eng !== engine) return@postDelayed
             eng.attachVideo(newContainer)
             // reset=true: hand-off needs a deterministic decoder/renderer reset
             // onto the re-attached surface (bare re-add can stall video).
-            if (url != null) eng.play(url, reset = true)
+            if (url != null) {
+                // Re-baseline as a fresh (re)start: clear the prior confirmation +
+                // stable timer so the next real frame runs onPlaybackProgress and
+                // re-arms the stall poll against the new clock; the startup timeout
+                // covers the replay until that frame arrives.
+                playbackConfirmed = false
+                stageStartMs = 0L
+                stableHandler.removeCallbacksAndMessages(null)
+                eng.play(url, reset = true)
+                armStartupTimeout()
+            }
         }, ENGINE_SWAP_DELAY_MS)
     }
 
@@ -170,6 +185,25 @@ class PlayerController(
     // EndReached; only one attempt may be scheduled/in-flight at a time.
     private var reconnectPending = false
 
+    // ---- Stall / startup watchdog -----------------------------------------
+    // The reconnect loop above is ENTIRELY event-driven (EndReached / error). A
+    // half-open upstream connection (NAT / load-balancer idle or max-age timeout,
+    // ~1-2h on real IPTV providers) can leave the engine BLOCKED reading with no
+    // EOF and no error event, so nothing fires and the picture silently freezes
+    // until the user kills the app. This watchdog supplies the missing signal:
+    //   - mid-stream: once playback is confirmed, poll the engine's playback clock;
+    //     if it stops advancing for STALL_TIMEOUT_MS the stream has silently stalled
+    //     -> force a fresh reconnect (full release+recreate = new socket).
+    //   - startup/reconnect attempt: if a (re)start never reaches confirmed playback
+    //     within STARTUP_TIMEOUT_MS (a connection that opens but delivers no data),
+    //     treat it as an error so the normal ladder/reconnect sequencing runs.
+    // Dedicated handler so the controller's other removeCallbacksAndMessages(null)
+    // calls can't clobber it. Generation-guarded against an already-dequeued post.
+    private val watchdogHandler = Handler(Looper.getMainLooper())
+    private var watchdogGen = 0
+    private var lastPositionMs = -1L
+    private var lastProgressAtMs = 0L
+
     /** True when the active engine can apply audio/subtitle delay (libVLC). */
     val supportsDelay: Boolean get() = engine?.supportsDelay == true
 
@@ -196,6 +230,9 @@ class PlayerController(
         // count from the previous stream so they can't bleed into this one.
         stableHandler.removeCallbacksAndMessages(null)
         quickDecodeFailures = 0
+        // Tear down the previous channel's stall/startup watchdog; the (re)start
+        // path below re-arms it for this channel.
+        cancelWatchdog()
         currentUrl = url
         playbackConfirmed = false
         val initial = initialStage()
@@ -225,6 +262,10 @@ class PlayerController(
             // a fresh Media + stop()s every play(), so reset is a no-op there.)
             PlaybackLog.log(context, "Controller", "fast-zap reuse stage=$initial reset")
             reusable.play(url, reset = true)
+            // The reused engine swaps in a fresh Media on a new socket, so cover the
+            // zap with the startup timeout too (a silently stalling new channel that
+            // never produces a frame would otherwise hang with no event).
+            armStartupTimeout()
             return
         }
 
@@ -272,6 +313,10 @@ class PlayerController(
         val useVlc = target != Stage.EXO
         val forceSoftware = target == Stage.VLC_SW
         startEngine(useVlc, forceSoftware)
+        // Guard this (re)start: if it never reaches confirmed playback (a socket
+        // that opens but delivers no data, firing no error), the startup timeout
+        // turns the silent hang into a normal failure the ladder/reconnect handles.
+        armStartupTimeout()
     }
 
     private fun startEngine(useVlc: Boolean, forceSoftware: Boolean) {
@@ -364,6 +409,81 @@ class PlayerController(
             quickDecodeFailures = 0
             resetReconnect()
         }, STABLE_PLAYBACK_MS)
+        // First confirmed frame: swap the startup timeout for the mid-stream stall
+        // poll so a later silent freeze (no EndReached/error) still recovers.
+        armStallWatchdog()
+    }
+
+    // ---- Watchdog ---------------------------------------------------------
+
+    /** Stop any armed watchdog (startup timeout or stall poll). The generation
+     *  bump neutralises a post that was already dequeued but not yet run. */
+    private fun cancelWatchdog() {
+        watchdogHandler.removeCallbacksAndMessages(null)
+        watchdogGen++
+    }
+
+    /**
+     * Arm the startup / reconnect-attempt timeout. If this (re)start does not reach
+     * confirmed playback within [STARTUP_TIMEOUT_MS] — a connection that opens but
+     * silently delivers no data, so no error event ever fires — treat it as an
+     * error and let [handleFailure] run the normal decode-ladder / reconnect
+     * sequencing. A real first frame (onPlaybackProgress) or a real error cancels
+     * this first via the generation guard / removeCallbacks.
+     */
+    private fun armStartupTimeout() {
+        if (!isLive) return
+        cancelWatchdog()
+        val gen = watchdogGen
+        watchdogHandler.postDelayed({
+            if (gen != watchdogGen || playbackConfirmed) return@postDelayed
+            PlaybackLog.log(context, "Controller", "no playback within ${STARTUP_TIMEOUT_MS}ms -> treat as error")
+            handleFailure(Reason.ERROR)
+        }, STARTUP_TIMEOUT_MS)
+    }
+
+    /**
+     * Arm the mid-stream stall poll. Baselines the playback clock, then re-reads it
+     * every [WATCHDOG_POLL_MS]; if it fails to advance for [STALL_TIMEOUT_MS] the
+     * live stream has silently frozen, so force a fresh reconnect.
+     */
+    private fun armStallWatchdog() {
+        if (!isLive) return
+        cancelWatchdog()
+        lastPositionMs = -1L
+        lastProgressAtMs = SystemClock.elapsedRealtime()
+        scheduleStallPoll(watchdogGen)
+    }
+
+    private fun scheduleStallPoll(gen: Int) {
+        watchdogHandler.postDelayed({
+            if (gen != watchdogGen) return@postDelayed
+            // While a reconnect is mid-flight the attempt's own startup timeout
+            // owns recovery; just keep polling until it re-arms (or supersedes) us.
+            if (reconnecting || engine == null) {
+                scheduleStallPoll(gen)
+                return@postDelayed
+            }
+            val pos = engine?.playbackPositionMs() ?: -1L
+            val now = SystemClock.elapsedRealtime()
+            when {
+                // Unknown position: don't penalise (never false-trigger on -1).
+                pos < 0 -> lastProgressAtMs = now
+                // Clock advanced -> real progress, reset the stall timer.
+                pos > lastPositionMs + PROGRESS_EPSILON_MS -> {
+                    lastPositionMs = pos
+                    lastProgressAtMs = now
+                }
+                // else: frozen clock -> let the stall timer accrue.
+            }
+            if (now - lastProgressAtMs >= STALL_TIMEOUT_MS) {
+                PlaybackLog.log(context, "Controller", "live stall (no progress ${STALL_TIMEOUT_MS}ms) -> reconnect")
+                cancelWatchdog()
+                engageReconnect()
+                return@postDelayed
+            }
+            scheduleStallPoll(gen)
+        }, WATCHDOG_POLL_MS)
     }
 
     private fun handleFailure(reason: Reason) {
@@ -439,6 +559,9 @@ class PlayerController(
      * degrades to the previous behaviour: a single fatal error, no reconnect loop.
      */
     private fun engageReconnect() {
+        // The reconnect attempt's own startup timeout (armed in startStage) takes
+        // over watchdog duty, so drop any current poll/timeout to avoid overlap.
+        cancelWatchdog()
         if (!isLive) {
             PlaybackLog.log(context, "Controller", "fatal after $stage (non-live, no reconnect)")
             callback.onFatalError()
@@ -541,19 +664,29 @@ class PlayerController(
     fun pause() {
         // Backgrounded: cancel pending reconnects so we don't open a connection
         // off-screen. A drop while backgrounded is recovered by a manual retry /
-        // zap on return, never by a hidden background reconnect.
+        // zap on return, never by a hidden background reconnect. The stall watchdog
+        // would otherwise see the paused (frozen) clock as a stall, so disarm it.
         resetReconnect()
+        cancelWatchdog()
         engine?.pause()
     }
-    fun resume() = engine?.resume()
+    fun resume() {
+        engine?.resume()
+        // Re-baseline + re-arm the stall poll for a stream that was already playing
+        // before we backgrounded (the clock jumps on resume, so a fresh baseline
+        // avoids a false stall).
+        if (playbackConfirmed) armStallWatchdog()
+    }
     fun stop() {
         resetReconnect()
+        cancelWatchdog()
         engine?.stop()
     }
 
     fun release() {
         mainHandler.removeCallbacksAndMessages(null)
         stableHandler.removeCallbacksAndMessages(null)
+        cancelWatchdog()
         resetReconnect()
         releaseEngine()
     }
@@ -608,5 +741,32 @@ class PlayerController(
          * glitch may recover) before giving up on it.
          */
         private const val MAX_QUICK_DECODE_FAILURES = 2
+
+        /** How often the mid-stream stall watchdog re-reads the playback clock. */
+        private const val WATCHDOG_POLL_MS = 3_000L
+
+        /**
+         * Minimum forward movement (ms) of the playback clock between polls that
+         * counts as real progress. A small epsilon ignores sub-second clock jitter
+         * while still flagging a genuinely frozen stream (clock stuck) as a stall.
+         */
+        private const val PROGRESS_EPSILON_MS = 250L
+
+        /**
+         * How long the playback clock may fail to advance before a confirmed live
+         * stream is treated as silently stalled (half-open connection, no error
+         * event) and force-reconnected. Long enough not to fight a brief network
+         * hiccup that libVLC/:http-reconnect can ride out, short enough that the
+         * user isn't left staring at a frozen picture.
+         */
+        private const val STALL_TIMEOUT_MS = 15_000L
+
+        /**
+         * How long a (re)start may run without reaching confirmed playback before
+         * it's treated as a failed attempt. Covers a connection that opens but
+         * delivers no data (so no error fires). Generous so a slow-but-healthy
+         * startup (connect + ~3s caching + first frame) never trips it.
+         */
+        private const val STARTUP_TIMEOUT_MS = 22_000L
     }
 }

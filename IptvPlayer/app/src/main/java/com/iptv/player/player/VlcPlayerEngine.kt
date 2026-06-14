@@ -413,6 +413,11 @@ class VlcPlayerEngine(
         }
     }
 
+    // libVLC's playback clock (ms). Advances while frames flow (including from
+    // cache during a top-up); freezes once a silent network stall drains the
+    // buffer — exactly the signal the controller's stall watchdog keys on.
+    override fun playbackPositionMs(): Long = mediaPlayer?.time ?: -1L
+
     override fun pause() { mediaPlayer?.pause() }
     override fun resume() { mediaPlayer?.play() }
     override fun stop() {

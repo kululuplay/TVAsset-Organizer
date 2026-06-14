@@ -61,6 +61,15 @@ interface PlayerEngine {
     val supportsDelay: Boolean get() = false
 
     /**
+     * Current playback position in milliseconds, or -1 when unknown / not playing.
+     * The controller's stall watchdog polls this to detect a silently FROZEN live
+     * stream — a half-open upstream connection that delivers no more data yet fires
+     * NO EndReached / error event, so event-driven recovery never engages. When the
+     * position stops advancing the controller forces a fresh reconnect.
+     */
+    fun playbackPositionMs(): Long = -1
+
+    /**
      * Current video stream technical info for the diagnostics overlay, or null
      * when nothing is playing yet / the backend can't report it.
      */
