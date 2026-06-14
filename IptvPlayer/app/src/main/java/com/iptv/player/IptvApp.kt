@@ -25,6 +25,7 @@ import com.iptv.player.util.AnrWatchdog
 import com.iptv.player.util.CrashReporter
 import com.iptv.player.util.HeartbeatReporter
 import com.iptv.player.util.Logger
+import com.iptv.player.util.PlaybackRouteMemory
 import com.iptv.player.util.RequestReporter
 import com.iptv.player.util.ResolvedRequestCenter
 import com.iptv.player.util.StabilityTelemetry
@@ -63,6 +64,10 @@ class IptvApp : Application() {
         // Load any stability events spooled by a previous run so they ship on the
         // next beat (set up before we record the abnormal-exit check below).
         StabilityTelemetry.init(this)
+
+        // Load the per-channel decode-route memory (Tier 2 self-healing) so the
+        // player can start a channel on the engine/stage it last played stably on.
+        PlaybackRouteMemory.init(this)
 
         // Sample the pending-crash flag BEFORE the uploader runs — uploadPendingIfAny
         // clears the marker asynchronously, which would otherwise race the abnormal-

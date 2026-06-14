@@ -267,7 +267,13 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         currentChannel = channel
         // A new channel cancels any reconnect-failed state from the previous one.
         binding.errorOverlay.visibility = View.GONE
-        controller.play(applyStreamFormat(channel.streamUrl))
+        // Per-channel route-memory key (Tier 2 self-healing): the channel id plus
+        // the chosen container format, which together determine the stream the
+        // decoder sees. No URL/token so it survives credential rotation.
+        controller.play(
+            applyStreamFormat(channel.streamUrl),
+            routeKey = "${channel.id}|${streamFormat.name}",
+        )
         showOverlay(channel)
         if (statsVisible) refreshStats()
     }

@@ -30,6 +30,7 @@ import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.util.DeviceCaps
 import com.iptv.player.util.PlaybackLog
+import com.iptv.player.util.PlaybackRouteMemory
 import com.iptv.player.util.StabilityTelemetry
 
 class PlayerController(
@@ -140,6 +141,26 @@ class PlayerController(
     // superseded becomes a no-op. Guards the SurfaceView-swap handoff gap.
     private var startGeneration = 0
 
+    // ---- Per-channel route memory (Tier 2 self-healing) -------------------
+    // Remembers which stage a channel last proved STABLE on and starts there next
+    // time, skipping the failing ladder steps the user already waited through.
+    // ACTIVE ONLY for live + AUTO engine + AUTO decoder — explicit user choices
+    // (ExoPlayer / VLC / Hardware / Software) are honoured exactly as before.
+    private var currentRouteKey: String? = null
+    // True while the CURRENT play started on a remembered stage that DIFFERS from
+    // the cold base stage and has not yet proved stable. If it fails before then,
+    // we distrust the memory and restart from the base ladder (see handleFailure).
+    // Cleared the moment the stage proves stable, so later drops use the normal
+    // same-stage reconnect path.
+    private var usingRememberedRoute = false
+    // Set once a remembered route has been distrusted on this play so the base
+    // ladder is used for the rest of it (and memory isn't re-read mid-stream).
+    private var memoryIgnoredThisPlay = false
+
+    /** Route memory only steers fully-automatic live playback. */
+    private val routeMemoryEligible: Boolean
+        get() = isLive && mode == PlayerMode.AUTO && decoderMode == DecoderMode.AUTO
+
     // True once the CURRENT stage produced confirmed playback (onPlaying /
     // onVideoOutput). A plain ERROR after this is a mid-stream DROP, not a
     // startup decode problem, so it reconnects the same stage instead of walking
@@ -221,7 +242,7 @@ class PlayerController(
         engine?.setSubtitleDelayMs(ms)
     }
 
-    fun play(url: String) {
+    fun play(url: String, routeKey: String? = null) {
         // Cancel any pending retry from a previous stream so zapping is clean.
         mainHandler.removeCallbacksAndMessages(null)
         // A new channel cancels any in-flight reconnect so it can't fire against
@@ -235,8 +256,18 @@ class PlayerController(
         // path below re-arms it for this channel.
         cancelWatchdog()
         currentUrl = url
+        currentRouteKey = routeKey
         playbackConfirmed = false
-        val initial = initialStage()
+        memoryIgnoredThisPlay = false
+        // Tier 2 self-healing: prefer the stage this channel last proved STABLE on
+        // (route memory) over the cold base ladder, so a channel that always needs,
+        // say, software decode starts there instead of greening on hardware first.
+        val base = baseInitialStage()
+        val remembered = rememberedStage()
+        val initial = remembered ?: base
+        // Only treat it as a "remembered route" (eligible for the distrust-on-fail
+        // restart) when memory actually changes the starting stage.
+        usingRememberedRoute = remembered != null && remembered != base
 
         // Fast zap: when the next stream would start on the very same stage the
         // current engine is already running, keep that engine alive and just swap
@@ -272,12 +303,19 @@ class PlayerController(
 
         triedStages.clear()
         stage = initial
-        PlaybackLog.log(context, "Controller", "play mode=$mode decoder=$decoderMode start=$stage")
+        PlaybackLog.log(
+            context, "Controller",
+            "play mode=$mode decoder=$decoderMode start=$stage" +
+                if (usingRememberedRoute) " (route memory)" else ""
+        )
         startStage(stage)
     }
 
-    /** First stage to try, given the engine choice and decoder strategy. */
-    private fun initialStage(): Stage = when {
+    /**
+     * First stage to try from a COLD start, given the engine choice and decoder
+     * strategy (no route memory). [play] prefers [rememberedStage] over this.
+     */
+    private fun baseInitialStage(): Stage = when {
         // An explicit ExoPlayer choice wins over EVERYTHING — including the
         // SOFTWARE decoder default — so the user can actually reach Media3's
         // native MediaCodec -> SurfaceView path. On Amlogic boxes (e.g. Xiaomi
@@ -298,6 +336,21 @@ class PlayerController(
         DeviceCaps.isAmlogic -> if (mode == PlayerMode.VLC) Stage.VLC_SW else Stage.EXO
         // Other boxes: AUTO/Hardware (and PlayerMode.VLC) start on libVLC hardware.
         else -> Stage.VLC_HW
+    }
+
+    /**
+     * The stage this channel last proved STABLE on, or null when route memory does
+     * not apply (ineligible mode, no key, no/expired entry, distrusted this play).
+     * A purely in-memory read — never touches disk on this hot path.
+     */
+    private fun rememberedStage(): Stage? {
+        if (memoryIgnoredThisPlay || !routeMemoryEligible) return null
+        val name = PlaybackRouteMemory.bestStage(currentRouteKey) ?: return null
+        val s = runCatching { Stage.valueOf(name) }.getOrNull() ?: return null
+        // Never resurrect the libVLC hardware path from memory on Amlogic: it greens
+        // on every non-UHD profile there and the green is undetectable at runtime.
+        if (s == Stage.VLC_HW && DeviceCaps.isAmlogic) return null
+        return s
     }
 
     private fun startStage(target: Stage) {
@@ -405,10 +458,21 @@ class PlayerController(
         playbackConfirmed = true
         stageStartMs = SystemClock.elapsedRealtime()
         stableHandler.removeCallbacksAndMessages(null)
+        // Capture the stage + route key as of NOW: if this stable callback ever
+        // survives to fire, it must record the route it was ARMED for, never one a
+        // later (un-cancelled) transition swapped in under it.
+        val stableStage = stage
+        val stableKey = currentRouteKey
         stableHandler.postDelayed({
             PlaybackLog.log(context, "Controller", "stable playback ${STABLE_PLAYBACK_MS}ms -> recovered")
             quickDecodeFailures = 0
             resetReconnect()
+            // Learn the proven-good decode path for this channel so the next start
+            // skips the ladder. Gated to live + AUTO/AUTO; best-effort, never throws.
+            if (routeMemoryEligible) PlaybackRouteMemory.markStable(stableKey, stableStage.name)
+            // The remembered route (if any) is now confirmed; later drops take the
+            // normal same-stage reconnect path, not the distrust-and-restart path.
+            usingRememberedRoute = false
         }, STABLE_PLAYBACK_MS)
         // First confirmed frame: swap the startup timeout for the mid-stream stall
         // poll so a later silent freeze (no EndReached/error) still recovers.
@@ -504,6 +568,33 @@ class PlayerController(
     }
 
     private fun handleFailure(reason: Reason) {
+        // A failure before the stable window elapses MUST cancel the pending stable
+        // callback first: a stage that rendered a frame then died near the 10s mark
+        // could otherwise still fire it and FALSELY learn a failed route as good
+        // (the delayed reconnect's startStage only clears it later). Harmless for a
+        // post-stable mid-stream drop — the callback has already fired, so it's a
+        // no-op there.
+        stableHandler.removeCallbacksAndMessages(null)
+
+        // Tier 2 self-healing: a remembered route that fails BEFORE proving stable
+        // is no longer trustworthy (the channel's codec changed, or the entry is
+        // stale/cross-device). Distrust it and restart this channel from the cold
+        // base ladder so a bad memory can never strand the stream on a dead stage
+        // or loop. Single-connection is preserved — startStage releases first. The
+        // distrust flag stops this from re-firing for the rest of the play; a later
+        // organic recovery still re-learns the corrected stage via markStable.
+        if (usingRememberedRoute && !memoryIgnoredThisPlay) {
+            usingRememberedRoute = false
+            memoryIgnoredThisPlay = true
+            PlaybackRouteMemory.markFailed(currentRouteKey, stage.name)
+            PlaybackLog.log(context, "Controller", "route memory miss ($stage $reason) -> base ladder")
+            resetReconnect()
+            quickDecodeFailures = 0
+            triedStages.clear()
+            startStage(baseInitialStage())
+            return
+        }
+
         // Repeated hardware DECODE failures must not loop on the same dead decoder.
         // Two shapes of this failure:
         //   - DECODE: ExoPlayer reported a decoder-specific error (videoCodecError /
@@ -628,7 +719,7 @@ class PlayerController(
     fun retry() {
         val url = currentUrl ?: return
         PlaybackLog.log(context, "Controller", "manual retry")
-        play(url)
+        play(url, currentRouteKey)
     }
 
     /** Cancel any in-flight reconnect and clear its schedule/window state. */

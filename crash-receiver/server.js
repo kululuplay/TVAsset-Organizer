@@ -1118,6 +1118,10 @@ app.get("/", auth, async (req, res) => {
     requestsRes,
     stabilityTypeRes,
     stabilityChanRes,
+    stabilityVerDevRes,
+    stabilityVerEvtRes,
+    stabilityModelDevRes,
+    stabilityModelEvtRes,
   ] = await Promise.all([
       pool.query(`SELECT * FROM crash_reports ORDER BY received_at DESC LIMIT 300`),
       pool.query(
@@ -1205,6 +1209,41 @@ app.get("/", auth, async (req, res) => {
           WHERE received_at > now() - interval '7 days'
             AND now_playing IS NOT NULL AND now_playing <> ''
           GROUP BY now_playing ORDER BY n DESC LIMIT 15`,
+      ),
+      // Active devices per app version (denominator for the per-version error rate).
+      pool.query(
+        `SELECT coalesce(NULLIF(app_version,''),'?') AS version, count(*)::int AS devices
+           FROM devices
+          WHERE last_seen > now() - interval '7 days'
+          GROUP BY 1`,
+      ),
+      // Stability events per app version over 7d (numerator); fatals flagged.
+      pool.query(
+        `SELECT coalesce(NULLIF(app_version,''),'?') AS version,
+                count(*)::int AS events,
+                count(DISTINCT device_id)::int AS err_devices,
+                count(*) FILTER (WHERE severity = 'fatal')::int AS fatals
+           FROM telemetry_events
+          WHERE received_at > now() - interval '7 days'
+          GROUP BY 1`,
+      ),
+      // Active devices per model (denominator for the per-model error rate).
+      pool.query(
+        `SELECT NULLIF(trim(coalesce(manufacturer,'') || ' ' || coalesce(model,'')),'') AS model,
+                count(*)::int AS devices
+           FROM devices
+          WHERE last_seen > now() - interval '7 days'
+          GROUP BY 1`,
+      ),
+      // Stability events per model over 7d (numerator); fatals flagged.
+      pool.query(
+        `SELECT NULLIF(trim(coalesce(manufacturer,'') || ' ' || coalesce(model,'')),'') AS model,
+                count(*)::int AS events,
+                count(DISTINCT device_id)::int AS err_devices,
+                count(*) FILTER (WHERE severity = 'fatal')::int AS fatals
+           FROM telemetry_events
+          WHERE received_at > now() - interval '7 days'
+          GROUP BY 1`,
       ),
     ]);
   const rows = crashRes.rows;
@@ -1503,6 +1542,74 @@ app.get("/", auth, async (req, res) => {
        </table>`
     : "";
 
+  // ---- Per-version / per-model error rate (events per active device, 7d) ----
+  // A version/model is flagged "riskli" once it has a meaningful sample of active
+  // devices AND an above-threshold failure rate (or repeated fatal events) — a
+  // lightweight automatic alert so a bad build or box stands out without digging.
+  const RATE_MIN_DEVICES = 3; // ignore tiny samples (1-2 boxes skew the rate)
+  const RATE_ALERT = 3; // events per active device over 7 days
+  const buildRateRows = (devRows, evtRows, keyName) => {
+    const devMap = new Map();
+    for (const r of devRows) if (r[keyName]) devMap.set(r[keyName], toInt(r.devices));
+    const evtMap = new Map();
+    for (const r of evtRows) {
+      if (!r[keyName]) continue;
+      evtMap.set(r[keyName], {
+        events: toInt(r.events),
+        fatals: toInt(r.fatals),
+      });
+    }
+    const out = [];
+    for (const k of evtMap.keys()) {
+      const devices = devMap.get(k) || 0;
+      const e = evtMap.get(k);
+      const rate = devices > 0 ? e.events / devices : e.events;
+      const alert =
+        devices >= RATE_MIN_DEVICES && (rate >= RATE_ALERT || e.fatals >= 2);
+      out.push({ key: k, devices, events: e.events, fatals: e.fatals, rate, alert });
+    }
+    out.sort((a, b) => b.rate - a.rate || b.events - a.events);
+    return out;
+  };
+  const verRates = buildRateRows(
+    stabilityVerDevRes.rows, stabilityVerEvtRes.rows, "version",
+  );
+  const modelRates = buildRateRows(
+    stabilityModelDevRes.rows, stabilityModelEvtRes.rows, "model",
+  );
+  const riskyVersions = verRates.filter((r) => r.alert);
+  const riskyModels = modelRates.filter((r) => r.alert);
+  const rateTable = (list, label) =>
+    list.length
+      ? `<table class="agg">
+           <thead><tr><th>${label}</th><th>Cihaz</th><th>Olay</th><th>Olay/Cihaz</th><th>Ölümcül</th></tr></thead>
+           <tbody>${list
+             .map(
+               (r) => `<tr${r.alert ? ' class="alert-row"' : ""}>
+               <td class="strong">${esc(r.key)}${r.alert ? '<span class="badge-alert">riskli</span>' : ""}</td>
+               <td class="muted">${r.devices || "—"}</td>
+               <td>${r.events}</td>
+               <td class="${r.alert ? "strong" : "muted"}">${r.rate.toFixed(1)}</td>
+               <td class="${r.fatals ? "strong" : "muted"}">${r.fatals}</td>
+             </tr>`,
+             )
+             .join("")}</tbody>
+         </table>`
+      : '<div class="empty">Veri yok.</div>';
+  const versionRateTable = rateTable(verRates, "Sürüm");
+  const modelRateTable = rateTable(modelRates, "Model");
+  const stabilityAlertBanner =
+    riskyVersions.length || riskyModels.length
+      ? `<div class="alert-banner">⚠ Yüksek hata oranı — ${[
+          ...riskyVersions.map(
+            (r) => `sürüm <b>${esc(r.key)}</b> (${r.rate.toFixed(1)} olay/cihaz${r.fatals ? `, ${r.fatals} ölümcül` : ""})`,
+          ),
+          ...riskyModels.map(
+            (r) => `<b>${esc(r.key)}</b> (${r.rate.toFixed(1)} olay/cihaz${r.fatals ? `, ${r.fatals} ölümcül` : ""})`,
+          ),
+        ].join(" · ")}</div>`
+      : "";
+
   res.send(`<!doctype html>
 <html lang="tr"><head>
 <meta charset="utf-8">
@@ -1546,6 +1653,10 @@ app.get("/", auth, async (req, res) => {
   .badge { display:inline-block; padding:1px 7px; border-radius:20px; font-size:11px; font-weight:600; }
   .badge.warn { background:#3a2f10; color:#FFC93C; border:1px solid #6a5410; }
   .badge.err { background:#3a1714; color:#F2766A; border:1px solid #6a201a; }
+  .badge-alert { display:inline-block; margin-left:6px; padding:1px 7px; border-radius:20px; font-size:10px; font-weight:700; background:#3a1714; color:#F2766A; border:1px solid #6a201a; }
+  .alert-row td { background:rgba(242,118,106,.07); }
+  .alert-banner { background:#3a1714; color:#F2766A; border:1px solid #6a201a; border-radius:10px; padding:10px 14px; margin:0 0 14px; font-size:13px; }
+  .alert-banner b { color:#FF9A8F; }
   .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:7px; vertical-align:middle; }
   .dot.on { background:#2FBF71; box-shadow:0 0 0 3px rgba(47,191,113,.18); }
   .dot.off { background:#5B6877; }
@@ -1647,7 +1758,10 @@ app.get("/", auth, async (req, res) => {
   </section>
   <section>
     <h2>Stabilite Olayları <span class="muted">(son 7 gün)</span></h2>
+    ${stabilityAlertBanner}
     ${stabilityTypeTable}
+    <h3 style="font-size:14px;margin:18px 0 8px;color:#9AA7B4">Sürüm bazında hata oranı</h3>${versionRateTable}
+    <h3 style="font-size:14px;margin:18px 0 8px;color:#9AA7B4">Model bazında hata oranı</h3>${modelRateTable}
     ${stabilityChanTable ? `<h3 style="font-size:14px;margin:18px 0 8px;color:#9AA7B4">En çok sorun çıkaran içerikler</h3>${stabilityChanTable}` : ""}
   </section>
   <section>
@@ -1668,47 +1782,102 @@ app.get("/", auth, async (req, res) => {
 app.get("/api/telemetry/summary", auth, async (req, res) => {
   const days = Math.min(Math.max(toInt(req.query.days) || 7, 1), 90);
   try {
-    const [byType, byChannel, byModel, recent] = await Promise.all([
-      pool.query(
-        `SELECT type, count(*)::int AS n, count(DISTINCT device_id)::int AS devices,
-                max(received_at) AS last_at
-           FROM telemetry_events
-          WHERE received_at > now() - make_interval(days => $1)
-          GROUP BY type ORDER BY n DESC`,
-        [days],
-      ),
-      pool.query(
-        `SELECT now_playing AS title, count(*)::int AS n,
-                count(DISTINCT device_id)::int AS devices,
-                string_agg(DISTINCT type, ', ') AS types
-           FROM telemetry_events
-          WHERE received_at > now() - make_interval(days => $1)
-            AND now_playing IS NOT NULL AND now_playing <> ''
-          GROUP BY now_playing ORDER BY n DESC LIMIT 30`,
-        [days],
-      ),
-      pool.query(
-        `SELECT trim(coalesce(manufacturer,'') || ' ' || coalesce(model,'')) AS model,
-                count(*)::int AS n, count(DISTINCT device_id)::int AS devices
-           FROM telemetry_events
-          WHERE received_at > now() - make_interval(days => $1)
-          GROUP BY 1 ORDER BY n DESC LIMIT 30`,
-        [days],
-      ),
-      pool.query(
-        `SELECT received_at, occurred_at, device_id, app_version, model, type,
-                severity, now_playing, engine, stage, details
-           FROM telemetry_events
-          WHERE received_at > now() - make_interval(days => $1)
-          ORDER BY received_at DESC LIMIT 200`,
-        [days],
-      ),
-    ]);
+    const [byType, byChannel, modelEvt, modelDev, verEvt, verDev, recent] =
+      await Promise.all([
+        pool.query(
+          `SELECT type, count(*)::int AS n, count(DISTINCT device_id)::int AS devices,
+                  max(received_at) AS last_at
+             FROM telemetry_events
+            WHERE received_at > now() - make_interval(days => $1)
+            GROUP BY type ORDER BY n DESC`,
+          [days],
+        ),
+        pool.query(
+          `SELECT now_playing AS title, count(*)::int AS n,
+                  count(DISTINCT device_id)::int AS devices,
+                  string_agg(DISTINCT type, ', ') AS types
+             FROM telemetry_events
+            WHERE received_at > now() - make_interval(days => $1)
+              AND now_playing IS NOT NULL AND now_playing <> ''
+            GROUP BY now_playing ORDER BY n DESC LIMIT 30`,
+          [days],
+        ),
+        pool.query(
+          `SELECT NULLIF(trim(coalesce(manufacturer,'') || ' ' || coalesce(model,'')),'') AS k,
+                  count(*)::int AS events, count(DISTINCT device_id)::int AS err_devices,
+                  count(*) FILTER (WHERE severity = 'fatal')::int AS fatals
+             FROM telemetry_events
+            WHERE received_at > now() - make_interval(days => $1)
+            GROUP BY 1`,
+          [days],
+        ),
+        pool.query(
+          `SELECT NULLIF(trim(coalesce(manufacturer,'') || ' ' || coalesce(model,'')),'') AS k,
+                  count(*)::int AS devices
+             FROM devices
+            WHERE last_seen > now() - make_interval(days => $1)
+            GROUP BY 1`,
+          [days],
+        ),
+        pool.query(
+          `SELECT coalesce(NULLIF(app_version,''),'?') AS k,
+                  count(*)::int AS events, count(DISTINCT device_id)::int AS err_devices,
+                  count(*) FILTER (WHERE severity = 'fatal')::int AS fatals
+             FROM telemetry_events
+            WHERE received_at > now() - make_interval(days => $1)
+            GROUP BY 1`,
+          [days],
+        ),
+        pool.query(
+          `SELECT coalesce(NULLIF(app_version,''),'?') AS k, count(*)::int AS devices
+             FROM devices
+            WHERE last_seen > now() - make_interval(days => $1)
+            GROUP BY 1`,
+          [days],
+        ),
+        pool.query(
+          `SELECT received_at, occurred_at, device_id, app_version, model, type,
+                  severity, now_playing, engine, stage, details
+             FROM telemetry_events
+            WHERE received_at > now() - make_interval(days => $1)
+            ORDER BY received_at DESC LIMIT 200`,
+          [days],
+        ),
+      ]);
+    // Merge events + active-device denominators into a per-key error rate, and
+    // flag "risky" keys (meaningful sample + above-threshold rate / repeat fatals)
+    // so callers get a ready-made alert list, not just raw counts.
+    const RATE_MIN_DEVICES = 3;
+    const RATE_ALERT = 3;
+    const mergeRates = (evtRows, devRows, dimension) => {
+      const devMap = new Map();
+      for (const r of devRows) if (r.k) devMap.set(r.k, toInt(r.devices));
+      const out = [];
+      for (const r of evtRows) {
+        if (!r.k) continue;
+        const devices = devMap.get(r.k) || 0;
+        const events = toInt(r.events);
+        const fatals = toInt(r.fatals);
+        const rate = devices > 0 ? +(events / devices).toFixed(2) : events;
+        const alert = devices >= RATE_MIN_DEVICES && (rate >= RATE_ALERT || fatals >= 2);
+        out.push({ [dimension]: r.k, devices, events, errDevices: toInt(r.err_devices), fatals, rate, alert });
+      }
+      out.sort((a, b) => b.rate - a.rate || b.events - a.events);
+      return out;
+    };
+    const byVersion = mergeRates(verEvt.rows, verDev.rows, "version");
+    const byModel = mergeRates(modelEvt.rows, modelDev.rows, "model");
+    const alerts = [
+      ...byVersion.filter((r) => r.alert).map((r) => ({ dimension: "version", key: r.version, rate: r.rate, events: r.events, devices: r.devices, fatals: r.fatals })),
+      ...byModel.filter((r) => r.alert).map((r) => ({ dimension: "model", key: r.model, rate: r.rate, events: r.events, devices: r.devices, fatals: r.fatals })),
+    ];
     res.json({
       windowDays: days,
       byType: byType.rows,
       byChannel: byChannel.rows,
-      byModel: byModel.rows,
+      byVersion,
+      byModel,
+      alerts,
       recent: recent.rows,
     });
   } catch (e) {
