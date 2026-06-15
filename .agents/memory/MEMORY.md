@@ -17,6 +17,7 @@
 - [In-app update checker via GitHub Releases](inapp-update-checker-github-releases.md) — needs a real Release (not CI artifacts; CI auto-publishes one) AND a public repo (releases API 404s on private); bump versionName to ship updates.
 - [Replit git can't push workflow changes](git-workflow-scope-push-block.md) — pushes touching .github/workflows are rejected (no `workflow` scope); revert workflow to origin & do the logic in app code instead.
 - [Source-only import discipline](source-only-import-discipline.md) — can't compile locally; add explicit cross-package imports as you go; CI kspDebugKotlin "Compilation error" usually = a missing import.
+- [Nullable lambda smart-cast in closure](kotlin-nullable-lambda-smartcast.md) — a null-checked nullable member lambda still needs ?. when invoked inside a lambda (runCatching{}); local LSP misses it, CI compileDebugKotlin fails.
 - [IPTV catalog scaling](iptv-catalog-scaling.md) — Movies/Series paged + FTS4; Live stays full in-memory (number-zap); FTS lockstep must run in withTransaction.
 - [Content freshness on relaunch](content-freshness-on-relaunch.md) — cold start force-resyncs already-opened (loaded=1) VOD/Series categories so new titles appear; run sweep before the unforced prefetch to avoid double fetch.
 - [Android TV green-screen (Amlogic)](android-green-screen-vlc-texture.md) — chroma override (RV16/RV32) is a DEAD END for HW decode (output stays "21 Biplanar", still green); SurfaceView always; libVLC HW DR re-enabled (watch output:17 freeze); ExoPlayer is the native MediaCodec→Surface bet.

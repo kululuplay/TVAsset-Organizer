@@ -67,7 +67,7 @@ class AnrWatchdog(
                         val clipped =
                             if (rendered.length > MAX_STACK_CHARS) rendered.substring(0, MAX_STACK_CHARS)
                             else rendered
-                        runCatching { onAnr.invoke(clipped) }
+                        runCatching { onAnr?.invoke(clipped) }
                     }
                 }
             } else {
