@@ -36,6 +36,7 @@ import com.iptv.player.databinding.ActivityVodPlayerBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.SleepTimer
 import com.iptv.player.player.StreamInfo
+import com.iptv.player.player.VlcOps
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NowPlaying
@@ -483,9 +484,15 @@ class VodPlayerActivity : BaseActivity() {
             addOption(":http-reconnect")
             addOption(":http-user-agent=${AppInfo.USER_AGENT}")
         }
-        mp.media = media
-        media.release()
-        mp.play()
+        // Start on the shared VLC ops thread: FIFO ordering guarantees any queued
+        // teardown (the live player released when this screen opened, or the UHD
+        // escalation's old player) has fully closed its connection first
+        // (single-connection contract), and the main thread never waits on it.
+        VlcOps.post {
+            mp.media = media
+            media.release()
+            mp.play()
+        }
         startTimers()
     }
 
@@ -508,18 +515,30 @@ class VodPlayerActivity : BaseActivity() {
 
     /** Tears down the software player and rebuilds it on hardware, resuming at [resumeAt]. */
     private fun escalateToHardware(resumeAt: Long) {
-        mediaPlayer?.setEventListener(null)
-        mediaPlayer?.stop()
-        mediaPlayer?.detachViews()
-        mediaPlayer?.release()
-        libVlc?.release()
+        // ANR fix (mirrors the live path): MediaPlayer.stop()/release() block on a
+        // stalled network, so the native teardown runs on the shared VLC ops
+        // thread. View/listener work stays on main; the rebuild is chained AFTER
+        // the release on the same FIFO thread so the old connection is fully
+        // closed before the new player opens one (single-connection contract).
+        val mp = mediaPlayer
+        val vlc = libVlc
+        mp?.setEventListener(null)
+        mp?.detachViews()
         mediaPlayer = null
         libVlc = null
         videoLayout?.let { binding.videoContainer.removeView(it) }
         videoLayout = null
         forceSoftware = false
-        buildPlayer()
-        preparePlayback(resumeAt)
+        VlcOps.post {
+            mp?.stop()
+            mp?.release()
+            vlc?.release()
+            runOnUiThread {
+                if (isDestroyed || isFinishing) return@runOnUiThread
+                buildPlayer()
+                preparePlayback(resumeAt)
+            }
+        }
     }
 
     /**
@@ -820,13 +839,22 @@ class VodPlayerActivity : BaseActivity() {
         sleepTimer.release()
         castController.detach()
         handler.removeCallbacksAndMessages(null)
-        mediaPlayer?.setEventListener(null)
-        mediaPlayer?.stop()
-        mediaPlayer?.detachViews()
-        mediaPlayer?.release()
-        libVlc?.release()
+        // ANR fix: stop()/release() block on a stalled network — backing out of a
+        // stuck VOD must not freeze the UI. Events + views are cut on main, the
+        // blocking native teardown runs on the shared VLC ops thread.
+        val mp = mediaPlayer
+        val vlc = libVlc
+        mp?.setEventListener(null)
+        mp?.detachViews()
         mediaPlayer = null
         libVlc = null
         videoLayout = null
+        if (mp != null || vlc != null) {
+            VlcOps.post {
+                mp?.stop()
+                mp?.release()
+                vlc?.release()
+            }
+        }
     }
 }

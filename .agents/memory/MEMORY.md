@@ -30,6 +30,7 @@
 - [Channel list focus follows playing channel](home-channel-list-focus.md) — on return/re-entry focus the playing channel (previewingChannel), not the opened row; one-shot pendingPlayingChannelId, armed only when inChannelView.
 - [Favorites id namespaces](favorites-id-namespaces.md) — favorites table mixes channel/vod_/series_ ids; the channel INNER JOIN silently drops non-channel favorites.
 - [IPTV single-connection contract](iptv-single-connection.md) — one stream/socket max: stop-before-start, serialize transitions, release (not pause) on background, reuse engine + swap Media.
+- [libVLC blocking stop = ANR](vlc-blocking-stop-anr.md) — never call VLC stop/release on main (blocks seconds on stalled net); shared VlcOps FIFO thread + seq skip + stale-event suppression + controller release() generation bump.
 - [Preview -> fullscreen hand-off](preview-fullscreen-handover.md) — transfer the running PlayerController (park on ServiceLocator, detach/gap/attach rebind, onStop skip-release); caption locked to playing channel, EPG follows focus; no release+reconnect.
 - [Preview→fullscreen adopt leak](handoff-adopt-coroutine-leak.md) — fullscreen consumes the handed-over controller sync but assigns `controller` after an async resolve; track it in a field so onDestroy releases it if BACK cancels the coroutine, else ghost audio.
 - [Player unit tests](player-unit-tests.md) — single-connection tests are pure-JVM via scheduler/engineFactory/coordinator seams; no Android SDK locally, they run only in CI.

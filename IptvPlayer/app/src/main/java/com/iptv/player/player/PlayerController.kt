@@ -409,7 +409,16 @@ class PlayerController(
             // green only hit channels that fell back EXO -> VLC (e.g. MP2 audio),
             // never channels that started directly on VLC (empty container). Deferring
             // the new engine until the old surface has been destroyed clears it.
-            mainHandler.postDelayed(create, ENGINE_SWAP_DELAY_MS)
+            //
+            // Trampoline through the shared VLC ops thread: the old engine's
+            // blocking stop/release now runs there asynchronously (ANR fix), so
+            // FIFO ordering guarantees the old libVLC instance has fully released
+            // its network connection (single-connection contract) before the next
+            // engine is created — without ever blocking the main thread. With an
+            // idle queue (e.g. old engine was ExoPlayer) the hop is immediate.
+            mainHandler.postDelayed({
+                VlcOps.post { mainHandler.post(create) }
+            }, ENGINE_SWAP_DELAY_MS)
         } else {
             create.run()
         }
@@ -799,6 +808,12 @@ class PlayerController(
     }
 
     fun release() {
+        // Invalidate any pending engine-create. The swap path trampolines the
+        // create through the VLC ops thread, where it can sit for seconds behind
+        // a stalled stop — removeCallbacksAndMessages() cannot reach it there, so
+        // without this bump a queued create would later pass its generation
+        // check, build a ghost engine and play into a destroyed screen.
+        ++startGeneration
         mainHandler.removeCallbacksAndMessages(null)
         stableHandler.removeCallbacksAndMessages(null)
         cancelWatchdog()

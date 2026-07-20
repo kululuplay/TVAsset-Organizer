@@ -31,6 +31,8 @@ import android.os.Handler
 import android.os.Looper
 import android.view.ViewGroup
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.DeviceCaps
 import com.iptv.player.util.PlaybackLog
@@ -90,6 +92,21 @@ class VlcPlayerEngine(
     // 3000000)"). Cap the VLC live buffer at the bound; larger user "Buffer size"
     // values still apply to the ExoPlayer path, which has no such limit.
     private val vlcCachingMs: Int = networkCachingMs.coerceAtMost(MAX_VLC_LIVE_CACHING_MS)
+
+    // ANR fix: MediaPlayer.stop() is SYNCHRONOUS and can block for seconds on a
+    // stalled network, so every blocking libVLC call (stop / stop+setMedia+play /
+    // release) runs on the shared VlcOps thread instead of main. Two guards:
+    //  - opsSeq: bumped by each play()/stop()/release() on the main thread; a
+    //    queued runnable no-ops when its captured seq is no longer current, so a
+    //    fast zap doesn't serially execute N blocking stop+play cycles (the
+    //    newest command's own stop() upholds stop-before-start).
+    //  - pendingOps: >0 while a stop/play command is queued or executing; the
+    //    event listener drops events during that window because they belong to
+    //    the PREVIOUS media (with async stop, a stale EncounteredError from the
+    //    old stalled stream could otherwise fire the controller's failure ladder
+    //    for the channel the user already left).
+    private val opsSeq = AtomicLong(0)
+    private val pendingOps = AtomicInteger(0)
 
     override fun bind(container: ViewGroup) {
         // Tuned for smooth IPTV on Android TV: a generous network buffer to
@@ -175,6 +192,9 @@ class VlcPlayerEngine(
         mp.attachViews(layout, null, false, false)
 
         mp.setEventListener { event ->
+            // A queued stop/play is pending on the VLC ops thread: these events
+            // are from the PREVIOUS media — drop them (see pendingOps note).
+            if (pendingOps.get() > 0) return@setEventListener
             when (event.type) {
                 MediaPlayer.Event.Buffering -> {
                     // VLC keeps firing Buffering during normal playback (cache
@@ -346,45 +366,61 @@ class VlcPlayerEngine(
         val mp = mediaPlayer ?: return
         greenCheckDone.set(false)
         profileHandler.removeCallbacksAndMessages(null)
-        // Reset the silent-audio guard and stop any stream still running on this
-        // engine. play() is now also the fast-zap reuse path — the controller keeps
-        // the engine alive across same-stage channel changes — so we must stop the
-        // previous media before swapping in the next (single-connection contract:
-        // one stream at a time, stop before start). On a freshly-bound engine this
-        // stop() is a harmless no-op.
+        // Reset the silent-audio guard on the main thread, then hand the blocking
+        // stop -> setMedia -> play sequence to the VLC ops thread as ONE runnable
+        // (FIFO keeps stop-before-start; the main thread never blocks on a stalled
+        // network). play() is also the fast-zap reuse path — the controller keeps
+        // the engine alive across same-stage channel changes — so the previous
+        // media must stop before the next starts (single-connection contract).
+        // On a freshly-bound engine that stop() is a harmless no-op.
         audioHealAttempted = false
         audioHandler.removeCallbacksAndMessages(null)
-        mp.stop()
         PlaybackLog.log(context, engineName, "play forceSoftware=$forceSoftware passthrough=$allowPassthrough")
-        val media = Media(vlc, android.net.Uri.parse(url)).apply {
-            // Hardware decoding unless software was forced (then both off).
-            setHWDecoderEnabled(!forceSoftware, !forceSoftware)
-            // Mirror the instance buffer/jitter tuning at the stream level.
-            addOption(":network-caching=$vlcCachingMs")
-            addOption(":live-caching=$vlcCachingMs")
-            addOption(":clock-jitter=0")
-            addOption(":clock-synchro=0")
-            if (forceSoftware) addOption(":avcodec-hw=none")
-            if (!allowPassthrough) {
-                addOption(":no-spdif")
-                // Force a 5.1 -> 2.0 stereo downmix (mirrors the instance option) so
-                // boxes that can't open a 6-channel PCM AudioTrack still get sound.
-                addOption(":stereo-mode=1")
+        val mySeq = opsSeq.incrementAndGet()
+        pendingOps.incrementAndGet()
+        VlcOps.post {
+            try {
+                // Superseded by a newer play/stop while queued -> skip entirely
+                // (the newer command's own stop() covers single-connection).
+                if (opsSeq.get() != mySeq) return@post
+                mp.stop()
+                // Re-check after the (possibly long) stop: don't start a channel
+                // the user has already zapped away from.
+                if (opsSeq.get() != mySeq) return@post
+                val media = Media(vlc, android.net.Uri.parse(url)).apply {
+                    // Hardware decoding unless software was forced (then both off).
+                    setHWDecoderEnabled(!forceSoftware, !forceSoftware)
+                    // Mirror the instance buffer/jitter tuning at the stream level.
+                    addOption(":network-caching=$vlcCachingMs")
+                    addOption(":live-caching=$vlcCachingMs")
+                    addOption(":clock-jitter=0")
+                    addOption(":clock-synchro=0")
+                    if (forceSoftware) addOption(":avcodec-hw=none")
+                    if (!allowPassthrough) {
+                        addOption(":no-spdif")
+                        // Force a 5.1 -> 2.0 stereo downmix (mirrors the instance
+                        // option) so boxes that can't open a 6-channel PCM
+                        // AudioTrack still get sound.
+                        addOption(":stereo-mode=1")
+                    }
+                    // Software-path deinterlace only (opaque HW buffers can't be
+                    // filtered; the Amlogic HW decoder deinterlaces 1080i natively).
+                    if (forceSoftware) {
+                        addOption(":deinterlace=1")
+                        addOption(":deinterlace-mode=bob")
+                    }
+                    // Auto-reconnect dropped HTTP connections instead of erroring out.
+                    addOption(":http-reconnect")
+                    // Per-stream User-Agent override (covers playlist + segments).
+                    addOption(":http-user-agent=${AppInfo.USER_AGENT}")
+                }
+                mp.media = media
+                media.release()
+                mp.play()
+            } finally {
+                pendingOps.decrementAndGet()
             }
-            // Software-path deinterlace only (opaque HW buffers can't be filtered
-            // and the Amlogic HW decoder deinterlaces 1080i natively).
-            if (forceSoftware) {
-                addOption(":deinterlace=1")
-                addOption(":deinterlace-mode=bob")
-            }
-            // Auto-reconnect dropped HTTP connections instead of erroring out.
-            addOption(":http-reconnect")
-            // Per-stream User-Agent override (covers HTTP(S) playlist + segments).
-            addOption(":http-user-agent=${AppInfo.USER_AGENT}")
         }
-        mp.media = media
-        media.release()
-        mp.play()
     }
 
     /**
@@ -418,26 +454,57 @@ class VlcPlayerEngine(
     // buffer — exactly the signal the controller's stall watchdog keys on.
     override fun playbackPositionMs(): Long = mediaPlayer?.time ?: -1L
 
-    override fun pause() { mediaPlayer?.pause() }
-    override fun resume() { mediaPlayer?.play() }
+    override fun pause() {
+        val mp = mediaPlayer ?: return
+        VlcOps.post { mp.pause() }
+    }
+
+    override fun resume() {
+        val mp = mediaPlayer ?: return
+        VlcOps.post { mp.play() }
+    }
+
     override fun stop() {
         profileHandler.removeCallbacksAndMessages(null)
         audioHandler.removeCallbacksAndMessages(null)
-        mediaPlayer?.stop()
+        val mp = mediaPlayer ?: return
+        val mySeq = opsSeq.incrementAndGet()
+        pendingOps.incrementAndGet()
+        VlcOps.post {
+            try {
+                // A newer play/stop already queued -> its own stop supersedes this.
+                if (opsSeq.get() != mySeq) return@post
+                mp.stop()
+            } finally {
+                pendingOps.decrementAndGet()
+            }
+        }
     }
 
     override fun release() {
         profileHandler.removeCallbacksAndMessages(null)
         audioHandler.removeCallbacksAndMessages(null)
-        mediaPlayer?.setEventListener(null)
-        mediaPlayer?.stop()
-        mediaPlayer?.detachViews()
-        mediaPlayer?.release()
-        libVlc?.release()
+        // Main thread: cut events + detach the view surface, then hand the
+        // blocking native teardown to the VLC ops thread. Capturing locals and
+        // nulling the fields first means nothing else can touch this player, and
+        // stale queued plays no-op via the seq bump. Stopping with the vout
+        // already detached is fine (detachVideo() does the same on a live player).
+        val mp = mediaPlayer
+        val vlc = libVlc
+        mp?.setEventListener(null)
+        mp?.detachViews()
         mediaPlayer = null
         libVlc = null
         videoLayout = null
         listener = null
+        opsSeq.incrementAndGet()
+        if (mp != null || vlc != null) {
+            VlcOps.post {
+                mp?.stop()
+                mp?.release()
+                vlc?.release()
+            }
+        }
     }
 
     override fun setListener(listener: PlayerListener?) {
