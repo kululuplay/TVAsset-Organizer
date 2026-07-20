@@ -229,4 +229,7 @@
     <string name="expiry_warning_title">Abonnement verloopt binnenkort</string>
     <string name="expiry_warning_message">Uw abonnement verloopt over %1$d dag(en). Om onderbreking van uw streams te voorkomen, verleng het tijdig bij uw IPTV-provider.</string>
     <string name="expiry_warning_dont_show">Niet meer tonen</string>
+    <string name="recovery_safe_mode">Veilige modus: de app is bij het opstarten herhaaldelijk vastgelopen, daarom zijn de afspeelinstellingen teruggezet naar standaard.</string>
+    <string name="error_auto_retry_countdown">Kan geen verbinding maken. Automatisch opnieuw proberen over %1$d s…</string>
+    <string name="error_auto_retry_exhausted">Nog steeds geen verbinding. Druk op Opnieuw proberen.</string>
 </resources>

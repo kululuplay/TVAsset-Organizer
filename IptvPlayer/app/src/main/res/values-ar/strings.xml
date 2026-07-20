@@ -241,4 +241,7 @@
     <string name="expiry_warning_title">اشتراكك على وشك الانتهاء</string>
     <string name="expiry_warning_message">تبقّى على انتهاء اشتراكك %1$d يوم. لتجنّب انقطاع البث، يُرجى التجديد مسبقًا مع مزوّد خدمة IPTV الخاص بك.</string>
     <string name="expiry_warning_dont_show">عدم الإظهار مرة أخرى</string>
+    <string name="recovery_safe_mode">الوضع الآمن: تعطل التطبيق بشكل متكرر عند بدء التشغيل، لذا أُعيد ضبط إعدادات التشغيل إلى الوضع الافتراضي.</string>
+    <string name="error_auto_retry_countdown">تعذر الاتصال. ستتم إعادة المحاولة تلقائيًا خلال %1$d ثانية…</string>
+    <string name="error_auto_retry_exhausted">لا يزال الاتصال متعذرًا. اضغط على إعادة المحاولة للمحاولة مجددًا.</string>
 </resources>

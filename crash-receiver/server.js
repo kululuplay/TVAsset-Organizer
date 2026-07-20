@@ -690,6 +690,7 @@ const TELEMETRY_LABELS = {
   anr: "Arayüz donması (ANR)",
   suspected_abnormal_exit: "Şüpheli ani kapanma",
   events_dropped: "Olay taşması (spool overflow)",
+  safe_mode: "Güvenli mod (crash-loop koruması)",
 };
 const telemetryLabel = (t) => TELEMETRY_LABELS[t] || t || "—";
 app.post("/api/request", async (req, res) => {
@@ -1122,6 +1123,7 @@ app.get("/", auth, async (req, res) => {
     stabilityVerEvtRes,
     stabilityModelDevRes,
     stabilityModelEvtRes,
+    stabilityTrendRes,
   ] = await Promise.all([
       pool.query(`SELECT * FROM crash_reports ORDER BY received_at DESC LIMIT 300`),
       pool.query(
@@ -1244,6 +1246,19 @@ app.get("/", auth, async (req, res) => {
            FROM telemetry_events
           WHERE received_at > now() - interval '7 days'
           GROUP BY 1`,
+      ),
+      // Daily stability trend over 14 days — is the fleet getting better or
+      // worse? Rendered as a mini bar chart; fatals split out so a stable
+      // event count can't hide a rising crash share.
+      pool.query(
+        `SELECT date_trunc('day', received_at)::date AS day,
+                count(*)::int AS events,
+                count(DISTINCT device_id)::int AS devices,
+                count(*) FILTER (WHERE severity = 'fatal')::int AS fatals
+           FROM telemetry_events
+          WHERE received_at > now() - interval '14 days'
+          GROUP BY 1
+          ORDER BY 1`,
       ),
     ]);
   const rows = crashRes.rows;
@@ -1598,6 +1613,53 @@ app.get("/", auth, async (req, res) => {
       : '<div class="empty">Veri yok.</div>';
   const versionRateTable = rateTable(verRates, "Sürüm");
   const modelRateTable = rateTable(modelRates, "Model");
+
+  // ---- 14-day daily trend (mini bar chart + numbers) ----
+  // Fill the gaps: a day with zero events must still show as an empty bar,
+  // otherwise a quiet fleet looks identical to a missing day of data.
+  const trendByDay = new Map(
+    stabilityTrendRes.rows.map((r) => {
+      const key = (r.day instanceof Date)
+        ? r.day.toISOString().slice(0, 10)
+        : String(r.day).slice(0, 10);
+      return [key, r];
+    }),
+  );
+  const trendDays = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 24 * 3600 * 1000);
+    const key = d.toISOString().slice(0, 10);
+    const row = trendByDay.get(key);
+    trendDays.push({
+      key,
+      label: `${String(d.getUTCDate()).padStart(2, "0")}.${String(d.getUTCMonth() + 1).padStart(2, "0")}`,
+      events: row ? toInt(row.events) : 0,
+      devices: row ? toInt(row.devices) : 0,
+      fatals: row ? toInt(row.fatals) : 0,
+    });
+  }
+  const trendMax = Math.max(1, ...trendDays.map((t) => t.events));
+  const trendHasData = trendDays.some((t) => t.events > 0);
+  const stabilityTrendSection = trendHasData
+    ? `<div class="trend">
+        ${trendDays
+          .map((t) => {
+            const h = Math.round((t.events / trendMax) * 64);
+            const fh = t.events > 0 ? Math.round((t.fatals / trendMax) * 64) : 0;
+            const tip = `${t.label} — ${t.events} olay, ${t.devices} cihaz${t.fatals ? `, ${t.fatals} ölümcül` : ""}`;
+            return `<div class="trend-col" title="${esc(tip)}">
+              <div class="trend-n">${t.events || ""}</div>
+              <div class="trend-bar-wrap">
+                <div class="trend-bar" style="height:${Math.max(t.events > 0 ? 3 : 0, h)}px"></div>
+                <div class="trend-bar fatal" style="height:${Math.max(t.fatals > 0 ? 3 : 0, fh)}px"></div>
+              </div>
+              <div class="trend-day">${esc(t.label)}</div>
+            </div>`;
+          })
+          .join("")}
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:4px">Kırmızı bölüm = ölümcül olaylar. Sütunun üzerine gelin: olay / cihaz sayısı.</div>`
+    : '<div class="empty">Son 14 günde stabilite olayı yok.</div>';
   const stabilityAlertBanner =
     riskyVersions.length || riskyModels.length
       ? `<div class="alert-banner">⚠ Yüksek hata oranı — ${[
@@ -1657,6 +1719,13 @@ app.get("/", auth, async (req, res) => {
   .alert-row td { background:rgba(242,118,106,.07); }
   .alert-banner { background:#3a1714; color:#F2766A; border:1px solid #6a201a; border-radius:10px; padding:10px 14px; margin:0 0 14px; font-size:13px; }
   .alert-banner b { color:#FF9A8F; }
+  .trend { display:flex; align-items:flex-end; gap:6px; padding:6px 2px 0; }
+  .trend-col { flex:1; min-width:0; text-align:center; }
+  .trend-n { font-size:11px; color:#9AA7B4; height:16px; }
+  .trend-bar-wrap { position:relative; height:64px; display:flex; align-items:flex-end; justify-content:center; }
+  .trend-bar { width:70%; max-width:34px; background:#3E7BFA; border-radius:3px 3px 0 0; }
+  .trend-bar.fatal { position:absolute; bottom:0; left:15%; width:70%; max-width:34px; background:#F2766A; }
+  .trend-day { font-size:10px; color:#5B6877; margin-top:4px; white-space:nowrap; }
   .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:7px; vertical-align:middle; }
   .dot.on { background:#2FBF71; box-shadow:0 0 0 3px rgba(47,191,113,.18); }
   .dot.off { background:#5B6877; }
@@ -1759,6 +1828,9 @@ app.get("/", auth, async (req, res) => {
   <section>
     <h2>Stabilite Olayları <span class="muted">(son 7 gün)</span></h2>
     ${stabilityAlertBanner}
+    <h3 style="font-size:14px;margin:6px 0 8px;color:#9AA7B4">Günlük eğilim <span class="muted">(son 14 gün)</span></h3>
+    ${stabilityTrendSection}
+    <h3 style="font-size:14px;margin:18px 0 8px;color:#9AA7B4">Olay türleri</h3>
     ${stabilityTypeTable}
     <h3 style="font-size:14px;margin:18px 0 8px;color:#9AA7B4">Sürüm bazında hata oranı</h3>${versionRateTable}
     <h3 style="font-size:14px;margin:18px 0 8px;color:#9AA7B4">Model bazında hata oranı</h3>${modelRateTable}

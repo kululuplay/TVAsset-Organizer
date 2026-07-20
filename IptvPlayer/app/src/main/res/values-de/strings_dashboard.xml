@@ -70,4 +70,7 @@
     <string name="resolved_title_complaint">Ihr Anliegen wurde gelöst</string>
     <string name="resolved_body_complaint">Wir haben Ihre Meldung geprüft und gelöst. Vielen Dank!</string>
     <string name="resolved_request_label">Ihre Anfrage</string>
+    <string name="dash_offline_banner">Keine Internetverbindung — gespeicherte Inhalte werden angezeigt</string>
+    <string name="dash_portal_unreachable">Server nicht erreichbar — automatischer Neuversuch…</string>
+    <string name="dash_reconnected_refreshing">Wieder online — Inhalte werden aktualisiert…</string>
 </resources>

@@ -156,3 +156,11 @@ dependencies {
     // stores but never really uses in tests (engine + scheduler are faked).
     testImplementation("org.mockito:mockito-core:5.12.0")
 }
+
+// CI only runs ":app:assembleDebug/Release" (the workflow file can't be
+// changed from here), so chain the JVM unit tests onto both assemble tasks:
+// a failing test now fails the APK build itself. Debug variant is enough —
+// the tests are variant-agnostic pure-JVM logic.
+tasks.matching { it.name == "assembleDebug" || it.name == "assembleRelease" }.configureEach {
+    dependsOn("testDebugUnitTest")
+}

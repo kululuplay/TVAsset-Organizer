@@ -12,14 +12,24 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import androidx.lifecycle.lifecycleScope
 import com.iptv.player.R
+import com.iptv.player.data.ServiceLocator
+import com.iptv.player.data.model.BufferMode
+import com.iptv.player.data.model.DecoderMode
+import com.iptv.player.data.model.PlayerMode
+import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.databinding.ActivityCrashRecoveryBinding
 import com.iptv.player.ui.dashboard.DashboardActivity
 import com.iptv.player.util.LaunchCrashGuard
 import com.iptv.player.util.Logger
+import com.iptv.player.util.PlaybackRouteMemory
+import com.iptv.player.util.StabilityTelemetry
+import kotlinx.coroutines.launch
 
 class CrashRecoveryActivity : AppCompatActivity() {
 
@@ -40,6 +50,42 @@ class CrashRecoveryActivity : AppCompatActivity() {
         binding.btnRecoveryShare.setOnClickListener { shareLog() }
         binding.btnRecoveryRetry.setOnClickListener { retry() }
         binding.btnRecoveryShare.requestFocus()
+
+        maybeEnterSafeMode()
+    }
+
+    /**
+     * Safe mode: after [LaunchCrashGuard.SAFE_MODE_THRESHOLD]+ consecutive launch
+     * crashes, reset every risky playback setting to its default so a bad choice
+     * (or a corrupted remembered value) can't keep the app in a boot-crash loop.
+     * Idempotent — re-applying defaults on a further crash is harmless. Purely
+     * best-effort: any failure here must never take down the recovery screen.
+     */
+    private fun maybeEnterSafeMode() {
+        val streak = LaunchCrashGuard.crashStreak(this)
+        if (streak < LaunchCrashGuard.SAFE_MODE_THRESHOLD) return
+        binding.recoverySafeMode.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            runCatching {
+                val settings = ServiceLocator.settings
+                settings.setPlayerMode(PlayerMode.AUTO)
+                settings.setDecoderMode(DecoderMode.AUTO)
+                settings.setBufferMode(BufferMode.NORMAL)
+                settings.setStreamFormat(StreamFormat.TS)
+                settings.setAudioPassthrough(false)
+                settings.setResumeOnLaunch(false)
+                // A learned per-channel decode route may itself be the crasher.
+                PlaybackRouteMemory.clear()
+                Logger.w("Recovery", "Safe mode: player settings reset to defaults (streak=$streak)")
+                StabilityTelemetry.record(
+                    type = "safe_mode",
+                    channel = null,
+                    kind = null,
+                    severity = "fatal",
+                    detail = "consecutive launch crashes=$streak; player settings reset to defaults"
+                )
+            }.onFailure { Logger.w("Recovery", "Safe mode reset failed: ${it.message}") }
+        }
     }
 
     private fun deviceInfo(): String {

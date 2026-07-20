@@ -154,6 +154,17 @@ object PlaybackRouteMemory {
         }
     }
 
+    /**
+     * Forget every learned route (safe mode): a remembered stage may itself be
+     * what keeps crashing playback, so the crash-loop reset wipes the memory too.
+     */
+    fun clear() {
+        runCatching {
+            synchronized(lock) { routes.clear() }
+            persistAsync() // empty map -> deletes the backing file
+        }
+    }
+
     /** Caller must hold [lock]. Evict the least-recently-used entries past the cap. */
     private fun evictIfNeeded() {
         while (routes.size > MAX_ENTRIES) {

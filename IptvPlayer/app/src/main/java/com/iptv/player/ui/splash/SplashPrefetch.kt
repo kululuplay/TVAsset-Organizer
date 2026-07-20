@@ -39,6 +39,20 @@ object SplashPrefetch {
     private val _essentialDone = MutableStateFlow(false)
     val essentialDone: StateFlow<Boolean> = _essentialDone
 
+    /**
+     * True when at least one essential stage failed (portal/network down at
+     * launch) — the app then runs on cached content. The Dashboard watches this
+     * to show its outage banner and auto-resync; cleared by [markRecovered]
+     * after a later sync succeeds (or by the next [start]).
+     */
+    private val _essentialFailed = MutableStateFlow(false)
+    val essentialFailed: StateFlow<Boolean> = _essentialFailed
+
+    /** A later full sync succeeded — the launch-time failure is healed. */
+    fun markRecovered() {
+        _essentialFailed.value = false
+    }
+
     private val lock = Any()
 
     @Volatile
@@ -54,6 +68,7 @@ object SplashPrefetch {
             if (job?.isActive == true) return
             _stage.value = Stage.STARTING
             _essentialDone.value = false
+            _essentialFailed.value = false
             // Fresh launch — clear any leftover "new content" tallies so the
             // notices reflect only what this launch's refresh discovers.
             NewContentNotifier.reset()
@@ -103,12 +118,16 @@ object SplashPrefetch {
     /** Sets the visible stage, then runs [block], isolating non-cancellation failures. */
     private suspend fun stage(stage: Stage, block: suspend () -> Unit) {
         _stage.value = stage
-        runCatchingCancellable(block)
+        // Essential stage failed (portal or network down): flag it so the
+        // Dashboard can surface the outage and auto-resync on reconnect.
+        if (!runCatchingCancellable(block)) _essentialFailed.value = true
     }
 
-    private suspend fun runCatchingCancellable(block: suspend () -> Unit) {
-        try {
+    /** Runs [block]; false when it failed with an ordinary (ignored) exception. */
+    private suspend fun runCatchingCancellable(block: suspend () -> Unit): Boolean {
+        return try {
             block()
+            true
         } catch (e: CancellationException) {
             throw e // never swallow coroutine cancellation
         } catch (e: OutOfMemoryError) {
@@ -122,6 +141,7 @@ object SplashPrefetch {
         } catch (e: Exception) {
             // Best-effort prefetch: ignore ordinary failures and move on.
             Logger.w(TAG, "Prefetch stage failed (ignored): ${e.message}")
+            false
         }
     }
 

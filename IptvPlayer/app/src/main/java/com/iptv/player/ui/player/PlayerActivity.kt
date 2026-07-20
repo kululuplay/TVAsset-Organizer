@@ -30,6 +30,7 @@ import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.databinding.ActivityPlayerBinding
 import com.iptv.player.player.PlayerController
 import com.iptv.player.player.StreamInfo
+import com.iptv.player.util.AutoRetryPolicy
 import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NowPlaying
 import com.iptv.player.ui.common.BaseActivity
@@ -84,6 +85,11 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     private var pendingZapChannel: Channel? = null
     private val overlayHandler = Handler(Looper.getMainLooper())
     private val handoffCoverHandler = Handler(Looper.getMainLooper())
+    // Post-fatal automatic retry (see onFatalError / AutoRetryPolicy): countdown
+    // ticks + the pending retry live on this handler; the attempt index picks the
+    // next backoff delay and only resets on success or an explicit user action.
+    private val autoRetryHandler = Handler(Looper.getMainLooper())
+    private var autoRetryAttempt = 0
     private var okDownTime = 0L
     private var epgJob: Job? = null
 
@@ -130,8 +136,10 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         castController.attach()
 
         // Manual retry after the reconnect window expired: re-open the same
-        // channel and reset the reconnect state.
+        // channel and reset the reconnect state. An explicit user action also
+        // restarts the automatic-retry schedule from scratch.
         binding.retryButton.setOnClickListener {
+            cancelAutoRetry(resetAttempts = true)
             binding.errorOverlay.visibility = View.GONE
             binding.bufferingLabel.setText(R.string.buffering)
             binding.bufferingIndicator.visibility = View.VISIBLE
@@ -265,7 +273,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     private fun startChannel(channel: Channel) {
         currentChannel = channel
-        // A new channel cancels any reconnect-failed state from the previous one.
+        // A new channel cancels any reconnect-failed state from the previous one,
+        // including a pending automatic retry aimed at the old channel.
+        cancelAutoRetry(resetAttempts = true)
         binding.errorOverlay.visibility = View.GONE
         // Per-channel route-memory key (Tier 2 self-healing): the channel id plus
         // the chosen container format, which together determine the stream the
@@ -544,12 +554,18 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     // ---- Controller callbacks ------------------------------------------
 
     override fun onBuffering() {
+        // A playback attempt is underway (auto retry, manual retry or a zap) —
+        // stop any pending countdown but keep the attempt count: only a real
+        // success (onPlaying/onVideoResumed) forgives past failures, otherwise
+        // a failing retry would reset its own backoff into a 15s hammer-loop.
+        cancelAutoRetry(resetAttempts = false)
         binding.errorOverlay.visibility = View.GONE
         binding.bufferingLabel.setText(R.string.buffering)
         binding.bufferingIndicator.visibility = View.VISIBLE
     }
 
     override fun onPlaying(engineName: String) {
+        cancelAutoRetry(resetAttempts = true)
         binding.errorOverlay.visibility = View.GONE
         binding.bufferingIndicator.visibility = View.GONE
     }
@@ -557,6 +573,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     override fun onVideoResumed() {
         // First real frame on the (re)attached surface — clear the hand-off cover
         // and any reconnect indicator the moment playback genuinely resumes.
+        cancelAutoRetry(resetAttempts = true)
         handoffCoverHandler.removeCallbacksAndMessages(null)
         binding.errorOverlay.visibility = View.GONE
         binding.bufferingIndicator.visibility = View.GONE
@@ -566,6 +583,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         // Non-blocking "stream not responding, retrying…" indicator over the
         // picture while the controller re-opens the same channel. Cleared
         // automatically by onPlaying / onVideoResumed once playback resumes.
+        cancelAutoRetry(resetAttempts = false)
         binding.errorOverlay.visibility = View.GONE
         binding.bufferingLabel.setText(R.string.error_stream_not_responding)
         binding.bufferingIndicator.visibility = View.VISIBLE
@@ -573,11 +591,55 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     override fun onFatalError() {
         // Reconnect window elapsed with no recovery: replace the spinner with a
-        // clear message and a focusable manual-retry button.
+        // clear message and a focusable manual-retry button, then keep retrying
+        // on our own growing schedule so an unattended TV heals by itself once
+        // the provider/network comes back.
         binding.bufferingIndicator.visibility = View.GONE
         binding.errorMessage.setText(R.string.error_cannot_connect)
         binding.errorOverlay.visibility = View.VISIBLE
         binding.retryButton.requestFocus()
+        scheduleAutoRetry()
+    }
+
+    // ---- Post-fatal automatic retry --------------------------------------
+
+    /**
+     * Arms the next automatic retry per [AutoRetryPolicy] and shows a live
+     * countdown on the error overlay. When the schedule is exhausted the
+     * overlay switches to a "press retry" message and automatic retrying stops.
+     */
+    private fun scheduleAutoRetry() {
+        autoRetryHandler.removeCallbacksAndMessages(null)
+        val delayMs = AutoRetryPolicy.delayForAttempt(autoRetryAttempt)
+        if (delayMs == null) {
+            binding.errorMessage.setText(R.string.error_auto_retry_exhausted)
+            return
+        }
+        tickAutoRetryCountdown((delayMs / 1000L).coerceAtLeast(1L))
+    }
+
+    /** One-second countdown tick; fires the retry when it reaches zero. */
+    private fun tickAutoRetryCountdown(secondsLeft: Long) {
+        if (secondsLeft <= 0L) {
+            autoRetryAttempt++
+            binding.errorOverlay.visibility = View.GONE
+            binding.bufferingLabel.setText(R.string.buffering)
+            binding.bufferingIndicator.visibility = View.VISIBLE
+            if (::controller.isInitialized) controller.retry()
+            return
+        }
+        binding.errorMessage.text = getString(R.string.error_auto_retry_countdown, secondsLeft)
+        autoRetryHandler.postDelayed({ tickAutoRetryCountdown(secondsLeft - 1) }, 1000L)
+    }
+
+    /**
+     * Stops any pending automatic retry/countdown. [resetAttempts] only on real
+     * success or an explicit user action (manual retry / channel change) — never
+     * on a mere new attempt, which would defeat the growing backoff.
+     */
+    private fun cancelAutoRetry(resetAttempts: Boolean) {
+        autoRetryHandler.removeCallbacksAndMessages(null)
+        if (resetAttempts) autoRetryAttempt = 0
     }
 
     // ---- Lifecycle ------------------------------------------------------
@@ -585,9 +647,11 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     override fun onStop() {
         super.onStop()
         // Drop any pending debounced zap so it can't start a stream after we've
-        // backgrounded (it would re-open playback while not visible).
+        // backgrounded (it would re-open playback while not visible). Same for a
+        // pending automatic retry — it must never start a stream in the background.
         zapHandler.removeCallbacksAndMessages(null)
         pendingZapChannel = null
+        cancelAutoRetry(resetAttempts = false)
         // Don't pause when handing the controller back to Home — it must keep
         // playing into the preview surface that Home re-adopted.
         if (!handingBack && ::controller.isInitialized) controller.pause()
@@ -608,6 +672,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         zapHandler.removeCallbacksAndMessages(null)
         overlayHandler.removeCallbacksAndMessages(null)
         handoffCoverHandler.removeCallbacksAndMessages(null)
+        autoRetryHandler.removeCallbacksAndMessages(null)
         statsHandler.removeCallbacksAndMessages(null)
         debugBinder?.release()
         // Don't release a controller we've handed back to Home — it owns it now.

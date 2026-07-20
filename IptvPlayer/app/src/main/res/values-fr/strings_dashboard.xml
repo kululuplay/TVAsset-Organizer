@@ -12,4 +12,7 @@
     <string name="dash_expires">Expire le : %1$s</string>
     <string name="dash_user">Utilisateur : %1$s</string>
     <string name="dash_version">Version %1$s</string>
+    <string name="dash_offline_banner">Pas de connexion Internet — contenu enregistré affiché</string>
+    <string name="dash_portal_unreachable">Serveur injoignable — nouvel essai automatique…</string>
+    <string name="dash_reconnected_refreshing">Connexion rétablie — mise à jour du contenu…</string>
 </resources>

@@ -12,4 +12,7 @@
     <string name="dash_expires">Verloopt: %1$s</string>
     <string name="dash_user">Gebruiker: %1$s</string>
     <string name="dash_version">Versie %1$s</string>
+    <string name="dash_offline_banner">Geen internetverbinding — opgeslagen inhoud wordt getoond</string>
+    <string name="dash_portal_unreachable">Server niet bereikbaar — automatisch opnieuw proberen…</string>
+    <string name="dash_reconnected_refreshing">Weer online — inhoud wordt bijgewerkt…</string>
 </resources>

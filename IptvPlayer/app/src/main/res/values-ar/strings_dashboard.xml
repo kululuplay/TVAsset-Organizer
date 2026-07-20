@@ -12,4 +12,7 @@
     <string name="dash_expires">تنتهي في: %1$s</string>
     <string name="dash_user">المستخدم: %1$s</string>
     <string name="dash_version">الإصدار %1$s</string>
+    <string name="dash_offline_banner">لا يوجد اتصال بالإنترنت — يتم عرض المحتوى المحفوظ</string>
+    <string name="dash_portal_unreachable">يتعذر الوصول إلى الخادم — تتم إعادة المحاولة تلقائيًا…</string>
+    <string name="dash_reconnected_refreshing">عاد الاتصال — يتم تحديث المحتوى…</string>
 </resources>

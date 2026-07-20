@@ -16,6 +16,14 @@ object LaunchCrashGuard {
 
     private const val PREFS = "launch_guard"
     private const val KEY_IN_PROGRESS = "launch_in_progress"
+    private const val KEY_STREAK = "crash_streak"
+
+    /**
+     * Consecutive launch crashes at which safe mode kicks in: the recovery screen
+     * resets the risky player settings to their defaults so a bad setting (or a
+     * remembered decode route) can't keep the app in a boot-crash loop.
+     */
+    const val SAFE_MODE_THRESHOLD = 2
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -24,13 +32,39 @@ object LaunchCrashGuard {
     fun previousLaunchCrashed(context: Context): Boolean =
         runCatching { prefs(context).getBoolean(KEY_IN_PROGRESS, false) }.getOrDefault(false)
 
+    /**
+     * Consume the armed guard after a crash was detected: disarm it (so an exit
+     * from the recovery screen doesn't count the SAME crash again on the next
+     * launch) and increment the consecutive-crash streak. Committed synchronously.
+     * Returns the new streak (>= 1).
+     */
+    fun consumeCrashAndCountStreak(context: Context): Int =
+        runCatching {
+            val p = prefs(context)
+            val streak = p.getInt(KEY_STREAK, 0) + 1
+            p.edit().putBoolean(KEY_IN_PROGRESS, false).putInt(KEY_STREAK, streak).commit()
+            streak
+        }.getOrDefault(1)
+
+    /** Current consecutive launch-crash streak (0 = last launch was healthy). */
+    fun crashStreak(context: Context): Int =
+        runCatching { prefs(context).getInt(KEY_STREAK, 0) }.getOrDefault(0)
+
     /** Arm the guard right before the risky Dashboard launch. Committed synchronously. */
     fun markLaunchStarted(context: Context) {
         runCatching { prefs(context).edit().putBoolean(KEY_IN_PROGRESS, true).commit() }
     }
 
-    /** Clear the guard once the home screen has drawn its first frame successfully. */
+    /**
+     * Clear the guard once the home screen has drawn its first frame successfully.
+     * Also resets the crash streak — the loop (if any) is broken.
+     */
     fun markLaunchSucceeded(context: Context) {
-        runCatching { prefs(context).edit().putBoolean(KEY_IN_PROGRESS, false).apply() }
+        runCatching {
+            prefs(context).edit()
+                .putBoolean(KEY_IN_PROGRESS, false)
+                .putInt(KEY_STREAK, 0)
+                .apply()
+        }
     }
 }

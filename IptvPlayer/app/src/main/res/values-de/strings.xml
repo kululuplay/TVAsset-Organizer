@@ -233,4 +233,7 @@
     <string name="expiry_expired_title">Ihr Abonnement ist abgelaufen</string>
     <string name="expiry_expired_message">Ihr Abonnementzeitraum ist beendet, daher können Sie keine Inhalte mehr ansehen. Um weiterzuschauen, verlängern Sie bitte Ihr Abonnement bei Ihrem IPTV-Anbieter.</string>
     <string name="expiry_expired_date">Abgelaufen am %1$s</string>
+    <string name="recovery_safe_mode">Sicherer Modus: Die App ist beim Start wiederholt abgestürzt, daher wurden die Wiedergabe-Einstellungen zurückgesetzt.</string>
+    <string name="error_auto_retry_countdown">Verbindung fehlgeschlagen. Automatischer Neuversuch in %1$d s…</string>
+    <string name="error_auto_retry_exhausted">Verbindung weiterhin nicht möglich. Drücken Sie „Erneut versuchen“.</string>
 </resources>

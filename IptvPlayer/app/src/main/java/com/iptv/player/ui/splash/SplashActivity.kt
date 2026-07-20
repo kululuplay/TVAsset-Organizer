@@ -191,7 +191,10 @@ class SplashActivity : BaseActivity() {
         // it crashed on this exact path. Don't crash-loop with no way to read the
         // trace: route to the recovery screen so the captured log can be shared.
         if (LaunchCrashGuard.previousLaunchCrashed(this)) {
-            Logger.w("Splash", "Previous launch crashed before home — routing to recovery")
+            // Disarm the guard and bump the consecutive-crash streak; the recovery
+            // screen reads the streak and self-heals (safe mode) past the threshold.
+            val streak = LaunchCrashGuard.consumeCrashAndCountStreak(this)
+            Logger.w("Splash", "Previous launch crashed before home (streak=$streak) — routing to recovery")
             go(CrashRecoveryActivity::class.java)
             return
         }

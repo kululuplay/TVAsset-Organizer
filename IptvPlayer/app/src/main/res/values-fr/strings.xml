@@ -229,4 +229,7 @@
     <string name="expiry_warning_title">Votre abonnement expire bientôt</string>
     <string name="expiry_warning_message">Votre abonnement expire dans %1$d jour(s). Pour éviter toute interruption de vos flux, veuillez le renouveler à l\'avance auprès de votre fournisseur IPTV.</string>
     <string name="expiry_warning_dont_show">Ne plus afficher</string>
+    <string name="recovery_safe_mode">Mode sans échec : l\'application a planté plusieurs fois au démarrage, les réglages de lecture ont été réinitialisés.</string>
+    <string name="error_auto_retry_countdown">Connexion impossible. Nouvel essai automatique dans %1$d s…</string>
+    <string name="error_auto_retry_exhausted">Connexion toujours impossible. Appuyez sur Réessayer.</string>
 </resources>

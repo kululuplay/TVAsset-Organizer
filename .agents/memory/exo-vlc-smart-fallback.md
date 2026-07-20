@@ -52,12 +52,14 @@ libVLC's software path is the only safety net.
   `AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES` so Dolby/DTS that the TV
   falsely advertises as passthrough-capable still gets decoded to audible PCM.
 
-## Surface / VLC rules (critical — see android-green-screen-vlc-texture.md)
+## Surface / VLC display rules — DEFER to android-green-screen-vlc-texture.md
+That note is the single source of truth for SurfaceView/DR/chroma decisions and
+is NEWER than this file. Current state (verified in code): DR is **ON** on the
+VLC HW path (the old `--no-mediacodec-dr`/`--no-omxil-dr` flags are gone — DR-off
+greens the Xiaomi compositor; watch for the `output: 17`/`dequeue_in timeout`
+freeze it once caused). Still true here:
 - BOTH engines output to **SurfaceView**, never TextureView (Amlogic underlay).
-- Direct rendering **OFF** (`--no-mediacodec-dr` + `--no-omxil-dr`) — matches the
-  known-good v1.0.1 baseline. DR-on froze the Amlogic display path.
-- **No** `--android-display-chroma=RV32` — forcing it caused `output: 17 unknown`
-  + `dequeue_in timeout` (frozen video). The baseline never set a display chroma.
+- **No** `--android-display-chroma=RV32` (froze video).
 - **No** deinterlace on the HW path; only `--deinterlace=1` + bob when forcing
   software (raw frames).
 - `:no-spdif` (PCM) when passthrough off (audio-only, unrelated to the freeze).

@@ -70,4 +70,7 @@
     <string name="resolved_title_complaint">Şikayetiniz çözüldü</string>
     <string name="resolved_body_complaint">Bildiriminiz incelendi ve çözüme kavuşturuldu. Teşekkürler!</string>
     <string name="resolved_request_label">Talebiniz</string>
+    <string name="dash_offline_banner">İnternet bağlantısı yok — kayıtlı içerik gösteriliyor</string>
+    <string name="dash_portal_unreachable">Sunucuya ulaşılamıyor — otomatik olarak yeniden deneniyor…</string>
+    <string name="dash_reconnected_refreshing">Bağlantı geri geldi — içerik güncelleniyor…</string>
 </resources>

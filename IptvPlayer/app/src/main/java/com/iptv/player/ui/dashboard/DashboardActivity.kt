@@ -28,10 +28,15 @@ import com.iptv.player.ui.settings.SettingsActivity
 import com.iptv.player.ui.vod.VodActivity
 import com.iptv.player.update.ExpiryWarningPrompt
 import com.iptv.player.update.UpdatePrompt
+import com.iptv.player.ui.splash.SplashPrefetch
+import com.iptv.player.util.ConnectivityWatcher
 import com.iptv.player.util.LaunchCrashGuard
 import com.iptv.player.util.Logger
 import com.iptv.player.util.NetworkSignal
 import com.iptv.player.util.WeatherProvider
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -39,6 +44,11 @@ import java.util.Date
 class DashboardActivity : BaseActivity() {
 
     private lateinit var binding: ActivityDashboardBinding
+
+    // Outage resilience: live connectivity signal + the auto-resync loop that
+    // keeps retrying a failed portal sync with growing backoff (see statusBanner).
+    private var connectivity: ConnectivityWatcher? = null
+    private var autoResyncJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -74,6 +84,95 @@ class DashboardActivity : BaseActivity() {
         updateSignal()
         loadWeather()
         loadFooter()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Watch connectivity while visible: banner + auto-resync on reconnect.
+        connectivity = ConnectivityWatcher(this) { online ->
+            onConnectivityChanged(online)
+        }.also { it.start() }
+        evaluateOutageState()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        connectivity?.stop()
+        connectivity = null
+        // Never keep hammering the portal from the background.
+        autoResyncJob?.cancel()
+        autoResyncJob = null
+    }
+
+    // ---- Outage banner + auto-resync -------------------------------------
+
+    /** Initial state on entry: offline banner, pending launch failure, or clean. */
+    private fun evaluateOutageState() {
+        when {
+            NetworkSignal.current(this) == NetworkSignal.Level.OFFLINE ->
+                showBanner(R.string.dash_offline_banner)
+            SplashPrefetch.essentialFailed.value -> {
+                showBanner(R.string.dash_portal_unreachable)
+                scheduleAutoResync()
+            }
+            else -> hideBanner()
+        }
+    }
+
+    private fun onConnectivityChanged(online: Boolean) {
+        updateSignal()
+        if (!online) {
+            // Offline: stop retrying (it can't succeed) and say we're on cache.
+            autoResyncJob?.cancel()
+            autoResyncJob = null
+            showBanner(R.string.dash_offline_banner)
+            return
+        }
+        if (SplashPrefetch.essentialFailed.value) {
+            // Connection is back but the launch sync had failed — refresh now.
+            showBanner(R.string.dash_reconnected_refreshing)
+            scheduleAutoResync()
+        } else {
+            hideBanner()
+        }
+    }
+
+    /**
+     * Retries the full portal sync until it succeeds, with growing delays
+     * (15s → 30s → 60s → 120s cap) so a down portal isn't hammered. The first
+     * attempt runs immediately. Cancelled on stop/offline; on success the
+     * launch-failure flag is cleared and the banner disappears.
+     */
+    private fun scheduleAutoResync() {
+        if (autoResyncJob?.isActive == true) return
+        autoResyncJob = lifecycleScope.launch {
+            val delays = longArrayOf(15_000L, 30_000L, 60_000L, 120_000L)
+            var attempt = 0
+            while (isActive) {
+                val config = ServiceLocator.settings.getSourceConfig() ?: break
+                val ok = runCatching { ServiceLocator.repository.syncAll(config) }
+                    .getOrDefault(false)
+                if (ok) {
+                    Logger.i("Dashboard", "Auto-resync succeeded (attempt ${attempt + 1})")
+                    SplashPrefetch.markRecovered()
+                    hideBanner()
+                    loadFooter()
+                    break
+                }
+                showBanner(R.string.dash_portal_unreachable)
+                delay(delays[minOf(attempt, delays.size - 1)])
+                attempt++
+            }
+        }
+    }
+
+    private fun showBanner(textRes: Int) {
+        binding.statusBanner.setText(textRes)
+        binding.statusBanner.visibility = View.VISIBLE
+    }
+
+    private fun hideBanner() {
+        binding.statusBanner.visibility = View.GONE
     }
 
     private fun wireCards() {

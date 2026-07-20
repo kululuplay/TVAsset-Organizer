@@ -73,4 +73,7 @@
     <string name="resolved_title_complaint">Your issue is resolved</string>
     <string name="resolved_body_complaint">We reviewed your report and resolved it. Thank you!</string>
     <string name="resolved_request_label">Your request</string>
+    <string name="dash_offline_banner">No internet connection — showing saved content</string>
+    <string name="dash_portal_unreachable">Server unreachable — retrying automatically…</string>
+    <string name="dash_reconnected_refreshing">Back online — refreshing content…</string>
 </resources>

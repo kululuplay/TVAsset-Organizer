@@ -269,4 +269,7 @@
     <string name="recovery_share">Share report</string>
     <string name="recovery_share_subject">Kululu IPTV crash report</string>
     <string name="recovery_retry">Try again</string>
+    <string name="recovery_safe_mode">Safe mode: the app crashed repeatedly at startup, so playback settings were reset to their defaults.</string>
+    <string name="error_auto_retry_countdown">Could not connect. Retrying automatically in %1$d s…</string>
+    <string name="error_auto_retry_exhausted">Still can\'t connect. Press Retry to try again.</string>
 </resources>

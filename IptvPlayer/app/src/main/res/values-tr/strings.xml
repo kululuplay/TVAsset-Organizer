@@ -311,4 +311,7 @@
     <string name="recovery_share">Raporu paylaş</string>
     <string name="recovery_share_subject">Kululu IPTV çökme raporu</string>
     <string name="recovery_retry">Tekrar dene</string>
+    <string name="recovery_safe_mode">Güvenli mod: Uygulama açılışta üst üste çöktüğü için oynatma ayarları varsayılana sıfırlandı.</string>
+    <string name="error_auto_retry_countdown">Bağlantı kurulamadı. %1$d saniye içinde otomatik olarak tekrar denenecek…</string>
+    <string name="error_auto_retry_exhausted">Bağlantı hâlâ kurulamıyor. Tekrar denemek için Yeniden Dene\'ye basın.</string>
 </resources>
