@@ -11,8 +11,26 @@ section and a **public IPv4** row under General Info.
 ## Endpoint choices (keyless, no API key)
 - **Real download speed** must stream from a CDN, not the IPTV provider origin
   (the origin can be throttled / single-connection limited and would understate
-  the customer's line). Use a large CDN file and stop on a ~10s timer; divide
-  bytes-read by elapsed time for Mbps.
+  the customer's line). Use a large CDN file and stop on a ~10s timer.
+  - **Measurement methodology (learned the hard way — a naive single-stream test
+    read 4-5 Mbps while the same device's browser test showed far more):**
+    1. **Parallel streams, HTTP/1.1 forced.** One TCP stream is capped by
+       congestion-window growth + any path loss; browser tests open 4-16 sockets.
+       Use ~4 parallel legs AND `protocols(listOf(Protocol.HTTP_1_1))` on the
+       OkHttp client — otherwise OkHttp multiplexes all "parallel" requests onto
+       ONE HTTP/2 connection (one congestion window), silently defeating it.
+    2. **Clock starts at the FIRST RECEIVED BYTE**, not at request creation —
+       DNS+TLS+TTFB otherwise get billed as seconds of zero-byte transfer.
+    3. **Exclude a ~1.5s warm-up** (snapshot bytes/time at the mark; final avg =
+       bytes/time PAST the snapshot) so TCP slow-start doesn't drag the mean.
+    4. **Progress emission must never block the readers**: readers feed a shared
+       AtomicLong; a separate orchestrator loop does the `withContext(Main)`
+       emit. (The old reader loop itself hopped to Main every 250ms — on a busy
+       TV main thread each hop stalled the download.)
+  - If the number is STILL far below the browser test after all this, it's real:
+    browser tests (Ookla) pick ISP-local servers, our test measures the
+    international CDN path — i.e. the path IPTV traffic actually takes (see
+    peering-comparative-nettest note).
   - Use SEVERAL geographically diverse keyless mirrors tried in order, not one or
     two. Single hosts fail per-ISP: `speed.hetzner.de` can return
     `UnknownHostException` (DNS) on some networks, and Cloudflare `__down` can be
