@@ -8,7 +8,7 @@ pinned the green-screen / frozen-video root causes. The decoder runs fine and
 audio is correct PCM stereo, but the picture is green/blank or freezes.
 
 ## The rule that actually matters: match the known-good v1.0.1 libVLC options
-The user's regression-free baseline (tag v1.0.1 / commit c8e9eac) used a SMALL,
+The user's regression-free baseline (tag v1.0.1) used a SMALL,
 specific set of options. Every green/freeze regression since came from ADDING
 options on top of it. When in doubt, restore the baseline decode/display config:
 

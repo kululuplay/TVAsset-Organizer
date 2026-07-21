@@ -21,6 +21,7 @@ import com.iptv.player.BuildConfig
 import com.iptv.player.data.ServiceLocator
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaType
@@ -87,6 +88,18 @@ object HeartbeatReporter {
                 .getOrNull()
                 ?.takeIf { it.isNotBlank() }
                 ?.let { put("username", it) }
+            // Player audio/engine settings snapshot so the ops panel can remotely
+            // spot risky configs (e.g. HDMI passthrough ON silences projector/TV
+            // speakers that cannot decode Dolby bitstreams). Best-effort.
+            runCatching {
+                val s = ServiceLocator.settings
+                put("audioPassthrough", s.getAudioPassthrough())
+                val summary = "engine=" + s.playerMode.first().name +
+                    " decoder=" + s.getDecoderMode().name +
+                    " buffer=" + s.getBufferMode().name +
+                    " format=" + s.getStreamFormat().name
+                put("playerSettings", summary)
+            }
             if (pendingEvents.isNotEmpty()) {
                 put("events", JSONArray().apply { pendingEvents.forEach { put(it) } })
             }

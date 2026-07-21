@@ -1,12 +1,12 @@
 ---
-name: Player known-good baseline (v1.0.1 / commit c8e9eac)
+name: Player known-good baseline (v1.0.1)
 description: The live-TV + VOD player state the user considers regression-free, and what reverting to it requires.
 ---
 
 # Player "known-good" baseline
 
-The user treats the player as it was at **git tag v1.0.1 (commit c8e9eac)** as the
-last regression-free live-TV + VOD playback. c8e9eac itself is ONLY a versionName
+The user treats the player as it was at **git tag v1.0.1** as the
+last regression-free live-TV + VOD playback. The v1.0.1 commit itself is ONLY a versionName
 bump — the working player is that commit's *tree*, restore the files from it.
 
 ## Player module is self-contained

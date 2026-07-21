@@ -167,6 +167,15 @@ async function initDb() {
   await pool.query(
     `ALTER TABLE devices ADD COLUMN IF NOT EXISTS username TEXT;`,
   );
+  // Player audio/engine settings snapshot from the heartbeat, so "video plays
+  // but no sound" complaints (e.g. projectors) can be diagnosed remotely:
+  // passthrough ON on a device without a Dolby decoder = silent playback.
+  await pool.query(
+    `ALTER TABLE devices ADD COLUMN IF NOT EXISTS audio_passthrough BOOLEAN;`,
+  );
+  await pool.query(
+    `ALTER TABLE devices ADD COLUMN IF NOT EXISTS player_settings TEXT;`,
+  );
   await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS geo_city TEXT;`);
   await pool.query(
     `ALTER TABLE devices ADD COLUMN IF NOT EXISTS geo_country TEXT;`,
@@ -485,8 +494,8 @@ app.post("/api/heartbeat", async (req, res) => {
       `INSERT INTO devices
         (device_id, last_seen, ip, manufacturer, model, device,
          android_version, api_level, app_version, version_code,
-         now_playing, now_playing_kind, username)
-       VALUES ($1, now(), $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+         now_playing, now_playing_kind, username, audio_passthrough, player_settings)
+       VALUES ($1, now(), $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        ON CONFLICT (device_id) DO UPDATE SET
          last_seen = now(),
          ip = EXCLUDED.ip,
@@ -501,7 +510,11 @@ app.post("/api/heartbeat", async (req, res) => {
          now_playing_kind = EXCLUDED.now_playing_kind,
          -- Keep the last known username if a beat omits it (M3U sources / logged
          -- out) so the panel doesn't lose the account-to-device mapping.
-         username = COALESCE(EXCLUDED.username, devices.username)`,
+         username = COALESCE(EXCLUDED.username, devices.username),
+         -- Older app versions don't send the settings snapshot; keep the last
+         -- known values instead of wiping them on every beat.
+         audio_passthrough = COALESCE(EXCLUDED.audio_passthrough, devices.audio_passthrough),
+         player_settings = COALESCE(EXCLUDED.player_settings, devices.player_settings)`,
       [
         deviceId,
         ip,
@@ -517,6 +530,8 @@ app.post("/api/heartbeat", async (req, res) => {
         // See uname above: blank coalesced to null; COALESCE in SQL preserves
         // the last known account mapping when a beat omits it.
         uname,
+        typeof b.audioPassthrough === "boolean" ? b.audioPassthrough : null,
+        clip(b.playerSettings, 200),
       ],
     );
     // ---- Stability telemetry events piggybacked on this beat ----
@@ -1300,6 +1315,12 @@ app.get("/", auth, async (req, res) => {
       const shared = sharedIp(d.ip)
         ? ` <span class="badge warn" title="Aynı IP'de ${ipDeviceCount.get(d.ip).size} cihaz">⚠ ${ipDeviceCount.get(d.ip).size}</span>`
         : "";
+      // Passthrough ON is the classic "video plays but no sound" config on
+      // TVs/projectors without a Dolby decoder — flag it so the operator can
+      // spot it at a glance when a user complains about silent playback.
+      const audioWarn = d.audio_passthrough
+        ? ` <span class="badge warn" title="Ses aktarımı (passthrough) AÇIK — Dolby çözücüsü olmayan TV/projeksiyonda ses çıkmaz">🔇 passthrough</span>`
+        : "";
       const playing = d.online && d.now_playing
         ? `<span class="play">▶ ${esc(d.now_playing)}</span>${d.now_playing_kind ? ` <span class="muted">${esc(d.now_playing_kind)}</span>` : ""}`
         : '<span class="muted">—</span>';
@@ -1312,7 +1333,7 @@ app.get("/", auth, async (req, res) => {
       return `
       <tr class="${d.online ? "online" : "offline"}">
         <td><span class="dot ${d.online ? "on" : "off"}" title="${status}"></span>${status}</td>
-        <td class="strong"><a class="devlink" href="/device/${encodeURIComponent(d.device_id)}">${esc(name)}</a></td>
+        <td class="strong"><a class="devlink" href="/device/${encodeURIComponent(d.device_id)}">${esc(name)}</a>${audioWarn}</td>
         <td>${user}</td>
         <td class="mono">${esc(d.ip || "—")}${shared}${geo ? `<div class="muted">${esc(geo)}</div>` : ""}</td>
         <td>${playing}</td>
@@ -2010,6 +2031,8 @@ app.get("/device/:id", auth, async (req, res) => {
   .info { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; background:#161B22; border:1px solid #1C232D; border-radius:12px; padding:16px; }
   .info .k { color:#9AA7B4; font-size:12px; }
   .info .v { font-size:14px; }
+  .badge { display:inline-block; padding:1px 7px; border-radius:20px; font-size:11px; font-weight:600; }
+  .badge.warn { background:#3a2f10; color:#FFC93C; border:1px solid #6a5410; }
   table { width:100%; border-collapse:collapse; background:#161B22; border:1px solid #1C232D; border-radius:12px; overflow:hidden; }
   thead th { text-align:left; font-size:12px; color:#9AA7B4; padding:10px 12px; border-bottom:1px solid #1C232D; background:#12171E; }
   tbody td { padding:9px 12px; border-bottom:1px solid #161B22; font-size:13px; vertical-align:top; }
@@ -2115,6 +2138,14 @@ app.get("/device/:id", auth, async (req, res) => {
       <div><div class="k">Sürüm</div><div class="v">${versionLabel(d.app_version, d.version_code)}</div></div>
       <div><div class="k">Android</div><div class="v">Android ${esc(d.android_version || "?")}${d.api_level ? " · API " + esc(d.api_level) : ""}</div></div>
       <div><div class="k">Şu an izliyor</div><div class="v">${d.online && d.now_playing ? `<span class="play">▶ ${esc(d.now_playing)}</span>` : "—"}</div></div>
+      <div><div class="k">Ses aktarımı (passthrough)</div><div class="v">${
+        d.audio_passthrough === true
+          ? '<span class="badge warn" title="Dolby çözücüsü olmayan TV/projeksiyonda ses çıkmaz">🔇 AÇIK</span>'
+          : d.audio_passthrough === false
+            ? "Kapalı (PCM)"
+            : "—"
+      }</div></div>
+      <div><div class="k">Oynatıcı ayarları</div><div class="v mono">${esc(d.player_settings || "—")}</div></div>
       <div><div class="k">İlk görülme</div><div class="v">${esc(fmt(d.first_seen))}</div></div>
       <div><div class="k">Son görülme</div><div class="v">${esc(ago(d.last_seen))}</div></div>
     </div>

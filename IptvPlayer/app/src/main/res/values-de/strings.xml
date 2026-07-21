@@ -204,6 +204,8 @@
     <string name="settings_enter_old_pin">Aktuelle PIN eingeben</string>
     <string name="settings_enter_new_pin">Neue PIN eingeben</string>
     <string name="settings_pin_changed">PIN aktualisiert</string>
+    <string name="settings_audio_passthrough">Audio-Passthrough (für AV-Receiver)</string>
+    <string name="settings_audio_passthrough_warning">Nur aktivieren, wenn ein AV-Receiver oder eine Soundbar mit Dolby/DTS-Dekodierung angeschlossen ist. Auf Fernsehern und Beamern ohne Dekoder läuft das Bild, aber es gibt KEINEN Ton. Wenn der Ton fehlt, diese Option ausschalten.</string>
 
     <!-- Update-Hinweis (wird beim Start automatisch angezeigt) -->
     <string name="update_available_title">Update verfügbar</string>

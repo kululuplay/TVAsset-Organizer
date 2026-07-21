@@ -204,6 +204,8 @@
     <string name="settings_enter_old_pin">Voer je huidige pincode in</string>
     <string name="settings_enter_new_pin">Voer een nieuwe pincode in</string>
     <string name="settings_pin_changed">Pincode bijgewerkt</string>
+    <string name="settings_audio_passthrough">Audio-passthrough (voor AV-receivers)</string>
+    <string name="settings_audio_passthrough_warning">Schakel dit alleen in als er een AV-receiver of soundbar met Dolby/DTS-decodering is aangesloten. Op tv\'s en beamers zonder decoder speelt het beeld af, maar is er GEEN geluid. Ontbreekt het geluid, zet deze optie dan uit.</string>
 
     <!-- Updatemelding (wordt automatisch bij het opstarten getoond) -->
     <string name="update_available_title">Update beschikbaar</string>

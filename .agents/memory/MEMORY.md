@@ -1,6 +1,7 @@
 - [Keep-screen-on app-wide](fire-tv-keep-screen-on.md) — FLAG_KEEP_SCREEN_ON held app-wide in BaseActivity (no clearFlags); PlayerScreenGuard/IdleWatcher/ScreensaverActivity are dead code.
+- [Audio passthrough silence](audio-passthrough-silence.md) — passthrough ON = video w/ NO sound on decoderless TVs/Beamers, runtime-UNDETECTABLE; heartbeat snapshot + panel badge + enable-warning dialog.
 - [Crash-receiver live telemetry](crash-receiver-live-telemetry.md) — heartbeat UPSERTs devices; Postgres needs ALTER ADD COLUMN IF NOT EXISTS; foreground-gate the loop; announcement dedup.
-- [Stability telemetry observability](stability-telemetry-observability.md) — native/ANR failures bypass Java handler; spool→heartbeat; sample hadPendingCrash BEFORE uploader; updateAndGet is API24+.
+- [Stability telemetry observability](stability-telemetry-observability.md) — native/ANR failures bypass Java handler; spool→heartbeat; sample hadPendingCrash BEFORE uploader; updateAndGet=API24+.
 - [Live stall/startup watchdog](live-stall-watchdog.md) — poll engine playback clock; 15s no-advance → reconnect, 22s no-confirm → handleFailure; rebind() replay must reset watchdog state.
 - [TV detail scrolling rails + focus](tv-detail-scroll-rail-focus.md) — one plain ScrollView; stamp nextFocusUp/Down on rail children as attached; never target GONE views; initial focus via post.
 - [ScrollView maxHeight is inert](scrollview-maxheight-inert.md) — android:maxHeight ignored → starves pinned CTAs to 0px; use a MaxHeightScrollView clamping onMeasure (AT_MOST).
@@ -37,7 +38,7 @@
 - [Player unit tests](player-unit-tests.md) — single-connection tests are pure-JVM via scheduler/engineFactory/coordinator seams; no Android SDK locally, they run only in CI.
 - [ExoPlayer→libVLC fallback for undecodable audio](player-engine-fallback.md) — Exo can play mute with no error (MP2/AC-3); force onError so VLC takes over.
 - [Dashboard keyless weather + signal](dashboard-keyless-weather.md) — weather via IP geolocation + Open-Meteo, NO key/location perm; Wi-Fi RSSI needs ACCESS_WIFI_STATE + runCatching.
-- [Exo→VLC smart fallback](exo-vlc-smart-fallback.md) — live ladder EXO→VLC_HW→VLC_SW; green→SW, silent-audio (debounced, READY-gated)→HW; display rules live in the Amlogic green-screen note.
+- [Exo→VLC smart fallback](exo-vlc-smart-fallback.md) — live ladder EXO→VLC_HW→VLC_SW; green→SW, silent-audio (debounced, READY-gated)→HW; display rules in Amlogic green-screen note.
 - [TV list move-mode reorder](tv-list-move-mode.md) — trap ALL dpad nav in dispatchKeyEvent while moving; badge needs targeted notifyItemChanged on enter/exit (submitList diff skips it).
 - [Player known-good baseline](player-known-good-baseline.md) — v1.0.1 is the regression-free player; reverting keeps EXTRA_CATEGORY_ID, deletes PlayerScheduler/VodPlaybackCoordinator(+tests).
 - [Amlogic VLC_HW greens all non-UHD](amlogic-vlc-hw-green-all-profiles.md) — green undetectable at runtime; gate on isAmlogic + route non-UHD VLC_HW→VLC_SW; overrides DecoderMode.HARDWARE.

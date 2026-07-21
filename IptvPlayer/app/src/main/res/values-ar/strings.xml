@@ -204,6 +204,8 @@
     <string name="settings_enter_old_pin">أدخل رمز PIN الحالي</string>
     <string name="settings_enter_new_pin">أدخل رمز PIN جديد</string>
     <string name="settings_pin_changed">تم تحديث رمز PIN</string>
+    <string name="settings_audio_passthrough">تمرير الصوت (لأجهزة استقبال AV)</string>
+    <string name="settings_audio_passthrough_warning">فعّل هذا الخيار فقط إذا كان هناك جهاز استقبال AV أو مكبر صوت يدعم فك ترميز Dolby/DTS. على أجهزة التلفزيون وأجهزة العرض بدون فك ترميز، ستعمل الصورة لكن بدون صوت. إذا انقطع الصوت، أوقف هذا الخيار.</string>
 
     <!-- إشعار التحديث (يظهر تلقائيًا عند بدء التشغيل) -->
     <string name="update_available_title">يتوفر تحديث</string>

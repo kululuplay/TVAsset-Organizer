@@ -367,7 +367,22 @@ class SettingsActivity : BaseActivity() {
         passthroughSwitch = passthroughRow.findViewById<SwitchCompat>(R.id.mSwitch)
             .also { it.visibility = View.VISIBLE }
         passthroughRow.setOnClickListener {
-            viewModel.setAudioPassthrough(!passthroughSwitch!!.isChecked)
+            val turningOn = !passthroughSwitch!!.isChecked
+            if (turningOn) {
+                // Passthrough sends the raw Dolby/DTS bitstream over HDMI; TVs and
+                // projectors without a decoder play video with NO sound. Warn and
+                // require an explicit confirm before enabling.
+                AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
+                    .setTitle(R.string.settings_audio_passthrough)
+                    .setMessage(R.string.settings_audio_passthrough_warning)
+                    .setPositiveButton(android.R.string.ok) { _, _ ->
+                        viewModel.setAudioPassthrough(true)
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+            } else {
+                viewModel.setAudioPassthrough(false)
+            }
         }
         c.addView(passthroughRow)
 

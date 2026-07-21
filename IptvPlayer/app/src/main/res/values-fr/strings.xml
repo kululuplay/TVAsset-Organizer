@@ -204,6 +204,8 @@
     <string name="settings_enter_old_pin">Saisissez votre code PIN actuel</string>
     <string name="settings_enter_new_pin">Saisissez un nouveau code PIN</string>
     <string name="settings_pin_changed">Code PIN mis à jour</string>
+    <string name="settings_audio_passthrough">Passthrough audio (pour amplis AV)</string>
+    <string name="settings_audio_passthrough_warning">N\'activez cette option que si un ampli AV ou une barre de son avec décodage Dolby/DTS est connecté. Sur les téléviseurs et vidéoprojecteurs sans décodeur, l\'image fonctionne mais il n\'y a AUCUN son. Si le son manque, désactivez cette option.</string>
 
     <!-- Invite de mise à jour (affichée automatiquement au démarrage) -->
     <string name="update_available_title">Mise à jour disponible</string>
