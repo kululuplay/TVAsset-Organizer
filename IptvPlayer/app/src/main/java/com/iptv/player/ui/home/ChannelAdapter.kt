@@ -41,7 +41,7 @@ class ChannelAdapter(
         for (i in 0 until recyclerView.childCount) {
             val holder =
                 recyclerView.getChildViewHolder(recyclerView.getChildAt(i)) as? VH ?: continue
-            holder.boundChannel?.let { holder.bind(it) }
+            holder.rebindCurrent()
         }
     }
 
@@ -62,16 +62,34 @@ class ChannelAdapter(
         private val favStar: ImageView = itemView.findViewById(R.id.favStar)
         private val catchupBadge: ImageView = itemView.findViewById(R.id.catchupBadge)
 
-        var boundChannel: Channel? = null
-            private set
+        /**
+         * Resolve callbacks against the adapter's current snapshot at event time.
+         * AsyncListDiffer can replace/move a row after bind but before a delayed
+         * focus/click/long-click arrives; capturing [channel] would then act on the
+         * stale item that previously occupied this holder.
+         */
+        private fun currentChannel(): Channel? {
+            val position = bindingAdapterPosition
+            if (position == RecyclerView.NO_POSITION || position >= itemCount) return null
+            return getItem(position)
+        }
+
+        fun rebindCurrent() {
+            currentChannel()?.let(::bind)
+        }
 
         fun bind(channel: Channel) {
-            boundChannel = channel
-
             itemView.setOnFocusChangeListener { _, hasFocus ->
-                if (hasFocus) onFocused(channel)
+                if (hasFocus) currentChannel()?.let(onFocused)
             }
-            itemView.setOnClickListener { onClicked(channel) }
+            itemView.setOnClickListener {
+                currentChannel()?.let(onClicked)
+            }
+            itemView.setOnLongClickListener {
+                val current = currentChannel() ?: return@setOnLongClickListener false
+                if (!lockedProvider(current)) onToggleFavorite(current)
+                true
+            }
 
             if (lockedProvider(channel)) {
                 name.setText(R.string.adult_locked_title)
@@ -84,7 +102,6 @@ class ChannelAdapter(
                 logo.load(R.drawable.ic_lock) {
                     crossfade(false)
                 }
-                itemView.setOnLongClickListener { true }
                 return
             }
 
@@ -109,10 +126,6 @@ class ChannelAdapter(
                 }
             }
 
-            itemView.setOnLongClickListener {
-                onToggleFavorite(channel)
-                true
-            }
         }
     }
 

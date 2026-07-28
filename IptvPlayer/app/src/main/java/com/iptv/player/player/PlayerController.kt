@@ -109,6 +109,11 @@ class PlayerController(
         fun onBuffering()
         fun onPlaying(engineName: String)
         /**
+         * The controller is recreating/re-routing the decoder. UIs that gate
+         * readiness on a real frame must discard any frame state from the old stage.
+         */
+        fun onPlaybackRestarting() {}
+        /**
          * A real video frame is now on screen. Fires on every video-output start
          * (initial play, zap, and after a preview->fullscreen surface hand-off).
          * Default no-op so callbacks that don't care need not implement it.
@@ -328,6 +333,7 @@ class PlayerController(
     }
 
     private fun startStage(target: Stage) {
+        callback.onPlaybackRestarting()
         // A GENUINE stage change (ladder move / escalation) starts a fresh decoder,
         // so reset the quick-decode-failure count. A reconnect replay of the SAME
         // stage keeps it, so a 1.5s-then-fail loop still escalates after a couple.
