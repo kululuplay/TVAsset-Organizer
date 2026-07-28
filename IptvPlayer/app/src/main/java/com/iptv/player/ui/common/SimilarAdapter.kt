@@ -12,12 +12,14 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.iptv.player.R
+import java.util.Locale
 
 /** Minimal poster card data, mapped from either a VodItem or a Series. */
 data class SimilarCard(
@@ -65,6 +67,8 @@ class SimilarAdapter(
         private val meta: TextView = itemView.findViewById(R.id.posterMeta)
         private val ratingRow: LinearLayout = itemView.findViewById(R.id.posterRatingRow)
         private val rating: TextView = itemView.findViewById(R.id.posterRating)
+        private val progress: ProgressBar = itemView.findViewById(R.id.posterProgress)
+        private val watched: ImageView = itemView.findViewById(R.id.posterWatched)
 
         var boundCard: SimilarCard? = null
             private set
@@ -72,6 +76,11 @@ class SimilarAdapter(
         fun bind(item: SimilarCard) {
             boundCard = item
             itemView.setOnClickListener { onClicked(item) }
+            // Recommendation rails never own playback state. Reset the shared
+            // poster affordances defensively in case a custom recycled-view pool
+            // is introduced later.
+            progress.visibility = View.GONE
+            watched.visibility = View.GONE
 
             if (
                 adultLocked &&
@@ -79,10 +88,13 @@ class SimilarAdapter(
                     PinLockHelper.looksAdult(item.categoryName))
             ) {
                 name.setText(R.string.adult_locked_title)
-                meta.visibility = View.GONE
+                meta.text = ""
+                meta.visibility = View.INVISIBLE
                 ratingRow.visibility = View.GONE
                 poster.scaleType = ImageView.ScaleType.FIT_CENTER
                 poster.load(R.drawable.ic_lock) { crossfade(false) }
+                itemView.contentDescription =
+                    itemView.context.getString(R.string.adult_locked_title)
                 return
             }
 
@@ -91,9 +103,13 @@ class SimilarAdapter(
 
             val year = item.releaseDate?.take(4)?.takeIf { it.isNotBlank() }
             meta.text = year ?: ""
-            meta.visibility = if (year != null) View.VISIBLE else View.GONE
+            // Keep every poster in the horizontal rail the same height even when
+            // a provider omits its release year.
+            meta.visibility = if (year != null) View.VISIBLE else View.INVISIBLE
 
-            val ratingText = item.rating?.takeIf { it > 0 }?.let { String.format("%.1f", it) }
+            val ratingText = item.rating
+                ?.takeIf { it > 0 }
+                ?.let { String.format(Locale.getDefault(), "%.1f", it) }
             if (ratingText != null) {
                 rating.text = ratingText
                 ratingRow.visibility = View.VISIBLE
@@ -111,6 +127,15 @@ class SimilarAdapter(
                     error(placeholder)
                 }
             }
+
+            val spokenDetails = buildList {
+                add(item.name)
+                year?.let(::add)
+                ratingText?.let {
+                    add("${itemView.context.getString(R.string.detail_rating)} $it")
+                }
+            }
+            itemView.contentDescription = spokenDetails.joinToString(". ")
         }
     }
 
