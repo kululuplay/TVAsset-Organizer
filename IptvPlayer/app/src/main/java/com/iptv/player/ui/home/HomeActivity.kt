@@ -2335,6 +2335,10 @@ class HomeActivity : BaseActivity() {
         }
         params.marginEnd = safe
         binding.fullscreenEpgOverlay.layoutParams = params
+        // The guide's full-screen scrim sits at 20dp while the EPG card starts at
+        // 18dp. Raise the card above that scrim only while both are visible.
+        binding.fullscreenEpgOverlay.translationZ =
+            if (guideVisible) resources.getDimension(R.dimen.space_xs) else 0f
         if (guideVisible) binding.fullscreenEpgOverlay.bringToFront()
     }
 
