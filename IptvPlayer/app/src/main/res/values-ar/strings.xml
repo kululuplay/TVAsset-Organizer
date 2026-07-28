@@ -60,10 +60,13 @@
     <string name="empty_series">لا توجد مسلسلات في هذا العرض.</string>
     <string name="added_to_favorites">أُضيف إلى المفضلة</string>
     <string name="removed_from_favorites">أُزيل من المفضلة</string>
+    <string name="favorite_state_on">في المفضلة</string>
+    <string name="favorite_state_off">ليس في المفضلة</string>
     <string name="channel_count">%1$d قناة</string>
     <string name="preview_playback_failed">تعذر تشغيل المعاينة. اضغط موافق لإعادة المحاولة.</string>
 
     <string name="buffering">جارٍ التحميل…</string>
+    <string name="player_seek_position">موضع التشغيل</string>
     <string name="reconnecting">جارٍ إعادة الاتصال… (%1$d)</string>
     <string name="player_mode_label">المشغل</string>
     <string name="audio_track">الصوت</string>
