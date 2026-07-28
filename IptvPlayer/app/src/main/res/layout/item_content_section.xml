@@ -1,84 +1,111 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Content manager hub tile, in the dashboard's editorial card language: a
-     gradient icon badge (colour set per content type in code), a title + helper
-     subtitle, and a trailing "Edit" pill that lights up with the brand gradient
-     on focus. Frosted-glass surface, brand-pink focus ring, and a gentle scale on
-     focus for clear 10-foot D-pad feedback. -->
+<!-- Destination card for Live TV, Movies or Series. All descendants are merged
+     into the root so TalkBack and D-pad users encounter one coherent action. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_tile_surface"
-    android:foreground="@drawable/bg_tile_focus"
-    android:stateListAnimator="@animator/tile_focus"
+    android:layout_marginHorizontal="@dimen/space_s"
+    android:layout_marginBottom="12dp"
+    android:background="@drawable/bg_content_manager_card"
+    android:clickable="true"
+    android:clipChildren="false"
+    android:descendantFocusability="blocksDescendants"
     android:focusable="true"
     android:focusableInTouchMode="false"
-    android:clickable="true"
-    android:layout_marginBottom="@dimen/space_m">
+    android:importantForAccessibility="yes"
+    android:minHeight="112dp"
+    android:stateListAnimator="@animator/content_manager_focus">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:duplicateParentState="true"
         android:gravity="center_vertical"
-        android:padding="@dimen/space_l">
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/space_m"
+        android:paddingTop="@dimen/space_m"
+        android:paddingEnd="@dimen/space_l"
+        android:paddingBottom="@dimen/space_m">
+
+        <View
+            android:id="@+id/csAccent"
+            android:layout_width="4dp"
+            android:layout_height="64dp"
+            android:background="@drawable/bg_badge_live"
+            android:importantForAccessibility="no" />
 
         <ImageView
             android:id="@+id/csIcon"
             android:layout_width="@dimen/badge_medium"
             android:layout_height="@dimen/badge_medium"
+            android:layout_marginStart="@dimen/space_m"
             android:background="@drawable/bg_badge_live"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
             android:padding="@dimen/space_m"
             android:scaleType="fitCenter"
-            app:tint="@color/text_primary"
-            android:contentDescription="@null" />
+            app:tint="@color/text_primary" />
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:layout_marginStart="@dimen/space_l"
+            android:layout_weight="1"
+            android:importantForAccessibility="no"
             android:orientation="vertical">
 
             <TextView
                 android:id="@+id/csTitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textColor="@color/text_primary"
-                android:textSize="24sp"
-                android:textStyle="bold"
+                android:ellipsize="end"
                 android:maxLines="1"
-                android:ellipsize="end" />
+                android:textColor="@color/text_primary"
+                android:textSize="23sp"
+                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/csSubtitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_xs"
-                android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_caption"
-                android:maxLines="1"
-                android:ellipsize="end" />
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="#C7D5DFEA"
+                android:textSize="@dimen/text_caption" />
         </LinearLayout>
 
-        <!-- Trailing "Edit" pill. duplicateParentState so it follows the tile's
-             focus state and lights up with the brand gradient. -->
+        <TextView
+            android:id="@+id/csOrder"
+            android:layout_width="36dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_s"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:importantForAccessibility="no"
+            android:letterSpacing="0.08"
+            android:textColor="#8FA8B3C2"
+            android:textSize="@dimen/text_small" />
+
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/space_m"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
+            android:layout_marginStart="@dimen/space_s"
             android:background="@drawable/bg_pill_action"
             android:duplicateParentState="true"
+            android:gravity="center_vertical"
+            android:importantForAccessibility="no"
+            android:orientation="horizontal"
             android:paddingStart="@dimen/space_m"
-            android:paddingEnd="@dimen/space_m"
             android:paddingTop="@dimen/space_s"
+            android:paddingEnd="@dimen/space_m"
             android:paddingBottom="@dimen/space_s">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:duplicateParentState="true"
                 android:text="@string/content_manager_edit"
                 android:textColor="@color/text_primary"
                 android:textSize="@dimen/text_caption"
@@ -88,9 +115,10 @@
                 android:layout_width="20dp"
                 android:layout_height="20dp"
                 android:layout_marginStart="@dimen/space_xs"
+                android:contentDescription="@null"
+                android:duplicateParentState="true"
                 android:src="@drawable/ic_arrow_right"
-                app:tint="@color/text_primary"
-                android:contentDescription="@null" />
+                app:tint="@color/text_primary" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

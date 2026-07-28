@@ -6,7 +6,7 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:background="@drawable/bg_glass_card"
+    android:background="@drawable/bg_diagnostics_row"
     android:padding="@dimen/space_m"
     android:layout_marginBottom="@dimen/space_xs">
 
@@ -16,13 +16,15 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:textColor="@color/text_primary"
-        android:textSize="@dimen/text_body" />
+        android:textSize="@dimen/text_body"
+        android:textStyle="bold" />
 
     <TextView
         android:id="@+id/diagDetail"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginEnd="@dimen/space_m"
+        android:maxLines="2"
         android:textColor="@color/text_secondary"
         android:textSize="@dimen/text_caption" />
 

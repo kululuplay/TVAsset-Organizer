@@ -14,7 +14,7 @@
 
     <!-- Zenderbeheer -->
     <string name="channel_manager_title">Zenders beheren</string>
-    <string name="channel_manager_hint">Zenders verbergen, herordenen en als favoriet instellen.</string>
+    <string name="channel_manager_hint">OK voor tonen/verbergen · ingedrukt houden om te verplaatsen · ▶ voor favoriet</string>
     <string name="channel_manager_show">Tonen</string>
     <string name="channel_manager_hide">Verbergen</string>
     <string name="channel_manager_hidden">Verborgen</string>
@@ -22,6 +22,28 @@
     <string name="channel_manager_move_down">Omlaag</string>
     <string name="channel_manager_favorite">Aan favorieten toevoegen</string>
     <string name="channel_manager_unfavorite">Uit favorieten verwijderen</string>
+
+    <!-- Inhoudsbeheer (hub + categorie-/zendereditors) -->
+    <string name="settings_content_manager_hint">Categorieën en zenders verbergen en herordenen</string>
+    <string name="content_manager_title">Inhoudsbeheer</string>
+    <string name="content_manager_hint">Kies wat zichtbaar is en in welke volgorde.</string>
+    <string name="content_manager_live">Live-tv</string>
+    <string name="content_manager_live_hint">Categorieën en zenders</string>
+    <string name="content_manager_movies">Films</string>
+    <string name="content_manager_movies_hint">Filmcategorieën</string>
+    <string name="content_manager_series">Series</string>
+    <string name="content_manager_series_hint">Seriecategorieën</string>
+    <string name="content_manager_overline">Beheer</string>
+    <string name="content_manager_edit">Bewerken</string>
+    <string name="category_manager_title_live">Live-tv-categorieën</string>
+    <string name="category_manager_title_movies">Filmcategorieën</string>
+    <string name="category_manager_title_series">Seriecategorieën</string>
+    <string name="category_manager_hint_live">OK voor tonen/verbergen · ingedrukt houden om te verplaatsen · ▶ voor zenders</string>
+    <string name="category_manager_hint">OK voor tonen/verbergen · ingedrukt houden om te verplaatsen</string>
+    <string name="category_manager_empty">Nog geen categorieën.</string>
+    <string name="manager_summary">%1$d zichtbaar · %2$d verborgen</string>
+    <string name="manager_moving">Wordt verplaatst</string>
+    <string name="manager_reset">Volgorde herstellen</string>
 
     <!-- Instellingen: inhoud / synchronisatie -->
     <string name="settings_content">Inhoud</string>

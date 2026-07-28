@@ -14,7 +14,7 @@
 
     <!-- Gestion des chaînes -->
     <string name="channel_manager_title">Gérer les chaînes</string>
-    <string name="channel_manager_hint">Masquez, réorganisez et mettez en favori vos chaînes.</string>
+    <string name="channel_manager_hint">OK pour afficher/masquer · maintenir pour déplacer · ▶ pour les favoris</string>
     <string name="channel_manager_show">Afficher</string>
     <string name="channel_manager_hide">Masquer</string>
     <string name="channel_manager_hidden">Masquée</string>
@@ -22,6 +22,28 @@
     <string name="channel_manager_move_down">Descendre</string>
     <string name="channel_manager_favorite">Ajouter aux favoris</string>
     <string name="channel_manager_unfavorite">Retirer des favoris</string>
+
+    <!-- Gestion du contenu (hub + éditeurs de catégories/chaînes) -->
+    <string name="settings_content_manager_hint">Masquer et réorganiser les catégories et les chaînes</string>
+    <string name="content_manager_title">Gestion du contenu</string>
+    <string name="content_manager_hint">Choisissez ce qui s’affiche et dans quel ordre.</string>
+    <string name="content_manager_live">TV en direct</string>
+    <string name="content_manager_live_hint">Catégories et chaînes</string>
+    <string name="content_manager_movies">Films</string>
+    <string name="content_manager_movies_hint">Catégories de films</string>
+    <string name="content_manager_series">Séries</string>
+    <string name="content_manager_series_hint">Catégories de séries</string>
+    <string name="content_manager_overline">Gestion</string>
+    <string name="content_manager_edit">Modifier</string>
+    <string name="category_manager_title_live">Catégories TV en direct</string>
+    <string name="category_manager_title_movies">Catégories de films</string>
+    <string name="category_manager_title_series">Catégories de séries</string>
+    <string name="category_manager_hint_live">OK pour afficher/masquer · maintenir pour déplacer · ▶ pour les chaînes</string>
+    <string name="category_manager_hint">OK pour afficher/masquer · maintenir pour déplacer</string>
+    <string name="category_manager_empty">Aucune catégorie pour le moment.</string>
+    <string name="manager_summary">%1$d affichées · %2$d masquées</string>
+    <string name="manager_moving">Déplacement</string>
+    <string name="manager_reset">Réinitialiser l’ordre</string>
 
     <!-- Paramètres : contenu / synchronisation -->
     <string name="settings_content">Contenu</string>

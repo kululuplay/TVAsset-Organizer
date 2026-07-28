@@ -1,110 +1,283 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Diagnostics: run connectivity tests, show device info and share a log summary. -->
+<!-- TV-first diagnostics workspace: actions remain visible while results scroll. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:background="@drawable/bg_login_aurora"
-    android:paddingHorizontal="@dimen/safe_area_h"
-    android:paddingVertical="@dimen/safe_area_v">
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/diag_title"
-        android:textColor="@color/text_primary"
-        android:textSize="@dimen/text_big_title"
-        android:textStyle="bold"
-        android:layout_marginBottom="@dimen/space_m" />
+    android:orientation="vertical"
+    android:paddingStart="@dimen/safe_area_h"
+    android:paddingTop="@dimen/safe_area_v"
+    android:paddingEnd="@dimen/safe_area_h"
+    android:paddingBottom="@dimen/safe_area_v">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="@dimen/space_m">
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-        <Button
-            android:id="@+id/btnRunTests"
-            style="@style/Widget.Iptv.Button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/diag_run" />
+        <ImageView
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:background="@drawable/bg_support_icon_badge"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
+            android:padding="12dp"
+            android:src="@drawable/ic_signal"
+            app:tint="@color/accent" />
 
-        <Button
-            android:id="@+id/btnPeering"
-            style="@style/Widget.Iptv.Button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/space_m"
-            android:text="@string/diag_peering" />
-
-        <Button
-            android:id="@+id/btnSendLogs"
-            style="@style/Widget.Iptv.Button"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="@dimen/space_m"
-            android:text="@string/diag_send_logs" />
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/diagnosticsTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/diag_title"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_big_title"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:text="@string/diag_subtitle"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_caption" />
+        </LinearLayout>
     </LinearLayout>
 
-    <ScrollView
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_m"
+        android:clipChildren="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnRunTests"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/bg_support_action"
+            android:backgroundTint="@null"
+            android:focusable="true"
+            android:focusableInTouchMode="false"
+            android:maxLines="2"
+            android:minHeight="@dimen/settings_row_min_h"
+            android:nextFocusRight="@id/btnPeering"
+            android:stateListAnimator="@animator/control_focus"
+            android:text="@string/diag_run"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/text_body"
+            android:textStyle="bold" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnPeering"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_s"
+            android:layout_weight="1"
+            android:background="@drawable/bg_support_action"
+            android:backgroundTint="@null"
+            android:focusable="true"
+            android:focusableInTouchMode="false"
+            android:maxLines="2"
+            android:minHeight="@dimen/settings_row_min_h"
+            android:nextFocusLeft="@id/btnRunTests"
+            android:nextFocusRight="@id/btnSendLogs"
+            android:stateListAnimator="@animator/control_focus"
+            android:text="@string/diag_peering"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/text_body"
+            android:textStyle="bold" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnSendLogs"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_s"
+            android:layout_weight="1"
+            android:background="@drawable/bg_support_action"
+            android:backgroundTint="@null"
+            android:focusable="true"
+            android:focusableInTouchMode="false"
+            android:maxLines="2"
+            android:minHeight="@dimen/settings_row_min_h"
+            android:nextFocusLeft="@id/btnPeering"
+            android:stateListAnimator="@animator/control_focus"
+            android:text="@string/diag_send_logs"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/text_body"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
+        android:layout_marginTop="@dimen/space_m"
         android:layout_weight="1"
         android:clipToPadding="false"
-        android:fillViewport="true">
+        android:fillViewport="true"
+        android:focusable="false"
+        android:focusableInTouchMode="false">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:paddingBottom="@dimen/space_m">
 
             <LinearLayout
-                android:id="@+id/diagResults"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical" />
+                android:background="@drawable/bg_support_panel"
+                android:orientation="vertical"
+                android:padding="@dimen/space_m">
 
-            <TextView
-                android:id="@+id/peeringVerdict"
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/diag_quick_section"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_title"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_xs"
+                    android:text="@string/diag_quick_desc"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="@dimen/text_caption" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_m"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ProgressBar
+                        android:id="@+id/diagQuickProgress"
+                        style="?android:attr/progressBarStyleSmall"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:contentDescription="@string/diag_running"
+                        android:indeterminateTint="@color/accent"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/diagQuickStatus"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/space_s"
+                        android:layout_weight="1"
+                        android:accessibilityLiveRegion="polite"
+                        android:text="@string/diag_ready"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="@dimen/text_caption"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/diagResults"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_s"
+                    android:orientation="vertical" />
+            </LinearLayout>
+
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:visibility="gone"
-                android:background="@drawable/bg_glass_card"
-                android:padding="@dimen/space_m"
                 android:layout_marginTop="@dimen/space_m"
-                android:layout_marginBottom="@dimen/space_s"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_body"
-                android:textStyle="bold"
-                android:lineSpacingMultiplier="1.3" />
+                android:background="@drawable/bg_support_panel"
+                android:orientation="vertical"
+                android:padding="@dimen/space_m">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/diag_peering_section"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_title"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_xs"
+                    android:text="@string/diag_peering_desc"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="@dimen/text_caption" />
+
+                <TextView
+                    android:id="@+id/peeringVerdict"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_m"
+                    android:background="@drawable/bg_diagnostics_verdict"
+                    android:lineSpacingMultiplier="1.25"
+                    android:padding="@dimen/space_m"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <LinearLayout
+                    android:id="@+id/peeringResults"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_s"
+                    android:orientation="vertical" />
+            </LinearLayout>
 
             <LinearLayout
-                android:id="@+id/peeringResults"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical" />
+                android:layout_marginTop="@dimen/space_m"
+                android:background="@drawable/bg_support_panel"
+                android:orientation="vertical"
+                android:padding="@dimen/space_m">
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/diag_device"
-                android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_caption"
-                android:textStyle="bold"
-                android:textAllCaps="true"
-                android:layout_marginTop="@dimen/space_l"
-                android:layout_marginBottom="@dimen/space_s" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/diag_device"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_title"
+                    android:textStyle="bold" />
 
-            <TextView
-                android:id="@+id/deviceInfo"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_glass_card"
-                android:padding="@dimen/space_m"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_caption"
-                android:lineSpacingMultiplier="1.3" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_xs"
+                    android:text="@string/diag_device_desc"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="@dimen/text_caption" />
+
+                <TextView
+                    android:id="@+id/deviceInfo"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_m"
+                    android:background="@drawable/bg_diagnostics_row"
+                    android:lineSpacingMultiplier="1.3"
+                    android:padding="@dimen/space_m"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_caption" />
+            </LinearLayout>
         </LinearLayout>
-    </ScrollView>
+    </androidx.core.widget.NestedScrollView>
 </LinearLayout>

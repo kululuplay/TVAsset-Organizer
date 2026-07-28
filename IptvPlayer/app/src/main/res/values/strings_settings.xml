@@ -28,6 +28,31 @@
     <string name="about_check_update">Check for updates</string>
     <string name="about_up_to_date">You\'re on the latest version.</string>
 
+    <!-- Modern System & Support / PIN surfaces -->
+    <string name="pin_clear">Clear</string>
+    <string name="pin_backspace">Delete last digit</string>
+    <string name="pin_progress">%1$d of 4 digits entered</string>
+    <string name="settings_pin_setup_desc">Change the four-digit PIN used for parental controls.</string>
+    <string name="settings_support_tools">Support tools</string>
+    <string name="settings_support_tools_desc">Check connectivity, collect technical details and keep the app current.</string>
+    <string name="settings_diagnostics_desc">Test the network, server path and device connection.</string>
+    <string name="settings_about_desc">View the installed version and check for secure updates.</string>
+    <string name="settings_account_actions">Account actions</string>
+    <string name="settings_logout_desc">Remove this IPTV account from the device.</string>
+    <string name="diag_subtitle">Network health, routing and device information</string>
+    <string name="diag_quick_section">Quick connection check</string>
+    <string name="diag_quick_desc">Tests internet access and your provider connection.</string>
+    <string name="diag_ready">Ready to run</string>
+    <string name="diag_complete_summary">%1$d of %2$d checks passed</string>
+    <string name="diag_peering_section">Extended route analysis</string>
+    <string name="diag_peering_desc">Compares the route to the service with independent reference points. Takes about three minutes.</string>
+    <string name="diag_device_desc">Technical details to include when contacting support.</string>
+    <string name="about_subtitle">Version information and secure application updates</string>
+    <string name="about_brand_tagline">A focused television experience, designed for the big screen.</string>
+    <string name="about_update_section">Application updates</string>
+    <string name="about_update_desc">Check for a newer release and install it without losing your account or preferences.</string>
+    <string name="about_ready">Your installed version is ready.</string>
+
     <!-- Master-detail redesign -->
     <string name="settings_general_info">General Info</string>
     <string name="settings_time_sync">Time &amp; sync</string>
@@ -54,10 +79,8 @@
     <string name="settings_panel_content_desc">Choose which categories and channels appear</string>
     <string name="settings_panel_player_desc">Tune playback engines, decoding, buffering and audio</string>
     <string name="settings_panel_time_desc">Clock, screen saver and background synchronisation</string>
-    <string name="settings_panel_tmdb_desc">Add an optional TMDB key for richer movie details</string>
     <string name="settings_panel_speed_desc">Measure the current connection’s download performance</string>
     <string name="settings_panel_system_desc">Diagnostics, app information and account actions</string>
-    <string name="settings_tmdb_input_hint">Enter TMDB API key</string>
 
     <!-- Public IP (General Info) -->
     <string name="settings_network_info">Network Info</string>
@@ -77,7 +100,7 @@
     <string name="speedtest_phase_connecting">Preparing connections · %1$d/%2$d</string>
     <string name="speedtest_phase_warming">Warming up connections · %1$d/%2$d active</string>
     <string name="speedtest_phase_measuring">Measuring sustained speed · %1$d/%2$d active</string>
-    <string name="speedtest_method">Uses multiple public CDNs and 10 parallel download streams. This measures your internet connection, not the IPTV server.</string>
+    <string name="speedtest_method">Uses a dedicated internet speed-test service with 10 parallel download streams. This measures your internet connection, not the IPTV server.</string>
     <string name="speedtest_data_notice">The test transfers a significant amount of data. Wi-Fi quality, VPNs and background traffic can affect the result.</string>
     <string name="speedtest_result_meta">%1$d active streams · %2$d MB · %3$.1f s</string>
     <string name="speedtest_result_summary">%1$s · %2$s</string>

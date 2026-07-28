@@ -11,6 +11,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
+import androidx.core.view.ViewCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -39,6 +40,9 @@ class CategoryManagerActivity : BaseActivity() {
     private var items: MutableList<ManagedCategory> = mutableListOf()
     private var movingId: String? = null
     private var pendingFocusId: String? = null
+    private var restoredFocusId: String? = null
+    private var lastFocusedId: String? = null
+    private var initialFocusApplied = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,19 +62,38 @@ class CategoryManagerActivity : BaseActivity() {
             if (type == ContentType.LIVE) R.string.category_manager_hint_live
             else R.string.category_manager_hint
         )
+        val (iconRes, badgeRes) = when (type) {
+            ContentType.LIVE -> R.drawable.ic_tv to R.drawable.bg_badge_live
+            ContentType.VOD -> R.drawable.ic_movie to R.drawable.bg_badge_movies
+            ContentType.SERIES -> R.drawable.ic_series to R.drawable.bg_badge_series
+        }
+        binding.cmIcon.setImageResource(iconRes)
+        binding.cmIcon.setBackgroundResource(badgeRes)
+        restoredFocusId = savedInstanceState?.getString(STATE_FOCUSED_CATEGORY_ID)
+        lastFocusedId = restoredFocusId
+
+        ViewCompat.setAccessibilityPaneTitle(binding.root, binding.cmTitle.text)
+        ViewCompat.setAccessibilityHeading(binding.cmTitle, true)
 
         adapter = CategoryManagerAdapter(
             canDrill = type == ContentType.LIVE,
             onClicked = { if (movingId == null) viewModel.setHidden(it.category.id, !it.hidden) },
             onLongClicked = { enterMoveMode(it) },
-            onDrill = { openChannels(it) }
+            onDrill = { openChannels(it) },
+            onFocused = { lastFocusedId = it }
         )
         binding.categoryList.layoutManager = LinearLayoutManager(this)
         binding.categoryList.adapter = adapter
+        // Change animations briefly detach/rebind a focused row after a hide
+        // toggle. Disabling them prevents visible focus flicker on TV devices.
+        binding.categoryList.itemAnimator = null
 
         binding.cmReset.setOnClickListener {
             if (movingId == null) viewModel.resetOrder()
         }
+        binding.cmReset.nextFocusUpId = binding.cmReset.id
+        binding.cmReset.nextFocusLeftId = binding.cmReset.id
+        binding.cmReset.nextFocusRightId = binding.cmReset.id
 
         lifecycleScope.launch {
             viewModel.categories.collectLatest { list ->
@@ -86,15 +109,48 @@ class CategoryManagerActivity : BaseActivity() {
         adapter.submitList(items.toList()) {
             updateSummary()
             binding.emptyState.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
-            pendingFocusId?.let { id ->
-                val pos = items.indexOfFirst { it.category.id == id }
-                if (pos >= 0) {
-                    binding.categoryList.post {
-                        binding.categoryList.layoutManager?.findViewByPosition(pos)?.requestFocus()
-                    }
+            binding.categoryList.post {
+                updateFocusGraph()
+
+                val pending = pendingFocusId.also { pendingFocusId = null }
+                val initial = if (!initialFocusApplied && items.isNotEmpty()) {
+                    initialFocusApplied = true
+                    restoredFocusId ?: items.first().category.id
+                } else {
+                    null
                 }
-                pendingFocusId = null
+
+                when {
+                    pending != null -> focusCategory(pending)
+                    initial != null -> focusCategory(initial)
+                    items.isEmpty() && !binding.cmReset.hasFocus() ->
+                        binding.cmReset.requestFocus()
+                }
             }
+        }
+    }
+
+    private fun updateFocusGraph() {
+        val first = binding.categoryList.layoutManager?.findViewByPosition(0)
+        if (first == null) {
+            binding.cmReset.nextFocusDownId = binding.cmReset.id
+            return
+        }
+        first.nextFocusUpId = binding.cmReset.id
+        binding.cmReset.nextFocusDownId = first.id
+    }
+
+    private fun focusCategory(id: String) {
+        val position = items.indexOfFirst { it.category.id == id }
+            .takeIf { it >= 0 }
+            ?: items.indices.firstOrNull()
+            ?: return
+        binding.categoryList.scrollToPosition(position)
+        binding.categoryList.post {
+            updateFocusGraph()
+            binding.categoryList.layoutManager
+                ?.findViewByPosition(position)
+                ?.requestFocus()
         }
     }
 
@@ -148,7 +204,7 @@ class CategoryManagerActivity : BaseActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (movingId != null) {
             // Trap all D-pad navigation while moving so focus can't escape the
-            // list and trigger background reorders; only commit/cancel exits.
+            // list and trigger background reorders; OK or Back commits and exits.
             if (event.action == KeyEvent.ACTION_DOWN) {
                 when (event.keyCode) {
                     KeyEvent.KEYCODE_DPAD_UP -> moveBy(-1)
@@ -166,7 +222,21 @@ class CategoryManagerActivity : BaseActivity() {
                 else -> super.dispatchKeyEvent(event)
             }
         }
+        if (binding.cmReset.hasFocus() && event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                items.firstOrNull()?.let { focusCategory(it.category.id) }
+            }
+            return true
+        }
         return super.dispatchKeyEvent(event)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString(
+            STATE_FOCUSED_CATEGORY_ID,
+            movingId ?: lastFocusedId ?: restoredFocusId
+        )
+        super.onSaveInstanceState(outState)
     }
 
     private fun openChannels(item: ManagedCategory) {
@@ -179,5 +249,6 @@ class CategoryManagerActivity : BaseActivity() {
 
     companion object {
         const val EXTRA_TYPE = "extra_type"
+        private const val STATE_FOCUSED_CATEGORY_ID = "state_focused_category_id"
     }
 }

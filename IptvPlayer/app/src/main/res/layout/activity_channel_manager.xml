@@ -1,55 +1,130 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Channel editor: header (title + summary) above a scrolling list of live
-     channels. OK shows/hides a row; hold to enter move mode; ▶ favourites. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Channel editor aligned with the Content Manager visual and focus language. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@drawable/bg_login_aurora"
-    android:paddingHorizontal="@dimen/safe_area_h"
-    android:paddingVertical="@dimen/safe_area_v">
+    android:background="@drawable/bg_content_manager_root"
+    android:clipChildren="false"
+    android:clipToPadding="false">
 
-    <TextView
-        android:id="@+id/cmTitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/channel_manager_title"
-        android:textColor="@color/text_primary"
-        android:textSize="@dimen/text_title"
-        android:textStyle="bold"
-        android:layout_marginBottom="@dimen/space_xs" />
-
-    <TextView
-        android:id="@+id/cmSummary"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/text_secondary"
-        android:textSize="@dimen/text_caption"
-        android:layout_marginBottom="@dimen/space_xs" />
-
-    <TextView
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/channel_manager_hint"
-        android:textColor="@color/text_secondary"
-        android:textSize="@dimen/text_caption"
-        android:layout_marginBottom="@dimen/space_m" />
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/safe_area_h"
+        android:paddingVertical="@dimen/safe_area_v">
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/channelList"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:clipToPadding="false" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_content_manager_panel"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="@dimen/space_l">
 
-    <TextView
-        android:id="@+id/emptyState"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/empty_channels"
-        android:textColor="@color/text_secondary"
-        android:textSize="@dimen/text_body"
-        android:gravity="center"
-        android:padding="@dimen/space_l"
-        android:visibility="gone" />
-</LinearLayout>
+            <ImageView
+                android:layout_width="68dp"
+                android:layout_height="68dp"
+                android:background="@drawable/bg_badge_live"
+                android:contentDescription="@null"
+                android:padding="@dimen/space_m"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_tv"
+                app:tint="@color/text_primary" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/space_l"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:importantForAccessibility="no"
+                    android:letterSpacing="0.16"
+                    android:text="@string/content_manager_live"
+                    android:textAllCaps="true"
+                    android:textColor="@color/brand_pink"
+                    android:textSize="@dimen/text_small"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_xs"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/cmTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:text="@string/channel_manager_title"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_title"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/cmSummary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/space_m"
+                        android:background="@drawable/bg_content_manager_count"
+                        android:paddingHorizontal="@dimen/space_m"
+                        android:paddingVertical="@dimen/space_xs"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="@dimen/text_caption" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_xs"
+                    android:ellipsize="end"
+                    android:maxLines="2"
+                    android:text="@string/channel_manager_hint"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="@dimen/text_caption" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="@dimen/space_m"
+            android:layout_weight="1"
+            android:background="@drawable/bg_content_manager_list_panel"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:padding="@dimen/space_s">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/channelList"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:padding="@dimen/space_xs"
+                android:scrollbars="none" />
+
+            <TextView
+                android:id="@+id/emptyState"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:padding="@dimen/space_l"
+                android:text="@string/empty_channels"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_body"
+                android:visibility="gone" />
+        </FrameLayout>
+    </LinearLayout>
+</FrameLayout>

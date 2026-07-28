@@ -14,6 +14,8 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
+import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
 import androidx.lifecycle.lifecycleScope
 import com.iptv.player.BuildConfig
 import com.iptv.player.R
@@ -68,6 +70,9 @@ class AboutActivity : BaseActivity() {
         binding.btnCheckUpdate.setOnClickListener { checkForUpdate() }
         binding.btnUpdateNow.setOnClickListener { startUpdate() }
         binding.btnCancelUpdate.setOnClickListener { cancelDownload() }
+        ViewCompat.setAccessibilityHeading(binding.aboutTitle, true)
+        ViewCompat.setAccessibilityPaneTitle(binding.root, getString(R.string.about_title))
+        binding.btnCheckUpdate.post { binding.btnCheckUpdate.requestFocus() }
 
         // Arrived from the launch-time prompt: run the check straight away and,
         // once it confirms an update, start the download automatically so the user
@@ -79,20 +84,33 @@ class AboutActivity : BaseActivity() {
     }
 
     private fun checkForUpdate() {
+        if (!binding.btnCheckUpdate.isClickable) return
         binding.aboutUpdateStatus.visibility = View.VISIBLE
         binding.aboutUpdateStatus.setText(R.string.about_checking)
+        binding.aboutUpdateStatus.setTextColor(
+            ContextCompat.getColor(this, R.color.text_secondary),
+        )
         binding.btnUpdateNow.visibility = View.GONE
         binding.updateProgressCard.visibility = View.GONE
-        binding.btnCheckUpdate.isEnabled = false
+        setChecking(true)
 
         lifecycleScope.launch {
-            val result = checker.check(BuildConfig.VERSION_NAME)
-            binding.btnCheckUpdate.isEnabled = true
+            val result = try {
+                checker.check(BuildConfig.VERSION_NAME)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (_: Throwable) {
+                UpdateResult.Failed
+            }
+            setChecking(false)
             when (result) {
                 is UpdateResult.Available -> {
                     pendingUpdate = result.info
                     binding.aboutUpdateStatus.text =
                         getString(R.string.about_update_available, result.info.versionName)
+                    binding.aboutUpdateStatus.setTextColor(
+                        ContextCompat.getColor(this@AboutActivity, R.color.accent),
+                    )
                     binding.btnUpdateNow.visibility = View.VISIBLE
                     binding.btnUpdateNow.requestFocus()
                     // Came from the launch prompt: kick off the download right away
@@ -105,13 +123,28 @@ class AboutActivity : BaseActivity() {
                 UpdateResult.UpToDate -> {
                     pendingUpdate = null
                     binding.aboutUpdateStatus.setText(R.string.about_up_to_date)
+                    binding.aboutUpdateStatus.setTextColor(
+                        ContextCompat.getColor(this@AboutActivity, R.color.success),
+                    )
+                    binding.btnCheckUpdate.requestFocus()
                 }
                 UpdateResult.Failed -> {
                     pendingUpdate = null
                     binding.aboutUpdateStatus.setText(R.string.about_update_failed)
+                    binding.aboutUpdateStatus.setTextColor(
+                        ContextCompat.getColor(this@AboutActivity, R.color.danger),
+                    )
+                    binding.btnCheckUpdate.requestFocus()
                 }
             }
         }
+    }
+
+    private fun setChecking(checking: Boolean) {
+        // Do not disable a focused TV control: Android would move focus to an
+        // arbitrary view. Clickability plus the guard above prevents re-entry.
+        binding.btnCheckUpdate.isClickable = !checking
+        binding.btnCheckUpdate.alpha = if (checking) 0.68f else 1f
     }
 
     private fun startUpdate() {
@@ -144,6 +177,9 @@ class AboutActivity : BaseActivity() {
         if (dir == null) {
             binding.aboutUpdateStatus.visibility = View.VISIBLE
             binding.aboutUpdateStatus.setText(R.string.about_update_failed)
+            binding.aboutUpdateStatus.setTextColor(
+                ContextCompat.getColor(this, R.color.danger),
+            )
             return
         }
 
@@ -157,7 +193,7 @@ class AboutActivity : BaseActivity() {
         }
 
         binding.btnUpdateNow.visibility = View.GONE
-        binding.btnCheckUpdate.isEnabled = false
+        binding.btnCheckUpdate.visibility = View.GONE
         binding.aboutUpdateStatus.visibility = View.GONE
         binding.updateProgressCard.visibility = View.VISIBLE
         binding.btnCancelUpdate.visibility = View.VISIBLE
@@ -232,7 +268,12 @@ class AboutActivity : BaseActivity() {
                 binding.btnCancelUpdate.visibility = View.GONE
                 binding.aboutUpdateStatus.visibility = View.VISIBLE
                 binding.aboutUpdateStatus.setText(R.string.about_update_failed)
-                binding.btnCheckUpdate.isEnabled = true
+                binding.aboutUpdateStatus.setTextColor(
+                    ContextCompat.getColor(this@AboutActivity, R.color.danger),
+                )
+                binding.btnCheckUpdate.visibility = View.VISIBLE
+                binding.btnCheckUpdate.isClickable = true
+                binding.btnCheckUpdate.alpha = 1f
                 binding.btnUpdateNow.visibility = View.VISIBLE
                 binding.btnUpdateNow.requestFocus()
             }
@@ -247,12 +288,17 @@ class AboutActivity : BaseActivity() {
         activeCall = null
         binding.updateProgressCard.visibility = View.GONE
         binding.btnCancelUpdate.visibility = View.GONE
-        binding.btnCheckUpdate.isEnabled = true
+        binding.btnCheckUpdate.visibility = View.VISIBLE
+        binding.btnCheckUpdate.isClickable = true
+        binding.btnCheckUpdate.alpha = 1f
         binding.aboutUpdateStatus.visibility = View.VISIBLE
         val info = pendingUpdate
         if (info != null) {
             binding.aboutUpdateStatus.text =
                 getString(R.string.about_update_available, info.versionName)
+            binding.aboutUpdateStatus.setTextColor(
+                ContextCompat.getColor(this, R.color.accent),
+            )
             binding.btnUpdateNow.visibility = View.VISIBLE
             binding.btnUpdateNow.requestFocus()
         } else {
@@ -306,20 +352,35 @@ class AboutActivity : BaseActivity() {
             binding.btnCancelUpdate.visibility = View.GONE
             binding.aboutUpdateStatus.visibility = View.VISIBLE
             binding.aboutUpdateStatus.setText(R.string.about_update_failed)
-            binding.btnCheckUpdate.isEnabled = true
+            binding.aboutUpdateStatus.setTextColor(
+                ContextCompat.getColor(this, R.color.danger),
+            )
+            binding.btnCheckUpdate.visibility = View.VISIBLE
+            binding.btnCheckUpdate.isClickable = true
+            binding.btnCheckUpdate.alpha = 1f
+            binding.btnCheckUpdate.requestFocus()
             return
         }
         binding.updateProgressBar.isIndeterminate = false
         binding.updateProgressBar.progress = 100
         binding.updatePercent.text = String.format(Locale.getDefault(), "%d%%", 100)
         binding.updateSize.text = getString(R.string.about_download_complete)
+        binding.updateSize.announceForAccessibility(binding.updateSize.text)
         binding.updateSpeedEta.text = ""
         binding.btnCancelUpdate.visibility = View.GONE
-        binding.btnCheckUpdate.isEnabled = true
+        binding.btnCheckUpdate.visibility = View.VISIBLE
+        binding.btnCheckUpdate.isClickable = true
+        binding.btnCheckUpdate.alpha = 1f
+        binding.btnCheckUpdate.requestFocus()
         if (!ApkInstaller.install(this, target)) {
             binding.updateProgressCard.visibility = View.GONE
             binding.aboutUpdateStatus.visibility = View.VISIBLE
             binding.aboutUpdateStatus.setText(R.string.about_update_failed)
+            binding.aboutUpdateStatus.setTextColor(
+                ContextCompat.getColor(this, R.color.danger),
+            )
+            binding.btnUpdateNow.visibility = View.VISIBLE
+            binding.btnUpdateNow.requestFocus()
         }
     }
 
@@ -341,10 +402,10 @@ class AboutActivity : BaseActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         downloadJob?.cancel()
         downloadJob = null
         activeCall?.cancel()
         activeCall = null
+        super.onDestroy()
     }
 }

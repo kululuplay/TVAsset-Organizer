@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A smaller scale than poster cards keeps neighbouring manager cards stable. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <set>
+            <objectAnimator
+                android:propertyName="scaleX"
+                android:valueTo="1.025"
+                android:duration="140" />
+            <objectAnimator
+                android:propertyName="scaleY"
+                android:valueTo="1.025"
+                android:duration="140" />
+            <objectAnimator
+                android:propertyName="translationZ"
+                android:valueTo="8dp"
+                android:duration="140" />
+        </set>
+    </item>
+    <item>
+        <set>
+            <objectAnimator
+                android:propertyName="scaleX"
+                android:valueTo="1.0"
+                android:duration="140" />
+            <objectAnimator
+                android:propertyName="scaleY"
+                android:valueTo="1.0"
+                android:duration="140" />
+            <objectAnimator
+                android:propertyName="translationZ"
+                android:valueTo="0dp"
+                android:duration="140" />
+        </set>
+    </item>
+</selector>

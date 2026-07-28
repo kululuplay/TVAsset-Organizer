@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Calm cinematic backdrop shared by the content-management flow. The glows
+     sit at the edges so long category/channel lists keep strong contrast. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/brand_cinematic" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.06"
+                android:centerY="0.12"
+                android:gradientRadius="720dp"
+                android:startColor="#4D7B2FF7"
+                android:endColor="#007B2FF7" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.94"
+                android:centerY="0.86"
+                android:gradientRadius="780dp"
+                android:startColor="#3D3A6BFF"
+                android:endColor="#003A6BFF" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="90"
+                android:startColor="#00101820"
+                android:centerColor="#33101820"
+                android:endColor="#B307090F" />
+        </shape>
+    </item>
+</layer-list>

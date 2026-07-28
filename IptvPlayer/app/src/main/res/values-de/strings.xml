@@ -149,8 +149,6 @@
     <string name="settings_parental">Kindersicherung</string>
     <string name="settings_parental_pin">PIN festlegen / ändern</string>
     <string name="settings_lock_adult">Erwachsenenkategorien sperren</string>
-    <string name="settings_tmdb">TMDB-API-Schlüssel</string>
-    <string name="settings_tmdb_hint">Optional: aktiviert Filmplakate und Details.</string>
     <string name="settings_screensaver">Bildschirmschoner bei Inaktivität</string>
     <string name="settings_clock">Uhr anzeigen</string>
     <string name="settings_diagnostics">Diagnose</string>
@@ -267,10 +265,8 @@
     <string name="settings_panel_content_desc">Sichtbare Kategorien und Sender auswählen</string>
     <string name="settings_panel_player_desc">Wiedergabe-Engines, Dekodierung, Pufferung und Audio optimieren</string>
     <string name="settings_panel_time_desc">Uhr, Bildschirmschoner und Hintergrundsynchronisierung</string>
-    <string name="settings_panel_tmdb_desc">Optionalen TMDB-Schlüssel für umfangreichere Filmdetails hinzufügen</string>
     <string name="settings_panel_speed_desc">Aktuelle Downloadleistung der Verbindung messen</string>
     <string name="settings_panel_system_desc">Diagnose, App-Informationen und Kontoaktionen</string>
-    <string name="settings_tmdb_input_hint">TMDB-API-Schlüssel eingeben</string>
 
     <!-- Netzwerk und Geschwindigkeitstest -->
     <string name="settings_network_info">Netzwerkinformationen</string>
@@ -288,7 +284,7 @@
     <string name="speedtest_phase_connecting">Verbindungen werden vorbereitet · %1$d/%2$d</string>
     <string name="speedtest_phase_warming">Verbindungen werden aufgewärmt · %1$d/%2$d aktiv</string>
     <string name="speedtest_phase_measuring">Dauerhafte Geschwindigkeit wird gemessen · %1$d/%2$d aktiv</string>
-    <string name="speedtest_method">Verwendet mehrere öffentliche CDNs und 10 parallele Download-Datenströme. Gemessen wird Ihre Internetverbindung, nicht der IPTV-Server.</string>
+    <string name="speedtest_method">Verwendet einen dedizierten Internet-Geschwindigkeitstest mit 10 parallelen Download-Streams. Gemessen wird Ihre Internetverbindung, nicht der IPTV-Server.</string>
     <string name="speedtest_data_notice">Der Test überträgt eine erhebliche Datenmenge. WLAN-Qualität, VPNs und Datenverkehr im Hintergrund können das Ergebnis beeinflussen.</string>
     <string name="speedtest_result_meta">%1$d aktive Streams · %2$d MB · %3$.1f s</string>
     <string name="speedtest_result_summary">%1$s · %2$s</string>
@@ -337,4 +333,27 @@
     <string name="recovery_safe_mode">Sicherer Modus: Die App ist beim Start wiederholt abgestürzt, daher wurden die Wiedergabe-Einstellungen zurückgesetzt.</string>
     <string name="error_auto_retry_countdown">Verbindung fehlgeschlagen. Automatischer Neuversuch in %1$d s…</string>
     <string name="error_auto_retry_exhausted">Verbindung weiterhin nicht möglich. Drücken Sie „Erneut versuchen“.</string>
+    <string name="pin_clear">Löschen</string>
+    <string name="pin_backspace">Letzte Ziffer löschen</string>
+    <string name="pin_progress">%1$d von 4 Ziffern eingegeben</string>
+    <string name="settings_pin_setup_desc">Ändern Sie die vierstellige PIN für die Kindersicherung.</string>
+    <string name="settings_support_tools">Support-Werkzeuge</string>
+    <string name="settings_support_tools_desc">Verbindung prüfen, technische Details erfassen und die App aktuell halten.</string>
+    <string name="settings_diagnostics_desc">Netzwerk, Serverroute und Geräteverbindung testen.</string>
+    <string name="settings_about_desc">Installierte Version anzeigen und nach sicheren Updates suchen.</string>
+    <string name="settings_account_actions">Kontoaktionen</string>
+    <string name="settings_logout_desc">Dieses IPTV-Konto vom Gerät entfernen.</string>
+    <string name="diag_subtitle">Netzwerkzustand, Routing und Geräteinformationen</string>
+    <string name="diag_quick_section">Schneller Verbindungstest</string>
+    <string name="diag_quick_desc">Prüft den Internetzugang und die Verbindung zu Ihrem Anbieter.</string>
+    <string name="diag_ready">Bereit zum Starten</string>
+    <string name="diag_complete_summary">%1$d von %2$d Prüfungen erfolgreich</string>
+    <string name="diag_peering_section">Erweiterte Routenanalyse</string>
+    <string name="diag_peering_desc">Vergleicht die Route zum Dienst mit unabhängigen Referenzpunkten. Dauert etwa drei Minuten.</string>
+    <string name="diag_device_desc">Technische Details für eine Support-Anfrage.</string>
+    <string name="about_subtitle">Versionsinformationen und sichere App-Updates</string>
+    <string name="about_brand_tagline">Ein konzentriertes Fernseherlebnis, entwickelt für den großen Bildschirm.</string>
+    <string name="about_update_section">App-Updates</string>
+    <string name="about_update_desc">Neue Versionen prüfen und installieren, ohne Konto oder Einstellungen zu verlieren.</string>
+    <string name="about_ready">Ihre installierte Version ist bereit.</string>
 </resources>

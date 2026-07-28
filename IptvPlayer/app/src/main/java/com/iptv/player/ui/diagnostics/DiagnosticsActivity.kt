@@ -14,8 +14,10 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
 import androidx.lifecycle.lifecycleScope
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
@@ -40,6 +42,7 @@ class DiagnosticsActivity : BaseActivity() {
     // D-pad focus to a nav row) — re-entry is blocked by the flag instead.
     private var quickRunning = false
     private var peeringRunning = false
+    private var quickJob: Job? = null
     private var peeringJob: Job? = null
     private val peeringRows = mutableListOf<View>()
     private var lastPeeringSummary: String? = null
@@ -53,11 +56,14 @@ class DiagnosticsActivity : BaseActivity() {
         binding.btnRunTests.setOnClickListener { runTests() }
         binding.btnPeering.setOnClickListener { runPeeringTest() }
         binding.btnSendLogs.setOnClickListener { sendLogs() }
-        binding.btnRunTests.requestFocus()
+        ViewCompat.setAccessibilityHeading(binding.diagnosticsTitle, true)
+        ViewCompat.setAccessibilityPaneTitle(binding.root, getString(R.string.diag_title))
+        binding.btnRunTests.post { binding.btnRunTests.requestFocus() }
     }
 
     override fun onStop() {
-        // Abort the long peering test if the user leaves the screen.
+        // Abort active network work if the user leaves the screen.
+        quickJob?.cancel()
         peeringJob?.cancel()
         super.onStop()
     }
@@ -65,11 +71,11 @@ class DiagnosticsActivity : BaseActivity() {
     private fun runTests() {
         if (quickRunning || peeringRunning) return
         quickRunning = true
-        binding.btnRunTests.isEnabled = false
+        setQuickRunning(true)
         binding.diagResults.removeAllViews()
         results.clear()
 
-        lifecycleScope.launch {
+        quickJob = lifecycleScope.launch {
             try {
                 val config = ServiceLocator.settings.getSourceConfig()
 
@@ -79,15 +85,83 @@ class DiagnosticsActivity : BaseActivity() {
                     if (online) getString(R.string.diag_passed) else getString(R.string.error_no_internet)))
 
                 if (config != null) {
-                    addResult(localize(ServiceLocator.repository.pingServer(config), R.string.diag_ping))
-                    addResult(localize(ServiceLocator.repository.speedTestMbps(config), R.string.diag_speed))
-                    addResult(localize(ServiceLocator.repository.checkDns(config), R.string.diag_dns))
+                    addSafeResult(R.string.diag_ping) {
+                        ServiceLocator.repository.pingServer(config)
+                    }
+                    addSafeResult(R.string.diag_speed) {
+                        ServiceLocator.repository.speedTestMbps(config)
+                    }
+                    addSafeResult(R.string.diag_dns) {
+                        ServiceLocator.repository.checkDns(config)
+                    }
+                } else {
+                    addResult(
+                        DiagnosticResult(
+                            getString(R.string.diag_server),
+                            false,
+                            getString(R.string.account_none),
+                        ),
+                    )
                 }
+                val summary = getString(
+                    R.string.diag_complete_summary,
+                    results.count { it.ok },
+                    results.size,
+                )
+                binding.diagQuickStatus.text = summary
+                binding.diagQuickStatus.announceForAccessibility(summary)
+            } catch (ce: CancellationException) {
+                binding.diagQuickStatus.setText(R.string.diag_ready)
+                throw ce
+            } catch (_: Throwable) {
+                addResult(
+                    DiagnosticResult(
+                        getString(R.string.diag_title),
+                        false,
+                        getString(R.string.error_unknown),
+                    ),
+                )
+                binding.diagQuickStatus.setText(R.string.diag_failed)
             } finally {
-                binding.btnRunTests.isEnabled = true
                 quickRunning = false
+                quickJob = null
+                setQuickRunning(false, keepStatus = results.isNotEmpty())
             }
         }
+    }
+
+    private fun setQuickRunning(running: Boolean, keepStatus: Boolean = false) {
+        // Keep the focused view enabled; disabling it makes Android TV move focus
+        // to an arbitrary sibling. The running guard + isClickable blocks re-entry.
+        binding.btnRunTests.isClickable = !running
+        binding.btnRunTests.alpha = if (running) 0.68f else 1f
+        binding.btnRunTests.setText(
+            if (running) R.string.diag_running else R.string.diag_run,
+        )
+        binding.diagQuickProgress.visibility = if (running) View.VISIBLE else View.GONE
+        if (running) {
+            binding.diagQuickStatus.setText(R.string.diag_running)
+        } else if (!keepStatus) {
+            binding.diagQuickStatus.setText(R.string.diag_ready)
+        }
+    }
+
+    private suspend fun addSafeResult(
+        labelRes: Int,
+        block: suspend () -> DiagnosticResult,
+    ) {
+        val result = try {
+            block()
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (_: Throwable) {
+            DiagnosticResult(
+                label = getString(labelRes),
+                ok = false,
+                detail = getString(R.string.error_unknown),
+            )
+        }
+        addResult(localize(result, labelRes))
     }
 
     /**
@@ -99,6 +173,9 @@ class DiagnosticsActivity : BaseActivity() {
     private fun runPeeringTest() {
         if (peeringRunning || quickRunning) return
         peeringRunning = true
+        binding.btnPeering.isClickable = false
+        binding.btnPeering.alpha = 0.68f
+        lastPeeringSummary = null
 
         val targets = PeeringTester.defaultTargets(getString(R.string.diag_peering_server))
         binding.peeringResults.removeAllViews()
@@ -134,9 +211,21 @@ class DiagnosticsActivity : BaseActivity() {
                 PeeringTester.upload(this@DiagnosticsActivity, summary)
             } catch (_: CancellationException) {
                 // User left the screen mid-test; leave the partial UI as-is.
+            } catch (_: Throwable) {
+                binding.peeringVerdict.visibility = View.VISIBLE
+                binding.peeringVerdict.setText(R.string.diag_failed)
+                binding.peeringVerdict.setTextColor(
+                    ContextCompat.getColor(this@DiagnosticsActivity, R.color.danger),
+                )
+                binding.peeringVerdict.announceForAccessibility(
+                    binding.peeringVerdict.text,
+                )
             } finally {
                 // Keep-screen-on is held app-wide by BaseActivity; don't drop it.
                 peeringRunning = false
+                peeringJob = null
+                binding.btnPeering.isClickable = true
+                binding.btnPeering.alpha = 1f
             }
         }
     }
@@ -172,11 +261,21 @@ class DiagnosticsActivity : BaseActivity() {
         }
         binding.peeringVerdict.text = getString(verdictRes(v))
         binding.peeringVerdict.setTextColor(ContextCompat.getColor(this, color))
+        binding.peeringVerdict.announceForAccessibility(binding.peeringVerdict.text)
     }
 
     private fun buildPeeringSummary(v: PeeringTester.Verdict, stats: List<PeeringTester.PeerStat>): String {
         val parts = stats.joinToString(" | ") { s ->
-            if (s.reachable) "${s.label}: ${s.avgMs}ms j${s.jitterMs} %k${s.lossPct}"
+            if (s.reachable) {
+                "${s.label}: " + getString(
+                    R.string.diag_peering_detail,
+                    s.avgMs,
+                    s.jitterMs,
+                    s.lossPct,
+                    s.samples,
+                    s.attempts,
+                )
+            }
             else "${s.label}: ${getString(R.string.diag_peering_unreachable)}"
         }
         return "${getString(verdictRes(v))} — $parts"
@@ -184,7 +283,21 @@ class DiagnosticsActivity : BaseActivity() {
 
     /** Replaces the repository's internal label with the localized one. */
     private fun localize(result: DiagnosticResult, labelRes: Int): DiagnosticResult =
-        result.copy(label = getString(labelRes))
+        result.copy(
+            label = getString(labelRes),
+            detail = sanitizeDetail(result.detail),
+        )
+
+    /** Avoid surfacing provider URLs/tokens from low-level exception messages. */
+    private fun sanitizeDetail(detail: String): String =
+        detail
+            .replace(Regex("""https?://\S+""", RegexOption.IGNORE_CASE), "•••")
+            .replace(
+                Regex(
+                    """(?i)(username|user|password|pass|token|auth)=([^&\s]+)""",
+                ),
+                "\$1=•••",
+            )
 
     private fun addResult(result: DiagnosticResult) {
         results += result
@@ -195,6 +308,8 @@ class DiagnosticsActivity : BaseActivity() {
         val status = row.findViewById<TextView>(R.id.diagStatus)
         status.text = getString(if (result.ok) R.string.diag_passed else R.string.diag_failed)
         status.setTextColor(ContextCompat.getColor(this, if (result.ok) R.color.success else R.color.danger))
+        row.contentDescription =
+            "${result.label}. ${status.text}. ${result.detail}"
         binding.diagResults.addView(row)
     }
 
@@ -239,6 +354,10 @@ class DiagnosticsActivity : BaseActivity() {
                 type = "text/plain"
             }
         }
-        startActivity(Intent.createChooser(intent, getString(R.string.diag_send_logs)))
+        runCatching {
+            startActivity(Intent.createChooser(intent, getString(R.string.diag_send_logs)))
+        }.onFailure {
+            Toast.makeText(this, R.string.settings_share_unavailable, Toast.LENGTH_SHORT).show()
+        }
     }
 }

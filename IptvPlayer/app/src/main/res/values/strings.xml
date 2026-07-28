@@ -191,8 +191,6 @@
     <string name="settings_parental">Parental control</string>
     <string name="settings_parental_pin">Set / change PIN</string>
     <string name="settings_lock_adult">Lock adult categories</string>
-    <string name="settings_tmdb">TMDB API key</string>
-    <string name="settings_tmdb_hint">Optional: enables movie posters and details.</string>
     <string name="settings_screensaver">Screen saver after idle</string>
     <string name="settings_clock">Show clock</string>
     <string name="settings_diagnostics">Diagnostics</string>
