@@ -9,4 +9,5 @@
     <string name="live_preview_hint">OK · Volledig scherm</string>
     <string name="program_guide_title">Programmagids</string>
     <string name="browse_count_format">%1$d</string>
+    <string name="fullscreen_guide_hint">↑ ↓ Bladeren   OK Kijken   TERUG Sluiten</string>
 </resources>

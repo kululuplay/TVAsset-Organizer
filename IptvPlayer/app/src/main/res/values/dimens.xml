@@ -81,4 +81,9 @@
     <dimen name="zap_text_title">24sp</dimen>
     <dimen name="zap_text_number">20sp</dimen>
     <dimen name="zap_text_secondary">16sp</dimen>
+
+    <!-- Inline fullscreen channel guide. Leaves enough width for the EPG card
+         beside it at the 960x540dp TV reference size. -->
+    <dimen name="fullscreen_guide_width">360dp</dimen>
+    <dimen name="fullscreen_guide_epg_gap">16dp</dimen>
 </resources>

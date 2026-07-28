@@ -9,4 +9,5 @@
     <string name="live_preview_hint">Tamam · Tam ekran</string>
     <string name="program_guide_title">Program rehberi</string>
     <string name="browse_count_format">%1$d</string>
+    <string name="fullscreen_guide_hint">↑ ↓ Gezin   OK İzle   GERİ Kapat</string>
 </resources>
