@@ -20,11 +20,20 @@ import com.iptv.player.R
 import com.iptv.player.data.model.VodItem
 import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.isAdult
+import java.text.NumberFormat
+import java.util.Locale
 
 class VodAdapter(
     private val onFocused: (VodItem) -> Unit,
     private val onClicked: (VodItem) -> Unit
 ) : PagingDataAdapter<VodItem, VodAdapter.VH>(DIFF) {
+
+    /**
+     * Optional position-aware focus callback used by the movie catalog to
+     * restore the exact poster after opening/closing the detail screen. Keeping
+     * this separate preserves the adapter API used by the global Search screen.
+     */
+    var onFocusedAt: ((VodItem, Int) -> Unit)? = null
 
     /** Returns 0..100 watch-progress for a movie's resume id ("vod_<id>"). */
     var progressProvider: ((String) -> Int)? = null
@@ -38,6 +47,13 @@ class VodAdapter(
      * metadata never leaks on screen. Set from the parental-lock setting.
      */
     var adultLocked: Boolean = false
+
+    init {
+        // RecyclerView must not restore a stale child position while Paging is
+        // still empty. It will restore after the first committed page instead.
+        stateRestorationPolicy =
+            RecyclerView.Adapter.StateRestorationPolicy.PREVENT_WHEN_EMPTY
+    }
 
     /**
      * Re-binds only the currently attached cards so resume bars / watched ticks /
@@ -61,9 +77,15 @@ class VodAdapter(
     }
 
     override fun onBindViewHolder(holder: VH, position: Int) {
-        // Paging may hand back null for not-yet-loaded placeholders; skip those.
-        val item = getItem(position) ?: return
-        holder.bind(item)
+        // Paging placeholders are disabled today, but keep this holder safe if
+        // that policy changes: never leave recycled art/click listeners visible.
+        val item = getItem(position)
+        if (item == null) holder.clear() else holder.bind(item)
+    }
+
+    override fun onViewRecycled(holder: VH) {
+        holder.clear()
+        super.onViewRecycled(holder)
     }
 
     inner class VH(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -81,23 +103,38 @@ class VodAdapter(
 
         fun bind(item: VodItem) {
             boundItem = item
-            itemView.setOnClickListener { onClicked(item) }
+            itemView.setOnClickListener {
+                currentItem()?.let(onClicked)
+            }
             itemView.setOnFocusChangeListener { _, hasFocus ->
-                if (hasFocus) onFocused(item)
+                if (hasFocus) {
+                    val position = bindingAdapterPosition
+                    currentItem()?.let { current ->
+                        onFocused(current)
+                        if (position != RecyclerView.NO_POSITION) {
+                            onFocusedAt?.invoke(current, position)
+                        }
+                    }
+                }
             }
 
             // Parental gate: mask adult metadata until the PIN is entered.
             if (adultLocked && item.isAdult()) {
                 name.text = itemView.context.getString(R.string.adult_locked_title)
-                meta.visibility = View.GONE
+                meta.text = ""
+                meta.visibility = View.INVISIBLE
                 ratingRow.visibility = View.GONE
                 progressBar.visibility = View.GONE
                 watched.visibility = View.GONE
                 poster.scaleType = ImageView.ScaleType.FIT_CENTER
+                poster.contentDescription = null
                 poster.load(R.drawable.ic_lock) { crossfade(false) }
+                itemView.contentDescription =
+                    itemView.context.getString(R.string.adult_locked_title)
                 return
             }
             poster.scaleType = ImageView.ScaleType.CENTER_CROP
+            poster.contentDescription = null
 
             name.text = item.name
 
@@ -115,9 +152,13 @@ class VodAdapter(
 
             val year = item.releaseDate?.take(4)?.takeIf { it.isNotBlank() }
             meta.text = year ?: ""
-            meta.visibility = if (year != null) View.VISIBLE else View.GONE
+            // Keep every card the same height. GONE made undated movies one text
+            // line shorter, producing jagged rows and unreliable vertical focus.
+            meta.visibility = if (year != null) View.VISIBLE else View.INVISIBLE
 
-            val ratingText = item.rating?.takeIf { it > 0 }?.let { String.format("%.1f", it) }
+            val ratingText = item.rating?.takeIf { it > 0 }?.let {
+                String.format(Locale.getDefault(), "%.1f", it)
+            }
             if (ratingText != null) {
                 rating.text = ratingText
                 ratingRow.visibility = View.VISIBLE
@@ -135,6 +176,50 @@ class VodAdapter(
                     error(placeholder)
                 }
             }
+
+            // The whole poster card is the single accessibility target. Avoid a
+            // duplicate image announcement and expose the useful state together.
+            itemView.contentDescription = buildList {
+                add(item.name)
+                year?.let(::add)
+                ratingText?.let {
+                    add("${itemView.context.getString(R.string.detail_rating)} $it")
+                }
+                when {
+                    isWatched -> add(itemView.context.getString(R.string.cd_watched))
+                    pct in 1..99 -> {
+                        val percent = NumberFormat
+                            .getPercentInstance(Locale.getDefault())
+                            .format(pct / 100.0)
+                        add("${itemView.context.getString(R.string.resume_continue)} $percent")
+                    }
+                }
+            }.joinToString(", ")
+        }
+
+        fun clear() {
+            boundItem = null
+            itemView.setOnClickListener(null)
+            itemView.setOnFocusChangeListener(null)
+            itemView.contentDescription = null
+            name.text = ""
+            meta.text = ""
+            meta.visibility = View.INVISIBLE
+            rating.text = ""
+            ratingRow.visibility = View.GONE
+            progressBar.progress = 0
+            progressBar.visibility = View.GONE
+            watched.visibility = View.GONE
+            poster.contentDescription = null
+            // Starting an empty request replaces/cancels any prior ImageView
+            // request, preventing a late recycled-poster result from flashing.
+            poster.load(null) { crossfade(false) }
+        }
+
+        private fun currentItem(): VodItem? {
+            val position = bindingAdapterPosition
+            if (position == RecyclerView.NO_POSITION) return null
+            return peek(position)
         }
     }
 
