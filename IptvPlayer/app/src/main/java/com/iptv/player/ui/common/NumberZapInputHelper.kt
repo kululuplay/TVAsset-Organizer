@@ -3,8 +3,8 @@
  * Captures digit key presses (KEYCODE_0..9) to build a channel number, like a
  * classic TV remote. After a short idle period (or when a max length is reached)
  * it resolves the typed number to a channel via the caller-supplied [lookup]
- * lambda and reports the result. Forward keys to handleKeyDown() from an
- * Activity's onKeyDown().
+ * lambda and reports the result. Forward both keyCode and repeatCount to
+ * handleKeyDown() from an Activity's onKeyDown().
  *
  * Usage:
  *   private val zap = NumberZapInputHelper(
@@ -12,7 +12,8 @@
  *       onResolved = { ch -> ch?.let { openPlayer(it) } },
  *       onInputChanged = { typed -> binding.zapOverlay.text = typed }
  *   )
- *   override fun onKeyDown(k:Int,e:KeyEvent) = zap.handleKeyDown(k) || super.onKeyDown(k,e)
+ *   override fun onKeyDown(k:Int,e:KeyEvent) =
+ *       zap.handleKeyDown(k, e.repeatCount) || super.onKeyDown(k,e)
  */
 package com.iptv.player.ui.common
 
@@ -34,17 +35,53 @@ class NumberZapInputHelper(
 
     private val commitRunnable = Runnable { commit() }
 
-    /** Returns true if the key was a digit and consumed. */
-    fun handleKeyDown(keyCode: Int): Boolean {
-        val digit = digitFor(keyCode) ?: return false
-        buffer.append(digit)
-        onInputChanged(buffer.toString())
-        handler.removeCallbacks(commitRunnable)
-        if (buffer.length >= maxDigits) {
-            commit()
-        } else {
-            handler.postDelayed(commitRunnable, commitDelayMs)
+    /** True while one or more digits are waiting to be resolved. */
+    val hasPendingInput: Boolean
+        get() = buffer.isNotEmpty()
+
+    /**
+     * Handles digit and confirm key-down events.
+     *
+     * A held digit is consumed without appending its auto-repeat events. A confirm
+     * key commits pending digits immediately, but is ignored when the buffer is
+     * empty so OK can still click the focused channel/category normally.
+     */
+    fun handleKeyDown(keyCode: Int, repeatCount: Int = 0): Boolean {
+        val decision = NumberZapInputPolicy.decide(
+            keyCode = keyCode,
+            repeatCount = repeatCount,
+            hasPendingInput = hasPendingInput,
+        )
+        return when (decision.action) {
+            NumberZapInputPolicy.Action.IGNORE -> false
+            NumberZapInputPolicy.Action.COMMIT -> {
+                commit()
+                true
+            }
+            NumberZapInputPolicy.Action.CONSUME_REPEAT -> true
+            NumberZapInputPolicy.Action.APPEND_DIGIT -> {
+                val digit = decision.digit ?: return false
+                buffer.append(digit)
+                onInputChanged(buffer.toString())
+                handler.removeCallbacks(commitRunnable)
+                if (buffer.length >= maxDigits) {
+                    commit()
+                } else {
+                    handler.postDelayed(commitRunnable, commitDelayMs)
+                }
+                true
+            }
         }
+    }
+
+    /** Convenience overload for callers that already hold the full event. */
+    fun handleKeyDown(event: KeyEvent): Boolean =
+        handleKeyDown(event.keyCode, event.repeatCount)
+
+    /** Commits pending input and reports whether anything was consumed. */
+    fun commitIfPending(): Boolean {
+        if (!hasPendingInput) return false
+        commit()
         return true
     }
 
@@ -62,21 +99,5 @@ class NumberZapInputHelper(
         handler.removeCallbacks(commitRunnable)
         buffer.setLength(0)
         onInputChanged("")
-    }
-
-    private fun digitFor(keyCode: Int): Char? = when (keyCode) {
-        KeyEvent.KEYCODE_0 -> '0'
-        KeyEvent.KEYCODE_1 -> '1'
-        KeyEvent.KEYCODE_2 -> '2'
-        KeyEvent.KEYCODE_3 -> '3'
-        KeyEvent.KEYCODE_4 -> '4'
-        KeyEvent.KEYCODE_5 -> '5'
-        KeyEvent.KEYCODE_6 -> '6'
-        KeyEvent.KEYCODE_7 -> '7'
-        KeyEvent.KEYCODE_8 -> '8'
-        KeyEvent.KEYCODE_9 -> '9'
-        in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9 ->
-            ('0' + (keyCode - KeyEvent.KEYCODE_NUMPAD_0))
-        else -> null
     }
 }

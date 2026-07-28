@@ -140,7 +140,7 @@ class HomeViewModel(
     }
 
     /** Channels for the currently selected category (or favorites/recent). */
-    val channels: StateFlow<List<Channel>> =
+    val channels: StateFlow<ChannelSnapshot> =
         combine(
             selectedCategory,
             repo.observeFavorites(),
@@ -172,15 +172,33 @@ class HomeViewModel(
                     else -> repo.observeChannelsByCategory(ContentType.LIVE, catId, radio = radio)
                 }
                 // Annotate each channel with its current favorite state.
-                source.map { list -> list.map { it.copy(isFavorite = favSet.contains(it.id)) } }
+                source.map { list ->
+                    ChannelSnapshot(
+                        categoryId = catId,
+                        query = query,
+                        channels = list.map { it.copy(isFavorite = favSet.contains(it.id)) },
+                        loaded = true,
+                    )
+                }
             }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5000),
+                ChannelSnapshot(),
+            )
 
     private data class ChannelParams(
         val categoryId: String?,
         val favoriteIds: Set<String>,
         val query: String,
         val hiddenCategories: Set<String>,
+    )
+
+    data class ChannelSnapshot(
+        val categoryId: String? = null,
+        val query: String = "",
+        val channels: List<Channel> = emptyList(),
+        val loaded: Boolean = false,
     )
 
     fun toggleFavorite(channelId: String) {

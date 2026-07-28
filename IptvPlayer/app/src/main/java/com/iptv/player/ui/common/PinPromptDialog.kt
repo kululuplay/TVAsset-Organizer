@@ -14,6 +14,7 @@ package com.iptv.player.ui.common
 
 import android.content.Context
 import android.view.LayoutInflater
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -28,7 +29,7 @@ object PinPromptDialog {
         expectedPin: String?,
         onSuccess: () -> Unit,
         onCancel: () -> Unit = {}
-    ) {
+    ): AlertDialog {
         val view = LayoutInflater.from(context).inflate(R.layout.dialog_pin, null, false)
         val boxesRow = view.findViewById<LinearLayout>(R.id.pinBoxes)
         val keysCol = view.findViewById<LinearLayout>(R.id.pinKeys)
@@ -86,6 +87,33 @@ object PinPromptDialog {
             }
         }
 
+        // Hardware TV remotes/keyboards with a numeric pad should work directly,
+        // without forcing users to traverse the on-screen keypad with D-pad.
+        dialog.setOnKeyListener { _, keyCode, event ->
+            val digit = when (keyCode) {
+                in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 ->
+                    ('0'.code + keyCode - KeyEvent.KEYCODE_0).toChar()
+                in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9 ->
+                    ('0'.code + keyCode - KeyEvent.KEYCODE_NUMPAD_0).toChar()
+                else -> null
+            }
+            when {
+                digit != null -> {
+                    if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                        onDigit(digit.toString())
+                    }
+                    true
+                }
+                keyCode == KeyEvent.KEYCODE_DEL -> {
+                    if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                        onBackspace()
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+
         fun keypadRow(): LinearLayout = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
@@ -116,5 +144,6 @@ object PinPromptDialog {
 
         dialog.show()
         firstKey?.requestFocus()
+        return dialog
     }
 }

@@ -9,8 +9,12 @@
  */
 package com.iptv.player.ui.common
 
+import android.app.Dialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.withStarted
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Category
 import com.iptv.player.data.model.Channel
@@ -23,6 +27,65 @@ import kotlinx.coroutines.launch
 object PinLockHelper {
 
     /**
+     * Cancellable ownership handle for an in-flight PIN request.
+     *
+     * The request observes its Activity directly, so even older call sites that
+     * ignore the returned handle cannot leave a PIN dialog (or a delayed
+     * DataStore callback) alive after the screen has stopped.
+     */
+    class Request internal constructor(
+        private val owner: LifecycleOwner,
+        private val onDenied: () -> Unit,
+    ) : DefaultLifecycleObserver {
+        private var finished = false
+        private var dialog: Dialog? = null
+
+        init {
+            owner.lifecycle.addObserver(this)
+        }
+
+        internal val isActive: Boolean
+            get() = !finished
+
+        internal fun attach(value: Dialog) {
+            if (finished) value.dismiss() else dialog = value
+        }
+
+        internal fun allow(onAllowed: () -> Unit) {
+            if (finished) return
+            finished = true
+            dialog = null
+            owner.lifecycle.removeObserver(this)
+            onAllowed()
+        }
+
+        internal fun deny() {
+            if (finished) return
+            finished = true
+            dialog = null
+            owner.lifecycle.removeObserver(this)
+            onDenied()
+        }
+
+        fun cancel() {
+            if (finished) return
+            finished = true
+            dialog?.dismiss()
+            dialog = null
+            owner.lifecycle.removeObserver(this)
+            onDenied()
+        }
+
+        override fun onStop(owner: LifecycleOwner) {
+            cancel()
+        }
+
+        override fun onDestroy(owner: LifecycleOwner) {
+            cancel()
+        }
+    }
+
+    /**
      * @param isAdult whether the target content/category is flagged adult.
      * @param onDenied  optional, run when the user cancels/fails the prompt.
      * @param onAllowed run when access is granted (no lock, or correct PIN).
@@ -32,26 +95,54 @@ object PinLockHelper {
         isAdult: Boolean,
         onDenied: () -> Unit = {},
         onAllowed: () -> Unit
-    ) {
-        if (!isAdult) {
-            onAllowed()
-            return
-        }
+    ): Request {
+        val request = Request(activity, onDenied)
         activity.lifecycleScope.launch {
+            // guard() can be reached after an async lookup that began in onCreate.
+            // If that lookup completes while the Activity is stopped, wait for the
+            // same screen to become visible again instead of opening a dialog or
+            // starting playback behind another Activity.
+            activity.lifecycle.withStarted { }
+            if (!request.isActive) return@launch
+            if (activity.isFinishing || activity.isDestroyed) {
+                request.deny()
+                return@launch
+            }
+            if (!isAdult) {
+                request.allow(onAllowed)
+                return@launch
+            }
+
             val settings = ServiceLocator.settings
             val locked = settings.lockAdult.first() && settings.hasPin()
+            if (!request.isActive) return@launch
+            if (activity.isFinishing || activity.isDestroyed) {
+                request.deny()
+                return@launch
+            }
             if (!locked) {
-                onAllowed()
+                request.allow(onAllowed)
                 return@launch
             }
             val pin = settings.getPin()
-            PinPromptDialog.show(
-                context = activity,
-                expectedPin = pin,
-                onSuccess = onAllowed,
-                onCancel = onDenied
-            )
+            // The preference reads above can suspend across onStop. The Request's
+            // observer cancels normal in-flight prompts; this second STARTED gate
+            // also covers a Request that itself was created after ON_STOP.
+            activity.lifecycle.withStarted {
+                if (!request.isActive || activity.isFinishing || activity.isDestroyed) {
+                    request.deny()
+                    return@withStarted
+                }
+                val dialog = PinPromptDialog.show(
+                    context = activity,
+                    expectedPin = pin,
+                    onSuccess = { request.allow(onAllowed) },
+                    onCancel = request::deny,
+                )
+                request.attach(dialog)
+            }
         }
+        return request
     }
 
     /**

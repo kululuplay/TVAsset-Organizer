@@ -63,14 +63,20 @@ class CategoryAdapter(
         private val title: TextView = itemView.findViewById(R.id.categoryTitle)
         private val count: TextView = itemView.findViewById(R.id.categoryCount)
 
+        private fun currentCategory(): Category? {
+            val position = bindingAdapterPosition
+            if (position == RecyclerView.NO_POSITION || position >= itemCount) return null
+            return getItem(position)
+        }
+
         fun bind(category: Category) {
             title.text = category.name
             count.text = category.count?.toString() ?: ""
             itemView.isSelected = category.id == selectedId
             itemView.setOnFocusChangeListener { _, hasFocus ->
-                if (hasFocus) onFocused(category)
+                if (hasFocus) currentCategory()?.let(onFocused)
             }
-            itemView.setOnClickListener { onClicked(category) }
+            itemView.setOnClickListener { currentCategory()?.let(onClicked) }
         }
     }
 

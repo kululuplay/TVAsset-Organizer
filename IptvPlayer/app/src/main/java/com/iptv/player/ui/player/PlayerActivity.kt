@@ -19,6 +19,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.withStarted
 import coil.load
 import com.iptv.player.R
 import com.iptv.player.cast.CastController
@@ -28,6 +29,7 @@ import com.iptv.player.data.model.NowNext
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.databinding.ActivityPlayerBinding
+import com.iptv.player.player.LiveStreamUrl
 import com.iptv.player.player.PlayerController
 import com.iptv.player.player.StreamInfo
 import com.iptv.player.util.AutoRetryPolicy
@@ -95,7 +97,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     // next backoff delay and only resets on success or an explicit user action.
     private val autoRetryHandler = Handler(Looper.getMainLooper())
     private var autoRetryAttempt = 0
-    private var okDownTime = 0L
+    private val confirmPress = RemoteConfirmPress()
     private var epgJob: Job? = null
     private val unlockedAdultChannels = mutableSetOf<String>()
     private var unlockedAdultCategoryId: String? = null
@@ -192,18 +194,27 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         lifecycleScope.launch {
             streamFormat = viewModel.streamFormat()
             val channel = viewModel.resolveChannel(channelId)
-            if (channel == null) {
-                // Release the adopted connection so the hand-off can't orphan it.
-                adopted?.release()
-                pendingAdopted = null
-                Toast.makeText(this@PlayerActivity, R.string.error_unknown, Toast.LENGTH_SHORT).show()
-                finish()
-                return@launch
+            // Playlist/settings resolution may finish after HOME was pressed. Do
+            // not open a PIN dialog or construct a player behind another screen;
+            // resume this one-time result only when this Activity is visible again.
+            lifecycle.withStarted {
+                if (channel == null) {
+                    // Release the adopted connection so the hand-off can't orphan it.
+                    adopted?.release()
+                    pendingAdopted = null
+                    Toast.makeText(
+                        this@PlayerActivity,
+                        R.string.error_unknown,
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    finish()
+                    return@withStarted
+                }
+                if (intent.getBooleanExtra(EXTRA_PARENTAL_AUTHORIZED, false)) {
+                    unlockedAdultChannels.add(channel.id)
+                }
+                authorizeInitialChannel(channel, adopted)
             }
-            if (intent.getBooleanExtra(EXTRA_PARENTAL_AUTHORIZED, false)) {
-                unlockedAdultChannels.add(channel.id)
-            }
-            authorizeInitialChannel(channel, adopted)
         }
     }
 
@@ -236,46 +247,56 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     private fun initializeChannel(channel: Channel, adopted: PlayerController?) {
         lifecycleScope.launch {
-            if (isFinishing || isDestroyed) {
-                adopted?.release()
-                pendingAdopted = null
-                return@launch
-            }
             if (adopted != null) {
-                // Seamless hand-off: rebind the still-playing engine to this
-                // screen's surface and take ownership — no new play()/reconnect.
-                adoptedPreview = true
-                controller = adopted
-                // Ownership transferred to [controller]; onDestroy now releases it
-                // via the ::controller path, so the pending reference is no longer needed.
-                pendingAdopted = null
-                controller.setCallback(this@PlayerActivity)
-                // The hand-off tears down and recreates the video surface, so the
-                // picture goes black for a beat (audio keeps playing) until the new
-                // surface gets its first frame. Cover that gap with the buffering
-                // indicator; onVideoResumed() clears it, with a safety timeout.
-                binding.bufferingIndicator.visibility = View.VISIBLE
-                handoffCoverHandler.postDelayed(
-                    { binding.bufferingIndicator.visibility = View.GONE },
-                    HANDOFF_COVER_TIMEOUT_MS
-                )
-                controller.rebind(binding.videoContainer)
-                currentChannel = channel
-                viewModel.markWatched(channel.id)
-                showOverlay(channel)
-                if (statsVisible) refreshStats()
+                lifecycle.withStarted {
+                    if (isFinishing || isDestroyed) {
+                        adopted.release()
+                        pendingAdopted = null
+                        return@withStarted
+                    }
+                    // Seamless hand-off: rebind the still-playing engine to this
+                    // screen's surface and take ownership.
+                    adoptedPreview = true
+                    controller = adopted
+                    // Ownership transferred to [controller]; onDestroy now releases it
+                    // via the ::controller path, so the pending reference is no longer needed.
+                    pendingAdopted = null
+                    controller.setCallback(this@PlayerActivity)
+                    // The hand-off tears down and recreates the video surface, so the
+                    // picture goes black for a beat (audio keeps playing) until the new
+                    // surface gets its first frame. Cover that gap with the buffering
+                    // indicator; onVideoResumed() clears it, with a safety timeout.
+                    binding.bufferingIndicator.visibility = View.VISIBLE
+                    handoffCoverHandler.postDelayed(
+                        { binding.bufferingIndicator.visibility = View.GONE },
+                        HANDOFF_COVER_TIMEOUT_MS
+                    )
+                    controller.rebind(binding.videoContainer)
+                    currentChannel = channel
+                    viewModel.markWatched(channel.id)
+                    showOverlay(channel)
+                    if (statsVisible) refreshStats()
+                }
             } else {
                 val mode: PlayerMode = viewModel.playerMode()
-                controller = PlayerController(
-                    context = this@PlayerActivity,
-                    container = binding.videoContainer,
-                    mode = mode,
-                    decoderMode = viewModel.decoderMode(),
-                    allowPassthrough = viewModel.audioPassthrough(),
-                    bufferMode = viewModel.bufferMode(),
-                    callback = this@PlayerActivity
-                )
-                startChannel(channel)
+                val decoderMode = viewModel.decoderMode()
+                val allowPassthrough = viewModel.audioPassthrough()
+                val bufferMode = viewModel.bufferMode()
+                // Each settings read can suspend. Gate the actual player creation
+                // again so onStop cannot be followed by hidden playback/ghost audio.
+                lifecycle.withStarted {
+                    if (isFinishing || isDestroyed) return@withStarted
+                    controller = PlayerController(
+                        context = this@PlayerActivity,
+                        container = binding.videoContainer,
+                        mode = mode,
+                        decoderMode = decoderMode,
+                        allowPassthrough = allowPassthrough,
+                        bufferMode = bufferMode,
+                        callback = this@PlayerActivity
+                    )
+                    startChannel(channel)
+                }
             }
         }
     }
@@ -360,38 +381,33 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         // the chosen container format, which together determine the stream the
         // decoder sees. No URL/token so it survives credential rotation.
         controller.play(
-            applyStreamFormat(channel.streamUrl),
-            routeKey = "${channel.id}|${streamFormat.name}",
+            LiveStreamUrl.applyFormat(channel.streamUrl, streamFormat),
+            routeKey = LiveStreamUrl.routeKey(channel.id, streamFormat),
         )
         showOverlay(channel)
         if (statsVisible) refreshStats()
     }
 
-    /**
-     * Rewrite a live channel URL to the user's preferred container. Xtream live
-     * URLs are baked with `.ts` at sync time; swap only that known live extension
-     * (or an existing `.m3u8`) on the path so HLS users hit the `.m3u8` path. Any
-     * `?query`/`#fragment` (CDN tokens etc.) is split off first so it's preserved,
-     * and anything that isn't a recognised live URL (VOD/series real containers)
-     * is left untouched.
-     */
-    private fun applyStreamFormat(url: String): String {
-        val ext = streamFormat.extension
-        val cut = url.indexOfFirst { it == '?' || it == '#' }
-        val path = if (cut >= 0) url.substring(0, cut) else url
-        val suffix = if (cut >= 0) url.substring(cut) else ""
-        val lower = path.lowercase(Locale.US)
-        val base = when {
-            lower.endsWith(".ts") -> path.dropLast(3)
-            lower.endsWith(".m3u8") -> path.dropLast(5)
-            else -> return url
-        }
-        return "$base.$ext$suffix"
-    }
-
     // ---- D-pad handling -------------------------------------------------
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (isGlobalConfirmKey(keyCode)) {
+            // A visible error gives focus to the Retry button. Let the focused
+            // Android view process its normal confirm DOWN/UP pair so OK retries
+            // playback instead of toggling the player overlay behind it.
+            if (binding.retryButton.hasFocus()) {
+                // Gamepad A is a player-level confirm but is not guaranteed to
+                // synthesize Button.performClick() on every TV framework.
+                if (keyCode == KeyEvent.KEYCODE_BUTTON_A) {
+                    confirmPress.onDown(keyCode, event.eventTime, event.repeatCount)
+                    return true
+                }
+                confirmPress.clear()
+                return super.onKeyDown(keyCode, event)
+            }
+            confirmPress.onDown(keyCode, event.eventTime, event.repeatCount)
+            return true
+        }
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_CHANNEL_UP -> {
                 // CH+ / UP -> next channel. Ignore auto-repeat (held key) so a long
@@ -404,16 +420,14 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
                 if (event.repeatCount == 0) requestZap(-1)
                 return true
             }
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                if (okDownTime == 0L) okDownTime = event.eventTime
-                return true
-            }
             KeyEvent.KEYCODE_MENU -> {
-                showPlayerMenu()
+                // Held MENU/INFO keys emit repeated DOWN events on many remotes.
+                // Open/toggle once per physical press instead of flickering dialogs.
+                if (event.repeatCount == 0) showPlayerMenu()
                 return true
             }
             KeyEvent.KEYCODE_INFO -> {
-                toggleStats()
+                if (event.repeatCount == 0) toggleStats()
                 return true
             }
         }
@@ -421,10 +435,29 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-            val held = event.eventTime - okDownTime
-            okDownTime = 0L
-            if (held >= LONG_PRESS_MS) {
+        if (isGlobalConfirmKey(keyCode)) {
+            if (binding.retryButton.hasFocus()) {
+                if (keyCode == KeyEvent.KEYCODE_BUTTON_A) {
+                    val release = confirmPress.onUp(
+                        keyCode,
+                        event.eventTime,
+                        canceled = event.isCanceled,
+                    ) ?: return true
+                    if (!release.canceled) binding.retryButton.performClick()
+                    return true
+                }
+                // If focus moved to Retry while a player-level confirm was held,
+                // discard that old press before delegating the release.
+                confirmPress.onUp(keyCode, event.eventTime, canceled = true)
+                return super.onKeyUp(keyCode, event)
+            }
+            // Ignore/delegate orphaned or different-key UP events. Previously an
+            // UP with no DOWN subtracted from zero and looked like a long press,
+            // unexpectedly toggling the current channel's favorite state.
+            val release = confirmPress.onUp(keyCode, event.eventTime, event.isCanceled)
+                ?: return super.onKeyUp(keyCode, event)
+            if (release.canceled) return true
+            if (release.heldMs >= LONG_PRESS_MS) {
                 // Long-press OK -> toggle favorite.
                 currentChannel?.let {
                     viewModel.toggleFavorite(it.id)
@@ -445,6 +478,15 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         }
         return super.onKeyUp(keyCode, event)
     }
+
+    /**
+     * Android TV remotes normally emit one of the framework confirm keys; USB
+     * numpads and game controllers can instead emit NUMPAD_ENTER / BUTTON_A.
+     */
+    private fun isGlobalConfirmKey(keyCode: Int): Boolean =
+        KeyEvent.isConfirmKey(keyCode) ||
+            keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER ||
+            keyCode == KeyEvent.KEYCODE_BUTTON_A
 
     override fun onBackPressed() {
         // Back peels overlays one at a time: stats first, then info, then exit.
@@ -724,6 +766,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     // ---- Lifecycle ------------------------------------------------------
 
     override fun onStop() {
+        // Never carry a half-press across background/foreground. Some Bluetooth
+        // remotes lose the UP event while an Activity is stopping.
+        confirmPress.clear()
         super.onStop()
         // Drop any pending debounced zap so it can't start a stream after we've
         // backgrounded (it would re-open playback while not visible). Same for a

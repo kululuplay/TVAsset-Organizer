@@ -37,7 +37,7 @@ interface EpgDao {
     suspend fun clearOld(before: Long)
 
     /** Current + upcoming programs for a channel ordered by start. */
-    @Query("SELECT * FROM programs WHERE epgChannelId = :epgId AND stopMs >= :now ORDER BY startMs LIMIT :limit")
+    @Query("SELECT * FROM programs WHERE epgChannelId = :epgId AND stopMs > :now ORDER BY startMs LIMIT :limit")
     suspend fun upcoming(epgId: String, now: Long, limit: Int): List<ProgramEntity>
 
     /** All programs for a channel within a time window (guide timeline). */

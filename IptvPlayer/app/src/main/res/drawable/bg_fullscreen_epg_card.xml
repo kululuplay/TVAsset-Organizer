@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- High-contrast glass panel for the 10-foot fullscreen Live TV EPG. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="18dp" />
+    <gradient
+        android:angle="0"
+        android:startColor="#F20A0F18"
+        android:centerColor="#EE111827"
+        android:endColor="#E6192030"
+        android:type="linear" />
+    <stroke
+        android:width="1dp"
+        android:color="#4D22D3EE" />
+</shape>
