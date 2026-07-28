@@ -60,10 +60,13 @@
     <string name="empty_series">Aucune série dans cette vue.</string>
     <string name="added_to_favorites">Ajouté aux favoris</string>
     <string name="removed_from_favorites">Retiré des favoris</string>
+    <string name="favorite_state_on">Dans les favoris</string>
+    <string name="favorite_state_off">Pas dans les favoris</string>
     <string name="channel_count">%1$d chaînes</string>
     <string name="preview_playback_failed">Impossible de lire l’aperçu. Appuyez sur OK pour réessayer.</string>
 
     <string name="buffering">Chargement…</string>
+    <string name="player_seek_position">Position de lecture</string>
     <string name="reconnecting">Reconnexion… (%1$d)</string>
     <string name="player_mode_label">Lecteur</string>
     <string name="audio_track">Audio</string>
