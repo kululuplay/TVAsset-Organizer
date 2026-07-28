@@ -11,7 +11,6 @@
     <string name="action_back">رجوع</string>
     <string name="action_continue">متابعة</string>
     <string name="action_close">إغلاق</string>
-    <string name="action_refresh">تحديث</string>
     <string name="loading">جارٍ التحميل…</string>
     <string name="search_hint">بحث…</string>
     <string name="search_movies_hint">بحث في الأفلام…</string>

@@ -11,7 +11,6 @@
     <string name="action_back">Retour</string>
     <string name="action_continue">Continuer</string>
     <string name="action_close">Fermer</string>
-    <string name="action_refresh">Actualiser</string>
     <string name="loading">Chargement…</string>
     <string name="search_hint">Rechercher…</string>
     <string name="search_movies_hint">Rechercher des films…</string>

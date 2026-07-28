@@ -11,7 +11,6 @@
     <string name="action_back">Terug</string>
     <string name="action_continue">Doorgaan</string>
     <string name="action_close">Sluiten</string>
-    <string name="action_refresh">Vernieuwen</string>
     <string name="loading">Laden…</string>
     <string name="search_hint">Zoeken…</string>
     <string name="search_movies_hint">Films zoeken…</string>
