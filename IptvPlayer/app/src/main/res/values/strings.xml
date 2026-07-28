@@ -79,11 +79,14 @@
     <string name="empty_series">No series found in this view.</string>
     <string name="added_to_favorites">Added to favorites</string>
     <string name="removed_from_favorites">Removed from favorites</string>
+    <string name="favorite_state_on">In favorites</string>
+    <string name="favorite_state_off">Not in favorites</string>
     <string name="channel_count">%1$d channels</string>
     <string name="preview_playback_failed">Preview could not play. Press OK to retry.</string>
 
     <!-- Player -->
     <string name="buffering">Loading…</string>
+    <string name="player_seek_position">Playback position</string>
     <string name="reconnecting">Reconnecting… (%1$d)</string>
     <string name="player_mode_label">Player</string>
     <string name="audio_track">Audio</string>
