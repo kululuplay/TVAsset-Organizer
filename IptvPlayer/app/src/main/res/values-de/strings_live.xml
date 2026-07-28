@@ -9,4 +9,5 @@
     <string name="live_preview_hint">OK · Vollbild</string>
     <string name="program_guide_title">Programmübersicht</string>
     <string name="browse_count_format">%1$d</string>
+    <string name="fullscreen_guide_hint">↑ ↓ Navigieren   OK Ansehen   ZURÜCK Schließen</string>
 </resources>
