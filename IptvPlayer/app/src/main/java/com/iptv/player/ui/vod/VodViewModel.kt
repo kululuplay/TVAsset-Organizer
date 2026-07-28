@@ -7,6 +7,7 @@ package com.iptv.player.ui.vod
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
@@ -37,7 +38,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
-class VodViewModel(app: Application) : AndroidViewModel(app) {
+class VodViewModel(
+    app: Application,
+    private val savedState: SavedStateHandle,
+) : AndroidViewModel(app) {
 
     private val repo = ServiceLocator.repository
     private val settings = ServiceLocator.settings
@@ -45,6 +49,9 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
     companion object {
         const val CAT_ALL = "__all__"
         const val CAT_POPULAR = "__popular__"
+
+        private const val STATE_CATEGORY = "vod_category"
+        private const val STATE_QUERY = "vod_query"
     }
 
     private val _loadState = MutableStateFlow(CatalogLoadState())
@@ -83,9 +90,10 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val selectedCategory = MutableStateFlow<String?>(null)
-    private val _query = MutableStateFlow("")
-    val query: StateFlow<String> = _query
+    private val selectedCategory =
+        savedState.getStateFlow<String?>(STATE_CATEGORY, null)
+    val query: StateFlow<String> =
+        savedState.getStateFlow(STATE_QUERY, "")
 
     /** The currently selected category id (survives config changes). */
     val selectedCategoryId: String? get() = selectedCategory.value
@@ -96,13 +104,27 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
 
     private var selectionLoadJob: Job? = null
     private var catalogLoadJob: Job? = null
+    private var sortRestoreJob: Job? = null
 
     init {
         // Restore the user's last-used sort so it survives process death.
-        viewModelScope.launch { _sort.value = settings.contentSort(ContentType.VOD).first() }
+        sortRestoreJob = viewModelScope.launch {
+            _sort.value = settings.contentSort(ContentType.VOD).first()
+        }
+        // Resume a lazy catalog request immediately after process recreation.
+        // The Activity's category attachment is intentionally idempotent and
+        // may call this again without starting a duplicate full-catalog job.
+        when {
+            query.value.isNotEmpty() -> ensureFullCatalog()
+            selectedCategory.value != null -> scheduleSelectedCategoryLoad()
+        }
     }
 
     fun setSort(order: ContentSort) {
+        if (_sort.value == order) return
+        // A fast user click during startup must win over the asynchronous
+        // DataStore restore rather than being overwritten a frame later.
+        sortRestoreJob?.cancel()
         _sort.value = order
         viewModelScope.launch { settings.setContentSort(ContentType.VOD, order) }
     }
@@ -118,15 +140,21 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
      * every row traversed; fetching immediately would request every category the
      * user merely passes on the way to the one they want.
      */
-    fun selectCategory(categoryId: String) {
-        selectedCategory.value = categoryId
+    fun selectCategory(categoryId: String, ensureLoaded: Boolean = false) {
+        // Category rows are selected on focus. Returning from the poster grid or
+        // receiving a category-count rebind can focus the already-selected row
+        // again; do not restart its debounce/network work in that case.
+        if (selectedCategory.value == categoryId && !ensureLoaded) return
+        if (selectedCategory.value != categoryId) {
+            savedState[STATE_CATEGORY] = categoryId
+        }
         scheduleSelectedCategoryLoad()
     }
 
     fun setQuery(text: String) {
         val normalized = text.trim()
-        if (_query.value == normalized) return
-        _query.value = normalized
+        if (query.value == normalized) return
+        savedState[STATE_QUERY] = normalized
         selectionLoadJob?.cancel()
         if (normalized.isNotEmpty()) {
             ensureFullCatalog()
@@ -138,7 +166,7 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
     /** Retries whichever single-category or whole-catalog request is visible. */
     fun retryLoad() {
         val categoryId = selectedCategory.value
-        if (_query.value.isNotEmpty() || categoryId == null ||
+        if (query.value.isNotEmpty() || categoryId == null ||
             categoryId == CAT_ALL || categoryId == CAT_POPULAR
         ) {
             ensureFullCatalog()
@@ -165,7 +193,7 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
         selectionLoadJob?.cancel()
         selectionLoadJob = viewModelScope.launch {
             delay(300)
-            if (_query.value.isNotEmpty() ||
+            if (query.value.isNotEmpty() ||
                 categoryId == CAT_ALL || categoryId == CAT_POPULAR
             ) {
                 ensureFullCatalog()
@@ -208,6 +236,10 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
      * overwhelming small providers and low-memory TV devices.
      */
     private suspend fun loadFullCatalog(forceAll: Boolean) {
+        // Full/search hydration may need to fetch the category index before the
+        // per-category total is known. Surface activity immediately instead of
+        // leaving a cold screen apparently frozen during that network call.
+        _loadState.value = CatalogLoadState(loading = true)
         val config = settings.getSourceConfig()
         if (config == null) {
             _loadState.value = CatalogLoadState(errorRes = R.string.error_unknown)
@@ -286,7 +318,7 @@ class VodViewModel(app: Application) : AndroidViewModel(app) {
     val items: Flow<PagingData<VodItem>> =
         combine(
             selectedCategory,
-            _query.debounce(250).distinctUntilChanged(),
+            query.debounce(250).distinctUntilChanged(),
             _sort,
             settings.hiddenCategories(ContentType.VOD)
         ) { catId, q, sort, hidden -> GridParams(catId, q, sort, hidden) }
