@@ -1,35 +1,90 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Movies (VOD): left = category list (name + count); right = section
-     header ("Recently added" / category) + poster grid. Matches the Live TV browser. -->
+<!-- Cinematic Movies browser designed around deterministic TV D-pad navigation. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_login_aurora"
-    android:paddingHorizontal="@dimen/safe_area_h"
-    android:paddingVertical="@dimen/safe_area_v">
+    android:background="@drawable/bg_vod_catalog_root"
+    android:clipChildren="false"
+    android:paddingStart="@dimen/safe_area_h"
+    android:paddingTop="@dimen/safe_area_v"
+    android:paddingEnd="@dimen/safe_area_h"
+    android:paddingBottom="@dimen/safe_area_v">
 
-    <!-- Left: categories -->
     <LinearLayout
         android:id="@+id/categoryPanel"
         android:layout_width="@dimen/catalog_category_width"
         android:layout_height="0dp"
+        android:background="@drawable/bg_vod_category_panel"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:orientation="vertical"
-        android:background="@drawable/bg_glass_card"
-        android:padding="@dimen/space_m"
+        android:paddingStart="12dp"
+        android:paddingTop="14dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="12dp"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent">
+        app:layout_constraintTop_toTopOf="parent">
 
-        <TextView
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="@dimen/space_m"
-            android:text="@string/nav_movies"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_body"
-            android:textStyle="bold" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:paddingBottom="14dp">
+
+            <FrameLayout
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:background="@drawable/bg_vod_icon_badge"
+                android:padding="10dp">
+
+                <ImageView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_movie"
+                    app:tint="@color/text_primary" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/nav_movies"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/cat_recently_added"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="@dimen/text_small"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
+            android:layout_marginBottom="10dp"
+            android:background="#24FFFFFF" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/categoryList"
@@ -38,44 +93,55 @@
             android:layout_weight="1"
             android:clipChildren="false"
             android:clipToPadding="false"
-            android:focusable="false" />
+            android:focusable="false"
+            android:overScrollMode="never"
+            android:scrollbarStyle="outsideOverlay" />
     </LinearLayout>
 
-    <!-- Right: section header + poster grid -->
     <LinearLayout
         android:id="@+id/contentPanel"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:orientation="vertical"
         android:layout_marginStart="@dimen/space_m"
-        app:layout_constraintStart_toEndOf="@id/categoryPanel"
+        android:background="@drawable/bg_vod_content_panel"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:orientation="vertical"
+        android:paddingStart="14dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="10dp"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent">
+        app:layout_constraintStart_toEndOf="@id/categoryPanel"
+        app:layout_constraintTop_toTopOf="parent">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginBottom="@dimen/space_m">
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:id="@+id/contentTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/cat_recently_added"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_title"
+                android:textStyle="bold" />
 
             <LinearLayout
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:id="@+id/contentTitle"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/cat_recently_added"
-                    android:textColor="@color/text_primary"
-                    android:textSize="@dimen/text_title"
-                    android:textStyle="bold"
-                    android:maxLines="1"
-                    android:ellipsize="end" />
+                android:gravity="end"
+                android:orientation="vertical">
 
                 <com.iptv.player.ui.common.ClockView
                     android:id="@+id/clock"
@@ -89,85 +155,111 @@
                     android:id="@+id/dateText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="1dp"
                     android:textColor="@color/text_secondary"
-                    android:textSize="@dimen/text_caption"
-                    android:layout_marginStart="@dimen/space_m" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_s"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <EditText
-                    android:id="@+id/searchInput"
-                    style="@style/Widget.Iptv.Input"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_input_modern"
-                    android:drawableStart="@drawable/ic_search"
-                    android:drawablePadding="@dimen/space_s"
-                    android:hint="@string/search_movies_hint"
-                    android:imeOptions="actionSearch"
-                    android:inputType="text"
-                    android:maxLines="1" />
-
-                <ImageButton
-                    android:id="@+id/refreshButton"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:layout_marginStart="@dimen/space_m"
-                    android:background="@drawable/bg_poster"
-                    android:contentDescription="@string/action_refresh"
-                    android:focusable="true"
-                    android:focusableInTouchMode="false"
-                    android:padding="@dimen/space_s"
-                    android:stateListAnimator="@animator/control_focus"
-                    android:src="@drawable/ic_refresh"
-                    app:tint="@color/text_primary" />
-
-                <TextView
-                    android:id="@+id/sortButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="@dimen/space_s"
-                    android:background="@drawable/bg_poster"
-                    android:drawableStart="@drawable/ic_sort"
-                    android:drawablePadding="@dimen/space_s"
-                    android:ellipsize="end"
-                    android:focusable="true"
-                    android:focusableInTouchMode="false"
-                    android:maxWidth="220dp"
-                    android:maxLines="1"
-                    android:paddingHorizontal="@dimen/space_m"
-                    android:paddingVertical="@dimen/space_s"
-                    android:stateListAnimator="@animator/control_focus"
-                    android:textColor="@color/text_primary"
-                    android:textSize="@dimen/text_caption"
-                    android:textStyle="bold" />
+                    android:textSize="@dimen/text_small" />
             </LinearLayout>
         </LinearLayout>
 
+        <LinearLayout
+            android:id="@+id/catalogToolbar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_vod_toolbar"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="7dp">
+
+            <EditText
+                android:id="@+id/searchInput"
+                style="@style/Widget.Iptv.Input"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_input_modern"
+                android:drawableStart="@drawable/ic_search"
+                android:drawablePadding="@dimen/space_s"
+                android:hint="@string/search_movies_hint"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:maxLines="1"
+                android:nextFocusDown="@id/posterGrid" />
+
+            <ImageButton
+                android:id="@+id/refreshButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_vod_action_secondary"
+                android:contentDescription="@string/action_refresh"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:nextFocusDown="@id/posterGrid"
+                android:padding="13dp"
+                android:stateListAnimator="@animator/control_focus"
+                android:src="@drawable/ic_refresh"
+                app:tint="@color/text_primary" />
+
+            <TextView
+                android:id="@+id/sortButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_vod_action_secondary"
+                android:drawableStart="@drawable/ic_sort"
+                android:drawablePadding="@dimen/space_s"
+                android:ellipsize="end"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:gravity="center"
+                android:maxWidth="218dp"
+                android:maxLines="1"
+                android:nextFocusDown="@id/posterGrid"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:stateListAnimator="@animator/control_focus"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
+                android:textStyle="bold" />
+        </LinearLayout>
+
         <FrameLayout
+            android:id="@+id/catalogBody"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1">
+            android:layout_marginTop="8dp"
+            android:layout_weight="1"
+            android:clipChildren="false"
+            android:clipToPadding="false">
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/posterGrid"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:clipChildren="false"
-                android:clipToPadding="false" />
+                android:clipToPadding="false"
+                android:overScrollMode="never"
+                android:paddingStart="2dp"
+                android:paddingTop="2dp"
+                android:paddingEnd="2dp"
+                android:paddingBottom="8dp" />
 
             <TextView
                 android:id="@+id/emptyState"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
+                android:accessibilityLiveRegion="polite"
+                android:background="@drawable/bg_vod_status_card"
+                android:drawableTop="@drawable/ic_movie"
+                android:drawablePadding="12dp"
+                android:elevation="16dp"
+                android:gravity="center"
+                android:maxWidth="430dp"
+                android:paddingStart="@dimen/space_l"
+                android:paddingTop="@dimen/space_l"
+                android:paddingEnd="@dimen/space_l"
+                android:paddingBottom="@dimen/space_l"
                 android:text="@string/empty_movies"
                 android:textColor="@color/text_secondary"
                 android:textSize="@dimen/text_body"
@@ -178,24 +270,31 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
+                android:accessibilityLiveRegion="polite"
+                android:background="@drawable/bg_vod_status_card"
+                android:elevation="16dp"
                 android:gravity="center"
-                android:orientation="vertical"
+                android:orientation="horizontal"
+                android:paddingStart="@dimen/space_m"
+                android:paddingTop="12dp"
+                android:paddingEnd="@dimen/space_m"
+                android:paddingBottom="12dp"
                 android:visibility="gone">
 
                 <ProgressBar
                     android:id="@+id/loadingIndicator"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:indeterminateTint="@color/accent" />
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:indeterminateTint="@color/accent_cyan" />
 
                 <TextView
                     android:id="@+id/loadingStatus"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/space_s"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="@dimen/text_caption"
-                    android:visibility="gone" />
+                    android:layout_marginStart="10dp"
+                    android:text="@string/loading"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_caption" />
             </LinearLayout>
 
             <LinearLayout
@@ -203,10 +302,15 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:background="@drawable/bg_glass_card"
+                android:accessibilityLiveRegion="assertive"
+                android:background="@drawable/bg_vod_status_card"
+                android:elevation="16dp"
                 android:gravity="center"
                 android:orientation="vertical"
-                android:padding="@dimen/space_l"
+                android:paddingStart="@dimen/space_l"
+                android:paddingTop="@dimen/space_m"
+                android:paddingEnd="@dimen/space_l"
+                android:paddingBottom="@dimen/space_m"
                 android:visibility="gone">
 
                 <TextView
