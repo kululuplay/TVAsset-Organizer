@@ -5,7 +5,7 @@
     android:layout_height="@dimen/settings_pin_key"
     android:layout_marginStart="@dimen/space_xs"
     android:layout_marginEnd="@dimen/space_xs"
-    android:background="@drawable/bg_settings_row"
+    android:background="@drawable/bg_pin_key"
     android:backgroundTint="@null"
     android:focusable="true"
     android:focusableInTouchMode="false"

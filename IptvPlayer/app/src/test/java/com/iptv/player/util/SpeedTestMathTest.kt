@@ -83,9 +83,108 @@ class SpeedTestMathTest {
     }
 
     @Test
+    fun `short measurement window rejects one isolated high spike`() {
+        val samples = List(5) { 250.0 } + 1_500.0
+
+        assertEquals(250.0, SpeedTestMath.representativeMbps(samples), 0.0)
+    }
+
+    @Test
+    fun `full measurement window keeps p90 steady rate`() {
+        val samples = List(9) { 250.0 } + 1_500.0
+
+        assertEquals(250.0, SpeedTestMath.representativeMbps(samples), 0.0)
+    }
+
+    @Test
     fun `median averages the two middle samples`() {
         val samples = listOf(400.0, 100.0, 300.0, 200.0)
 
         assertEquals(250.0, SpeedTestMath.median(samples), 0.0)
+    }
+
+    @Test
+    fun `three active streams start after connection settle window`() {
+        assertEquals(
+            SpeedTestPolicy.StartupDecision.WAIT,
+            SpeedTestPolicy.startupDecision(
+                activeStreams = 3,
+                usableForMs = 749L,
+                deadlineReached = false,
+                allReadersFinished = false,
+            ),
+        )
+        assertEquals(
+            SpeedTestPolicy.StartupDecision.START,
+            SpeedTestPolicy.startupDecision(
+                activeStreams = 3,
+                usableForMs = 750L,
+                deadlineReached = false,
+                allReadersFinished = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `preferred parallelism starts without waiting`() {
+        assertEquals(
+            SpeedTestPolicy.StartupDecision.START,
+            SpeedTestPolicy.startupDecision(
+                activeStreams = 6,
+                usableForMs = 0L,
+                deadlineReached = false,
+                allReadersFinished = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `startup deadline accepts usable pair and rejects a single stream`() {
+        assertEquals(
+            SpeedTestPolicy.StartupDecision.START,
+            SpeedTestPolicy.startupDecision(
+                activeStreams = 2,
+                usableForMs = 0L,
+                deadlineReached = true,
+                allReadersFinished = false,
+            ),
+        )
+        assertEquals(
+            SpeedTestPolicy.StartupDecision.FAIL,
+            SpeedTestPolicy.startupDecision(
+                activeStreams = 1,
+                usableForMs = 5_000L,
+                deadlineReached = true,
+                allReadersFinished = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `sample policy keeps positive scheduler jitter intervals`() {
+        assertEquals(
+            true,
+            SpeedTestPolicy.isUsableSample(
+                activeStreams = 1,
+                transferredBytes = 1_000_000L,
+                intervalNs = 500_000_000L,
+            ),
+        )
+        assertEquals(
+            false,
+            SpeedTestPolicy.isUsableSample(
+                activeStreams = 1,
+                transferredBytes = 0L,
+                intervalNs = 500_000_000L,
+            ),
+        )
+        assertEquals(
+            false,
+            SpeedTestPolicy.isUsableSample(
+                activeStreams = 1,
+                transferredBytes = 1_000_000L,
+                intervalNs = 299_999_999L,
+            ),
+        )
     }
 }

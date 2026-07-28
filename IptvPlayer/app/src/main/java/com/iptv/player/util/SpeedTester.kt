@@ -44,11 +44,12 @@ import kotlin.math.ceil
 import kotlin.math.max
 
 /**
- * Bounded, multi-CDN download speed test designed for Android TV hardware.
+ * Bounded, parallel download speed test designed for Android TV hardware.
  *
  * The test deliberately has no IPTV/portal fallback. Downloading a subscriber's
  * stream URL would measure that provider's throttle and could put credentials in
- * an unrelated request path. Ten public-CDN transfers run concurrently instead.
+ * an unrelated request path. Ten independent HTTP/1.1 transfers use Cloudflare's
+ * purpose-built speed endpoint instead.
  *
  * HTTP body reads happen on this object's private OkHttp dispatcher. The
  * orchestration coroutine only samples atomic counters, and cancellation calls
@@ -234,44 +235,40 @@ object SpeedTester {
         }
     }
 
+    /*
+     * Keep every transfer on the one endpoint that is explicitly designed for
+     * this job. The previous implementation round-robined ten streams over four
+     * unrelated public mirrors. In production only the three Cloudflare legs
+     * transferred data while OVH timed out, Tele2 returned 502 and Hetzner timed
+     * out. The state machine then rejected the perfectly usable 3/10 result
+     * because it required five streams across two CDN hosts.
+     *
+     * HTTP/1.1 plus maxRequestsPerHost=10 below still creates ten independent TCP
+     * flows; using one anycast edge does not collapse them into one connection.
+     */
     private val endpoints = listOf(
         Endpoint(
             name = "Cloudflare",
             url = "https://speed.cloudflare.com/__down?bytes=500000000"
-        ),
-        Endpoint(
-            name = "OVH",
-            url = "https://proof.ovh.net/files/1Gb.dat"
-        ),
-        Endpoint(
-            name = "Tele2",
-            url = "https://speedtest.tele2.net/1GB.zip"
-        ),
-        Endpoint(
-            name = "Hetzner",
-            url = "https://fsn1-speed.hetzner.com/1GB.bin"
         )
     )
 
     private const val STREAM_COUNT = 10
-    // Requiring half of the ten requested streams is enough to reject a
-    // single-route result without penalising slower sticks whose TLS handshakes
-    // cannot all finish together. Two independent CDN hosts are still mandatory.
-    private const val MIN_ACTIVE_STREAMS = 5
-    private const val MIN_ACTIVE_CDNS = 2
-    private const val MIN_VALID_SAMPLES = 10
+    private const val MIN_VALID_SAMPLES = 6
     private const val MIN_MEASURED_BYTES = 64L * 1024L
     private const val MIN_EXPECTED_BODY_BYTES = 32L * 1024L * 1024L
 
     private const val TOTAL_TIMEOUT_MS = 12_000L
-    private const val STARTUP_TIMEOUT_MS = 3_500L
-    private const val WARMUP_MS = 1_500L
-    private const val TARGET_MEASUREMENT_MS = 9_000L
-    private const val CLEANUP_RESERVE_MS = 250L
+    private const val STARTUP_TIMEOUT_MS = 5_000L
+    private const val WARMUP_MS = 1_250L
+    private const val TARGET_MEASUREMENT_MS = 8_000L
+    // Call.cancel() is immediate, but the ten callback threads still need time
+    // to unwind and join. A 250 ms reserve allowed successful measurements to be
+    // reclassified as TIMEOUT on slower TV sticks during cleanup.
+    private const val CLEANUP_RESERVE_MS = 1_000L
     private const val SAMPLE_INTERVAL_MS = 500L
     private const val PROGRESS_INTERVAL_MS = 250L
     private const val STARTUP_POLL_MS = 50L
-    private const val MIN_SAMPLE_INTERVAL_NS = 300_000_000L
     private const val ACTIVE_STREAM_FRESHNESS_NS = 1_250_000_000L
     private const val BUFFER_SIZE = 128 * 1024
 
@@ -447,12 +444,12 @@ object SpeedTester {
             val startupDeadlineNs =
                 state.startedAtNs + TimeUnit.MILLISECONDS.toNanos(STARTUP_TIMEOUT_MS)
             var lastProgressAtNs = state.startedAtNs
+            var usableSinceNs: Long? = null
 
             while (true) {
                 coroutineContext.ensureActive()
                 val nowNs = System.nanoTime()
                 val activeStreams = state.updateHighWaterMark(nowNs)
-                val activeCdns = state.activeCdnCount(nowNs)
 
                 if (
                     nowNs - lastProgressAtNs >=
@@ -462,20 +459,33 @@ object SpeedTester {
                     lastProgressAtNs = nowNs
                 }
 
-                if (
-                    activeStreams >= MIN_ACTIVE_STREAMS &&
-                    activeCdns >= MIN_ACTIVE_CDNS
-                ) {
-                    break
+                usableSinceNs = when {
+                    SpeedTestPolicy.hasMinimumActiveStreams(activeStreams) ->
+                        usableSinceNs ?: nowNs
+                    else -> null
                 }
-                if (nowNs >= startupDeadlineNs || readers.all { it.isCompleted }) {
-                    return@coroutineScope state.failure(
-                        reason = FailureReason.INSUFFICIENT_ACTIVE_STREAMS,
-                        validSampleCount = 0,
-                        diagnostic =
-                            "active=$activeStreams/$MIN_ACTIVE_STREAMS," +
-                                " cdns=$activeCdns/$MIN_ACTIVE_CDNS"
+                val usableForMs = usableSinceNs?.let {
+                    TimeUnit.NANOSECONDS.toMillis((nowNs - it).coerceAtLeast(0L))
+                } ?: 0L
+                when (
+                    SpeedTestPolicy.startupDecision(
+                        activeStreams = activeStreams,
+                        usableForMs = usableForMs,
+                        deadlineReached = nowNs >= startupDeadlineNs,
+                        allReadersFinished = readers.all { it.isCompleted },
                     )
+                ) {
+                    SpeedTestPolicy.StartupDecision.START -> break
+                    SpeedTestPolicy.StartupDecision.FAIL -> {
+                        return@coroutineScope state.failure(
+                            reason = FailureReason.INSUFFICIENT_ACTIVE_STREAMS,
+                            validSampleCount = 0,
+                            diagnostic =
+                                "active=$activeStreams/" +
+                                    "${SpeedTestPolicy.MIN_STARTUP_STREAMS}"
+                        )
+                    }
+                    SpeedTestPolicy.StartupDecision.WAIT -> Unit
                 }
                 delay(STARTUP_POLL_MS)
             }
@@ -495,17 +505,13 @@ object SpeedTester {
             val warmupCompletedAtNs = System.nanoTime()
             val warmupActiveStreams =
                 state.updateHighWaterMark(warmupCompletedAtNs)
-            val warmupActiveCdns = state.activeCdnCount(warmupCompletedAtNs)
-            if (
-                warmupActiveStreams < MIN_ACTIVE_STREAMS ||
-                warmupActiveCdns < MIN_ACTIVE_CDNS
-            ) {
+            if (!SpeedTestPolicy.hasMinimumActiveStreams(warmupActiveStreams)) {
                 return@coroutineScope state.failure(
                     reason = FailureReason.INSUFFICIENT_ACTIVE_STREAMS,
                     validSampleCount = 0,
                     diagnostic =
-                        "post_warmup_active=$warmupActiveStreams/$MIN_ACTIVE_STREAMS," +
-                            " cdns=$warmupActiveCdns/$MIN_ACTIVE_CDNS"
+                        "post_warmup_active=$warmupActiveStreams/" +
+                            "${SpeedTestPolicy.MIN_STARTUP_STREAMS}"
                 )
             }
 
@@ -513,7 +519,7 @@ object SpeedTester {
             // during warm-up are excluded from every sample and the final result.
             val measurementStartedAtNs = System.nanoTime()
             val measurementStartedBytes = state.totalBytes.get()
-            // Fast connections receive the full nine-second sample window. Slow
+            // Fast connections receive the full eight-second sample window. Slow
             // DNS/TLS startup receives the remaining budget rather than pushing
             // the complete operation beyond its twelve-second hard deadline.
             val measurementDeadlineNs = minOf(
@@ -560,11 +566,15 @@ object SpeedTester {
                 state.updateHighWaterMark(activeStreams)
                 val activeCdns = activeCdnHosts.size
                 val intervalNs = nowNs - previousSampleAtNs
+                val intervalBytes =
+                    (nowBytes - previousSampleBytes).coerceAtLeast(0L)
 
                 if (
-                    intervalNs >= MIN_SAMPLE_INTERVAL_NS &&
-                    activeStreams >= MIN_ACTIVE_STREAMS &&
-                    activeCdns >= MIN_ACTIVE_CDNS
+                    SpeedTestPolicy.isUsableSample(
+                        activeStreams = activeStreams,
+                        transferredBytes = intervalBytes,
+                        intervalNs = intervalNs,
+                    )
                 ) {
                     val sample = SpeedTestMath.mbpsBetween(
                         startBytes = previousSampleBytes,
@@ -581,7 +591,7 @@ object SpeedTester {
                 emit(
                     state.progress(
                         phase = Phase.MEASURING,
-                        mbps = SpeedTestMath.p90(samples),
+                        mbps = SpeedTestMath.representativeMbps(samples),
                         sampleCount = samples.size,
                         activeStreamsOverride = activeStreams,
                         activeCdnCountOverride = activeCdns
@@ -613,7 +623,7 @@ object SpeedTester {
             }
 
             Result.Success(
-                mbps = SpeedTestMath.p90(samples),
+                mbps = SpeedTestMath.representativeMbps(samples),
                 medianMbps = SpeedTestMath.median(samples),
                 peakMbps = samples.maxOrNull() ?: 0.0,
                 measuredBytes = measuredBytes,
@@ -816,6 +826,76 @@ object SpeedTester {
 }
 
 /**
+ * Pure speed-test state policy. Keeping the thresholds out of the network code
+ * makes the Android TV startup edge cases deterministic in local JVM tests.
+ */
+internal object SpeedTestPolicy {
+
+    const val MIN_STARTUP_STREAMS = 2
+    private const val PREFERRED_STARTUP_STREAMS = 6
+    private const val STARTUP_SETTLE_MS = 750L
+    private const val MIN_SAMPLE_ACTIVE_STREAMS = 1
+    private const val MIN_SAMPLE_INTERVAL_NS = 300_000_000L
+
+    enum class StartupDecision {
+        WAIT,
+        START,
+        FAIL
+    }
+
+    /**
+     * Start immediately when most connections are ready. If only a smaller but
+     * usable set is available, give late TLS handshakes a short grace period and
+     * then continue instead of failing at 3/10. The hard startup deadline remains
+     * authoritative when too few streams ever transfer bytes.
+     */
+    fun startupDecision(
+        activeStreams: Int,
+        usableForMs: Long,
+        deadlineReached: Boolean,
+        allReadersFinished: Boolean
+    ): StartupDecision {
+        val usable = hasMinimumActiveStreams(activeStreams)
+        if (
+            usable &&
+            (
+                activeStreams >= PREFERRED_STARTUP_STREAMS ||
+                    usableForMs >= STARTUP_SETTLE_MS ||
+                    deadlineReached ||
+                    allReadersFinished
+                )
+        ) {
+            return StartupDecision.START
+        }
+        return if (deadlineReached || allReadersFinished) {
+            StartupDecision.FAIL
+        } else {
+            StartupDecision.WAIT
+        }
+    }
+
+    fun hasMinimumActiveStreams(activeStreams: Int): Boolean {
+        return activeStreams >= MIN_STARTUP_STREAMS
+    }
+
+    /**
+     * Once warm-up has proved parallel capacity, retain any positive interval
+     * with at least one transferring stream. Requiring five simultaneous streams
+     * in every 500 ms bucket discarded real bytes during normal scheduler jitter
+     * and could leave a completed test with too few valid samples.
+     */
+    fun isUsableSample(
+        activeStreams: Int,
+        transferredBytes: Long,
+        intervalNs: Long
+    ): Boolean {
+        return activeStreams >= MIN_SAMPLE_ACTIVE_STREAMS &&
+            transferredBytes > 0L &&
+            intervalNs >= MIN_SAMPLE_INTERVAL_NS
+    }
+}
+
+/**
  * Pure arithmetic kept separate from Android/network code so boundary cases can
  * be verified by local JVM tests.
  */
@@ -837,6 +917,17 @@ internal object SpeedTestMath {
     }
 
     fun p90(samples: List<Double>): Double = percentile(samples, 0.90)
+
+    /**
+     * A completed test normally has 12-16 samples and uses p90 so short dips do
+     * not under-report the line. A late-starting connection can legitimately
+     * leave only six samples; p90 would then select the single highest value.
+     * Use p80 for those shorter windows so one scheduling spike is still rejected.
+     */
+    fun representativeMbps(samples: List<Double>): Double {
+        val validCount = validSorted(samples).size
+        return percentile(samples, if (validCount >= 10) 0.90 else 0.80)
+    }
 
     fun median(samples: List<Double>): Double {
         val sorted = validSorted(samples)

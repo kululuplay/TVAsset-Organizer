@@ -13,6 +13,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.core.view.ViewCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -22,7 +23,8 @@ import com.iptv.player.data.model.ManagedChannel
 class ChannelManagerAdapter(
     private val onClicked: (ManagedChannel) -> Unit,
     private val onLongClicked: (ManagedChannel) -> Unit,
-    private val onFavorite: (ManagedChannel) -> Unit
+    private val onFavorite: (ManagedChannel) -> Unit,
+    private val onFocused: (String) -> Unit
 ) : ListAdapter<ManagedChannel, ChannelManagerAdapter.VH>(DIFF) {
 
     /** Id of the row currently in move mode (null = none). */
@@ -43,23 +45,59 @@ class ChannelManagerAdapter(
         private val moving: TextView = itemView.findViewById(R.id.mcMoving)
         private val hiddenBadge: TextView = itemView.findViewById(R.id.mcHidden)
 
+        init {
+            itemView.id = View.generateViewId()
+        }
+
         fun bind(item: ManagedChannel) {
             number.text = item.channel.number?.toString() ?: ""
             name.text = item.channel.name
             favorite.visibility = if (item.isFavorite) View.VISIBLE else View.GONE
             hiddenBadge.visibility = if (item.hidden) View.VISIBLE else View.GONE
-            moving.visibility = if (item.channel.id == movingId) View.VISIBLE else View.GONE
-            itemView.alpha = if (item.hidden) 0.5f else 1f
+            val isMoving = item.channel.id == movingId
+            moving.visibility = if (isMoving) View.VISIBLE else View.GONE
+            itemView.isSelected = isMoving
+            name.alpha = if (item.hidden) 0.62f else 1f
+            number.alpha = if (item.hidden) 0.62f else 1f
+            itemView.contentDescription = listOfNotNull(
+                item.channel.number?.toString(),
+                item.channel.name
+            ).joinToString(". ")
+            val states = buildList {
+                if (isMoving) add(itemView.context.getString(R.string.manager_moving))
+                if (item.hidden) {
+                    add(itemView.context.getString(R.string.channel_manager_hidden))
+                }
+                add(
+                    itemView.context.getString(
+                        if (item.isFavorite) {
+                            R.string.favorite_state_on
+                        } else {
+                            R.string.favorite_state_off
+                        }
+                    )
+                )
+            }
+            ViewCompat.setStateDescription(itemView, states.joinToString(" · "))
+            itemView.nextFocusLeftId = itemView.id
+            itemView.nextFocusRightId = itemView.id
 
             itemView.setOnClickListener { onClicked(item) }
             itemView.setOnLongClickListener { onLongClicked(item); true }
+            itemView.setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus) onFocused(item.channel.id)
+            }
+            val favoriteKey = if (itemView.layoutDirection == View.LAYOUT_DIRECTION_RTL) {
+                KeyEvent.KEYCODE_DPAD_LEFT
+            } else {
+                KeyEvent.KEYCODE_DPAD_RIGHT
+            }
             itemView.setOnKeyListener { _, keyCode, event ->
-                if (event.action == KeyEvent.ACTION_DOWN &&
-                    keyCode == KeyEvent.KEYCODE_DPAD_RIGHT &&
-                    movingId == null
-                ) {
-                    onFavorite(item); true
-                } else false
+                if (keyCode != favoriteKey || movingId != null) return@setOnKeyListener false
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    onFavorite(item)
+                }
+                true
             }
         }
     }

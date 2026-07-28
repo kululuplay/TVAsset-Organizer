@@ -149,8 +149,6 @@
     <string name="settings_parental">Ouderlijk toezicht</string>
     <string name="settings_parental_pin">Pincode instellen / wijzigen</string>
     <string name="settings_lock_adult">Volwassencategorieën vergrendelen</string>
-    <string name="settings_tmdb">TMDB API-sleutel</string>
-    <string name="settings_tmdb_hint">Optioneel: schakelt filmposters en details in.</string>
     <string name="settings_screensaver">Schermbeveiliging bij inactiviteit</string>
     <string name="settings_clock">Klok tonen</string>
     <string name="settings_diagnostics">Diagnostiek</string>
@@ -267,10 +265,8 @@
     <string name="settings_panel_content_desc">Kies welke categorieën en zenders worden weergegeven</string>
     <string name="settings_panel_player_desc">Stel afspeel-engines, decodering, buffering en audio af</string>
     <string name="settings_panel_time_desc">Klok, schermbeveiliging en synchronisatie op de achtergrond</string>
-    <string name="settings_panel_tmdb_desc">Voeg optioneel een TMDB-sleutel toe voor uitgebreidere filminformatie</string>
     <string name="settings_panel_speed_desc">Meet de downloadprestaties van de huidige verbinding</string>
     <string name="settings_panel_system_desc">Diagnostiek, app-informatie en accountacties</string>
-    <string name="settings_tmdb_input_hint">Voer de TMDB API-sleutel in</string>
 
     <!-- Netwerk en snelheidstest -->
     <string name="settings_network_info">Netwerkinformatie</string>
@@ -288,7 +284,7 @@
     <string name="speedtest_phase_connecting">Verbindingen voorbereiden · %1$d/%2$d</string>
     <string name="speedtest_phase_warming">Verbindingen opwarmen · %1$d/%2$d actief</string>
     <string name="speedtest_phase_measuring">Aanhoudende snelheid meten · %1$d/%2$d actief</string>
-    <string name="speedtest_method">Gebruikt meerdere openbare CDN\'s en 10 parallelle downloadstreams. Hiermee wordt je internetverbinding gemeten, niet de IPTV-server.</string>
+    <string name="speedtest_method">Gebruikt een speciale internetsnelheidstestservice met 10 parallelle downloadstreams. Hiermee wordt je internetverbinding gemeten, niet de IPTV-server.</string>
     <string name="speedtest_data_notice">De test verbruikt een aanzienlijke hoeveelheid data. Wifikwaliteit, VPN\'s en achtergrondverkeer kunnen het resultaat beïnvloeden.</string>
     <string name="speedtest_result_meta">%1$d actieve streams · %2$d MB · %3$.1f s</string>
     <string name="speedtest_result_summary">%1$s · %2$s</string>
@@ -333,4 +329,27 @@
     <string name="recovery_safe_mode">Veilige modus: de app is bij het opstarten herhaaldelijk vastgelopen, daarom zijn de afspeelinstellingen teruggezet naar standaard.</string>
     <string name="error_auto_retry_countdown">Kan geen verbinding maken. Automatisch opnieuw proberen over %1$d s…</string>
     <string name="error_auto_retry_exhausted">Nog steeds geen verbinding. Druk op Opnieuw proberen.</string>
+    <string name="pin_clear">Wissen</string>
+    <string name="pin_backspace">Laatste cijfer verwijderen</string>
+    <string name="pin_progress">%1$d van 4 cijfers ingevoerd</string>
+    <string name="settings_pin_setup_desc">Wijzig de viercijferige pincode voor ouderlijk toezicht.</string>
+    <string name="settings_support_tools">Ondersteuningshulpmiddelen</string>
+    <string name="settings_support_tools_desc">Controleer de verbinding, verzamel technische gegevens en houd de app actueel.</string>
+    <string name="settings_diagnostics_desc">Test het netwerk, de serverroute en de apparaatverbinding.</string>
+    <string name="settings_about_desc">Bekijk de geïnstalleerde versie en controleer op veilige updates.</string>
+    <string name="settings_account_actions">Accountacties</string>
+    <string name="settings_logout_desc">Verwijder dit IPTV-account van het apparaat.</string>
+    <string name="diag_subtitle">Netwerkstatus, routering en apparaatinformatie</string>
+    <string name="diag_quick_section">Snelle verbindingscontrole</string>
+    <string name="diag_quick_desc">Test internettoegang en de verbinding met uw provider.</string>
+    <string name="diag_ready">Klaar om te starten</string>
+    <string name="diag_complete_summary">%1$d van %2$d controles geslaagd</string>
+    <string name="diag_peering_section">Uitgebreide routeanalyse</string>
+    <string name="diag_peering_desc">Vergelijkt de route naar de dienst met onafhankelijke referentiepunten. Duurt ongeveer drie minuten.</string>
+    <string name="diag_device_desc">Technische gegevens om met ondersteuning te delen.</string>
+    <string name="about_subtitle">Versie-informatie en veilige app-updates</string>
+    <string name="about_brand_tagline">Een gerichte tv-ervaring, ontworpen voor het grote scherm.</string>
+    <string name="about_update_section">App-updates</string>
+    <string name="about_update_desc">Controleer en installeer een nieuwe versie zonder uw account of voorkeuren te verliezen.</string>
+    <string name="about_ready">Uw geïnstalleerde versie is gereed.</string>
 </resources>

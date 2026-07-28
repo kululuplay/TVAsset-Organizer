@@ -166,8 +166,6 @@
     <string name="settings_parental">Ebeveyn denetimi</string>
     <string name="settings_parental_pin">PIN ayarla / değiştir</string>
     <string name="settings_lock_adult">Yetişkin kategorilerini kilitle</string>
-    <string name="settings_tmdb">TMDB API anahtarı</string>
-    <string name="settings_tmdb_hint">İsteğe bağlı: film afişlerini ve detaylarını açar.</string>
     <string name="settings_screensaver">Boştayken ekran koruyucu</string>
     <string name="settings_audio_passthrough">Ses aktarımı / passthrough (AV alıcılar için)</string>
     <string name="settings_audio_passthrough_warning">Bunu yalnızca Dolby/DTS çözebilen bir AV alıcı veya soundbar bağlıysa açın. Çözücüsü olmayan TV ve projeksiyonlarda görüntü oynar ancak SES ÇIKMAZ. Ses gelmiyorsa bu ayarı kapatın.</string>
@@ -302,10 +300,8 @@
     <string name="settings_panel_content_desc">Görünecek kategori ve kanalları seçin</string>
     <string name="settings_panel_player_desc">Oynatıcı, kod çözme, tampon ve ses ayarlarını düzenleyin</string>
     <string name="settings_panel_time_desc">Saat, ekran koruyucu ve arka plan eşitlemesi</string>
-    <string name="settings_panel_tmdb_desc">Daha zengin film bilgileri için isteğe bağlı TMDB anahtarı ekleyin</string>
     <string name="settings_panel_speed_desc">Mevcut bağlantının indirme performansını ölçün</string>
     <string name="settings_panel_system_desc">Tanılama, uygulama bilgileri ve hesap işlemleri</string>
-    <string name="settings_tmdb_input_hint">TMDB API anahtarını girin</string>
 
     <!-- Güncelleme uyarısı (açılışta otomatik gösterilir) -->
     <string name="update_available_title">Güncelleme mevcut</string>
@@ -354,7 +350,7 @@
     <string name="speedtest_phase_connecting">Bağlantılar hazırlanıyor · %1$d/%2$d</string>
     <string name="speedtest_phase_warming">Bağlantılar hazırlanıyor · %1$d/%2$d etkin</string>
     <string name="speedtest_phase_measuring">Sürdürülebilir hız ölçülüyor · %1$d/%2$d etkin</string>
-    <string name="speedtest_method">Birden fazla genel CDN ve 10 paralel indirme akışı kullanır. Sonuç IPTV sunucusunun değil, internet bağlantınızın hızıdır.</string>
+    <string name="speedtest_method">Özel bir internet hız testi hizmetinde 10 paralel indirme akışı kullanır. IPTV sunucusunu değil, internet bağlantınızı ölçer.</string>
     <string name="speedtest_data_notice">Test önemli miktarda veri aktarır. Wi‑Fi kalitesi, VPN ve arka plan trafiği sonucu etkileyebilir.</string>
     <string name="speedtest_result_meta">%1$d etkin akış · %2$d MB · %3$.1f sn</string>
     <string name="speedtest_result_summary">%1$s · %2$s</string>
@@ -378,4 +374,27 @@
     <string name="recovery_safe_mode">Güvenli mod: Uygulama açılışta üst üste çöktüğü için oynatma ayarları varsayılana sıfırlandı.</string>
     <string name="error_auto_retry_countdown">Bağlantı kurulamadı. %1$d saniye içinde otomatik olarak tekrar denenecek…</string>
     <string name="error_auto_retry_exhausted">Bağlantı hâlâ kurulamıyor. Tekrar denemek için Yeniden Dene\'ye basın.</string>
+    <string name="pin_clear">Temizle</string>
+    <string name="pin_backspace">Son haneyi sil</string>
+    <string name="pin_progress">4 haneden %1$d tanesi girildi</string>
+    <string name="settings_pin_setup_desc">Ebeveyn denetimleri için kullanılan dört haneli PIN kodunu değiştirin.</string>
+    <string name="settings_support_tools">Destek araçları</string>
+    <string name="settings_support_tools_desc">Bağlantıyı kontrol edin, teknik ayrıntıları toplayın ve uygulamayı güncel tutun.</string>
+    <string name="settings_diagnostics_desc">Ağı, sunucu yolunu ve cihaz bağlantısını test edin.</string>
+    <string name="settings_about_desc">Yüklü sürümü görüntüleyin ve güvenli güncellemeleri denetleyin.</string>
+    <string name="settings_account_actions">Hesap işlemleri</string>
+    <string name="settings_logout_desc">Bu IPTV hesabını cihazdan kaldırın.</string>
+    <string name="diag_subtitle">Ağ sağlığı, yönlendirme ve cihaz bilgileri</string>
+    <string name="diag_quick_section">Hızlı bağlantı kontrolü</string>
+    <string name="diag_quick_desc">İnternet erişimini ve sağlayıcı bağlantınızı test eder.</string>
+    <string name="diag_ready">Çalıştırmaya hazır</string>
+    <string name="diag_complete_summary">%2$d kontrolden %1$d tanesi başarılı</string>
+    <string name="diag_peering_section">Gelişmiş rota analizi</string>
+    <string name="diag_peering_desc">Hizmete giden rotayı bağımsız referans noktalarıyla karşılaştırır. Yaklaşık üç dakika sürer.</string>
+    <string name="diag_device_desc">Destek ekibiyle iletişime geçerken paylaşabileceğiniz teknik ayrıntılar.</string>
+    <string name="about_subtitle">Sürüm bilgileri ve güvenli uygulama güncellemeleri</string>
+    <string name="about_brand_tagline">Büyük ekran için tasarlanmış, odaklanmış bir televizyon deneyimi.</string>
+    <string name="about_update_section">Uygulama güncellemeleri</string>
+    <string name="about_update_desc">Hesabınızı veya tercihlerinizi kaybetmeden yeni sürümü denetleyip yükleyin.</string>
+    <string name="about_ready">Yüklü sürümünüz hazır.</string>
 </resources>

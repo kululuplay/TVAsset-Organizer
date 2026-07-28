@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Primary support-screen action with a strong TV focus state. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/card_radius" />
+            <solid android:color="#F05E6FE8" />
+            <stroke android:width="2dp" android:color="@android:color/white" />
+        </shape>
+    </item>
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/card_radius" />
+            <gradient
+                android:angle="0"
+                android:endColor="@color/settings_row_focus_end"
+                android:startColor="@color/settings_row_focus_start" />
+            <stroke
+                android:width="@dimen/focus_stroke"
+                android:color="@color/settings_row_focus_stroke" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/card_radius" />
+            <gradient
+                android:angle="0"
+                android:endColor="#B84C3F8F"
+                android:startColor="#B8254D8C" />
+            <stroke
+                android:width="1dp"
+                android:color="#668AA4FF" />
+        </shape>
+    </item>
+</selector>

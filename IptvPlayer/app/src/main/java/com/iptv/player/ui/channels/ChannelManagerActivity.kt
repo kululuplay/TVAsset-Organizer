@@ -13,6 +13,7 @@ package com.iptv.player.ui.channels
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
+import androidx.core.view.ViewCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -39,6 +40,9 @@ class ChannelManagerActivity : BaseActivity() {
     private var fullIds: List<String> = emptyList()
     private var movingId: String? = null
     private var pendingFocusId: String? = null
+    private var restoredFocusId: String? = null
+    private var lastFocusedId: String? = null
+    private var initialFocusApplied = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,14 +51,20 @@ class ChannelManagerActivity : BaseActivity() {
         setContentView(binding.root)
 
         intent.getStringExtra(EXTRA_CATEGORY_NAME)?.let { binding.cmTitle.text = it }
+        restoredFocusId = savedInstanceState?.getString(STATE_FOCUSED_CHANNEL_ID)
+        lastFocusedId = restoredFocusId
+        ViewCompat.setAccessibilityPaneTitle(binding.root, binding.cmTitle.text)
+        ViewCompat.setAccessibilityHeading(binding.cmTitle, true)
 
         adapter = ChannelManagerAdapter(
             onClicked = { if (movingId == null) viewModel.setHidden(it.channel.id, !it.hidden) },
             onLongClicked = { enterMoveMode(it) },
-            onFavorite = { viewModel.toggleFavorite(it.channel.id) }
+            onFavorite = { viewModel.toggleFavorite(it.channel.id) },
+            onFocused = { lastFocusedId = it }
         )
         binding.channelList.layoutManager = LinearLayoutManager(this)
         binding.channelList.adapter = adapter
+        binding.channelList.itemAnimator = null
 
         lifecycleScope.launch {
             viewModel.allChannels.collectLatest { all -> fullIds = all.map { it.channel.id } }
@@ -72,15 +82,33 @@ class ChannelManagerActivity : BaseActivity() {
         adapter.submitList(items.toList()) {
             updateSummary()
             binding.emptyState.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
-            pendingFocusId?.let { id ->
-                val pos = items.indexOfFirst { it.channel.id == id }
-                if (pos >= 0) {
-                    binding.channelList.post {
-                        binding.channelList.layoutManager?.findViewByPosition(pos)?.requestFocus()
-                    }
+            binding.channelList.post {
+                val pending = pendingFocusId.also { pendingFocusId = null }
+                val initial = if (!initialFocusApplied && items.isNotEmpty()) {
+                    initialFocusApplied = true
+                    restoredFocusId ?: items.first().channel.id
+                } else {
+                    null
                 }
-                pendingFocusId = null
+
+                when {
+                    pending != null -> focusChannel(pending)
+                    initial != null -> focusChannel(initial)
+                }
             }
+        }
+    }
+
+    private fun focusChannel(id: String) {
+        val position = items.indexOfFirst { it.channel.id == id }
+            .takeIf { it >= 0 }
+            ?: items.indices.firstOrNull()
+            ?: return
+        binding.channelList.scrollToPosition(position)
+        binding.channelList.post {
+            binding.channelList.layoutManager
+                ?.findViewByPosition(position)
+                ?.requestFocus()
         }
     }
 
@@ -104,11 +132,15 @@ class ChannelManagerActivity : BaseActivity() {
         adapter.movingId = null
         // Reorder only this category's slots inside the global order, leaving every
         // other channel's position untouched.
-        val displayIds = items.map { it.channel.id }
-        val displaySet = displayIds.toHashSet()
-        var k = 0
-        val newGlobal = fullIds.map { gid -> if (gid in displaySet) displayIds[k++] else gid }
-        viewModel.applyOrder(newGlobal)
+        if (fullIds.isNotEmpty()) {
+            val displayIds = items.map { it.channel.id }
+            val displaySet = displayIds.toHashSet()
+            var k = 0
+            val newGlobal = fullIds.map { gid ->
+                if (gid in displaySet && k < displayIds.size) displayIds[k++] else gid
+            }
+            viewModel.applyOrder(newGlobal)
+        }
         refreshMovingRow(moving)
     }
 
@@ -140,7 +172,7 @@ class ChannelManagerActivity : BaseActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (movingId != null) {
             // Trap all D-pad navigation while moving so focus can't escape the
-            // list and trigger background reorders; only commit/cancel exits.
+            // list and trigger background reorders; OK or Back commits and exits.
             if (event.action == KeyEvent.ACTION_DOWN) {
                 when (event.keyCode) {
                     KeyEvent.KEYCODE_DPAD_UP -> moveBy(-1)
@@ -161,8 +193,17 @@ class ChannelManagerActivity : BaseActivity() {
         return super.dispatchKeyEvent(event)
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString(
+            STATE_FOCUSED_CHANNEL_ID,
+            movingId ?: lastFocusedId ?: restoredFocusId
+        )
+        super.onSaveInstanceState(outState)
+    }
+
     companion object {
         const val EXTRA_CATEGORY_ID = "extra_category_id"
         const val EXTRA_CATEGORY_NAME = "extra_category_name"
+        private const val STATE_FOCUSED_CHANNEL_ID = "state_focused_channel_id"
     }
 }

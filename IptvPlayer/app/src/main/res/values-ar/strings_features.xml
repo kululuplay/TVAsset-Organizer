@@ -14,7 +14,7 @@
 
     <!-- إدارة القنوات -->
     <string name="channel_manager_title">إدارة القنوات</string>
-    <string name="channel_manager_hint">إخفاء القنوات وإعادة ترتيبها وإضافتها للمفضلة.</string>
+    <string name="channel_manager_hint">OK للإظهار/الإخفاء · اضغط مطولاً للتحريك · ◀ للمفضلة</string>
     <string name="channel_manager_show">إظهار</string>
     <string name="channel_manager_hide">إخفاء</string>
     <string name="channel_manager_hidden">مخفية</string>
@@ -22,6 +22,28 @@
     <string name="channel_manager_move_down">تحريك لأسفل</string>
     <string name="channel_manager_favorite">إضافة إلى المفضلة</string>
     <string name="channel_manager_unfavorite">إزالة من المفضلة</string>
+
+    <!-- إدارة المحتوى (الواجهة ومحررات الفئات والقنوات) -->
+    <string name="settings_content_manager_hint">إخفاء الفئات والقنوات وإعادة ترتيبها</string>
+    <string name="content_manager_title">إدارة المحتوى</string>
+    <string name="content_manager_hint">اختر ما يظهر وترتيب ظهوره.</string>
+    <string name="content_manager_live">التلفزيون المباشر</string>
+    <string name="content_manager_live_hint">الفئات والقنوات</string>
+    <string name="content_manager_movies">الأفلام</string>
+    <string name="content_manager_movies_hint">فئات الأفلام</string>
+    <string name="content_manager_series">المسلسلات</string>
+    <string name="content_manager_series_hint">فئات المسلسلات</string>
+    <string name="content_manager_overline">الإدارة</string>
+    <string name="content_manager_edit">تعديل</string>
+    <string name="category_manager_title_live">فئات التلفزيون المباشر</string>
+    <string name="category_manager_title_movies">فئات الأفلام</string>
+    <string name="category_manager_title_series">فئات المسلسلات</string>
+    <string name="category_manager_hint_live">OK للإظهار/الإخفاء · اضغط مطولاً للتحريك · ◀ للقنوات</string>
+    <string name="category_manager_hint">OK للإظهار/الإخفاء · اضغط مطولاً للتحريك</string>
+    <string name="category_manager_empty">لا توجد فئات بعد.</string>
+    <string name="manager_summary">%1$d ظاهرة · %2$d مخفية</string>
+    <string name="manager_moving">جارٍ التحريك</string>
+    <string name="manager_reset">إعادة ضبط الترتيب</string>
 
     <!-- الإعدادات: المحتوى / المزامنة -->
     <string name="settings_content">المحتوى</string>

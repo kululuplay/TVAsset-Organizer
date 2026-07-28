@@ -326,7 +326,8 @@ class SettingsStore(
 
     // ---- TMDB -----------------------------------------------------------
 
-    // A user-saved key takes precedence over the optional CI-injected default.
+    // Preserve a key saved by an older app version; otherwise use the
+    // CI-injected BuildConfig value. The key is no longer exposed in Settings.
     val tmdbKey: Flow<String> = context.dataStore.data.map {
         secureValues.decrypt(it[Keys.TMDB_KEY]).takeIf(String::isNotBlank)
             ?: DEFAULT_TMDB_KEY
@@ -529,7 +530,7 @@ class SettingsStore(
         /** Default parental PIN used until the user sets their own. */
         const val DEFAULT_PIN = "0000"
 
-        /** Optional CI-injected TMDB key; blank means the user can supply one. */
+        /** CI-injected TMDB key; older encrypted overrides remain compatible. */
         val DEFAULT_TMDB_KEY: String = BuildConfig.TMDB_API_KEY
     }
 }

@@ -150,8 +150,6 @@
     <string name="settings_parental">الرقابة الأبوية</string>
     <string name="settings_parental_pin">تعيين / تغيير الرمز</string>
     <string name="settings_lock_adult">قفل فئات الكبار</string>
-    <string name="settings_tmdb">مفتاح TMDB API</string>
-    <string name="settings_tmdb_hint">اختياري: يُفعّل ملصقات الأفلام والتفاصيل.</string>
     <string name="settings_screensaver">شاشة التوقف عند الخمول</string>
     <string name="settings_clock">إظهار الساعة</string>
     <string name="settings_diagnostics">التشخيص</string>
@@ -268,10 +266,8 @@
     <string name="settings_panel_content_desc">اختر الفئات والقنوات التي تظهر</string>
     <string name="settings_panel_player_desc">ضبط محركات التشغيل وفك الترميز والتخزين المؤقت والصوت</string>
     <string name="settings_panel_time_desc">الساعة وشاشة التوقف والمزامنة في الخلفية</string>
-    <string name="settings_panel_tmdb_desc">أضف مفتاح TMDB اختياريًا للحصول على تفاصيل أفلام أكثر ثراءً</string>
     <string name="settings_panel_speed_desc">قياس أداء التنزيل للاتصال الحالي</string>
     <string name="settings_panel_system_desc">التشخيص ومعلومات التطبيق وإجراءات الحساب</string>
-    <string name="settings_tmdb_input_hint">أدخل مفتاح TMDB API</string>
 
     <!-- الشبكة واختبار السرعة -->
     <string name="settings_network_info">معلومات الشبكة</string>
@@ -289,7 +285,7 @@
     <string name="speedtest_phase_connecting">جارٍ إعداد الاتصالات · %1$d/%2$d</string>
     <string name="speedtest_phase_warming">جارٍ تهيئة الاتصالات · %1$d/%2$d نشطة</string>
     <string name="speedtest_phase_measuring">جارٍ قياس السرعة المستمرة · %1$d/%2$d نشطة</string>
-    <string name="speedtest_method">يستخدم عدة شبكات CDN عامة و10 تدفقات تنزيل متوازية. يقيس هذا اتصالك بالإنترنت، وليس خادم IPTV.</string>
+    <string name="speedtest_method">يستخدم خدمة مخصصة لاختبار سرعة الإنترنت عبر 10 تدفقات تنزيل متوازية. يقيس هذا اتصالك بالإنترنت، وليس خادم IPTV.</string>
     <string name="speedtest_data_notice">ينقل الاختبار كمية كبيرة من البيانات. قد تؤثر جودة شبكة Wi-Fi وشبكات VPN وحركة البيانات في الخلفية في النتيجة.</string>
     <string name="speedtest_result_meta">%1$d تدفقات نشطة · %2$d ميغابايت · %3$.1f ث</string>
     <string name="speedtest_result_summary">%1$s · %2$s</string>
@@ -345,4 +341,27 @@
     <string name="recovery_safe_mode">الوضع الآمن: تعطل التطبيق بشكل متكرر عند بدء التشغيل، لذا أُعيد ضبط إعدادات التشغيل إلى الوضع الافتراضي.</string>
     <string name="error_auto_retry_countdown">تعذر الاتصال. ستتم إعادة المحاولة تلقائيًا خلال %1$d ثانية…</string>
     <string name="error_auto_retry_exhausted">لا يزال الاتصال متعذرًا. اضغط على إعادة المحاولة للمحاولة مجددًا.</string>
+    <string name="pin_clear">مسح</string>
+    <string name="pin_backspace">حذف الرقم الأخير</string>
+    <string name="pin_progress">تم إدخال %1$d من 4 أرقام</string>
+    <string name="settings_pin_setup_desc">غيّر رمز PIN المكوّن من أربعة أرقام للرقابة الأبوية.</string>
+    <string name="settings_support_tools">أدوات الدعم</string>
+    <string name="settings_support_tools_desc">تحقق من الاتصال واجمع التفاصيل التقنية وحافظ على تحديث التطبيق.</string>
+    <string name="settings_diagnostics_desc">اختبر الشبكة ومسار الخادم واتصال الجهاز.</string>
+    <string name="settings_about_desc">اعرض الإصدار المثبت وتحقق من التحديثات الآمنة.</string>
+    <string name="settings_account_actions">إجراءات الحساب</string>
+    <string name="settings_logout_desc">أزل حساب IPTV هذا من الجهاز.</string>
+    <string name="diag_subtitle">حالة الشبكة والتوجيه ومعلومات الجهاز</string>
+    <string name="diag_quick_section">فحص سريع للاتصال</string>
+    <string name="diag_quick_desc">يختبر الوصول إلى الإنترنت والاتصال بمزوّد الخدمة.</string>
+    <string name="diag_ready">جاهز للتشغيل</string>
+    <string name="diag_complete_summary">نجح %1$d من أصل %2$d فحوصات</string>
+    <string name="diag_peering_section">تحليل متقدم للمسار</string>
+    <string name="diag_peering_desc">يقارن المسار إلى الخدمة بنقاط مرجعية مستقلة. يستغرق نحو ثلاث دقائق.</string>
+    <string name="diag_device_desc">تفاصيل تقنية لمشاركتها عند التواصل مع الدعم.</string>
+    <string name="about_subtitle">معلومات الإصدار وتحديثات التطبيق الآمنة</string>
+    <string name="about_brand_tagline">تجربة تلفزيونية مركّزة مصممة للشاشة الكبيرة.</string>
+    <string name="about_update_section">تحديثات التطبيق</string>
+    <string name="about_update_desc">تحقق من إصدار أحدث وثبّته دون فقدان حسابك أو تفضيلاتك.</string>
+    <string name="about_ready">الإصدار المثبت جاهز.</string>
 </resources>

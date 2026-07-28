@@ -14,7 +14,7 @@
 
     <!-- Senderverwaltung -->
     <string name="channel_manager_title">Sender verwalten</string>
-    <string name="channel_manager_hint">Sender ausblenden, sortieren und favorisieren.</string>
+    <string name="channel_manager_hint">OK zum Ein-/Ausblenden · gedrückt halten zum Verschieben · ▶ für Favorit</string>
     <string name="channel_manager_show">Anzeigen</string>
     <string name="channel_manager_hide">Ausblenden</string>
     <string name="channel_manager_hidden">Ausgeblendet</string>
@@ -22,6 +22,28 @@
     <string name="channel_manager_move_down">Nach unten</string>
     <string name="channel_manager_favorite">Zu Favoriten</string>
     <string name="channel_manager_unfavorite">Aus Favoriten entfernen</string>
+
+    <!-- Inhaltsverwaltung (Hub + Kategorien-/Sendereditoren) -->
+    <string name="settings_content_manager_hint">Kategorien und Sender ausblenden und neu anordnen</string>
+    <string name="content_manager_title">Inhaltsverwaltung</string>
+    <string name="content_manager_hint">Legen Sie fest, was in welcher Reihenfolge angezeigt wird.</string>
+    <string name="content_manager_live">Live-TV</string>
+    <string name="content_manager_live_hint">Kategorien und Sender</string>
+    <string name="content_manager_movies">Filme</string>
+    <string name="content_manager_movies_hint">Filmkategorien</string>
+    <string name="content_manager_series">Serien</string>
+    <string name="content_manager_series_hint">Serienkategorien</string>
+    <string name="content_manager_overline">Verwaltung</string>
+    <string name="content_manager_edit">Bearbeiten</string>
+    <string name="category_manager_title_live">Live-TV-Kategorien</string>
+    <string name="category_manager_title_movies">Filmkategorien</string>
+    <string name="category_manager_title_series">Serienkategorien</string>
+    <string name="category_manager_hint_live">OK zum Ein-/Ausblenden · gedrückt halten zum Verschieben · ▶ für Sender</string>
+    <string name="category_manager_hint">OK zum Ein-/Ausblenden · gedrückt halten zum Verschieben</string>
+    <string name="category_manager_empty">Noch keine Kategorien.</string>
+    <string name="manager_summary">%1$d sichtbar · %2$d ausgeblendet</string>
+    <string name="manager_moving">Wird verschoben</string>
+    <string name="manager_reset">Reihenfolge zurücksetzen</string>
 
     <!-- Einstellungen: Inhalt / Synchronisierung -->
     <string name="settings_content">Inhalt</string>

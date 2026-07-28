@@ -69,7 +69,6 @@ class SettingsActivity : BaseActivity() {
         CATEGORIES,
         PLAYER,
         TIME,
-        TMDB,
         SPEEDTEST,
         SYSTEM,
     }
@@ -116,9 +115,12 @@ class SettingsActivity : BaseActivity() {
     private enum class PinStage { CURRENT, NEW, CONFIRM }
 
     private val pinBoxViews = mutableListOf<TextView>()
+    private val pinKeyViews = mutableListOf<View>()
     private val pinEntry = StringBuilder()
     private var pinStage = PinStage.CURRENT
     private var pendingNewPin = ""
+    private var usesDefaultPin = false
+    private var pinErrorVisible = false
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
@@ -188,7 +190,6 @@ class SettingsActivity : BaseActivity() {
         addNavRow(c, getString(R.string.settings_content_manager), Panel.CATEGORIES)
         addNavRow(c, getString(R.string.settings_player_mode), Panel.PLAYER)
         addNavRow(c, getString(R.string.settings_time_sync), Panel.TIME)
-        addNavRow(c, getString(R.string.settings_tmdb), Panel.TMDB)
         addNavRow(c, getString(R.string.settings_speedtest), Panel.SPEEDTEST)
         addNavRow(c, getString(R.string.settings_system_support), Panel.SYSTEM)
 
@@ -237,7 +238,6 @@ class SettingsActivity : BaseActivity() {
         buildTimePanel()
         buildCategoriesPanel()
         buildPinPanel()
-        buildTmdbPanel()
         buildSpeedtestPanel()
         buildSystemPanel()
     }
@@ -249,7 +249,6 @@ class SettingsActivity : BaseActivity() {
         Panel.CATEGORIES -> binding.detailCategories
         Panel.PLAYER -> binding.detailPlayer
         Panel.TIME -> binding.detailTime
-        Panel.TMDB -> binding.detailTmdb
         Panel.SPEEDTEST -> binding.detailSpeedtest
         Panel.SYSTEM -> binding.detailSystem
     }
@@ -286,7 +285,6 @@ class SettingsActivity : BaseActivity() {
         Panel.CATEGORIES -> R.string.settings_content_manager
         Panel.PLAYER -> R.string.settings_player_mode
         Panel.TIME -> R.string.settings_time_sync
-        Panel.TMDB -> R.string.settings_tmdb
         Panel.SPEEDTEST -> R.string.settings_speedtest
         Panel.SYSTEM -> R.string.settings_system_support
     }
@@ -298,7 +296,6 @@ class SettingsActivity : BaseActivity() {
         Panel.CATEGORIES -> R.string.settings_panel_content_desc
         Panel.PLAYER -> R.string.settings_panel_player_desc
         Panel.TIME -> R.string.settings_panel_time_desc
-        Panel.TMDB -> R.string.settings_panel_tmdb_desc
         Panel.SPEEDTEST -> R.string.settings_panel_speed_desc
         Panel.SYSTEM -> R.string.settings_panel_system_desc
     }
@@ -310,7 +307,6 @@ class SettingsActivity : BaseActivity() {
         Panel.CATEGORIES -> R.drawable.ic_sort
         Panel.PLAYER -> R.drawable.ic_play
         Panel.TIME -> R.drawable.ic_clock
-        Panel.TMDB -> R.drawable.ic_movie
         Panel.SPEEDTEST -> R.drawable.ic_signal
         Panel.SYSTEM -> R.drawable.ic_settings
     }
@@ -354,7 +350,8 @@ class SettingsActivity : BaseActivity() {
             if (
                 event.keyCode == detailToRailKey &&
                 isFocusInside(binding.detailContainer) &&
-                canLeaveEditTextTowardRail(currentFocus, detailToRailKey)
+                canLeaveEditTextTowardRail(currentFocus, detailToRailKey) &&
+                canLeavePinKeypadTowardRail(currentFocus, detailToRailKey)
             ) {
                 selectedRow?.requestFocus()
                 return true
@@ -378,6 +375,22 @@ class SettingsActivity : BaseActivity() {
             KeyEvent.KEYCODE_DPAD_LEFT -> focused.selectionStart <= 0
             KeyEvent.KEYCODE_DPAD_RIGHT -> focused.selectionStart >= focused.text.length
             else -> false
+        }
+    }
+
+    /**
+     * The master/detail screen normally treats Left (Right in RTL) as "return to
+     * the rail". A PIN keypad is a real 3-column control, so only leave from the
+     * outer key; otherwise horizontal D-pad navigation must stay inside the row.
+     */
+    private fun canLeavePinKeypadTowardRail(focused: View?, keyCode: Int): Boolean {
+        if (selectedPanel != Panel.PIN || focused !in pinKeyViews) return true
+        val row = focused?.parent as? ViewGroup ?: return true
+        val position = row.indexOfChild(focused)
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_LEFT -> position == 0
+            KeyEvent.KEYCODE_DPAD_RIGHT -> position == row.childCount - 1
+            else -> true
         }
     }
 
@@ -661,6 +674,8 @@ class SettingsActivity : BaseActivity() {
             startActivity(Intent(this, ProfilesActivity::class.java))
         }
 
+        pinBoxViews.clear()
+        pinKeyViews.clear()
         // Four display boxes.
         repeat(4) {
             val box = LayoutInflater.from(this)
@@ -688,11 +703,14 @@ class SettingsActivity : BaseActivity() {
             addKey(row, "⌫", backspace = true)
             binding.pinKeys.addView(row)
         }
+        wirePinKeyFocus()
         binding.pinHint.setText(R.string.settings_pin_remote_hint)
     }
 
     private fun keypadRow(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
+        clipChildren = false
+        clipToPadding = false
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).also { it.bottomMargin = resources.getDimensionPixelSize(R.dimen.space_s) }
@@ -706,6 +724,12 @@ class SettingsActivity : BaseActivity() {
     ) {
         val key = LayoutInflater.from(this).inflate(R.layout.item_pin_key, row, false) as TextView
         key.text = label
+        key.id = View.generateViewId()
+        key.contentDescription = when {
+            clear -> getString(R.string.pin_clear)
+            backspace -> getString(R.string.pin_backspace)
+            else -> label
+        }
         key.setOnClickListener {
             when {
                 clear -> clearPinEntry()
@@ -714,6 +738,26 @@ class SettingsActivity : BaseActivity() {
             }
         }
         row.addView(key)
+        pinKeyViews += key
+    }
+
+    /** Stable 3×4 navigation even when text scaling changes card geometry. */
+    private fun wirePinKeyFocus() {
+        val rows = pinKeyViews.chunked(3)
+        rows.forEachIndexed { rowIndex, row ->
+            row.forEachIndexed { columnIndex, key ->
+                key.nextFocusLeftId =
+                    row.getOrNull(columnIndex - 1)?.id ?: key.id
+                key.nextFocusRightId =
+                    row.getOrNull(columnIndex + 1)?.id ?: key.id
+                rows.getOrNull(rowIndex - 1)?.getOrNull(columnIndex)?.let {
+                    key.nextFocusUpId = it.id
+                }
+                rows.getOrNull(rowIndex + 1)?.getOrNull(columnIndex)?.let {
+                    key.nextFocusDownId = it.id
+                } ?: run { key.nextFocusDownId = key.id }
+            }
+        }
     }
 
     private fun resetPin() {
@@ -721,26 +765,23 @@ class SettingsActivity : BaseActivity() {
         pendingNewPin = ""
         pinEntry.setLength(0)
         binding.pinPrompt.setText(R.string.settings_enter_old_pin)
-        binding.pinHint.setText(R.string.settings_pin_remote_hint)
+        usesDefaultPin = false
+        pinErrorVisible = false
+        renderPinHint()
         updatePinBoxes()
         lifecycleScope.launch {
-            if (ServiceLocator.settings.getPin() == SettingsStore.DEFAULT_PIN) {
-                binding.pinHint.text = buildString {
-                    append(
-                        getString(
-                            R.string.settings_default_pin,
-                            SettingsStore.DEFAULT_PIN,
-                        ),
-                    )
-                    append('\n')
-                    append(getString(R.string.settings_pin_remote_hint))
-                }
-            }
+            usesDefaultPin =
+                ServiceLocator.settings.getPin() == SettingsStore.DEFAULT_PIN
+            if (!pinErrorVisible) renderPinHint()
         }
     }
 
     private fun onPinDigit(d: String) {
         if (pinEntry.length >= 4) return
+        if (pinErrorVisible) {
+            pinErrorVisible = false
+            renderPinHint()
+        }
         pinEntry.append(d)
         updatePinBoxes()
         if (pinEntry.length == 4) handlePinComplete()
@@ -767,7 +808,10 @@ class SettingsActivity : BaseActivity() {
                     pinStage = PinStage.NEW
                     pinEntry.setLength(0)
                     binding.pinPrompt.setText(R.string.settings_enter_new_pin)
+                    pinErrorVisible = false
+                    renderPinHint()
                     updatePinBoxes()
+                    binding.pinPrompt.announceForAccessibility(binding.pinPrompt.text)
                 } else {
                     Toast.makeText(
                         this@SettingsActivity,
@@ -775,6 +819,7 @@ class SettingsActivity : BaseActivity() {
                         Toast.LENGTH_SHORT,
                     ).show()
                     clearPinEntry()
+                    showPinError(R.string.pin_wrong)
                 }
             }
 
@@ -783,7 +828,10 @@ class SettingsActivity : BaseActivity() {
                 pinStage = PinStage.CONFIRM
                 pinEntry.setLength(0)
                 binding.pinPrompt.setText(R.string.settings_confirm_new_pin)
+                pinErrorVisible = false
+                renderPinHint()
                 updatePinBoxes()
+                binding.pinPrompt.announceForAccessibility(binding.pinPrompt.text)
             }
 
             PinStage.CONFIRM -> {
@@ -793,6 +841,7 @@ class SettingsActivity : BaseActivity() {
                     pendingNewPin = ""
                     clearPinEntry()
                     binding.pinPrompt.setText(R.string.settings_enter_new_pin)
+                    showPinError(R.string.pin_mismatch)
                     return
                 }
                 lifecycleScope.launch {
@@ -811,33 +860,102 @@ class SettingsActivity : BaseActivity() {
     private fun updatePinBoxes() {
         pinBoxViews.forEachIndexed { i, box ->
             box.text = if (i < pinEntry.length) "●" else ""
+            box.isActivated = i < pinEntry.length
+        }
+        binding.pinBoxes.contentDescription = getString(
+            R.string.pin_progress,
+            pinEntry.length,
+        )
+    }
+
+    private fun renderPinHint() {
+        binding.pinHint.setTextColor(
+            ContextCompat.getColor(this, R.color.text_secondary),
+        )
+        binding.pinHint.text = if (usesDefaultPin && pinStage == PinStage.CURRENT) {
+            buildString {
+                append(
+                    getString(
+                        R.string.settings_default_pin,
+                        SettingsStore.DEFAULT_PIN,
+                    ),
+                )
+                append('\n')
+                append(getString(R.string.settings_pin_remote_hint))
+            }
+        } else {
+            getString(R.string.settings_pin_remote_hint)
         }
     }
 
-    private fun buildTmdbPanel() {
-        binding.tmdbSave.setOnClickListener {
-            val key = binding.tmdbInput.text.toString().trim()
-            lifecycleScope.launch {
-                ServiceLocator.settings.setTmdbKey(key)
-                Toast.makeText(
-                    this@SettingsActivity,
-                    R.string.settings_saved,
-                    Toast.LENGTH_SHORT,
-                ).show()
-            }
-        }
+    private fun showPinError(messageRes: Int) {
+        pinErrorVisible = true
+        binding.pinHint.setTextColor(ContextCompat.getColor(this, R.color.danger))
+        binding.pinHint.setText(messageRes)
+        binding.pinHint.announceForAccessibility(getString(messageRes))
     }
 
     private fun buildSystemPanel() {
         val c = binding.systemContainer
-        addActionRow(c, getString(R.string.settings_diagnostics)) {
+        addSectionHeader(c, getString(R.string.settings_support_tools))
+        addPanelDescription(c, getString(R.string.settings_support_tools_desc))
+        addSupportRow(
+            c,
+            R.string.settings_diagnostics,
+            R.string.settings_diagnostics_desc,
+            R.drawable.ic_signal,
+        ) {
             startActivity(Intent(this, DiagnosticsActivity::class.java))
         }
-        addActionRow(c, getString(R.string.settings_about)) {
+        addSupportRow(
+            c,
+            R.string.settings_about,
+            R.string.settings_about_desc,
+            R.drawable.ic_update,
+        ) {
             startActivity(Intent(this, AboutActivity::class.java))
         }
-        val logout = addActionRow(c, getString(R.string.settings_logout)) { confirmLogout() }
-        logout.contentDescription = getString(R.string.settings_logout)
+        addSectionHeader(c, getString(R.string.settings_account_actions))
+        addSupportRow(
+            c,
+            R.string.settings_logout,
+            R.string.settings_logout_desc,
+            R.drawable.ic_power,
+            danger = true,
+        ) {
+            confirmLogout()
+        }
+    }
+
+    private fun addSupportRow(
+        container: LinearLayout,
+        titleRes: Int,
+        subtitleRes: Int,
+        iconRes: Int,
+        danger: Boolean = false,
+        action: () -> Unit,
+    ): View {
+        val row = LayoutInflater.from(this)
+            .inflate(R.layout.item_settings_choice, container, false)
+        val title = getString(titleRes)
+        val subtitle = getString(subtitleRes)
+        row.findViewById<TextView>(R.id.cTitle).text = title
+        row.findViewById<TextView>(R.id.cSubtitle).apply {
+            text = subtitle
+            visibility = View.VISIBLE
+        }
+        row.findViewById<ImageView>(R.id.cIcon).apply {
+            setImageResource(iconRes)
+            imageTintList = ContextCompat.getColorStateList(
+                this@SettingsActivity,
+                if (danger) R.color.danger else R.color.settings_row_text,
+            )
+            visibility = View.VISIBLE
+        }
+        row.contentDescription = "$title. $subtitle"
+        row.setOnClickListener { action() }
+        container.addView(row)
+        return row
     }
 
     // ---- Speed test ----------------------------------------------------
@@ -1177,11 +1295,6 @@ class SettingsActivity : BaseActivity() {
         }
         lifecycleScope.launch {
             viewModel.debugOverlay.collectLatest { debugOverlaySwitch?.isChecked = it }
-        }
-        lifecycleScope.launch {
-            viewModel.tmdbKey.collectLatest {
-                if (!binding.tmdbInput.isFocused) binding.tmdbInput.setText(it)
-            }
         }
     }
 

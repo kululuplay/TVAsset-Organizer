@@ -28,7 +28,6 @@ class SettingsViewModel : ViewModel() {
     val showClock: Flow<Boolean> = settings.showClock
     val screensaverMinutes: Flow<Int> = settings.screensaverMinutes
     val languageTag: Flow<String> = settings.languageTag
-    val tmdbKey: Flow<String> = settings.tmdbKey
     val lockAdult: Flow<Boolean> = settings.lockAdult
     val autoSyncEnabled: Flow<Boolean> = settings.autoSyncEnabled
     val autoSyncHours: Flow<Int> = settings.autoSyncHours
@@ -57,8 +56,6 @@ class SettingsViewModel : ViewModel() {
         viewModelScope.launch { settings.setScreensaverMinutes(minutes) }
 
     fun setLanguageTag(tag: String) = viewModelScope.launch { settings.setLanguageTag(tag) }
-
-    fun setTmdbKey(key: String) = viewModelScope.launch { settings.setTmdbKey(key) }
 
     fun setLockAdult(enabled: Boolean) = viewModelScope.launch { settings.setLockAdult(enabled) }
 
