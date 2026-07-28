@@ -49,6 +49,7 @@ class DashboardActivity : BaseActivity() {
     // keeps retrying a failed portal sync with growing backoff (see statusBanner).
     private var connectivity: ConnectivityWatcher? = null
     private var autoResyncJob: Job? = null
+    private var manualRefreshJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,9 +59,12 @@ class DashboardActivity : BaseActivity() {
 
         wireCards()
         wireActions()
+        wireFocusGraph()
 
         // Land on the Live hero so the remote has an obvious starting point.
-        binding.tileLive.root.requestFocus()
+        binding.tileLive.root.post {
+            if (currentFocus == null) binding.tileLive.root.requestFocus()
+        }
 
         // Subscription state takes priority: an expired account must always see
         // its notice at launch, even when an update is available. If no expiry
@@ -237,6 +241,75 @@ class DashboardActivity : BaseActivity() {
         binding.btnRefresh.setOnClickListener { refresh() }
     }
 
+    /**
+     * Explicit D-pad graph for the asymmetric hero grid. Geometry-based focus
+     * search is unpredictable here because Live is twice as wide as the other
+     * cards; fixed links make every remote press deterministic on every TV.
+     */
+    private fun wireFocusGraph() {
+        binding.tileLive.root.apply {
+            nextFocusLeftId = R.id.tileLive
+            nextFocusRightId = R.id.tileMovies
+            nextFocusUpId = R.id.tileLive
+            nextFocusDownId = R.id.tileFavorites
+        }
+        binding.tileMovies.root.apply {
+            nextFocusLeftId = R.id.tileLive
+            nextFocusRightId = R.id.tileSeries
+            nextFocusUpId = R.id.tileMovies
+            nextFocusDownId = R.id.tileSearch
+        }
+        binding.tileSeries.root.apply {
+            nextFocusLeftId = R.id.tileMovies
+            nextFocusRightId = R.id.tileRadio
+            nextFocusUpId = R.id.tileSeries
+            nextFocusDownId = R.id.tileSettings
+        }
+        binding.tileRadio.root.apply {
+            nextFocusLeftId = R.id.tileSeries
+            nextFocusRightId = R.id.tileRadio
+            nextFocusUpId = R.id.btnRefresh
+            nextFocusDownId = R.id.tileRequest
+        }
+
+        binding.tileFavorites.root.apply {
+            nextFocusLeftId = R.id.tileFavorites
+            nextFocusRightId = R.id.tileContinue
+            nextFocusUpId = R.id.tileLive
+            nextFocusDownId = R.id.tileFavorites
+        }
+        binding.tileContinue.root.apply {
+            nextFocusLeftId = R.id.tileFavorites
+            nextFocusRightId = R.id.tileSearch
+            nextFocusUpId = R.id.tileLive
+            nextFocusDownId = R.id.tileContinue
+        }
+        binding.tileSearch.root.apply {
+            nextFocusLeftId = R.id.tileContinue
+            nextFocusRightId = R.id.tileSettings
+            nextFocusUpId = R.id.tileMovies
+            nextFocusDownId = R.id.tileSearch
+        }
+        binding.tileSettings.root.apply {
+            nextFocusLeftId = R.id.tileSearch
+            nextFocusRightId = R.id.tileRequest
+            nextFocusUpId = R.id.tileSeries
+            nextFocusDownId = R.id.tileSettings
+        }
+        binding.tileRequest.root.apply {
+            nextFocusLeftId = R.id.tileSettings
+            nextFocusRightId = R.id.tileRequest
+            nextFocusUpId = R.id.tileRadio
+            nextFocusDownId = R.id.tileRequest
+        }
+        binding.btnRefresh.apply {
+            nextFocusLeftId = R.id.tileRadio
+            nextFocusRightId = R.id.btnRefresh
+            nextFocusUpId = R.id.btnRefresh
+            nextFocusDownId = R.id.tileRadio
+        }
+    }
+
     private fun updateSignal() {
         val (textRes, colorRes) = when (NetworkSignal.current(this)) {
             NetworkSignal.Level.GOOD -> R.string.signal_good to R.color.success
@@ -281,18 +354,31 @@ class DashboardActivity : BaseActivity() {
     }
 
     private fun refresh() {
-        lifecycleScope.launch {
-            val config = ServiceLocator.settings.getSourceConfig()
-            if (config == null) {
-                toast(getString(R.string.dash_no_source))
-                return@launch
+        if (manualRefreshJob?.isActive == true) return
+        manualRefreshJob = lifecycleScope.launch {
+            setRefreshBusy(true)
+            try {
+                val config = ServiceLocator.settings.getSourceConfig()
+                if (config == null) {
+                    toast(getString(R.string.dash_no_source))
+                    return@launch
+                }
+                toast(getString(R.string.dash_refreshing))
+                val ok = runCatching { ServiceLocator.repository.syncAll(config) }
+                    .getOrDefault(false)
+                toast(getString(if (ok) R.string.dash_refreshed else R.string.dash_refresh_failed))
+                loadFooter()
+            } finally {
+                setRefreshBusy(false)
             }
-            toast(getString(R.string.dash_refreshing))
-            val ok = runCatching { ServiceLocator.repository.syncAll(config) }
-                .getOrDefault(false)
-            toast(getString(if (ok) R.string.dash_refreshed else R.string.dash_refresh_failed))
-            loadFooter()
         }
+    }
+
+    private fun setRefreshBusy(busy: Boolean) {
+        // Keep focus on the icon instead of disabling it (disabled focused views
+        // make Android TV jump to an arbitrary card); clickability blocks repeats.
+        binding.btnRefresh.isClickable = !busy
+        binding.btnRefresh.alpha = if (busy) 0.5f else 1f
     }
 
     /** Shows the account username, expiry, and the app version. */

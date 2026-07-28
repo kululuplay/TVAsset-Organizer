@@ -98,6 +98,11 @@
     <string name="detail_year">Jahr</string>
     <string name="detail_rating">Bewertung</string>
     <string name="detail_plot">Handlung</string>
+    <string name="detail_more">Mehr</string>
+    <string name="detail_less">Weniger</string>
+    <string name="detail_seasons">Staffeln</string>
+    <string name="detail_episodes">Folgen</string>
+    <string name="empty_episodes">Für diese Serie sind keine Folgen verfügbar.</string>
     <string name="detail_more_in_category">Mehr aus %1$s</string>
     <string name="detail_more_to_watch">Weitere Titel zum Ansehen</string>
     <string name="sort_label">Sortierung</string>

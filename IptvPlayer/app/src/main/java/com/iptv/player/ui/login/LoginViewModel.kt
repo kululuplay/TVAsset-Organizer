@@ -41,7 +41,9 @@ class LoginViewModel : ViewModel() {
             type = SourceType.XTREAM,
             serverUrl = normalizeUrl(serverUrl),
             username = username.trim(),
-            password = password.trim()
+            // Passwords are opaque provider credentials; preserve intentional
+            // leading/trailing spaces instead of silently changing the login.
+            password = password
         )
         submit(config)
     }

@@ -120,8 +120,12 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="@string/hint_username"
-                        android:inputType="text"
+                        android:imeOptions="actionNext"
+                        android:inputType="textVisiblePassword"
                         android:layout_marginBottom="@dimen/space_s"
+                        android:maxLines="1"
+                        android:nextFocusDown="@id/inputPassword"
+                        android:singleLine="true"
                         android:importantForAutofill="no" />
 
                     <EditText
@@ -131,8 +135,26 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="@string/hint_password"
+                        android:imeOptions="actionDone"
                         android:inputType="textPassword"
+                        android:maxLines="1"
+                        android:nextFocusUp="@id/inputUsername"
+                        android:nextFocusDown="@id/btnConnect"
+                        android:singleLine="true"
                         android:importantForAutofill="no" />
+
+                    <TextView
+                        android:id="@+id/loginError"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_m"
+                        android:accessibilityLiveRegion="polite"
+                        android:drawableStart="@drawable/ic_feedback"
+                        android:drawablePadding="@dimen/space_s"
+                        android:gravity="center_vertical"
+                        android:textColor="@color/danger"
+                        android:textSize="@dimen/text_caption"
+                        android:visibility="gone" />
 
                     <Button
                         android:id="@+id/btnConnect"
@@ -143,7 +165,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/action_connect"
-                        android:layout_marginTop="@dimen/space_l" />
+                        android:layout_marginTop="@dimen/space_l"
+                        android:nextFocusUp="@id/inputPassword" />
 
                     <ProgressBar
                         android:id="@+id/progress"

@@ -9,6 +9,7 @@
     android:background="@drawable/bg_poster"
     android:focusable="true"
     android:focusableInTouchMode="false"
+    android:stateListAnimator="@animator/control_focus"
     android:padding="@dimen/space_s"
     android:layout_marginEnd="@dimen/space_s">
 

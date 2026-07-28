@@ -107,6 +107,11 @@
     <string name="sort_rating">Puana göre</string>
     <string name="sort_year">Yıla göre</string>
     <string name="detail_plot">Konu</string>
+    <string name="detail_more">Daha fazla</string>
+    <string name="detail_less">Daha az</string>
+    <string name="detail_seasons">Sezonlar</string>
+    <string name="detail_episodes">Bölümler</string>
+    <string name="empty_episodes">Bu dizi için kullanılabilir bölüm bulunamadı.</string>
     <string name="detail_similar">Benzer</string>
     <string name="detail_more_in_category">%1$s kategorisinden daha fazlası</string>
     <string name="detail_more_to_watch">İzleyebileceğiniz diğer içerikler</string>

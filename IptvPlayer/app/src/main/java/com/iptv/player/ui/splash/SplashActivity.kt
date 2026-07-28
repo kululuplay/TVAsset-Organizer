@@ -5,7 +5,7 @@
  *   wizardDone & no src -> LoginActivity (connect a service)
  *   else               -> DashboardActivity (straight to content)
  *
- * For logged-in users it shows a modern branded splash for ~5–6s while
+ * For logged-in users it shows a modern branded splash briefly while
  * SplashPrefetch warms Live channels, EPG, Series and Movie categories in the
  * background (on an app-lifetime scope so it survives this screen). The splash
  * never hangs: it always routes within the hard cap, and any unfinished prefetch
@@ -58,11 +58,11 @@ class SplashActivity : BaseActivity() {
         /** Short delay for the routing-only (not logged in) path. */
         private const val ROUTE_DELAY_MS = 600L
 
-        /** Minimum time the branded splash stays up for logged-in users. */
-        private const val MIN_SPLASH_MS = 5_000L
+        /** Minimum time for a readable entrance without making repeat launches drag. */
+        private const val MIN_SPLASH_MS = 1_400L
 
         /** Hard cap before routing onward regardless of prefetch progress. */
-        private const val MAX_SPLASH_MS = 6_000L
+        private const val MAX_SPLASH_MS = 3_000L
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -165,6 +165,13 @@ class SplashActivity : BaseActivity() {
 
     override fun onDestroy() {
         binding.root.removeCallbacks(idleLoopsRunnable)
+        listOf(
+            binding.logoBadge,
+            binding.logoGlow,
+            binding.appName,
+            binding.tagline,
+            binding.splashStatus,
+        ).forEach { it.animate().cancel() }
         animators.forEach { it.cancel() }
         animators.clear()
         super.onDestroy()
@@ -185,7 +192,7 @@ class SplashActivity : BaseActivity() {
         }
     }
 
-    /** Logged-in path: kick off the prefetch and stay on screen for ~5–6s. */
+    /** Logged-in path: kick off prefetch and leave as soon as the short brand beat is done. */
     private suspend fun runBrandedSplash() {
         // If the previous launch armed the guard but never reached a stable home,
         // it crashed on this exact path. Don't crash-loop with no way to read the

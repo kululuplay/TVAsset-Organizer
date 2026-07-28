@@ -8,8 +8,8 @@ package com.iptv.player.ui.vod
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.View
-import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import coil.load
@@ -25,6 +25,7 @@ import com.iptv.player.ui.common.PinLockHelper
 import com.iptv.player.ui.common.RatingStars
 import com.iptv.player.ui.common.SimilarAdapter
 import com.iptv.player.ui.common.SimilarCard
+import com.iptv.player.ui.common.requestFocusAt
 import com.iptv.player.ui.player.VodPlayerActivity
 import com.iptv.player.ui.trailer.TrailerActivity
 import kotlinx.coroutines.CancellationException
@@ -47,6 +48,7 @@ class VodDetailActivity : BaseActivity() {
     private var current: VodItem? = null
     private var hasResume = false
     private var isFavorite = false
+    private var detailLoadJob: Job? = null
 
     // The cached pass and the detailed pass each kick off cast/similar enrichment.
     // Tracked so a re-load cancels the previous (cached) coroutine before starting
@@ -77,7 +79,8 @@ class VodDetailActivity : BaseActivity() {
         binding.playButton.setOnClickListener { launchPlayer(autoResume = hasResume) }
         binding.trailerButton.setOnClickListener { openTrailer() }
         binding.favoriteButton.setOnClickListener { toggleFavorite(id) }
-        binding.playButton.post { binding.playButton.requestFocus() }
+        binding.detailRetryButton.setOnClickListener { load(id) }
+        renderColdState(loading = true)
 
         lifecycleScope.launch {
             similarAdapter.adultLocked =
@@ -86,8 +89,17 @@ class VodDetailActivity : BaseActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        current?.let { item ->
+            lifecycleScope.launch { refreshUserState(item.id) }
+        }
+    }
+
     private fun load(id: String) {
-        lifecycleScope.launch {
+        detailLoadJob?.cancel()
+        if (current == null) renderColdState(loading = true)
+        detailLoadJob = lifecycleScope.launch {
             // 1) Render the cached record instantly so the poster, title and a
             //    working Play button appear at once instead of waiting on the
             //    (sometimes slow) detail API. The stream URL is already cached.
@@ -110,10 +122,7 @@ class VodDetailActivity : BaseActivity() {
 
             when {
                 detailed != null -> showItem(detailed)
-                cached == null -> {
-                    Toast.makeText(this@VodDetailActivity, R.string.error_unknown, Toast.LENGTH_SHORT).show()
-                    finish()
-                }
+                cached == null -> renderColdState(error = true)
             }
         }
     }
@@ -121,18 +130,51 @@ class VodDetailActivity : BaseActivity() {
     private suspend fun showItem(item: VodItem) {
         current = item
         bind(item)
-        // Play auto-resumes when a saved position already exists.
-        hasResume = repo.getResume("vod_" + item.id) > 0L
-        // Reflect the stored favorite state on the heart icon.
-        isFavorite = try {
-            repo.isContentFavorite("vod_" + item.id)
+        renderColdState()
+        refreshUserState(item.id)
+        loadSimilar(item)
+        binding.playButton.post {
+            if (currentFocus == null || binding.detailRetryButton.hasFocus()) {
+                binding.playButton.requestFocus()
+            }
+        }
+    }
+
+    /** Refreshes resume/favorite state after returning from the player. */
+    private suspend fun refreshUserState(id: String) {
+        hasResume = try {
+            repo.getResume("vod_$id") > 0L
         } catch (ce: CancellationException) {
             throw ce
         } catch (t: Throwable) {
             false
         }
+        isFavorite = try {
+            repo.isContentFavorite("vod_$id")
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (t: Throwable) {
+            false
+        }
+        binding.playLabel.setText(
+            if (hasResume) R.string.resume_continue else R.string.detail_play
+        )
         renderFavorite()
-        loadSimilar(item)
+    }
+
+    private fun renderColdState(loading: Boolean = false, error: Boolean = false) {
+        binding.detailLoading.visibility =
+            if (loading && current == null) View.VISIBLE else View.GONE
+        binding.detailError.visibility =
+            if (error && current == null) View.VISIBLE else View.GONE
+        val available = current != null
+        binding.playButton.isEnabled = available
+        binding.favoriteButton.isEnabled = available
+        binding.playButton.alpha = if (available) 1f else 0.45f
+        binding.favoriteButton.alpha = if (available) 1f else 0.45f
+        if (error && current == null) {
+            binding.detailRetryButton.post { binding.detailRetryButton.requestFocus() }
+        }
     }
 
     /** Loads other movies from the same category into the "Similar" rail. */
@@ -175,6 +217,38 @@ class VodDetailActivity : BaseActivity() {
                 putExtra(EXTRA_VOD_ID, card.id)
             })
         }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP ->
+                    if (binding.similarList.hasFocus()) {
+                        binding.playButton.requestFocus()
+                        return true
+                    }
+                KeyEvent.KEYCODE_DPAD_DOWN ->
+                    if (
+                        binding.similarList.visibility == View.VISIBLE &&
+                        (binding.playButton.hasFocus() ||
+                            binding.trailerButton.hasFocus() ||
+                            binding.favoriteButton.hasFocus())
+                    ) {
+                        binding.similarList.requestFocusAt(0)
+                        return true
+                    }
+                KeyEvent.KEYCODE_DPAD_LEFT ->
+                    if (binding.similarList.hasFocus()) {
+                        val focused = currentFocus ?: return super.dispatchKeyEvent(event)
+                        val holder = binding.similarList.findContainingViewHolder(focused)
+                        if (holder?.bindingAdapterPosition == 0) {
+                            binding.favoriteButton.requestFocus()
+                            return true
+                        }
+                    }
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     private fun bind(item: VodItem) {

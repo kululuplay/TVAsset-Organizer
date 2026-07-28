@@ -114,6 +114,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:alpha="0"
+            android:accessibilityLiveRegion="polite"
             android:text="@string/splash_status_starting"
             android:textColor="@color/text_secondary"
             android:textSize="@dimen/text_caption"

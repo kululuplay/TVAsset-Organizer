@@ -9,6 +9,7 @@
     android:background="@drawable/bg_list_row"
     android:focusable="true"
     android:focusableInTouchMode="false"
+    android:stateListAnimator="@animator/control_focus"
     android:minWidth="100dp"
     android:paddingHorizontal="@dimen/space_m"
     android:paddingVertical="@dimen/space_s"

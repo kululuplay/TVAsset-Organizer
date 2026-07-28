@@ -128,8 +128,11 @@
     <string name="detail_plot">Plot</string>
     <string name="series_season">Season %1$d</string>
     <string name="series_episode">Episode %1$d</string>
-    <string name="detail_more">more</string>
+    <string name="detail_more">More</string>
+    <string name="detail_less">Less</string>
     <string name="detail_seasons">Seasons</string>
+    <string name="detail_episodes">Episodes</string>
+    <string name="empty_episodes">No episodes are available for this series.</string>
     <string name="detail_similar">Similar</string>
     <string name="detail_more_in_category">More in %1$s</string>
     <string name="detail_more_to_watch">More to watch</string>

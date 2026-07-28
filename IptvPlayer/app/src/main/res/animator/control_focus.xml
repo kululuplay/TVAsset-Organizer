@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Subtle scale/lift feedback for compact TV controls and content cards. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <set>
+            <objectAnimator
+                android:propertyName="scaleX"
+                android:valueTo="1.035"
+                android:duration="120" />
+            <objectAnimator
+                android:propertyName="scaleY"
+                android:valueTo="1.035"
+                android:duration="120" />
+            <objectAnimator
+                android:propertyName="translationZ"
+                android:valueTo="8dp"
+                android:valueType="floatType"
+                android:duration="120" />
+        </set>
+    </item>
+    <item>
+        <set>
+            <objectAnimator
+                android:propertyName="scaleX"
+                android:valueTo="1.0"
+                android:duration="120" />
+            <objectAnimator
+                android:propertyName="scaleY"
+                android:valueTo="1.0"
+                android:duration="120" />
+            <objectAnimator
+                android:propertyName="translationZ"
+                android:valueTo="0dp"
+                android:valueType="floatType"
+                android:duration="120" />
+        </set>
+    </item>
+</selector>
