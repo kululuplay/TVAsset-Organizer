@@ -9,14 +9,18 @@ import android.content.Intent
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
+import android.widget.FrameLayout
+import androidx.core.view.ViewCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.paging.LoadState
+import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.R
@@ -44,6 +48,18 @@ import java.util.Locale
 
 class VodActivity : BaseActivity() {
 
+    companion object {
+        private const val STATE_FOCUS_REGION = "vod_focus_region"
+        private const val STATE_POSTER_ID = "vod_focused_poster_id"
+        private const val STATE_POSTER_POSITION = "vod_focused_poster_position"
+
+        private const val FOCUS_CATEGORY = "category"
+        private const val FOCUS_GRID = "grid"
+        private const val FOCUS_SEARCH = "search"
+        private const val FOCUS_REFRESH = "refresh"
+        private const val FOCUS_SORT = "sort"
+    }
+
     private lateinit var binding: ActivityVodBinding
     private val viewModel: VodViewModel by lazy {
         ViewModelProvider(this)[VodViewModel::class.java]
@@ -61,12 +77,24 @@ class VodActivity : BaseActivity() {
 
     /** Latest Paging refresh state, updated by the load-state collector. */
     private var adapterRefreshSettled = false
+    private var pagingRefreshState: LoadState = LoadState.Loading
 
     /** Focus the first fresh poster once an async category/search page commits. */
     private var pendingGridFocus = false
+    private var pendingGridPosition = 0
 
     /** Return focus to browse content after the retry card disappears. */
     private var restoreFocusAfterRetry = false
+
+    /** Exact poster anchor used after detail playback and configuration changes. */
+    private var lastFocusedPosterId: String? = null
+    private var lastFocusedPosterPosition = 0
+    private var restorePosterOnResume = false
+
+    /** Initial D-pad region is restored only after async categories are attached. */
+    private var restoredFocusRegion: String? = null
+    private var initialFocusApplied = false
+    private var lastKnownFocusRegion = FOCUS_CATEGORY
 
     /** Sort orders cycled by the header button, in display order. */
     private val sortCycle = listOf(
@@ -77,6 +105,17 @@ class VodActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityVodBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        ViewCompat.setAccessibilityHeading(binding.contentTitle, true)
+        ViewCompat.setAccessibilityPaneTitle(
+            binding.contentPanel,
+            getString(R.string.nav_movies),
+        )
+
+        restoredFocusRegion = savedInstanceState?.getString(STATE_FOCUS_REGION)
+        lastKnownFocusRegion = restoredFocusRegion ?: FOCUS_CATEGORY
+        lastFocusedPosterId = savedInstanceState?.getString(STATE_POSTER_ID)
+        lastFocusedPosterPosition =
+            savedInstanceState?.getInt(STATE_POSTER_POSITION, 0) ?: 0
 
         setupLists()
         setupSearch()
@@ -111,6 +150,17 @@ class VodActivity : BaseActivity() {
             .getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
             .format(Date())
         refreshWatchState()
+        if (restorePosterOnResume) {
+            restorePosterOnResume = false
+            binding.posterGrid.post { restorePosterFocus() }
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString(STATE_FOCUS_REGION, focusedRegion())
+        outState.putString(STATE_POSTER_ID, lastFocusedPosterId)
+        outState.putInt(STATE_POSTER_POSITION, lastFocusedPosterPosition)
+        super.onSaveInstanceState(outState)
     }
 
     /**
@@ -134,12 +184,16 @@ class VodActivity : BaseActivity() {
     private fun setupLists() {
         categoryAdapter = CategoryAdapter(
             onFocused = { cat ->
+                lastKnownFocusRegion = FOCUS_CATEGORY
                 pendingGridFocus = false
                 val categoryChanged = currentCategory?.id != cat.id
                 if (viewModel.query.value.isNotEmpty()) {
                     binding.searchInput.text?.clear()
                 }
-                if (categoryChanged) adapterRefreshSettled = false
+                if (categoryChanged) {
+                    adapterRefreshSettled = false
+                    resetPosterAnchor()
+                }
                 viewModel.selectCategory(cat.id)
                 categoryAdapter.setSelected(cat.id)
                 currentCategory = cat
@@ -162,24 +216,49 @@ class VodActivity : BaseActivity() {
                 PinLockHelper.guard(this, isAdult = item.isAdult()) { openDetail(item.id) }
             }
         )
+        vodAdapter.onFocusedAt = { item, position ->
+            lastKnownFocusRegion = FOCUS_GRID
+            lastFocusedPosterId = item.id
+            lastFocusedPosterPosition = position
+        }
         vodAdapter.progressProvider = { id -> progressMap[id] ?: 0 }
         vodAdapter.watchedProvider = { id -> id in watchedSet }
         binding.posterGrid.layoutManager = SafeGridLayoutManager(this, 4)
         binding.posterGrid.autoFitColumns(min = 4)
         binding.posterGrid.adapter = vodAdapter
+        // A modest cache keeps the immediately adjacent TV row warm without
+        // retaining dozens of full-size bitmaps on low-memory streaming sticks.
+        binding.posterGrid.setItemViewCacheSize(8)
         (binding.posterGrid.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
             ?.supportsChangeAnimations = false
 
         binding.sortButton.setOnClickListener {
+            resetPosterAnchor()
             val next = sortCycle[(sortCycle.indexOf(viewModel.sort.value) + 1) % sortCycle.size]
             adapterRefreshSettled = false
             viewModel.setSort(next)
         }
-        binding.refreshButton.setOnClickListener { viewModel.refreshCatalog() }
+        binding.refreshButton.setOnClickListener {
+            if (!viewModel.loadState.value.loading) {
+                resetPosterAnchor()
+                viewModel.refreshCatalog()
+            }
+        }
+        binding.refreshButton.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) lastKnownFocusRegion = FOCUS_REFRESH
+        }
+        binding.sortButton.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) lastKnownFocusRegion = FOCUS_SORT
+        }
         binding.retryButton.setOnClickListener {
             restoreFocusAfterRetry = true
-            adapterRefreshSettled = false
-            viewModel.retryLoad()
+            if (pagingRefreshState is LoadState.Error) {
+                adapterRefreshSettled = false
+                vodAdapter.retry()
+            } else {
+                adapterRefreshSettled = pagingRefreshState is LoadState.NotLoading
+                viewModel.retryLoad()
+            }
         }
     }
 
@@ -194,10 +273,18 @@ class VodActivity : BaseActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 pendingGridFocus = false
                 adapterRefreshSettled = false
+                resetPosterAnchor()
                 viewModel.setQuery(s?.toString().orEmpty())
             }
             override fun afterTextChanged(s: Editable?) = Unit
         })
+        binding.searchInput.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) {
+                lastKnownFocusRegion = FOCUS_SEARCH
+            } else {
+                binding.searchInput.hideSoftKeyboard()
+            }
+        }
         binding.searchInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                 binding.searchInput.hideSoftKeyboard()
@@ -211,21 +298,65 @@ class VodActivity : BaseActivity() {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN) {
+            val rtl = binding.root.layoutDirection == View.LAYOUT_DIRECTION_RTL
+            val towardGrid =
+                if (rtl) KeyEvent.KEYCODE_DPAD_LEFT else KeyEvent.KEYCODE_DPAD_RIGHT
+            val towardCategories =
+                if (rtl) KeyEvent.KEYCODE_DPAD_RIGHT else KeyEvent.KEYCODE_DPAD_LEFT
             when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_RIGHT ->
-                    if (binding.categoryList.hasFocus()) {
-                        focusFirstItem()
-                        return true
+                towardGrid -> {
+                    when {
+                        binding.categoryList.hasFocus() -> focusFirstItem()
+                        binding.searchInput.hasFocus() &&
+                            binding.searchInput.selectionStart >=
+                            (binding.searchInput.text?.length ?: 0) -> {
+                            binding.searchInput.hideSoftKeyboard()
+                            binding.refreshButton.requestFocus()
+                        }
+                        binding.refreshButton.hasFocus() &&
+                            binding.sortButton.visibility == View.VISIBLE -> {
+                            binding.sortButton.requestFocus()
+                        }
+                        binding.refreshButton.hasFocus() ||
+                            binding.sortButton.hasFocus() -> Unit
+                        else -> return super.dispatchKeyEvent(event)
                     }
-                KeyEvent.KEYCODE_DPAD_LEFT ->
-                    if (binding.posterGrid.hasFocus() && focusedPosterIsInFirstColumn()) {
-                        focusCurrentCategory()
-                        return true
+                    return true
+                }
+                towardCategories -> {
+                    when {
+                        binding.posterGrid.hasFocus() &&
+                            focusedPosterIsInFirstColumn() -> focusCurrentCategory()
+                        binding.sortButton.hasFocus() -> binding.refreshButton.requestFocus()
+                        binding.refreshButton.hasFocus() -> binding.searchInput.requestFocus()
+                        binding.searchInput.hasFocus() &&
+                            binding.searchInput.selectionStart <= 0 -> {
+                            binding.searchInput.hideSoftKeyboard()
+                            focusCurrentCategory()
+                        }
+                        binding.categoryList.hasFocus() -> Unit
+                        else -> return super.dispatchKeyEvent(event)
                     }
+                    return true
+                }
                 KeyEvent.KEYCODE_DPAD_DOWN ->
-                    if (binding.searchInput.hasFocus()) {
+                    if (
+                        binding.searchInput.hasFocus() ||
+                        binding.refreshButton.hasFocus() ||
+                        binding.sortButton.hasFocus() ||
+                        binding.retryButton.hasFocus()
+                    ) {
                         binding.searchInput.hideSoftKeyboard()
-                        focusFirstItem()
+                        focusGridItem(lastFocusedPosterPosition)
+                        return true
+                    }
+                KeyEvent.KEYCODE_DPAD_UP ->
+                    if (binding.posterGrid.hasFocus() && focusedPosterIsInFirstRow()) {
+                        if (binding.loadErrorContainer.visibility == View.VISIBLE) {
+                            binding.retryButton.requestFocus()
+                        } else {
+                            binding.searchInput.requestFocus()
+                        }
                         return true
                     }
             }
@@ -285,8 +416,12 @@ class VodActivity : BaseActivity() {
 
     private fun renderEmptyState() {
         val catalogState = viewModel.loadState.value
-        val empty = adapterRefreshSettled && vodAdapter.itemCount == 0 &&
-            !catalogState.loading && catalogState.errorRes == null
+        val hasBrowseContext =
+            currentCategory != null || viewModel.query.value.isNotEmpty()
+        val empty = hasBrowseContext &&
+            adapterRefreshSettled && vodAdapter.itemCount == 0 &&
+            !catalogState.loading && catalogState.errorRes == null &&
+            pagingRefreshState !is LoadState.Error
         binding.emptyState.setText(
             if (viewModel.query.value.isNotEmpty()) R.string.empty_search
             else R.string.empty_movies
@@ -295,30 +430,57 @@ class VodActivity : BaseActivity() {
     }
 
     private fun renderCatalogState(state: com.iptv.player.ui.common.CatalogLoadState) {
-        binding.loadingContainer.visibility = if (state.loading) View.VISIBLE else View.GONE
+        val hasContent = vodAdapter.itemCount > 0
+        positionStatusOverlay(binding.loadingContainer, centered = !hasContent)
+        positionStatusOverlay(binding.loadErrorContainer, centered = !hasContent)
+        val errorRes = state.errorRes
+            ?: if (pagingRefreshState is LoadState.Error) R.string.error_unknown else null
+        val failed = errorRes != null
+        val loading = (state.loading || pagingRefreshState is LoadState.Loading) && !failed
+        binding.loadingContainer.visibility = if (loading) View.VISIBLE else View.GONE
         val showProgress = state.loading && state.total > 1
-        binding.loadingStatus.visibility = if (showProgress) View.VISIBLE else View.GONE
-        if (showProgress) {
-            binding.loadingStatus.text = getString(
+        binding.loadingStatus.visibility = if (loading) View.VISIBLE else View.GONE
+        binding.loadingStatus.text = if (showProgress) {
+            getString(
                 R.string.catalog_loading_progress,
                 state.completed,
                 state.total,
             )
-        }
-        val failed = state.errorRes != null
+        } else getString(R.string.loading)
         binding.loadErrorContainer.visibility = if (failed) View.VISIBLE else View.GONE
-        state.errorRes?.let { binding.loadErrorText.setText(it) }
+        errorRes?.let { binding.loadErrorText.setText(it) }
         // Keep an already-focused refresh control in the D-pad graph while the
         // request runs; clickability still prevents duplicate refreshes.
         binding.refreshButton.isClickable = !state.loading
         binding.refreshButton.alpha = if (state.loading) 0.5f else 1f
-        if (failed && vodAdapter.itemCount == 0) {
-            binding.retryButton.post { binding.retryButton.requestFocus() }
-        } else if (restoreFocusAfterRetry && !state.loading) {
+        if (failed && (vodAdapter.itemCount == 0 || restoreFocusAfterRetry)) {
             restoreFocusAfterRetry = false
-            focusFirstItem()
+            binding.retryButton.post { binding.retryButton.requestFocus() }
+        } else if (restoreFocusAfterRetry && !loading && adapterRefreshSettled) {
+            restoreFocusAfterRetry = false
+            if (hasContent) {
+                focusFirstItem()
+            } else if (viewModel.query.value.isNotEmpty()) {
+                binding.searchInput.requestFocus()
+            } else {
+                focusCurrentCategory()
+            }
         }
         renderEmptyState()
+    }
+
+    /**
+     * A full-screen cold load/error is centered. When cached posters are already
+     * usable, the same state becomes a compact top-end status card so catalog
+     * hydration never blocks browsing or obscures the focused movie.
+     */
+    private fun positionStatusOverlay(view: View, centered: Boolean) {
+        val params = view.layoutParams as? FrameLayout.LayoutParams ?: return
+        val desired = if (centered) Gravity.CENTER else Gravity.TOP or Gravity.END
+        if (params.gravity != desired) {
+            params.gravity = desired
+            view.layoutParams = params
+        }
     }
 
     private fun observe() {
@@ -331,33 +493,38 @@ class VodActivity : BaseActivity() {
                 vodAdapter.adultLocked = settings.lockAdult.first() && settings.hasPin()
                 launch {
                     viewModel.categories.collectLatest { cats ->
-                        val firstLoad = categoryAdapter.currentList.isEmpty()
                         categoryAdapter.submitList(cats) {
-                            if (firstLoad && cats.isNotEmpty()) {
-                                // Restore the prior selection (survives config
-                                // change via the ViewModel) instead of always
-                                // snapping back to the first category.
-                                val existing = viewModel.selectedCategoryId
-                                val target = cats.firstOrNull { it.id == existing } ?: cats.first()
-                                // Reselect whenever the restored target differs (incl.
-                                // a now-hidden/removed prior selection), so the grid and
-                                // any lazy fetch align with a still-visible category.
-                                if (viewModel.selectedCategoryId != target.id) {
-                                    viewModel.selectCategory(target.id)
+                            if (cats.isEmpty()) return@submitList
+
+                            // Keep the selected model fresh as category counts/names
+                            // update. If Content Manager hid the selected category,
+                            // atomically fall back to the first visible row.
+                            val existing = viewModel.selectedCategoryId
+                            val target = cats.firstOrNull { it.id == existing } ?: cats.first()
+                            val selectionMissing = existing != null && target.id != existing
+                            val restoreGridAfterFallback =
+                                selectionMissing && binding.posterGrid.hasFocus()
+                            if (selectionMissing) {
+                                adapterRefreshSettled = false
+                                resetPosterAnchor()
+                                if (restoreGridAfterFallback) {
+                                    pendingGridFocus = true
+                                    pendingGridPosition = 0
                                 }
-                                categoryAdapter.setSelected(target.id)
-                                currentCategory = target
-                                updateContentTitle()
-                                // Preserve an active search across recreation. Focusing
-                                // a category invokes onFocused and intentionally clears
-                                // search, so only do that in browse mode.
-                                if (viewModel.query.value.isNotEmpty()) {
-                                    binding.searchInput.post {
-                                        binding.searchInput.requestFocus()
-                                    }
-                                } else {
-                                    focusFirstCategory()
-                                }
+                            }
+                            viewModel.selectCategory(
+                                target.id,
+                                ensureLoaded = !initialFocusApplied || selectionMissing,
+                            )
+                            categoryAdapter.setSelected(target.id)
+                            currentCategory = target
+                            updateContentTitle()
+
+                            if (!initialFocusApplied) {
+                                initialFocusApplied = true
+                                applyInitialFocus()
+                            } else if (selectionMissing && binding.categoryList.hasFocus()) {
+                                focusCurrentCategory()
                             }
                         }
                     }
@@ -389,7 +556,11 @@ class VodActivity : BaseActivity() {
                             // which invalidates the PagingSource and re-settles refresh; an
                             // unconditional scrollToPosition(0) then yanked the grid to the
                             // top mid-scroll and focus escaped back to the category list.
-                            if (state.refresh is LoadState.NotLoading && !binding.posterGrid.hasFocus()) {
+                            if (
+                                state.refresh is LoadState.NotLoading &&
+                                !binding.posterGrid.hasFocus() &&
+                                !pendingGridFocus
+                            ) {
                                 binding.posterGrid.scrollToPosition(0)
                             }
                         }
@@ -397,6 +568,7 @@ class VodActivity : BaseActivity() {
                 // Empty state: only once the refresh has settled with nothing to show.
                 launch {
                     vodAdapter.loadStateFlow.collectLatest { state ->
+                        pagingRefreshState = state.refresh
                         adapterRefreshSettled = state.refresh is LoadState.NotLoading
                         if (
                             adapterRefreshSettled &&
@@ -404,9 +576,11 @@ class VodActivity : BaseActivity() {
                             vodAdapter.itemCount > 0
                         ) {
                             pendingGridFocus = false
-                            binding.posterGrid.requestFocusAt(0)
+                            binding.posterGrid.requestFocusAt(
+                                pendingGridPosition.coerceAtMost(vodAdapter.itemCount - 1)
+                            )
                         }
-                        renderEmptyState()
+                        renderCatalogState(viewModel.loadState.value)
                     }
                 }
                 launch {
@@ -418,20 +592,67 @@ class VodActivity : BaseActivity() {
         }
     }
 
-    /** Moves focus onto the first category row (the on-entry focus target). */
-    private fun focusFirstCategory() {
-        binding.categoryList.requestFocusAt(0)
-    }
-
     /** Moves focus into the poster grid, always landing on the first item. */
     private fun focusFirstItem() {
+        focusGridItem(0)
+    }
+
+    private fun focusGridItem(position: Int) {
+        pendingGridPosition = position.coerceAtLeast(0)
         if (!adapterRefreshSettled || vodAdapter.itemCount == 0) {
             pendingGridFocus = true
             return
         }
         pendingGridFocus = false
         binding.searchInput.hideSoftKeyboard()
-        binding.posterGrid.requestFocusAt(0)
+        binding.posterGrid.requestFocusAt(
+            pendingGridPosition.coerceAtMost(vodAdapter.itemCount - 1)
+        )
+    }
+
+    private fun restorePosterFocus() {
+        val exactPosition = lastFocusedPosterId?.let { id ->
+            vodAdapter.snapshot().items.indexOfFirst { it.id == id }.takeIf { it >= 0 }
+        }
+        focusGridItem(exactPosition ?: lastFocusedPosterPosition)
+    }
+
+    private fun resetPosterAnchor() {
+        lastFocusedPosterId = null
+        lastFocusedPosterPosition = 0
+        pendingGridPosition = 0
+    }
+
+    private fun applyInitialFocus() {
+        when (restoredFocusRegion) {
+            FOCUS_GRID -> restorePosterFocus()
+            FOCUS_SEARCH -> binding.searchInput.post { binding.searchInput.requestFocus() }
+            FOCUS_REFRESH -> binding.refreshButton.post { binding.refreshButton.requestFocus() }
+            FOCUS_SORT -> {
+                val target =
+                    if (binding.sortButton.visibility == View.VISIBLE) binding.sortButton
+                    else binding.searchInput
+                target.post { target.requestFocus() }
+            }
+            FOCUS_CATEGORY -> focusCurrentCategory()
+            else -> {
+                if (viewModel.query.value.isNotEmpty()) {
+                    binding.searchInput.post { binding.searchInput.requestFocus() }
+                } else {
+                    focusCurrentCategory()
+                }
+            }
+        }
+        restoredFocusRegion = null
+    }
+
+    private fun focusedRegion(): String = when {
+        binding.categoryList.hasFocus() -> FOCUS_CATEGORY
+        binding.posterGrid.hasFocus() -> FOCUS_GRID
+        binding.searchInput.hasFocus() -> FOCUS_SEARCH
+        binding.refreshButton.hasFocus() -> FOCUS_REFRESH
+        binding.sortButton.hasFocus() -> FOCUS_SORT
+        else -> restoredFocusRegion ?: lastKnownFocusRegion
     }
 
     private fun focusCurrentCategory() {
@@ -446,12 +667,28 @@ class VodActivity : BaseActivity() {
         val focused = currentFocus ?: return false
         val holder = binding.posterGrid.findContainingViewHolder(focused) ?: return false
         val position = holder.bindingAdapterPosition
-        if (position == androidx.recyclerview.widget.RecyclerView.NO_POSITION) return false
+        if (position == RecyclerView.NO_POSITION) return false
         val span = (binding.posterGrid.layoutManager as? GridLayoutManager)?.spanCount ?: return false
         return position % span == 0
     }
 
+    private fun focusedPosterIsInFirstRow(): Boolean {
+        val focused = currentFocus ?: return false
+        val holder = binding.posterGrid.findContainingViewHolder(focused) ?: return false
+        val position = holder.bindingAdapterPosition
+        if (position == RecyclerView.NO_POSITION) return false
+        val span = (binding.posterGrid.layoutManager as? GridLayoutManager)?.spanCount ?: return false
+        return position < span
+    }
+
     private fun openDetail(id: String) {
+        val focused = currentFocus
+        val holder = focused?.let(binding.posterGrid::findContainingViewHolder)
+        holder?.bindingAdapterPosition
+            ?.takeIf { it != RecyclerView.NO_POSITION }
+            ?.let { lastFocusedPosterPosition = it }
+        lastFocusedPosterId = id
+        restorePosterOnResume = true
         val intent = Intent(this, VodDetailActivity::class.java).apply {
             putExtra(VodDetailActivity.EXTRA_VOD_ID, id)
         }
