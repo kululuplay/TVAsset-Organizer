@@ -97,8 +97,9 @@
                     <!-- Step progress dots -->
                     <LinearLayout
                         android:id="@+id/stepDots"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
                         android:orientation="horizontal">
 
                         <View
@@ -120,6 +121,19 @@
                             android:layout_width="@dimen/wizard_dot_inactive"
                             android:layout_height="6dp"
                             android:background="@drawable/bg_step_dot" />
+
+                        <Space
+                            android:layout_width="0dp"
+                            android:layout_height="1dp"
+                            android:layout_weight="1" />
+
+                        <TextView
+                            android:id="@+id/stepCounter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="@dimen/text_caption"
+                            android:textStyle="bold" />
                     </LinearLayout>
 
                     <TextView
@@ -140,16 +154,14 @@
                         android:layout_marginTop="@dimen/space_xs"
                         android:layout_marginBottom="@dimen/space_l" />
 
-                    <!-- Language picker (only visible on the language step). A
-                         two-column grid of native language names; wrapped in a
-                         ScrollView so D-pad focus can reach entries below the
-                         fold on smaller TV panels. -->
-                    <ScrollView
+                    <!-- Language picker (only visible on the language step).
+                         The outer card ScrollView keeps every chip reachable on
+                         smaller panels without nesting two vertical scrollers. -->
+                    <FrameLayout
                         android:id="@+id/languageScroll"
                         android:layout_width="match_parent"
-                        android:layout_height="360dp"
+                        android:layout_height="wrap_content"
                         android:visibility="gone"
-                        android:scrollbars="vertical"
                         android:layout_marginBottom="@dimen/space_l">
 
                         <GridLayout
@@ -157,7 +169,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:columnCount="2" />
-                    </ScrollView>
+                    </FrameLayout>
 
                     <!-- Navigation -->
                     <LinearLayout

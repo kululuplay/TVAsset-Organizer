@@ -39,6 +39,7 @@ import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.NewContentPopup
 import com.iptv.player.ui.common.NumberZapInputHelper
 import com.iptv.player.ui.common.PinLockHelper
+import com.iptv.player.ui.common.hideSoftKeyboard
 import com.iptv.player.ui.common.isAdult
 import com.iptv.player.ui.player.PlayerActivity
 import com.iptv.player.util.DebugOverlayBinder
@@ -82,6 +83,9 @@ class HomeActivity : BaseActivity() {
 
     /** Last category actually selected; used to detect real category changes. */
     private var lastSelectedCategoryId: String? = null
+
+    /** Restores deterministic browse focus after the retry control disappears. */
+    private var restoreFocusAfterRetry = false
 
     /** Last channel row that held focus; restored when returning to the channel list. */
     private var lastFocusedChannelId: String? = null
@@ -241,11 +245,30 @@ class HomeActivity : BaseActivity() {
                         return true
                     }
                 }
-                KeyEvent.KEYCODE_DPAD_RIGHT ->
-                    if (!inChannelView && binding.categoryList.hasFocus()) {
+                KeyEvent.KEYCODE_DPAD_RIGHT -> when {
+                    inChannelView && binding.channelList.hasFocus() -> {
+                        binding.previewCard.requestFocus()
+                        return true
+                    }
+                    !inChannelView && binding.categoryList.hasFocus() -> {
                         categoryAdapter.currentList
                             .firstOrNull { it.id == lastSelectedCategoryId }
                             ?.let { drillIntoCategory(it); return true }
+                    }
+                }
+                KeyEvent.KEYCODE_DPAD_DOWN ->
+                    if (binding.searchInput.hasFocus()) {
+                        binding.searchInput.hideSoftKeyboard()
+                        when {
+                            inChannelView && currentChannels.isNotEmpty() ->
+                                focusRow(binding.channelList, 0)
+                            categoryAdapter.itemCount > 0 -> {
+                                val id = lastSelectedCategoryId
+                                if (id != null) focusCategory(id)
+                                else focusRow(binding.categoryList, 0)
+                            }
+                        }
+                        return true
                     }
                 KeyEvent.KEYCODE_GUIDE, KeyEvent.KEYCODE_PROG_RED ->
                     // repeatCount guard: a held key must not stack-launch the browser.
@@ -331,7 +354,10 @@ class HomeActivity : BaseActivity() {
             }
         }
         binding.refreshButton.setOnClickListener { viewModel.refresh() }
-        binding.retryButton.setOnClickListener { viewModel.refresh() }
+        binding.retryButton.setOnClickListener {
+            restoreFocusAfterRetry = true
+            viewModel.refresh()
+        }
         binding.browserTitle.setText(if (radioMode) R.string.nav_radio else R.string.nav_live)
     }
 
@@ -348,15 +374,26 @@ class HomeActivity : BaseActivity() {
                     pendingScrollReset = true
                     clearPreview()
                 } else if (binding.searchInput.hasFocus()) {
-                    showCategories()
+                    // Keep the keyboard/search field active when the last
+                    // character is deleted. Moving focus here made it impossible
+                    // to immediately type a different query with a TV keyboard.
+                    binding.categoryList.visibility = View.VISIBLE
+                    binding.channelList.visibility = View.GONE
                 }
             }
 
             override fun afterTextChanged(s: Editable?) = Unit
         })
         binding.searchInput.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_SEARCH && currentChannels.isNotEmpty()) {
-                focusRow(binding.channelList, 0)
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                binding.searchInput.hideSoftKeyboard()
+                if (viewModel.query.value.isNotBlank() && currentChannels.isNotEmpty()) {
+                    focusRow(binding.channelList, 0)
+                } else {
+                    val id = lastSelectedCategoryId
+                    if (id != null) focusCategory(id)
+                    else if (categoryAdapter.itemCount > 0) focusRow(binding.categoryList, 0)
+                }
                 true
             } else {
                 false
@@ -366,8 +403,9 @@ class HomeActivity : BaseActivity() {
 
     private fun exitSearch() {
         binding.searchInput.text?.clear()
-        showCategories()
+        binding.searchInput.hideSoftKeyboard()
         binding.searchInput.clearFocus()
+        showCategories()
     }
 
     private fun observe() {
@@ -469,7 +507,9 @@ class HomeActivity : BaseActivity() {
         val failed = state.errorRes != null
         binding.loadErrorContainer.visibility = if (failed) View.VISIBLE else View.GONE
         state.errorRes?.let { binding.loadErrorText.setText(it) }
-        binding.refreshButton.isEnabled = !state.loading
+        // Keep an already-focused refresh control in the D-pad graph while the
+        // request runs; disabling it makes Android TV eject focus unpredictably.
+        binding.refreshButton.isClickable = !state.loading
         binding.refreshButton.alpha = if (state.loading) 0.5f else 1f
 
         binding.emptyState.setText(
@@ -480,6 +520,16 @@ class HomeActivity : BaseActivity() {
         binding.emptyState.visibility = if (empty) View.VISIBLE else View.GONE
         if (failed && currentChannels.isEmpty()) {
             binding.retryButton.post { binding.retryButton.requestFocus() }
+        } else if (restoreFocusAfterRetry && !state.loading) {
+            restoreFocusAfterRetry = false
+            when {
+                inChannelView && currentChannels.isNotEmpty() -> focusFirstChannel()
+                categoryAdapter.itemCount > 0 -> {
+                    val id = lastSelectedCategoryId
+                    if (id != null) focusCategory(id)
+                    else focusRow(binding.categoryList, 0)
+                }
+            }
         }
     }
 
@@ -678,7 +728,7 @@ class HomeActivity : BaseActivity() {
     private fun isCurrentCategoryLocked(): Boolean {
         val cat = categoryAdapter.currentList.firstOrNull { it.id == lastSelectedCategoryId }
             ?: return false
-        return cat.isAdult() && cat.id !in unlockedCategories
+        return adultLockEnabled && cat.isAdult() && cat.id !in unlockedCategories
     }
 
     /** True when exposing this channel would bypass the enabled parental lock. */
@@ -693,7 +743,11 @@ class HomeActivity : BaseActivity() {
      * on locked (adult) categories. Shared by OK/click and the RIGHT-arrow shortcut.
      */
     private fun drillIntoCategory(category: com.iptv.player.data.model.Category) {
-        if (category.isAdult() && category.id !in unlockedCategories) {
+        if (
+            adultLockEnabled &&
+            category.isAdult() &&
+            category.id !in unlockedCategories
+        ) {
             PinLockHelper.guard(this, isAdult = true) {
                 unlockedCategories.add(category.id)
                 channelAdapter.refreshVisible(binding.channelList)
@@ -717,7 +771,9 @@ class HomeActivity : BaseActivity() {
     private fun showCategories() {
         binding.categoryList.visibility = View.VISIBLE
         binding.channelList.visibility = View.GONE
-        lastSelectedCategoryId?.let { focusCategory(it) }
+        val id = lastSelectedCategoryId
+        if (id != null) focusCategory(id)
+        else if (categoryAdapter.itemCount > 0) focusRow(binding.categoryList, 0)
     }
 
     /**

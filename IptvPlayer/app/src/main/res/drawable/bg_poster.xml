@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Poster card background. Focused = purple stroke + translucent purple fill,
-     selected = subtle stroke, default = glass. Matches the Live TV row accent. -->
+<!-- Poster card background. A bright brand ring remains obvious from a sofa,
+     while the translucent fill keeps artwork visually dominant. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <corners android:radius="@dimen/tile_radius" />
-            <solid android:color="#332E9A" />
-            <stroke android:width="@dimen/focus_stroke" android:color="#7B2FF7" />
+            <solid android:color="#24FFFFFF" />
+            <stroke android:width="3dp" android:color="@color/brand_pink" />
         </shape>
     </item>
     <item android:state_selected="true">

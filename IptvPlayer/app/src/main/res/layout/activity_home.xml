@@ -29,6 +29,8 @@
         android:layout_height="0dp"
         android:layout_marginEnd="@dimen/space_l"
         android:orientation="vertical"
+        android:background="@drawable/bg_glass_card"
+        android:padding="@dimen/space_m"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toStartOf="@id/splitGuide"
         app:layout_constraintTop_toTopOf="parent"
@@ -58,7 +60,9 @@
                 android:contentDescription="@string/action_refresh"
                 android:focusable="true"
                 android:focusableInTouchMode="false"
+                android:nextFocusDown="@id/searchInput"
                 android:padding="@dimen/space_s"
+                android:stateListAnimator="@animator/control_focus"
                 android:src="@drawable/ic_refresh"
                 app:tint="@color/text_primary" />
         </LinearLayout>
@@ -70,6 +74,7 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="@dimen/space_m"
             android:layout_marginTop="@dimen/space_s"
+            android:background="@drawable/bg_input_modern"
             android:drawableStart="@drawable/ic_search"
             android:drawablePadding="@dimen/space_s"
             android:hint="@string/search_channels_hint"
@@ -86,14 +91,18 @@
                 android:id="@+id/categoryList"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:clipChildren="false"
                 android:clipToPadding="false"
+                android:preserveFocusAfterLayout="true"
                 android:paddingBottom="@dimen/space_m" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/channelList"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:clipChildren="false"
                 android:clipToPadding="false"
+                android:preserveFocusAfterLayout="true"
                 android:paddingBottom="@dimen/space_m"
                 android:visibility="gone" />
 
@@ -315,6 +324,7 @@
                 android:id="@+id/epgList"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:clipChildren="false"
                 android:clipToPadding="false"
                 android:focusable="false" />
 

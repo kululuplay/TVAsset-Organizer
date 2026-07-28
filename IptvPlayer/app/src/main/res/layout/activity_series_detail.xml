@@ -161,6 +161,7 @@
                         android:nextFocusDown="@id/playButton"
                         android:paddingHorizontal="@dimen/space_m"
                         android:paddingVertical="@dimen/space_xs"
+                        android:stateListAnimator="@animator/control_focus"
                         android:text="@string/detail_more"
                         android:textColor="@color/text_primary"
                         android:textSize="@dimen/text_caption"
@@ -185,7 +186,8 @@
                             android:focusableInTouchMode="false"
                             android:nextFocusDown="@id/seasonList"
                             android:paddingHorizontal="@dimen/space_l"
-                            android:paddingVertical="@dimen/space_m">
+                            android:paddingVertical="@dimen/space_m"
+                            android:stateListAnimator="@animator/control_focus">
 
                             <ImageView
                                 android:layout_width="20dp"
@@ -217,6 +219,7 @@
                             android:nextFocusDown="@id/seasonList"
                             android:paddingHorizontal="@dimen/space_l"
                             android:paddingVertical="@dimen/space_m"
+                            android:stateListAnimator="@animator/control_focus"
                             android:text="@string/detail_trailer"
                             android:textColor="@color/text_primary"
                             android:textSize="@dimen/detail_action_text"
@@ -233,6 +236,7 @@
                             android:focusableInTouchMode="false"
                             android:nextFocusDown="@id/seasonList"
                             android:padding="@dimen/space_m"
+                            android:stateListAnimator="@animator/control_focus"
                             android:src="@drawable/ic_heart"
                             android:contentDescription="@string/section_favorites" />
                     </LinearLayout>
@@ -265,19 +269,32 @@
                 android:layout_marginTop="@dimen/space_s"
                 android:nextFocusUp="@id/playButton"
                 android:nextFocusDown="@id/episodeList"
+                android:clipChildren="false"
                 android:clipToPadding="false" />
 
             <!-- ===== Episodes ===== -->
+            <TextView
+                android:id="@+id/episodesLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_l"
+                android:text="@string/detail_episodes"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/detail_section_text"
+                android:textStyle="bold" />
+
             <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_l">
+                android:layout_marginTop="@dimen/space_s"
+                android:minHeight="190dp">
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/episodeList"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:nextFocusUp="@id/seasonList"
+                    android:clipChildren="false"
                     android:clipToPadding="false" />
 
                 <ProgressBar
@@ -287,15 +304,35 @@
                     android:layout_gravity="center"
                     android:visibility="gone" />
 
-                <TextView
-                    android:id="@+id/emptyState"
+                <LinearLayout
+                    android:id="@+id/episodeEmptyContainer"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
-                    android:text="@string/empty_channels"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="@dimen/detail_meta_text"
-                    android:visibility="gone" />
+                    android:background="@drawable/bg_glass_card"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="@dimen/space_m"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/emptyState"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:maxWidth="440dp"
+                        android:text="@string/empty_episodes"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="@dimen/detail_meta_text" />
+
+                    <Button
+                        android:id="@+id/episodeRetryButton"
+                        style="@style/Widget.Iptv.Button"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_m"
+                        android:text="@string/action_retry" />
+                </LinearLayout>
             </FrameLayout>
 
             <!-- ===== Cast (display-only; D-pad skips this rail) ===== -->
@@ -338,7 +375,9 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_s"
                 android:nextFocusUp="@id/episodeList"
+                android:clipChildren="false"
                 android:clipToPadding="false"
+                android:preserveFocusAfterLayout="true"
                 android:visibility="gone" />
         </LinearLayout>
     </ScrollView>

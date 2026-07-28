@@ -36,6 +36,8 @@
     <dimen name="category_width">248dp</dimen>
     <!-- Wider category rail for Movies/Series so long category names stay readable. -->
     <dimen name="category_width_wide">340dp</dimen>
+    <!-- Catalog rail sized to preserve a compact four-poster grid at 960x540dp (720p TV). -->
+    <dimen name="catalog_category_width">280dp</dimen>
     <dimen name="info_width">300dp</dimen>
     <dimen name="channel_logo">56dp</dimen>
     <dimen name="card_radius">10dp</dimen>

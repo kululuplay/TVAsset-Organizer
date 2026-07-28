@@ -10,12 +10,14 @@
  */
 package com.iptv.player.ui.wizard
 
+import android.animation.AnimatorInflater
 import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.widget.GridLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
@@ -23,6 +25,7 @@ import com.iptv.player.databinding.ActivityWizardBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.login.LoginActivity
 import com.iptv.player.util.LocaleManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 class WizardActivity : BaseActivity() {
@@ -32,11 +35,17 @@ class WizardActivity : BaseActivity() {
     private val totalSteps = 3
     private var step = 0
     private var selectedLanguage: String = ""
+    private var savingLanguage = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityWizardBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        step = savedInstanceState?.getInt(STATE_STEP, 0)
+            ?.coerceIn(0, totalSteps - 1) ?: 0
+        selectedLanguage = savedInstanceState?.getString(STATE_LANGUAGE)
+            ?: ServiceLocator.settings.languageTagBlocking()
 
         buildLanguageOptions()
 
@@ -44,6 +53,12 @@ class WizardActivity : BaseActivity() {
         binding.btnNext.setOnClickListener { goNext() }
 
         render()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt(STATE_STEP, step)
+        outState.putString(STATE_LANGUAGE, selectedLanguage)
+        super.onSaveInstanceState(outState)
     }
 
     private fun buildLanguageOptions() {
@@ -59,13 +74,17 @@ class WizardActivity : BaseActivity() {
     private fun addLanguageRow(tag: String, label: String, span: Int = 1) {
         val chip = TextView(this).apply {
             text = label
-            setTextColor(resources.getColor(R.color.text_primary))
+            setTextColor(ContextCompat.getColor(this@WizardActivity, R.color.text_primary))
             textSize = resources.getDimension(R.dimen.text_body) /
                 resources.displayMetrics.scaledDensity
             gravity = Gravity.CENTER
             setBackgroundResource(R.drawable.bg_card_selectable)
             isFocusable = true
             isFocusableInTouchMode = false
+            stateListAnimator = AnimatorInflater.loadStateListAnimator(
+                this@WizardActivity,
+                R.animator.control_focus,
+            )
             minHeight = resources.getDimensionPixelSize(R.dimen.wizard_chip_min_height)
             val pad = resources.getDimensionPixelSize(R.dimen.space_m)
             setPadding(pad, pad, pad, pad)
@@ -115,6 +134,11 @@ class WizardActivity : BaseActivity() {
 
     private fun render() {
         renderDots()
+        binding.stepCounter.text = getString(
+            R.string.wizard_step_indicator,
+            step + 1,
+            totalSteps,
+        )
         binding.languageScroll.visibility = View.GONE
         binding.btnBack.visibility = if (step == 0) View.INVISIBLE else View.VISIBLE
 
@@ -131,7 +155,10 @@ class WizardActivity : BaseActivity() {
                 binding.languageScroll.visibility = View.VISIBLE
                 binding.btnNext.setText(R.string.wizard_next)
                 highlightLanguage()
-                binding.languageGroup.getChildAt(0)?.requestFocus()
+                val selected = (0 until binding.languageGroup.childCount)
+                    .map(binding.languageGroup::getChildAt)
+                    .firstOrNull { (it.tag as? String) == selectedLanguage }
+                (selected ?: binding.languageGroup.getChildAt(0))?.requestFocus()
             }
             2 -> {
                 binding.stepTitle.setText(R.string.wizard_connect_title)
@@ -144,14 +171,55 @@ class WizardActivity : BaseActivity() {
 
     private fun goNext() {
         if (step == 1) {
-            // Persist the chosen language as we leave the language step.
-            lifecycleScope.launch { ServiceLocator.settings.setLanguageTag(selectedLanguage) }
+            persistLanguageAndAdvance()
+            return
         }
         if (step < totalSteps - 1) {
             step++
             render()
         } else {
             finishWizard()
+        }
+    }
+
+    /**
+     * Persists the locale before leaving the language step. Starting/recreating
+     * the next screen before this suspend write completed made the old language
+     * appear until a second launch. When the locale changed, recreate at step 3
+     * so even the final wizard page immediately uses the selected language.
+     */
+    private fun persistLanguageAndAdvance() {
+        if (savingLanguage) return
+        savingLanguage = true
+        setNavigationEnabled(false)
+        lifecycleScope.launch {
+            val changed =
+                ServiceLocator.settings.languageTagBlocking() != selectedLanguage
+            try {
+                ServiceLocator.settings.setLanguageTag(selectedLanguage)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                savingLanguage = false
+                setNavigationEnabled(true)
+                return@launch
+            }
+            step = (step + 1).coerceAtMost(totalSteps - 1)
+            if (changed) {
+                recreate()
+            } else {
+                savingLanguage = false
+                setNavigationEnabled(true)
+                render()
+            }
+        }
+    }
+
+    private fun setNavigationEnabled(enabled: Boolean) {
+        binding.btnBack.isEnabled = enabled
+        binding.btnNext.isEnabled = enabled
+        for (i in 0 until binding.languageGroup.childCount) {
+            binding.languageGroup.getChildAt(i).isEnabled = enabled
         }
     }
 
@@ -171,6 +239,12 @@ class WizardActivity : BaseActivity() {
     }
 
     override fun onBackPressed() {
+        if (savingLanguage) return
         if (step > 0) goBack() else super.onBackPressed()
+    }
+
+    companion object {
+        private const val STATE_STEP = "wizard_step"
+        private const val STATE_LANGUAGE = "wizard_language"
     }
 }

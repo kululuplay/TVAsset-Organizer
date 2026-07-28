@@ -13,7 +13,7 @@
     <!-- Left: categories -->
     <LinearLayout
         android:id="@+id/categoryPanel"
-        android:layout_width="@dimen/category_width_wide"
+        android:layout_width="@dimen/catalog_category_width"
         android:layout_height="0dp"
         android:orientation="vertical"
         android:background="@drawable/bg_glass_card"
@@ -22,13 +22,24 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent">
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="@dimen/space_m"
+            android:text="@string/nav_movies"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_body"
+            android:textStyle="bold" />
+
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/categoryList"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
+            android:clipChildren="false"
             android:clipToPadding="false"
-            android:focusable="false" />
+            android:focusable="false"
+            android:preserveFocusAfterLayout="true" />
     </LinearLayout>
 
     <!-- Right: section header + poster grid -->
@@ -46,80 +57,99 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
+            android:orientation="vertical"
             android:layout_marginBottom="@dimen/space_m">
 
-            <TextView
-                android:id="@+id/contentTitle"
-                android:layout_width="0dp"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/cat_recently_added"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_title"
-                android:textStyle="bold"
-                android:maxLines="1"
-                android:ellipsize="end" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <EditText
-                android:id="@+id/searchInput"
-                style="@style/Widget.Iptv.Input"
-                android:layout_width="220dp"
+                <TextView
+                    android:id="@+id/contentTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/cat_recently_added"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_title"
+                    android:textStyle="bold"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+                <com.iptv.player.ui.common.ClockView
+                    android:id="@+id/clock"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/dateText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="@dimen/text_caption"
+                    android:layout_marginStart="@dimen/space_m" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="@dimen/space_m"
-                android:drawableStart="@drawable/ic_search"
-                android:drawablePadding="@dimen/space_s"
-                android:hint="@string/search_movies_hint"
-                android:imeOptions="actionSearch"
-                android:inputType="text"
-                android:maxLines="1" />
+                android:layout_marginTop="@dimen/space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <ImageButton
-                android:id="@+id/refreshButton"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:layout_marginEnd="@dimen/space_s"
-                android:background="@drawable/bg_poster"
-                android:contentDescription="@string/action_refresh"
-                android:focusable="true"
-                android:focusableInTouchMode="false"
-                android:padding="@dimen/space_s"
-                android:src="@drawable/ic_refresh"
-                app:tint="@color/text_primary" />
+                <EditText
+                    android:id="@+id/searchInput"
+                    style="@style/Widget.Iptv.Input"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_input_modern"
+                    android:drawableStart="@drawable/ic_search"
+                    android:drawablePadding="@dimen/space_s"
+                    android:hint="@string/search_movies_hint"
+                    android:imeOptions="actionSearch"
+                    android:inputType="text"
+                    android:maxLines="1" />
 
-            <TextView
-                android:id="@+id/sortButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:focusable="true"
-                android:focusableInTouchMode="false"
-                android:background="@drawable/bg_poster"
-                android:paddingHorizontal="@dimen/space_m"
-                android:paddingVertical="@dimen/space_s"
-                android:layout_marginEnd="@dimen/space_m"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_caption"
-                android:textStyle="bold"
-                android:maxLines="1"
-                android:drawableStart="@drawable/ic_sort"
-                android:drawablePadding="@dimen/space_s" />
+                <ImageButton
+                    android:id="@+id/refreshButton"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="@dimen/space_m"
+                    android:background="@drawable/bg_poster"
+                    android:contentDescription="@string/action_refresh"
+                    android:focusable="true"
+                    android:focusableInTouchMode="false"
+                    android:padding="@dimen/space_s"
+                    android:stateListAnimator="@animator/control_focus"
+                    android:src="@drawable/ic_refresh"
+                    app:tint="@color/text_primary" />
 
-            <com.iptv.player.ui.common.ClockView
-                android:id="@+id/clock"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_body"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/dateText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_caption"
-                android:layout_marginStart="@dimen/space_m" />
+                <TextView
+                    android:id="@+id/sortButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/space_s"
+                    android:background="@drawable/bg_poster"
+                    android:drawableStart="@drawable/ic_sort"
+                    android:drawablePadding="@dimen/space_s"
+                    android:ellipsize="end"
+                    android:focusable="true"
+                    android:focusableInTouchMode="false"
+                    android:maxWidth="220dp"
+                    android:maxLines="1"
+                    android:paddingHorizontal="@dimen/space_m"
+                    android:paddingVertical="@dimen/space_s"
+                    android:stateListAnimator="@animator/control_focus"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_caption"
+                    android:textStyle="bold" />
+            </LinearLayout>
         </LinearLayout>
 
         <FrameLayout
@@ -131,7 +161,9 @@
                 android:id="@+id/posterGrid"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:clipToPadding="false" />
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:preserveFocusAfterLayout="true" />
 
             <TextView
                 android:id="@+id/emptyState"

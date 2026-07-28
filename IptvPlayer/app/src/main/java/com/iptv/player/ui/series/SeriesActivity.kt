@@ -10,6 +10,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import androidx.lifecycle.Lifecycle
@@ -17,6 +18,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.paging.LoadState
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
@@ -29,7 +31,9 @@ import com.iptv.player.ui.common.PinLockHelper
 import com.iptv.player.ui.common.SafeGridLayoutManager
 import com.iptv.player.util.NewContentNotifier
 import com.iptv.player.ui.common.autoFitColumns
+import com.iptv.player.ui.common.hideSoftKeyboard
 import com.iptv.player.ui.common.isAdult
+import com.iptv.player.ui.common.requestFocusAt
 import com.iptv.player.ui.home.CategoryAdapter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChangedBy
@@ -57,6 +61,12 @@ class SeriesActivity : BaseActivity() {
 
     /** Latest Paging refresh state, updated by the load-state collector. */
     private var adapterRefreshSettled = false
+
+    /** Focus the first fresh poster once an async category/search page commits. */
+    private var pendingGridFocus = false
+
+    /** Return focus to browse content after the retry card disappears. */
+    private var restoreFocusAfterRetry = false
 
     /** Sort orders cycled by the header button, in display order. */
     private val sortCycle = listOf(
@@ -122,9 +132,12 @@ class SeriesActivity : BaseActivity() {
     private fun setupLists() {
         categoryAdapter = CategoryAdapter(
             onFocused = { cat ->
+                pendingGridFocus = false
+                val categoryChanged = currentCategory?.id != cat.id
                 if (viewModel.query.value.isNotEmpty()) {
                     binding.searchInput.text?.clear()
                 }
+                if (categoryChanged) adapterRefreshSettled = false
                 viewModel.selectCategory(cat.id)
                 categoryAdapter.setSelected(cat.id)
                 currentCategory = cat
@@ -149,15 +162,22 @@ class SeriesActivity : BaseActivity() {
         )
         seriesAdapter.progressProvider = { id -> progressMap[id] ?: 0 }
         binding.posterGrid.layoutManager = SafeGridLayoutManager(this, 4)
-        binding.posterGrid.autoFitColumns(min = 3)
+        binding.posterGrid.autoFitColumns(min = 4)
         binding.posterGrid.adapter = seriesAdapter
+        (binding.posterGrid.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
+            ?.supportsChangeAnimations = false
 
         binding.sortButton.setOnClickListener {
             val next = sortCycle[(sortCycle.indexOf(viewModel.sort.value) + 1) % sortCycle.size]
+            adapterRefreshSettled = false
             viewModel.setSort(next)
         }
         binding.refreshButton.setOnClickListener { viewModel.refreshCatalog() }
-        binding.retryButton.setOnClickListener { viewModel.retryLoad() }
+        binding.retryButton.setOnClickListener {
+            restoreFocusAfterRetry = true
+            adapterRefreshSettled = false
+            viewModel.retryLoad()
+        }
     }
 
     private fun setupSearch() {
@@ -169,18 +189,57 @@ class SeriesActivity : BaseActivity() {
         binding.searchInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                pendingGridFocus = false
+                adapterRefreshSettled = false
                 viewModel.setQuery(s?.toString().orEmpty())
             }
             override fun afterTextChanged(s: Editable?) = Unit
         })
         binding.searchInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                binding.searchInput.hideSoftKeyboard()
                 focusFirstItem()
                 true
             } else {
                 false
             }
         }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_RIGHT ->
+                    if (binding.categoryList.hasFocus()) {
+                        focusFirstItem()
+                        return true
+                    }
+                KeyEvent.KEYCODE_DPAD_LEFT ->
+                    if (binding.posterGrid.hasFocus() && focusedPosterIsInFirstColumn()) {
+                        focusCurrentCategory()
+                        return true
+                    }
+                KeyEvent.KEYCODE_DPAD_DOWN ->
+                    if (binding.searchInput.hasFocus()) {
+                        binding.searchInput.hideSoftKeyboard()
+                        focusFirstItem()
+                        return true
+                    }
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (viewModel.query.value.isNotEmpty() || binding.searchInput.hasFocus()) {
+            binding.searchInput.text?.clear()
+            binding.searchInput.hideSoftKeyboard()
+            binding.searchInput.clearFocus()
+            focusCurrentCategory()
+            return
+        }
+        super.onBackPressed()
     }
 
     /** Localised "Sort: <order>" label for the header chip. */
@@ -244,10 +303,15 @@ class SeriesActivity : BaseActivity() {
         val failed = state.errorRes != null
         binding.loadErrorContainer.visibility = if (failed) View.VISIBLE else View.GONE
         state.errorRes?.let { binding.loadErrorText.setText(it) }
-        binding.refreshButton.isEnabled = !state.loading
+        // Keep an already-focused refresh control in the D-pad graph while the
+        // request runs; clickability still prevents duplicate refreshes.
+        binding.refreshButton.isClickable = !state.loading
         binding.refreshButton.alpha = if (state.loading) 0.5f else 1f
         if (failed && seriesAdapter.itemCount == 0) {
             binding.retryButton.post { binding.retryButton.requestFocus() }
+        } else if (restoreFocusAfterRetry && !state.loading) {
+            restoreFocusAfterRetry = false
+            focusFirstItem()
         }
         renderEmptyState()
     }
@@ -328,6 +392,14 @@ class SeriesActivity : BaseActivity() {
                 launch {
                     seriesAdapter.loadStateFlow.collectLatest { state ->
                         adapterRefreshSettled = state.refresh is LoadState.NotLoading
+                        if (
+                            adapterRefreshSettled &&
+                            pendingGridFocus &&
+                            seriesAdapter.itemCount > 0
+                        ) {
+                            pendingGridFocus = false
+                            binding.posterGrid.requestFocusAt(0)
+                        }
                         renderEmptyState()
                     }
                 }
@@ -342,19 +414,35 @@ class SeriesActivity : BaseActivity() {
 
     /** Moves focus onto the first category row (the on-entry focus target). */
     private fun focusFirstCategory() {
-        binding.categoryList.post {
-            (binding.categoryList.findViewHolderForAdapterPosition(0)?.itemView
-                ?: binding.categoryList).requestFocus()
-        }
+        binding.categoryList.requestFocusAt(0)
     }
 
     /** Moves focus into the poster grid, always landing on the first item. */
     private fun focusFirstItem() {
-        binding.posterGrid.scrollToPosition(0)
-        binding.posterGrid.post {
-            (binding.posterGrid.findViewHolderForAdapterPosition(0)?.itemView
-                ?: binding.posterGrid).requestFocus()
+        if (!adapterRefreshSettled || seriesAdapter.itemCount == 0) {
+            pendingGridFocus = true
+            return
         }
+        pendingGridFocus = false
+        binding.searchInput.hideSoftKeyboard()
+        binding.posterGrid.requestFocusAt(0)
+    }
+
+    private fun focusCurrentCategory() {
+        pendingGridFocus = false
+        val id = currentCategory?.id
+        val position = categoryAdapter.currentList.indexOfFirst { it.id == id }
+            .takeIf { it >= 0 } ?: 0
+        binding.categoryList.requestFocusAt(position)
+    }
+
+    private fun focusedPosterIsInFirstColumn(): Boolean {
+        val focused = currentFocus ?: return false
+        val holder = binding.posterGrid.findContainingViewHolder(focused) ?: return false
+        val position = holder.bindingAdapterPosition
+        if (position == androidx.recyclerview.widget.RecyclerView.NO_POSITION) return false
+        val span = (binding.posterGrid.layoutManager as? GridLayoutManager)?.spanCount ?: return false
+        return position % span == 0
     }
 
     private fun openDetail(id: String) {

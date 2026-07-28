@@ -98,6 +98,11 @@
     <string name="detail_year">Jaar</string>
     <string name="detail_rating">Beoordeling</string>
     <string name="detail_plot">Verhaal</string>
+    <string name="detail_more">Meer</string>
+    <string name="detail_less">Minder</string>
+    <string name="detail_seasons">Seizoenen</string>
+    <string name="detail_episodes">Afleveringen</string>
+    <string name="empty_episodes">Er zijn geen afleveringen beschikbaar voor deze serie.</string>
     <string name="detail_more_in_category">Meer uit %1$s</string>
     <string name="detail_more_to_watch">Meer om te kijken</string>
     <string name="sort_label">Sorteren</string>

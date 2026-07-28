@@ -98,6 +98,11 @@
     <string name="detail_year">السنة</string>
     <string name="detail_rating">التقييم</string>
     <string name="detail_plot">القصة</string>
+    <string name="detail_more">المزيد</string>
+    <string name="detail_less">أقل</string>
+    <string name="detail_seasons">المواسم</string>
+    <string name="detail_episodes">الحلقات</string>
+    <string name="empty_episodes">لا توجد حلقات متاحة لهذا المسلسل.</string>
     <string name="detail_more_in_category">المزيد من %1$s</string>
     <string name="detail_more_to_watch">محتويات أخرى للمشاهدة</string>
     <string name="sort_label">الترتيب</string>

@@ -20,6 +20,7 @@
         <item name="android:textSize">@dimen/text_body</item>
         <item name="android:padding">@dimen/space_m</item>
         <item name="android:focusable">true</item>
+        <item name="android:stateListAnimator">@animator/control_focus</item>
     </style>
 
     <style name="Widget.Iptv.Input" parent="Widget.AppCompat.EditText">
@@ -57,6 +58,7 @@
         <item name="android:scaleType">centerInside</item>
         <item name="android:padding">@dimen/space_s</item>
         <item name="android:focusable">true</item>
+        <item name="android:stateListAnimator">@animator/control_focus</item>
     </style>
 
     <!-- Modern standard dialogs (Settings option lists + confirmations): a dark
