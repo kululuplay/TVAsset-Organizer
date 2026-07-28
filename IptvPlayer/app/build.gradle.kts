@@ -6,6 +6,13 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+fun buildConfigString(value: String): String =
+    "\"" + value
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+        .replace("\r", "\\r")
+        .replace("\n", "\\n") + "\""
+
 android {
     namespace = "com.iptv.player"
     compileSdk = 34
@@ -16,6 +23,19 @@ android {
         targetSdk = 34
         versionCode = 107
         versionName = "1.5.63"
+
+        // Service credentials are injected by CI/local environment and never
+        // committed. Blank values disable the optional integration gracefully.
+        buildConfigField(
+            "String",
+            "TMDB_API_KEY",
+            buildConfigString(System.getenv("TMDB_API_KEY").orEmpty()),
+        )
+        buildConfigField(
+            "String",
+            "TELEMETRY_INGEST_KEY",
+            buildConfigString(System.getenv("TELEMETRY_INGEST_KEY").orEmpty()),
+        )
 
         // Limit native ABIs to keep APK small and cover common TV/stick chipsets.
         ndk {
@@ -157,10 +177,8 @@ dependencies {
     testImplementation("org.mockito:mockito-core:5.12.0")
 }
 
-// CI only runs ":app:assembleDebug/Release" (the workflow file can't be
-// changed from here), so chain the JVM unit tests onto both assemble tasks:
-// a failing test now fails the APK build itself. Debug variant is enough —
-// the tests are variant-agnostic pure-JVM logic.
+// Keep direct local assemble invocations honest too: a failing policy/redaction
+// test fails the APK build even outside the CI workflow.
 tasks.matching { it.name == "assembleDebug" || it.name == "assembleRelease" }.configureEach {
     dependsOn("testDebugUnitTest")
 }

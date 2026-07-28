@@ -1,22 +1,15 @@
 /*
  * PlayerController.kt
- * Orchestrates the two engines and the automatic software fallback. A stream is
- * tried hardware-first; if the hardware path greens out, can't decode the audio,
- * or errors, it is automatically restarted on a software path — one connection
- * at a time (full stop -> release -> restart).
+ * Orchestrates the two engines and their reconnect/fallback policy — one
+ * connection at a time (full stop -> release -> restart).
  *
- * Fallback ladder (per stream):
- *   EXO  ──green──▶ VLC_SW            (hardware video failed: go straight to SW)
- *   EXO  ──audio/error──▶ VLC_HW      (video ok, let libVLC software-decode audio)
- *   VLC_HW ──green/audio/error──▶ VLC_SW
- *   VLC_SW ──error──▶ retry w/ backoff ──▶ fatal
+ * AUTO + automatic decoder:
+ *   EXO  ──failure──▶ VLC_HW ──failure──▶ VLC_SW
  *
- * The ladder is shaped by PlayerMode (start engine) and DecoderMode (whether the
- * software stage is allowed / forced). One override: a GREEN video failure always
- * drops to the software stage even in HARDWARE mode — a green frame is unusable, so
- * software is the only remaining way to show a picture. (On Amlogic boxes the
- * libVLC hardware underlay greens on every non-UHD profile, so VlcPlayerEngine
- * flags the whole non-UHD hardware path as green-prone there.)
+ * AUTO + hardware decoder stops before software. Explicit ExoPlayer/VLC choices
+ * never silently change engine; VLC + automatic decoder may still move from VLC
+ * hardware to VLC software. The pure decisions live in PlaybackRoutingPolicy and
+ * are covered by JVM tests.
  */
 package com.iptv.player.player
 
@@ -28,7 +21,8 @@ import android.view.ViewGroup
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
-import com.iptv.player.util.DeviceCaps
+import com.iptv.player.player.PlaybackRoutingPolicy.Failure as Reason
+import com.iptv.player.player.PlaybackRoutingPolicy.Stage
 import com.iptv.player.util.PlaybackLog
 import com.iptv.player.util.PlaybackRouteMemory
 import com.iptv.player.util.StabilityTelemetry
@@ -125,12 +119,6 @@ class PlayerController(
         fun onRetrying(attempt: Int)
     }
 
-    /** Which engine + decode path a stream is currently running on. */
-    private enum class Stage { EXO, VLC_HW, VLC_SW }
-
-    /** Why the current stage failed, so we pick the right next stage. */
-    private enum class Reason { ERROR, AUDIO, VIDEO, SOFTWARE_SLOW, DECODE }
-
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var engine: PlayerEngine? = null
@@ -207,6 +195,13 @@ class PlayerController(
     // EndReached; only one attempt may be scheduled/in-flight at a time.
     private var reconnectPending = false
 
+    // Lifecycle gate. Engine callbacks can arrive after Activity.onStop() (notably
+    // a native VLC error queued just before pause). Never let such a late callback
+    // start a hidden reconnect in the background; remember it and recover once the
+    // owner resumes instead.
+    private var suspended = false
+    private var recoveryNeededOnResume = false
+
     // ---- Stall / startup watchdog -----------------------------------------
     // The reconnect loop above is ENTIRELY event-driven (EndReached / error). A
     // half-open upstream connection (NAT / load-balancer idle or max-age timeout,
@@ -243,6 +238,8 @@ class PlayerController(
     }
 
     fun play(url: String, routeKey: String? = null) {
+        suspended = false
+        recoveryNeededOnResume = false
         // Cancel any pending retry from a previous stream so zapping is clean.
         mainHandler.removeCallbacksAndMessages(null)
         // A new channel cancels any in-flight reconnect so it can't fire against
@@ -315,28 +312,8 @@ class PlayerController(
      * First stage to try from a COLD start, given the engine choice and decoder
      * strategy (no route memory). [play] prefers [rememberedStage] over this.
      */
-    private fun baseInitialStage(): Stage = when {
-        // An explicit ExoPlayer choice wins over EVERYTHING — including the
-        // SOFTWARE decoder default — so the user can actually reach Media3's
-        // native MediaCodec -> SurfaceView path. On Amlogic boxes (e.g. Xiaomi
-        // Stick) libVLC's android_display vout greens the hardware underlay;
-        // ExoPlayer hands the SurfaceView straight to MediaCodec, which is the
-        // box's native hardware-video pipeline and often shows real video.
-        mode == PlayerMode.EXOPLAYER -> Stage.EXO
-        // Software decoder choice always forces libVLC software decode.
-        decoderMode == DecoderMode.SOFTWARE -> Stage.VLC_SW
-        // Amlogic boxes: libVLC's hardware underlay greens out on EVERY non-UHD
-        // profile (confirmed in the field — VLC logs "output: 17 unknown") and the
-        // runtime green detection is unreliable there (currentVideoTrack often reads
-        // 0x0/null, so the reactive software fallback never fires). So skip the green
-        // VLC hardware path entirely: AUTO starts on ExoPlayer — the box's working
-        // native MediaCodec -> SurfaceView hardware-video path (hardware quality, no
-        // green; audio-incompatible channels drop to VLC_SW in nextStage). An explicit
-        // VLC choice honours libVLC but starts software, the only non-green VLC path.
-        DeviceCaps.isAmlogic -> if (mode == PlayerMode.VLC) Stage.VLC_SW else Stage.EXO
-        // Other boxes: AUTO/Hardware (and PlayerMode.VLC) start on libVLC hardware.
-        else -> Stage.VLC_HW
-    }
+    private fun baseInitialStage(): Stage =
+        PlaybackRoutingPolicy.initialStage(mode, decoderMode)
 
     /**
      * The stage this channel last proved STABLE on, or null when route memory does
@@ -347,9 +324,6 @@ class PlayerController(
         if (memoryIgnoredThisPlay || !routeMemoryEligible) return null
         val name = PlaybackRouteMemory.bestStage(currentRouteKey) ?: return null
         val s = runCatching { Stage.valueOf(name) }.getOrNull() ?: return null
-        // Never resurrect the libVLC hardware path from memory on Amlogic: it greens
-        // on every non-UHD profile there and the green is undetectable at runtime.
-        if (s == Stage.VLC_HW && DeviceCaps.isAmlogic) return null
         return s
     }
 
@@ -388,10 +362,18 @@ class PlayerController(
             if (generation != startGeneration) return@Runnable
             val newEngine: PlayerEngine =
                 if (useVlc) VlcPlayerEngine(context, forceSoftware, allowPassthrough, bufferMode.networkCachingMs)
-                else ExoPlayerEngine(context, allowPassthrough, bufferMode)
+                else ExoPlayerEngine(
+                    context = context,
+                    allowPassthrough = allowPassthrough,
+                    bufferMode = bufferMode,
+                    allowDecoderFallback = decoderMode == DecoderMode.AUTO,
+                )
             newEngine.bind(container)
-            newEngine.setListener(engineListener)
             engine = newEngine
+            // Capture the concrete engine instance. Native VLC callbacks can arrive
+            // after release; without this identity gate a stale error from the old
+            // engine can incorrectly advance/reconnect the newly-created route.
+            newEngine.setListener(engineListener(newEngine))
             // Re-apply any user delay offsets to the (new) engine.
             newEngine.setAudioDelayMs(audioDelayMs)
             newEngine.setSubtitleDelayMs(subtitleDelayMs)
@@ -424,20 +406,30 @@ class PlayerController(
         }
     }
 
-    private val engineListener = object : PlayerListener {
-        override fun onBuffering() = post { callback.onBuffering() }
+    private fun engineListener(source: PlayerEngine) = object : PlayerListener {
+        override fun onBuffering() = post {
+            if (source !== engine || suspended) return@post
+            callback.onBuffering()
+        }
 
         override fun onPlaying() = post {
-            callback.onPlaying(engine?.engineName ?: "")
+            if (source !== engine || suspended) return@post
+            callback.onPlaying(source.engineName)
             onPlaybackProgress()
         }
 
         override fun onVideoOutput() = post {
+            if (source !== engine || suspended) return@post
             callback.onVideoResumed()
             onPlaybackProgress()
         }
 
         override fun onEnded() = post {
+            if (source !== engine) return@post
+            if (suspended) {
+                recoveryNeededOnResume = true
+                return@post
+            }
             // A live stream should not end; the server closed/restarted it. Treat
             // as a drop and reconnect the same channel. (Non-live ignores it.)
             if (isLive) {
@@ -446,11 +438,28 @@ class PlayerController(
             }
         }
 
-        override fun onError(message: String?) = post { handleFailure(Reason.ERROR) }
-        override fun onDecodeError(message: String?) = post { handleFailure(Reason.DECODE) }
-        override fun onAudioUnavailable() = post { handleFailure(Reason.AUDIO) }
-        override fun onVideoInvalid() = post { handleFailure(Reason.VIDEO) }
-        override fun onSoftwareTooSlow() = post { handleFailure(Reason.SOFTWARE_SLOW) }
+        override fun onError(message: String?) =
+            post { if (source === engine) handleEngineFailure(Reason.ERROR) }
+
+        override fun onDecodeError(message: String?) =
+            post { if (source === engine) handleEngineFailure(Reason.DECODE) }
+
+        override fun onAudioUnavailable() =
+            post { if (source === engine) handleEngineFailure(Reason.AUDIO) }
+
+        override fun onVideoInvalid() =
+            post { if (source === engine) handleEngineFailure(Reason.VIDEO) }
+
+        override fun onSoftwareTooSlow() =
+            post { if (source === engine) handleEngineFailure(Reason.SOFTWARE_SLOW) }
+    }
+
+    private fun handleEngineFailure(reason: Reason) {
+        if (suspended) {
+            recoveryNeededOnResume = true
+            return
+        }
+        handleFailure(reason)
     }
 
     /**
@@ -473,6 +482,7 @@ class PlayerController(
         val stableStage = stage
         val stableKey = currentRouteKey
         stableHandler.postDelayed({
+            if (suspended || stableStage != stage) return@postDelayed
             PlaybackLog.log(context, "Controller", "stable playback ${STABLE_PLAYBACK_MS}ms -> recovered")
             quickDecodeFailures = 0
             resetReconnect()
@@ -617,19 +627,30 @@ class PlayerController(
         // connection first, so single-connection is preserved). The counter is NOT
         // reset by a brief first frame, so a 1.5s-then-fail loop escalates instead
         // of restarting the retry count every cycle.
-        val quickHwFailure = reason == Reason.DECODE ||
-            (reason == Reason.ERROR && isHardwareStage(stage) && playedBriefly())
+        val quickHwFailure = isHardwareStage(stage) &&
+            (reason == Reason.DECODE || (reason == Reason.ERROR && playedBriefly()))
         if (quickHwFailure) {
             quickDecodeFailures++
             PlaybackLog.log(
                 context, "Controller",
                 "hw decode fail #$quickDecodeFailures stage=$stage reason=$reason"
             )
-            if (quickDecodeFailures >= MAX_QUICK_DECODE_FAILURES && Stage.VLC_SW !in triedStages) {
-                PlaybackLog.log(context, "Controller", "repeated hw decode fail -> force software")
-                recordStability("force_sw", "warn", "after $quickDecodeFailures hw decode fails (stage=$stage)")
-                startStage(Stage.VLC_SW)
-                return
+            if (quickDecodeFailures >= MAX_QUICK_DECODE_FAILURES) {
+                val fallback = nextStage(stage, reason)
+                if (fallback != null && fallback !in triedStages) {
+                    PlaybackLog.log(
+                        context,
+                        "Controller",
+                        "repeated hw decode fail -> fallback $stage to $fallback",
+                    )
+                    recordStability(
+                        "decode_fallback",
+                        "warn",
+                        "after $quickDecodeFailures hw decode fails ($stage -> $fallback)",
+                    )
+                    startStage(fallback)
+                    return
+                }
             }
             // Below the threshold (or software already tried): reconnect the same
             // stage but KEEP the count so the next quick failure escalates.
@@ -681,6 +702,10 @@ class PlayerController(
         // The reconnect attempt's own startup timeout (armed in startStage) takes
         // over watchdog duty, so drop any current poll/timeout to avoid overlap.
         cancelWatchdog()
+        if (suspended) {
+            recoveryNeededOnResume = true
+            return
+        }
         if (!isLive) {
             PlaybackLog.log(context, "Controller", "fatal after $stage (non-live, no reconnect)")
             recordStability("fatal", "fatal", "non-live, no further decode path (stage=$stage)")
@@ -741,67 +766,47 @@ class PlayerController(
     }
 
     /** The stage to advance to, or null when no more paths are available. */
-    private fun nextStage(current: Stage, reason: Reason): Stage? {
-        // UHD/4K on software can't decode in real time -> escalate to the hardware
-        // decoder (the only viable 4K path). This is an UPGRADE, the opposite of the
-        // green/software downgrade ladder below, so it runs regardless of decoderMode.
-        if (reason == Reason.SOFTWARE_SLOW) {
-            return if (current == Stage.VLC_SW) Stage.VLC_HW else null
-        }
-        val softwareAllowed = decoderMode != DecoderMode.HARDWARE
-        return when (current) {
-            Stage.EXO -> when (reason) {
-                // Hardware video greened: the hw H.264 decoder is the culprit, so
-                // skip VLC's hardware path and go straight to software. Green means
-                // hardware cannot produce a picture AT ALL, so this drop is allowed
-                // even in HARDWARE decoder mode — otherwise the user just stares at a
-                // green screen with no way out.
-                Reason.VIDEO -> Stage.VLC_SW
-                // Video is fine; let libVLC software-decode the audio codec. On
-                // Amlogic the libVLC HARDWARE path greens out, so go straight to
-                // VLC_SW there (a green picture is worse than software-decoded video).
-                // Elsewhere keep libVLC HARDWARE video + software audio: software video
-                // would stutter on 1080p, so we recommend PlayerMode.VLC for those.
-                Reason.AUDIO, Reason.ERROR ->
-                    if (DeviceCaps.isAmlogic) Stage.VLC_SW else Stage.VLC_HW
-                // A hardware decoder failure always drops straight to software
-                // (handleFailure normally escalates DECODE directly, this covers
-                // any fall-through so the enum `when` stays exhaustive).
-                Reason.DECODE -> Stage.VLC_SW
-                Reason.SOFTWARE_SLOW -> null
-            }
-            // Green on the libVLC hardware path (Amlogic underlay etc.) always drops
-            // to software, regardless of decoder mode — a green frame is unusable, so
-            // software is the only remaining way to show a picture. Plain errors
-            // still honour the HARDWARE "no software" preference.
-            Stage.VLC_HW -> when (reason) {
-                Reason.VIDEO -> Stage.VLC_SW
-                else -> if (softwareAllowed) Stage.VLC_SW else null
-            }
-            Stage.VLC_SW -> null
-        }
-    }
+    private fun nextStage(current: Stage, reason: Reason): Stage? =
+        PlaybackRoutingPolicy.nextStage(mode, decoderMode, current, reason)
 
     /** Current video stream info for the diagnostics overlay, or null. */
     fun streamInfo(): StreamInfo? = engine?.getStreamInfo()
 
     fun pause() {
-        // Backgrounded: cancel pending reconnects so we don't open a connection
-        // off-screen. A drop while backgrounded is recovered by a manual retry /
-        // zap on return, never by a hidden background reconnect. The stall watchdog
-        // would otherwise see the paused (frozen) clock as a stall, so disarm it.
+        // A paused VLC/Exo instance can keep an IPTV subscription socket occupied.
+        // Stop it when the owner leaves the foreground and rebuild the same stage
+        // on resume. Also invalidate a delayed engine/surface creation already in
+        // flight; its generation guard then prevents a hidden background player.
+        suspended = true
+        recoveryNeededOnResume = currentUrl != null
+        ++startGeneration
+        mainHandler.removeCallbacksAndMessages(null)
+        stableHandler.removeCallbacksAndMessages(null)
         resetReconnect()
         cancelWatchdog()
-        engine?.pause()
+        engine?.stop()
     }
+
     fun resume() {
+        suspended = false
+        if (recoveryNeededOnResume) {
+            recoveryNeededOnResume = false
+            currentUrl?.let { startStage(stage) }
+            return
+        }
         engine?.resume()
         // Re-baseline + re-arm the stall poll for a stream that was already playing
         // before we backgrounded (the clock jumps on resume, so a fresh baseline
         // avoids a false stall).
         if (playbackConfirmed) armStallWatchdog()
     }
+
     fun stop() {
+        suspended = true
+        recoveryNeededOnResume = false
+        ++startGeneration
+        mainHandler.removeCallbacksAndMessages(null)
+        stableHandler.removeCallbacksAndMessages(null)
         resetReconnect()
         cancelWatchdog()
         engine?.stop()
@@ -813,6 +818,8 @@ class PlayerController(
         // a stalled stop — removeCallbacksAndMessages() cannot reach it there, so
         // without this bump a queued create would later pass its generation
         // check, build a ghost engine and play into a destroyed screen.
+        suspended = true
+        recoveryNeededOnResume = false
         ++startGeneration
         mainHandler.removeCallbacksAndMessages(null)
         stableHandler.removeCallbacksAndMessages(null)

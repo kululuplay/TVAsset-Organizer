@@ -4,6 +4,7 @@
      and "Don't show again" (secondary, suppress for this expiry date).
      Both buttons are D-pad focusable for TV. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="520dp"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -18,7 +19,7 @@
         android:padding="20dp"
         android:src="@drawable/ic_clock"
         android:contentDescription="@null"
-        android:tint="@color/warning" />
+        app:tint="@color/warning" />
 
     <TextView
         android:layout_width="wrap_content"

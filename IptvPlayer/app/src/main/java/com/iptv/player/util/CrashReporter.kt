@@ -39,7 +39,7 @@ object CrashReporter {
      * and clear the marker so it is sent only once. Safe to call on every start.
      */
     fun uploadPendingIfAny(context: Context) {
-        if (ENDPOINT.contains("REPLACE_AFTER_DEPLOY")) return
+        if (!Telemetry.isEnabled || ENDPOINT.contains("REPLACE_AFTER_DEPLOY")) return
         if (!Logger.hasPendingCrash()) return
         val app = context.applicationContext
         Thread {

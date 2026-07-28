@@ -43,7 +43,7 @@ class FavoritesActivity : BaseActivity() {
         binding = ActivityFavoritesBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        adapter = FavoritesAdapter(onClicked = { open(it) })
+        adapter = FavoritesAdapter(onClicked = { openFavorite(it) })
         binding.favoritesGrid.layoutManager = GridLayoutManager(this, SPAN_COUNT)
         binding.favoritesGrid.adapter = adapter
 
@@ -72,7 +72,7 @@ class FavoritesActivity : BaseActivity() {
         }
     }
 
-    private fun open(item: FavoriteItem) {
+    private fun openFavorite(item: FavoriteItem) {
         // Mirror the parental gating used by the other entry points (same isAdult
         // heuristic the grid masks with). Always guard before opening.
         PinLockHelper.guard(this, isAdult = item.isAdult()) {
@@ -82,6 +82,7 @@ class FavoritesActivity : BaseActivity() {
                         .putExtra(PlayerActivity.EXTRA_CHANNEL_ID, item.targetId)
                         // Zap within the favorite channels, not the global list.
                         .putExtra(PlayerActivity.EXTRA_CATEGORY_ID, HomeViewModel.CAT_FAVORITES)
+                        .putExtra(PlayerActivity.EXTRA_PARENTAL_AUTHORIZED, true)
                 )
                 FavoriteKind.MOVIE -> startActivity(
                     Intent(this, VodDetailActivity::class.java)

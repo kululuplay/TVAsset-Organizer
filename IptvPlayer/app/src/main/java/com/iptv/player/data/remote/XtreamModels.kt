@@ -54,6 +54,8 @@ data class XtreamVodStream(
     @SerializedName("stream_icon") val streamIcon: String?,
     @SerializedName("category_id") val categoryId: String?,
     @SerializedName("rating") val rating: String?,
+    @SerializedName(value = "releasedate", alternate = ["releaseDate"]) val releaseDate: String?,
+    @SerializedName("year") val year: String?,
     @SerializedName("container_extension") val containerExtension: String?,
     // Unix timestamp (seconds, as string) when the movie was added to the catalog.
     @SerializedName("added") val added: String?
@@ -93,7 +95,8 @@ data class XtreamSeriesItem(
     @SerializedName("cast") val cast: String?,
     @SerializedName("director") val director: String?,
     @SerializedName("genre") val genre: String?,
-    @SerializedName("releaseDate") val releaseDate: String?,
+    @SerializedName(value = "releaseDate", alternate = ["release_date", "releasedate"])
+    val releaseDate: String?,
     @SerializedName("rating") val rating: String?,
     @SerializedName("youtube_trailer") val youtubeTrailer: String?,
     // Unix timestamp (seconds, as string) when the series was last updated
@@ -112,7 +115,8 @@ data class XtreamSeriesDetail(
     @SerializedName("cast") val cast: String?,
     @SerializedName("director") val director: String?,
     @SerializedName("genre") val genre: String?,
-    @SerializedName("releaseDate") val releaseDate: String?,
+    @SerializedName(value = "releaseDate", alternate = ["release_date", "releasedate"])
+    val releaseDate: String?,
     @SerializedName("rating") val rating: String?,
     @SerializedName("cover") val cover: String?,
     @SerializedName("youtube_trailer") val youtubeTrailer: String?,

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Transient top-right "N new …" notice. Non-focusable so it never traps D-pad. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/popupRoot"
     android:layout_width="wrap_content"
@@ -20,7 +21,7 @@
         android:layout_width="26dp"
         android:layout_height="26dp"
         android:layout_marginEnd="@dimen/space_s"
-        android:tint="@color/accent"
+        app:tint="@color/accent"
         android:importantForAccessibility="no"
         android:src="@drawable/ic_movie" />
 

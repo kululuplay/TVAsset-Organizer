@@ -8,13 +8,15 @@ package com.iptv.player.ui.series
 
 import android.content.Intent
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
+import android.view.inputmethod.EditorInfo
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.paging.LoadState
-import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
@@ -53,6 +55,9 @@ class SeriesActivity : BaseActivity() {
     /** The category currently shown, so the header title can follow the sort. */
     private var currentCategory: Category? = null
 
+    /** Latest Paging refresh state, updated by the load-state collector. */
+    private var adapterRefreshSettled = false
+
     /** Sort orders cycled by the header button, in display order. */
     private val sortCycle = listOf(
         ContentSort.RECENT, ContentSort.NAME, ContentSort.RATING, ContentSort.YEAR
@@ -64,6 +69,7 @@ class SeriesActivity : BaseActivity() {
         setContentView(binding.root)
 
         setupLists()
+        setupSearch()
         observe()
         observeNewContent()
     }
@@ -116,6 +122,9 @@ class SeriesActivity : BaseActivity() {
     private fun setupLists() {
         categoryAdapter = CategoryAdapter(
             onFocused = { cat ->
+                if (viewModel.query.value.isNotEmpty()) {
+                    binding.searchInput.text?.clear()
+                }
                 viewModel.selectCategory(cat.id)
                 categoryAdapter.setSelected(cat.id)
                 currentCategory = cat
@@ -147,6 +156,31 @@ class SeriesActivity : BaseActivity() {
             val next = sortCycle[(sortCycle.indexOf(viewModel.sort.value) + 1) % sortCycle.size]
             viewModel.setSort(next)
         }
+        binding.refreshButton.setOnClickListener { viewModel.refreshCatalog() }
+        binding.retryButton.setOnClickListener { viewModel.retryLoad() }
+    }
+
+    private fun setupSearch() {
+        val restored = viewModel.query.value
+        if (restored.isNotEmpty()) {
+            binding.searchInput.setText(restored)
+            binding.searchInput.setSelection(restored.length)
+        }
+        binding.searchInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                viewModel.setQuery(s?.toString().orEmpty())
+            }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+        binding.searchInput.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                focusFirstItem()
+                true
+            } else {
+                false
+            }
+        }
     }
 
     /** Localised "Sort: <order>" label for the header chip. */
@@ -166,21 +200,56 @@ class SeriesActivity : BaseActivity() {
      * heading never contradicts the visible order. Real categories show their name.
      */
     private fun updateContentTitle() {
-        val cat = currentCategory ?: return
-        binding.contentTitle.text = if (cat.id == SeriesViewModel.CAT_ALL) {
-            if (viewModel.sort.value == ContentSort.RECENT) {
-                getString(R.string.cat_recently_added)
-            } else {
-                getString(R.string.all_series)
+        val query = viewModel.query.value
+        val cat = currentCategory
+        binding.contentTitle.text = when {
+            query.isNotEmpty() -> getString(R.string.search_results_title)
+            cat == null -> getString(R.string.nav_series)
+            cat.id == SeriesViewModel.CAT_ALL -> {
+                if (viewModel.sort.value == ContentSort.RECENT) {
+                    getString(R.string.cat_recently_added)
+                } else {
+                    getString(R.string.all_series)
+                }
             }
-        } else {
-            cat.name
+            else -> cat.name
         }
-        // "You may like" always shows highest-rated first regardless of the sort
-        // control, so the sort chip would be a no-op there — hide it to avoid a
-        // misleading label and a pointless grid reload.
         binding.sortButton.visibility =
-            if (cat.id == SeriesViewModel.CAT_POPULAR) View.GONE else View.VISIBLE
+            if (query.isEmpty() && cat?.id == SeriesViewModel.CAT_POPULAR) View.GONE
+            else View.VISIBLE
+    }
+
+    private fun renderEmptyState() {
+        val catalogState = viewModel.loadState.value
+        val empty = adapterRefreshSettled && seriesAdapter.itemCount == 0 &&
+            !catalogState.loading && catalogState.errorRes == null
+        binding.emptyState.setText(
+            if (viewModel.query.value.isNotEmpty()) R.string.empty_search
+            else R.string.empty_series
+        )
+        binding.emptyState.visibility = if (empty) View.VISIBLE else View.GONE
+    }
+
+    private fun renderCatalogState(state: com.iptv.player.ui.common.CatalogLoadState) {
+        binding.loadingContainer.visibility = if (state.loading) View.VISIBLE else View.GONE
+        val showProgress = state.loading && state.total > 1
+        binding.loadingStatus.visibility = if (showProgress) View.VISIBLE else View.GONE
+        if (showProgress) {
+            binding.loadingStatus.text = getString(
+                R.string.catalog_loading_progress,
+                state.completed,
+                state.total,
+            )
+        }
+        val failed = state.errorRes != null
+        binding.loadErrorContainer.visibility = if (failed) View.VISIBLE else View.GONE
+        state.errorRes?.let { binding.loadErrorText.setText(it) }
+        binding.refreshButton.isEnabled = !state.loading
+        binding.refreshButton.alpha = if (state.loading) 0.5f else 1f
+        if (failed && seriesAdapter.itemCount == 0) {
+            binding.retryButton.post { binding.retryButton.requestFocus() }
+        }
+        renderEmptyState()
     }
 
     private fun observe() {
@@ -210,9 +279,15 @@ class SeriesActivity : BaseActivity() {
                                 categoryAdapter.setSelected(target.id)
                                 currentCategory = target
                                 updateContentTitle()
-                                // Land focus on the first category so the screen is
-                                // navigable on entry and the user can D-pad down/right.
-                                focusFirstCategory()
+                                // Preserve an active search across recreation. A
+                                // category focus deliberately exits search mode.
+                                if (viewModel.query.value.isNotEmpty()) {
+                                    binding.searchInput.post {
+                                        binding.searchInput.requestFocus()
+                                    }
+                                } else {
+                                    focusFirstCategory()
+                                }
                             }
                         }
                     }
@@ -226,6 +301,12 @@ class SeriesActivity : BaseActivity() {
                     viewModel.sort.collectLatest { order ->
                         binding.sortButton.text = sortLabel(order)
                         updateContentTitle()
+                    }
+                }
+                launch {
+                    viewModel.query.collectLatest {
+                        updateContentTitle()
+                        renderEmptyState()
                     }
                 }
                 // When a fresh page settles (category switch / new search), jump to the top.
@@ -246,15 +327,13 @@ class SeriesActivity : BaseActivity() {
                 // Empty state: only once the refresh has settled with nothing to show.
                 launch {
                     seriesAdapter.loadStateFlow.collectLatest { state ->
-                        val empty = state.refresh is LoadState.NotLoading && seriesAdapter.itemCount == 0
-                        binding.emptyState.visibility = if (empty) View.VISIBLE else View.GONE
+                        adapterRefreshSettled = state.refresh is LoadState.NotLoading
+                        renderEmptyState()
                     }
                 }
-                // Lightweight spinner while a category's series are lazily downloading.
                 launch {
-                    viewModel.refreshing.collectLatest { loading ->
-                        binding.loadingIndicator.visibility = if (loading) View.VISIBLE else View.GONE
-                        if (loading) binding.emptyState.visibility = View.GONE
+                    viewModel.loadState.collectLatest { state ->
+                        renderCatalogState(state)
                     }
                 }
             }

@@ -6,6 +6,7 @@
      keyboard (with SOFT_INPUT_ADJUST_RESIZE set on the window) can never hide the
      text being typed; the CTAs stay pinned below it. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="560dp"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -20,7 +21,7 @@
         android:padding="20dp"
         android:src="@drawable/ic_feedback"
         android:contentDescription="@null"
-        android:tint="@color/text_primary" />
+        app:tint="@color/text_primary" />
 
     <TextView
         android:layout_width="match_parent"

@@ -45,6 +45,43 @@
         android:maxLines="1"
         android:layout_marginBottom="@dimen/space_m" />
 
+    <LinearLayout
+        android:id="@+id/catalogStatusRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="@dimen/space_m"
+        android:background="@drawable/bg_glass_card"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="@dimen/space_m"
+        android:paddingVertical="@dimen/space_s"
+        android:visibility="gone">
+
+        <ProgressBar
+            android:id="@+id/catalogProgress"
+            style="?android:attr/progressBarStyleSmall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:indeterminateTint="@color/accent" />
+
+        <TextView
+            android:id="@+id/catalogStatusText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_m"
+            android:layout_weight="1"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_caption" />
+
+        <Button
+            android:id="@+id/catalogRetryButton"
+            style="@style/Widget.Iptv.Button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/action_retry"
+            android:visibility="gone" />
+    </LinearLayout>
+
     <!-- Results: three equal columns (Live / Movies / Series) -->
     <FrameLayout
         android:layout_width="match_parent"

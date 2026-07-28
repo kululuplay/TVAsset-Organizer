@@ -2,6 +2,7 @@
 <!-- Episode card for the horizontal series rail: 16:9 thumbnail with a resume
      bar, season/episode caption and title. Focusable for D-pad. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="220dp"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -42,7 +43,7 @@
             android:padding="3dp"
             android:src="@drawable/ic_check"
             android:background="@drawable/bg_time_chip"
-            android:tint="@color/accent"
+            app:tint="@color/accent"
             android:visibility="gone"
             android:contentDescription="@string/cd_watched" />
     </FrameLayout>

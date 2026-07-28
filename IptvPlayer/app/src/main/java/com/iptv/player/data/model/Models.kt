@@ -69,12 +69,12 @@ enum class PlayerMode {
 }
 
 /**
- * How aggressively to use the hardware decoder versus software (libVLC). In AUTO
- * the player starts on hardware and automatically drops a stream to software
- * decode when it greens / blanks or errors. Exposed in Settings.
+ * Hardware/software decode policy shared by live TV and on-demand playback. In
+ * AUTO, live TV follows the tested engine ladder and VOD may rebuild VLC on
+ * software after a confirmed hardware failure. Explicit choices are strict.
  */
 enum class DecoderMode {
-    /** Hardware first, automatic software fallback on green/blank or failure. */
+    /** Hardware first, with a bounded fallback after confirmed playback failure. */
     AUTO,
     /** Always use the hardware decoder (no software fallback). */
     HARDWARE,
@@ -82,17 +82,9 @@ enum class DecoderMode {
     SOFTWARE;
 
     companion object {
-        // Default = AUTO (per user request): hardware-first with automatic
-        // software fallback on decode failure -- the lightest path on weak
-        // sticks while staying compatible. CAVEAT: on some Amlogic boxes (e.g.
-        // Xiaomi Stick) the hardware decoder paints frames in the wrong colour
-        // plane -> a GREEN picture with audio still fine, and that green is
-        // undetectable in software (libVLC reports a healthy decode, frames keep
-        // arriving, the opaque HW surface can't be read back) so there is no
-        // reliable auto-fallback for it. Users hitting a green screen can switch
-        // to Software in Settings; users wanting max performance can pick AUTO/
-        // Hardware. Software's downside is possible macroblocking on heavy
-        // channels (softened by avcodec-skiploopfilter=nonref + avcodec-fast).
+        // AUTO stays the safe default: hardware performance first, bounded
+        // evidence-based recovery second. Device-model guesses are deliberately
+        // excluded because they misrouted healthy streams on real hardware.
         fun fromName(value: String?): DecoderMode =
             entries.firstOrNull { it.name == value } ?: AUTO
     }

@@ -29,24 +29,40 @@ class RetryInterceptor(
             try {
                 val response = chain.proceed(request)
                 if (response.code in 500..599 && attempt < maxRetries) {
+                    val code = response.code
                     response.close()
                     attempt++
-                    Logger.w("RetryInterceptor", "HTTP ${response.code} on ${request.url}; retry $attempt/$maxRetries")
+                    Logger.w(
+                        "RetryInterceptor",
+                        "HTTP $code on ${safeEndpoint(request.url.toString())}; " +
+                            "retry $attempt/$maxRetries",
+                    )
                     backoff(attempt)
                     continue
                 }
                 return response
             } catch (e: IOException) {
                 if (attempt >= maxRetries) {
-                    Logger.w("RetryInterceptor", "Giving up on ${request.url} after $attempt retries", e)
+                    Logger.w(
+                        "RetryInterceptor",
+                        "Giving up on ${safeEndpoint(request.url.toString())} " +
+                            "after $attempt retries",
+                        e,
+                    )
                     throw e
                 }
                 attempt++
-                Logger.w("RetryInterceptor", "IO error on ${request.url}; retry $attempt/$maxRetries: ${e.message}")
+                Logger.w(
+                    "RetryInterceptor",
+                    "IO error on ${safeEndpoint(request.url.toString())}; " +
+                        "retry $attempt/$maxRetries: ${e.message}",
+                )
                 backoff(attempt)
             }
         }
     }
+
+    private fun safeEndpoint(url: String): String = SensitiveDataRedactor.redact(url)
 
     /**
      * Sleeps for the backoff window. If interrupted (e.g. the coroutine/call was

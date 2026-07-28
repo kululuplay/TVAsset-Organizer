@@ -36,6 +36,13 @@ class CatchupViewModel : ViewModel() {
         }
     }
 
+    /** Cancel an older EPG request before showing a locked channel. */
+    fun clearSelection() {
+        loadJob?.cancel()
+        loadJob = null
+        _programs.value = emptyList()
+    }
+
     suspend fun urlFor(channel: Channel, program: Program): String? =
         repo.buildCatchupUrl(channel, program)
 }

@@ -13,6 +13,11 @@
     <string name="action_close">Schließen</string>
     <string name="loading">Wird geladen…</string>
     <string name="search_hint">Suchen…</string>
+    <string name="search_movies_hint">Filme suchen…</string>
+    <string name="search_series_hint">Serien suchen…</string>
+    <string name="search_channels_hint">Sender suchen…</string>
+    <string name="search_results_title">Suchergebnisse</string>
+    <string name="catalog_loading_progress">Katalog wird geladen %1$d/%2$d…</string>
 
     <string name="wizard_welcome_title">Willkommen</string>
     <string name="wizard_welcome_subtitle">Richten wir Ihren Dienst in wenigen Schritten ein.</string>
@@ -51,9 +56,12 @@
     <string name="empty_channels">Hier ist noch nichts.</string>
     <string name="empty_favorites">Sie haben noch keine Favoriten.</string>
     <string name="empty_search">Keine Ergebnisse gefunden.</string>
+    <string name="empty_movies">In dieser Ansicht wurden keine Filme gefunden.</string>
+    <string name="empty_series">In dieser Ansicht wurden keine Serien gefunden.</string>
     <string name="added_to_favorites">Zu Favoriten hinzugefügt</string>
     <string name="removed_from_favorites">Aus Favoriten entfernt</string>
     <string name="channel_count">%1$d Kanäle</string>
+    <string name="preview_playback_failed">Vorschau konnte nicht abgespielt werden. Zum Wiederholen OK drücken.</string>
 
     <string name="buffering">Wird geladen…</string>
     <string name="reconnecting">Erneut verbinden… (%1$d)</string>
@@ -90,15 +98,41 @@
     <string name="detail_year">Jahr</string>
     <string name="detail_rating">Bewertung</string>
     <string name="detail_plot">Handlung</string>
+    <string name="detail_more_in_category">Mehr aus %1$s</string>
+    <string name="detail_more_to_watch">Weitere Titel zum Ansehen</string>
+    <string name="sort_label">Sortierung</string>
+    <string name="sort_recent">Neueste</string>
+    <string name="sort_az">A–Z</string>
+    <string name="sort_rating">Bewertung</string>
+    <string name="sort_year">Jahr</string>
     <string name="series_season">Staffel %1$d</string>
     <string name="series_episode">Folge %1$d</string>
 
     <string name="settings_title">Einstellungen</string>
     <string name="settings_playback">Wiedergabe</string>
-    <string name="settings_player_mode">Player-Engine</string>
+    <string name="settings_player_mode">Live-TV-Player-Engine</string>
+    <string name="settings_live_player_header">Live-TV-Engine</string>
+    <string name="settings_player_scope_desc">Automatisch startet Live-TV mit ExoPlayer-Hardware und wechselt nur bei einem echten Wiedergabefehler kontrolliert zu VLC. Filme, Serien und Catch-up nutzen VLC für breite Format-, Audio- und Untertitelunterstützung. Decoder, Puffer und Passthrough gelten für beide.</string>
+    <string name="settings_playback_tuning_header">Wiedergabe-Optimierung</string>
     <string name="settings_player_auto">Automatisch (empfohlen)</string>
+    <string name="settings_player_auto_desc">Zuerst ExoPlayer-Hardware, danach kontrolliertes VLC-Fallback</string>
     <string name="settings_player_exo">ExoPlayer</string>
+    <string name="settings_player_exo_desc">Nur ExoPlayer; kein stiller Engine-Wechsel</string>
     <string name="settings_player_vlc">VLC</string>
+    <string name="settings_player_vlc_desc">Nur VLC; Decoder-Automatik darf innerhalb von VLC wechseln</string>
+    <string name="settings_exo_requires_hardware">ExoPlayer verwendet MediaCodec des Geräts und kann VLC-Softwaredekodierung nicht erzwingen. Der Decoder wird auf „Nur Hardware“ gesetzt.</string>
+    <string name="settings_software_requires_vlc">Softwaredekodierung benötigt VLC. Die Player-Engine wird auf VLC gesetzt.</string>
+    <string name="settings_decoder_mode">Decoder</string>
+    <string name="settings_decoder_auto">Automatisch (Hardware mit Software-Fallback)</string>
+    <string name="settings_decoder_hardware">Nur Hardware</string>
+    <string name="settings_decoder_software">Nur Software</string>
+    <string name="settings_stream_format">Live-Stream-Format</string>
+    <string name="settings_stream_format_ts">MPEG-TS (.ts) — höchste Kompatibilität</string>
+    <string name="settings_stream_format_hls">HLS (.m3u8) — adaptiv</string>
+    <string name="settings_buffer">Puffergröße</string>
+    <string name="settings_buffer_low">Niedrig (schnelles Umschalten)</string>
+    <string name="settings_buffer_normal">Normal (empfohlen)</string>
+    <string name="settings_buffer_high">Hoch (weniger Unterbrechungen)</string>
     <string name="settings_language">Sprache</string>
     <string name="settings_general">Allgemein</string>
     <string name="settings_account">Konto</string>
@@ -122,6 +156,7 @@
     <string name="pin_wrong">Falsche PIN.</string>
     <string name="pin_mismatch">PINs stimmen nicht überein.</string>
     <string name="pin_locked_content">Dieser Inhalt ist gesperrt.</string>
+    <string name="adult_locked_title">Gesperrt</string>
 
     <string name="diag_title">Diagnose</string>
     <string name="diag_run">Tests ausführen</string>
@@ -146,12 +181,13 @@
 
     <string name="about_title">Über</string>
     <string name="about_version">Version %1$s</string>
-    <string name="about_update_available">Ein Update ist verfügbar.</string>
+    <string name="about_update_available">Update v%1$s ist verfügbar.</string>
     <string name="about_update_required">Ein erforderliches Update ist verfügbar. Bitte aktualisieren Sie.</string>
     <string name="about_update_now">Jetzt aktualisieren</string>
 
     <string name="error_no_internet">Überprüfen Sie Ihre Internetverbindung.</string>
     <string name="error_cannot_connect">Verbindung zum Server fehlgeschlagen.</string>
+    <string name="error_cannot_play_content">Dieser Inhalt konnte nicht wiedergegeben werden. Verbindung prüfen oder einen anderen Decoder wählen.</string>
     <string name="error_bad_credentials">Benutzername oder Passwort falsch.</string>
     <string name="error_subscription_expired">Ihr Abonnement ist abgelaufen.</string>
     <string name="error_account_in_use">Dieses Konto wird möglicherweise auf einem anderen Gerät verwendet.</string>
@@ -206,6 +242,7 @@
     <string name="settings_pin_changed">PIN aktualisiert</string>
     <string name="settings_audio_passthrough">Audio-Passthrough (für AV-Receiver)</string>
     <string name="settings_audio_passthrough_warning">Nur aktivieren, wenn ein AV-Receiver oder eine Soundbar mit Dolby/DTS-Dekodierung angeschlossen ist. Auf Fernsehern und Beamern ohne Dekoder läuft das Bild, aber es gibt KEINEN Ton. Wenn der Ton fehlt, diese Option ausschalten.</string>
+    <string name="settings_debug_overlay">Debug-Anzeige (Player und Vorschau)</string>
 
     <!-- Update-Hinweis (wird beim Start automatisch angezeigt) -->
     <string name="update_available_title">Update verfügbar</string>

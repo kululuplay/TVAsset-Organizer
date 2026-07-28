@@ -23,55 +23,142 @@
         app:layout_constraintGuide_percent="0.4" />
 
     <!-- LEFT pane: categories OR channels (drill-down) -->
-    <FrameLayout
+    <LinearLayout
         android:id="@+id/leftPane"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:layout_marginEnd="@dimen/space_l"
+        android:orientation="vertical"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toStartOf="@id/splitGuide"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/categoryList"
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:paddingBottom="@dimen/space_m" />
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/channelList"
+            <TextView
+                android:id="@+id/browserTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/nav_live"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_title"
+                android:textStyle="bold" />
+
+            <ImageButton
+                android:id="@+id/refreshButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_poster"
+                android:contentDescription="@string/action_refresh"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:padding="@dimen/space_s"
+                android:src="@drawable/ic_refresh"
+                app:tint="@color/text_primary" />
+        </LinearLayout>
+
+        <EditText
+            android:id="@+id/searchInput"
+            style="@style/Widget.Iptv.Input"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:paddingBottom="@dimen/space_m"
-            android:visibility="gone" />
-
-        <TextView
-            android:id="@+id/emptyState"
-            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:text="@string/empty_channels"
-            android:textColor="@color/text_secondary"
-            android:textSize="@dimen/text_body"
-            android:visibility="gone" />
+            android:layout_marginBottom="@dimen/space_m"
+            android:layout_marginTop="@dimen/space_s"
+            android:drawableStart="@drawable/ic_search"
+            android:drawablePadding="@dimen/space_s"
+            android:hint="@string/search_channels_hint"
+            android:imeOptions="actionSearch"
+            android:inputType="text"
+            android:maxLines="1" />
 
-        <!-- Number-key zap overlay (TV remote channel entry). -->
-        <TextView
-            android:id="@+id/zapOverlay"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="top|end"
-            android:background="@drawable/bg_overlay"
-            android:paddingHorizontal="@dimen/space_l"
-            android:paddingVertical="@dimen/space_s"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_big_title"
-            android:textStyle="bold"
-            android:visibility="gone" />
-    </FrameLayout>
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/categoryList"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingBottom="@dimen/space_m" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/channelList"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingBottom="@dimen/space_m"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/emptyState"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:text="@string/empty_channels"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_body"
+                android:visibility="gone" />
+
+            <ProgressBar
+                android:id="@+id/loadingIndicator"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:indeterminateTint="@color/accent"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/loadErrorContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_glass_card"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="@dimen/space_l"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/loadErrorText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_body" />
+
+                <Button
+                    android:id="@+id/retryButton"
+                    style="@style/Widget.Iptv.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_m"
+                    android:text="@string/action_retry" />
+            </LinearLayout>
+
+            <!-- Number-key zap overlay (TV remote channel entry). -->
+            <TextView
+                android:id="@+id/zapOverlay"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|end"
+                android:background="@drawable/bg_overlay"
+                android:paddingHorizontal="@dimen/space_l"
+                android:paddingVertical="@dimen/space_s"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_big_title"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </FrameLayout>
+    </LinearLayout>
 
     <!-- RIGHT pane: preview + EPG -->
     <LinearLayout
@@ -109,6 +196,21 @@
                 android:layout_gravity="center"
                 android:scaleType="fitCenter"
                 android:contentDescription="@string/now_playing" />
+
+            <TextView
+                android:id="@+id/previewStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal|bottom"
+                android:layout_marginBottom="104dp"
+                android:background="@drawable/bg_overlay"
+                android:gravity="center"
+                android:maxWidth="420dp"
+                android:paddingHorizontal="@dimen/space_m"
+                android:paddingVertical="@dimen/space_s"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
+                android:visibility="gone" />
 
             <!-- Debug overlay: engine/stage/resolution + live PlaybackLog tail.
                  Gated by the Debug setting (hidden by default). -->

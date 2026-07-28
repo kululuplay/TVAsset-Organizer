@@ -16,13 +16,17 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.R
+import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.Program
 import com.iptv.player.data.model.ResumeKind
 import com.iptv.player.databinding.ActivityCatchupBinding
 import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.ui.common.PinLockHelper
+import com.iptv.player.ui.common.isAdult
 import com.iptv.player.ui.player.VodPlayerActivity
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -40,6 +44,8 @@ class CatchupActivity : BaseActivity() {
 
     private var currentChannel: Channel? = null
     private var didInitialFocus = false
+    private var adultLockEnabled = true
+    private val unlockedChannelIds = mutableSetOf<String>()
 
     /** Optional channel id to pre-focus (passed from the Live TV page). */
     private val requestedChannelId: String? by lazy { intent.getStringExtra(EXTRA_CHANNEL_ID) }
@@ -67,7 +73,8 @@ class CatchupActivity : BaseActivity() {
     private fun setupLists() {
         channelAdapter = CatchupChannelAdapter(
             onFocused = { onChannelFocused(it) },
-            onClicked = { binding.programList.requestFocus() }
+            onClicked = { onChannelClicked(it) },
+            lockedProvider = { isChannelLocked(it) },
         )
         binding.channelList.layoutManager = LinearLayoutManager(this)
         binding.channelList.adapter = channelAdapter
@@ -79,6 +86,8 @@ class CatchupActivity : BaseActivity() {
 
     private fun observe() {
         lifecycleScope.launch {
+            val settings = ServiceLocator.settings
+            adultLockEnabled = settings.lockAdult.first() && settings.hasPin()
             viewModel.channels.collectLatest { channels ->
                 channelAdapter.submitList(channels)
                 binding.emptyChannels.visibility =
@@ -108,25 +117,48 @@ class CatchupActivity : BaseActivity() {
 
     private fun onChannelFocused(channel: Channel) {
         currentChannel = channel
+        if (isChannelLocked(channel)) {
+            binding.focusedChannelName.setText(R.string.adult_locked_title)
+            viewModel.clearSelection()
+            binding.emptyPrograms.visibility = View.VISIBLE
+            return
+        }
         binding.focusedChannelName.text = channel.name
         viewModel.selectChannel(channel)
     }
 
+    private fun onChannelClicked(channel: Channel) {
+        PinLockHelper.guard(this, isAdult = isChannelLocked(channel)) {
+            unlockedChannelIds += channel.id
+            channelAdapter.refreshVisible()
+            onChannelFocused(channel)
+            binding.programList.requestFocus()
+        }
+    }
+
+    private fun isChannelLocked(channel: Channel): Boolean =
+        adultLockEnabled && channel.isAdult() && channel.id !in unlockedChannelIds
+
     private fun playProgram(program: Program) {
         val channel = currentChannel ?: return
-        lifecycleScope.launch {
-            val url = viewModel.urlFor(channel, program)
-            if (url.isNullOrBlank()) {
-                Toast.makeText(this@CatchupActivity, R.string.catchup_unavailable, Toast.LENGTH_SHORT).show()
-                return@launch
+        // Defense in depth: even if a program click is delivered from a stale
+        // RecyclerView row, archived adult playback still requires authorization.
+        PinLockHelper.guard(this, isAdult = isChannelLocked(channel)) {
+            unlockedChannelIds += channel.id
+            lifecycleScope.launch {
+                val url = viewModel.urlFor(channel, program)
+                if (url.isNullOrBlank()) {
+                    Toast.makeText(this@CatchupActivity, R.string.catchup_unavailable, Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                val intent = Intent(this@CatchupActivity, VodPlayerActivity::class.java).apply {
+                    putExtra(VodPlayerActivity.EXTRA_STREAM_URL, url)
+                    putExtra(VodPlayerActivity.EXTRA_TITLE, "${channel.name} — ${program.title}")
+                    putExtra(VodPlayerActivity.EXTRA_RESUME_ID, "catchup_${channel.id}_${program.startMs}")
+                    putExtra(VodPlayerActivity.EXTRA_RESUME_TYPE, ResumeKind.CATCHUP.raw)
+                }
+                startActivity(intent)
             }
-            val intent = Intent(this@CatchupActivity, VodPlayerActivity::class.java).apply {
-                putExtra(VodPlayerActivity.EXTRA_STREAM_URL, url)
-                putExtra(VodPlayerActivity.EXTRA_TITLE, "${channel.name} — ${program.title}")
-                putExtra(VodPlayerActivity.EXTRA_RESUME_ID, "catchup_${channel.id}_${program.startMs}")
-                putExtra(VodPlayerActivity.EXTRA_RESUME_TYPE, ResumeKind.CATCHUP.raw)
-            }
-            startActivity(intent)
         }
     }
 }

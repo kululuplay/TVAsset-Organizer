@@ -25,12 +25,23 @@ data class SimilarCard(
     val name: String,
     val posterUrl: String?,
     val rating: Double?,
-    val releaseDate: String?
+    val releaseDate: String?,
+    val categoryName: String?,
 )
 
 class SimilarAdapter(
     private val onClicked: (SimilarCard) -> Unit
 ) : ListAdapter<SimilarCard, SimilarAdapter.VH>(DIFF) {
+
+    var adultLocked: Boolean = false
+
+    fun refreshVisible(recyclerView: RecyclerView) {
+        for (i in 0 until recyclerView.childCount) {
+            val holder =
+                recyclerView.getChildViewHolder(recyclerView.getChildAt(i)) as? VH ?: continue
+            holder.boundCard?.let { holder.bind(it) }
+        }
+    }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val view = LayoutInflater.from(parent.context)
@@ -55,7 +66,27 @@ class SimilarAdapter(
         private val ratingRow: LinearLayout = itemView.findViewById(R.id.posterRatingRow)
         private val rating: TextView = itemView.findViewById(R.id.posterRating)
 
+        var boundCard: SimilarCard? = null
+            private set
+
         fun bind(item: SimilarCard) {
+            boundCard = item
+            itemView.setOnClickListener { onClicked(item) }
+
+            if (
+                adultLocked &&
+                (PinLockHelper.looksAdult(item.name) ||
+                    PinLockHelper.looksAdult(item.categoryName))
+            ) {
+                name.setText(R.string.adult_locked_title)
+                meta.visibility = View.GONE
+                ratingRow.visibility = View.GONE
+                poster.scaleType = ImageView.ScaleType.FIT_CENTER
+                poster.load(R.drawable.ic_lock) { crossfade(false) }
+                return
+            }
+
+            poster.scaleType = ImageView.ScaleType.CENTER_CROP
             name.text = item.name
 
             val year = item.releaseDate?.take(4)?.takeIf { it.isNotBlank() }
@@ -72,7 +103,7 @@ class SimilarAdapter(
 
             val placeholder = LogoPlaceholder.forName(itemView.context, item.name)
             if (item.posterUrl.isNullOrBlank()) {
-                poster.setImageDrawable(placeholder)
+                poster.load(placeholder) { crossfade(false) }
             } else {
                 poster.load(item.posterUrl) {
                     crossfade(false)
@@ -80,8 +111,6 @@ class SimilarAdapter(
                     error(placeholder)
                 }
             }
-
-            itemView.setOnClickListener { onClicked(item) }
         }
     }
 

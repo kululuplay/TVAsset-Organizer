@@ -31,19 +31,31 @@ class PlayerViewModel : ViewModel() {
     var radioMode: Boolean = false
 
     /**
-     * Category scope for up/down zapping. When set to [HomeViewModel.CAT_FAVORITES]
-     * (the Favorites screen entry point), zapping cycles only through the favorite
-     * live channels instead of the full live list. Null = full list.
+     * Browse scope for up/down zapping. Real category ids stay inside that
+     * category; Favorites/Recent stay inside their synthetic list; null uses all
+     * visible channels. Hidden channels/categories are excluded in every case.
      */
     var categoryId: String? = null
 
     suspend fun loadPlaylist() {
-        playlist = if (categoryId == HomeViewModel.CAT_FAVORITES) {
-            // Favorite live channels only: observeFavorites() INNER JOINs channels
-            // (so movies/series are excluded already); drop radio like the Home rail.
-            repo.observeFavorites().first().filterNot { it.isRadio }
-        } else {
-            repo.observeChannels(ContentType.LIVE, radio = radioMode).first()
+        val hiddenCategories = settings.hiddenCategories(ContentType.LIVE).first()
+        // observeChannels already excludes channel-level hidden overrides. Apply
+        // category visibility once, then intersect synthetic lists with this set
+        // so CH+/- cannot jump into content hidden by Content Manager.
+        val visible = repo.observeChannels(ContentType.LIVE, radio = radioMode)
+            .first()
+            .filter { it.categoryId !in hiddenCategories }
+        val visibleIds = visible.mapTo(hashSetOf()) { it.id }
+
+        playlist = when (val scope = categoryId) {
+            HomeViewModel.CAT_FAVORITES -> repo.observeFavorites()
+                .first()
+                .filter { it.id in visibleIds }
+            HomeViewModel.CAT_RECENT -> repo.observeRecent()
+                .first()
+                .filter { it.id in visibleIds }
+            null -> visible
+            else -> visible.filter { it.categoryId == scope }
         }
     }
 
@@ -60,7 +72,7 @@ class PlayerViewModel : ViewModel() {
     suspend fun resolveChannel(channelId: String): Channel? {
         if (playlist.isEmpty()) loadPlaylist()
         currentIndex = playlist.indexOfFirst { it.id == channelId }
-        return repo.getChannel(channelId)?.also { markWatched(channelId) }
+        return repo.getChannel(channelId)
     }
 
     fun next(): Channel? = stepBy(+1)
@@ -69,16 +81,20 @@ class PlayerViewModel : ViewModel() {
     private fun stepBy(delta: Int): Channel? {
         if (playlist.isEmpty()) return null
         currentIndex = (currentIndex + delta + playlist.size) % playlist.size
-        val channel = playlist[currentIndex]
-        markWatched(channel.id)
-        return channel
+        return playlist[currentIndex]
+    }
+
+    /** Restore the CH+/- cursor after a parental prompt is cancelled. */
+    fun selectChannel(channelId: String) {
+        val index = playlist.indexOfFirst { it.id == channelId }
+        if (index >= 0) currentIndex = index
     }
 
     fun toggleFavorite(channelId: String) {
         viewModelScope.launch { repo.toggleFavorite(channelId) }
     }
 
-    private fun markWatched(channelId: String) {
+    fun markWatched(channelId: String) {
         viewModelScope.launch {
             repo.markWatched(channelId)
             settings.setLastChannel(channelId)

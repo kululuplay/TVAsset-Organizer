@@ -14,10 +14,15 @@ import com.iptv.player.data.model.Category
 import com.iptv.player.data.model.ContentSort
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.Series
+import com.iptv.player.ui.common.CatalogLoadState
+import com.iptv.player.util.Outcome
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -42,12 +47,8 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
         const val CAT_POPULAR = "__popular__"
     }
 
-    private val _refreshing = MutableStateFlow(false)
-    val refreshing: StateFlow<Boolean> = _refreshing
-
-    // Series are loaded lazily per category (see [selectCategory]); the full
-    // catalog is never downloaded at once. The category rail comes from the
-    // category cache, which the splash prefetch fills right after login.
+    private val _loadState = MutableStateFlow(CatalogLoadState())
+    val loadState: StateFlow<CatalogLoadState> = _loadState
 
     /**
      * Categories with a "Recently added" entry pinned to the top, each with a
@@ -83,7 +84,8 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val selectedCategory = MutableStateFlow<String?>(null)
-    private val query = MutableStateFlow("")
+    private val _query = MutableStateFlow("")
+    val query: StateFlow<String> = _query
 
     /** The currently selected category id (survives config changes). */
     val selectedCategoryId: String? get() = selectedCategory.value
@@ -91,6 +93,9 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
     /** Current grid ordering; cycled from the UI. Restored from settings. */
     private val _sort = MutableStateFlow(ContentSort.RECENT)
     val sort: StateFlow<ContentSort> = _sort
+
+    private var selectionLoadJob: Job? = null
+    private var catalogLoadJob: Job? = null
 
     init {
         // Restore the user's last-used sort so it survives process death.
@@ -105,38 +110,152 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
     /** Latest in-progress percent (0..100) keyed by series id, for grid bars. */
     suspend fun repoSeriesWatchProgress(): Map<String, Int> = repo.seriesWatchProgress()
 
-    // Categories whose series are currently being lazily downloaded. Tracked so
-    // overlapping selections don't fetch the same category twice and so the
-    // spinner only hides once *all* in-flight fetches finish.
-    private val inFlight = mutableSetOf<String>()
-
     /**
-     * Selects a category and, for real categories (not "Recently added"), lazily
-     * downloads that category's series if they aren't cached yet. The repository
-     * merges into the cache and skips the network when already loaded, so
-     * re-opening a category is instant.
+     * Debounce category focus so fast D-pad traversal does not issue a request
+     * for every row the user passes.
      */
     fun selectCategory(categoryId: String) {
         selectedCategory.value = categoryId
-        // Synthetic rails ("Recently added", "You may like") are computed from the
-        // local cache — never trigger a per-category network fetch for them.
-        if (categoryId == CAT_ALL || categoryId == CAT_POPULAR) return
-        if (!inFlight.add(categoryId)) return // already fetching this category
-        viewModelScope.launch {
-            try {
-                val config = settings.getSourceConfig() ?: return@launch
-                if (repo.isSeriesCategoryLoaded(categoryId)) return@launch
-                _refreshing.value = true
-                repo.refreshSeriesCategory(config, categoryId)
-            } finally {
-                inFlight.remove(categoryId)
-                if (inFlight.isEmpty()) _refreshing.value = false
+        scheduleSelectedCategoryLoad()
+    }
+
+    fun setQuery(text: String) {
+        val normalized = text.trim()
+        if (_query.value == normalized) return
+        _query.value = normalized
+        selectionLoadJob?.cancel()
+        if (normalized.isNotEmpty()) {
+            ensureFullCatalog()
+        } else {
+            scheduleSelectedCategoryLoad()
+        }
+    }
+
+    fun retryLoad() {
+        val categoryId = selectedCategory.value
+        if (_query.value.isNotEmpty() || categoryId == null ||
+            categoryId == CAT_ALL || categoryId == CAT_POPULAR
+        ) {
+            ensureFullCatalog()
+            return
+        }
+        selectionLoadJob?.cancel()
+        selectionLoadJob = viewModelScope.launch {
+            catalogLoadJob?.cancelAndJoin()
+            loadSingleCategory(categoryId, force = true)
+        }
+    }
+
+    fun refreshCatalog() {
+        selectionLoadJob?.cancel()
+        catalogLoadJob?.cancel()
+        catalogLoadJob = viewModelScope.launch {
+            loadFullCatalog(forceAll = true)
+        }
+    }
+
+    private fun scheduleSelectedCategoryLoad() {
+        val categoryId = selectedCategory.value ?: return
+        selectionLoadJob?.cancel()
+        selectionLoadJob = viewModelScope.launch {
+            delay(300)
+            if (_query.value.isNotEmpty() ||
+                categoryId == CAT_ALL || categoryId == CAT_POPULAR
+            ) {
+                ensureFullCatalog()
+            } else {
+                catalogLoadJob?.cancelAndJoin()
+                loadSingleCategory(categoryId)
             }
         }
     }
 
-    fun setQuery(text: String) {
-        query.value = text.trim()
+    private fun ensureFullCatalog() {
+        if (catalogLoadJob?.isActive == true) return
+        catalogLoadJob = viewModelScope.launch {
+            loadFullCatalog(forceAll = false)
+        }
+    }
+
+    private suspend fun loadSingleCategory(categoryId: String, force: Boolean = false) {
+        val config = settings.getSourceConfig()
+        if (config == null) {
+            _loadState.value = CatalogLoadState(errorRes = R.string.error_unknown)
+            return
+        }
+        if (!force && repo.isSeriesCategoryLoaded(categoryId)) {
+            _loadState.value = CatalogLoadState()
+            return
+        }
+        _loadState.value = CatalogLoadState(loading = true, total = 1)
+        when (val result = repo.refreshSeriesCategory(config, categoryId, force)) {
+            is Outcome.Success -> _loadState.value = CatalogLoadState()
+            is Outcome.Failure -> {
+                _loadState.value = CatalogLoadState(errorRes = result.error.messageRes)
+            }
+        }
+    }
+
+    private suspend fun loadFullCatalog(forceAll: Boolean) {
+        val config = settings.getSourceConfig()
+        if (config == null) {
+            _loadState.value = CatalogLoadState(errorRes = R.string.error_unknown)
+            return
+        }
+        if (forceAll) {
+            when (val categories = repo.refreshSeriesCategories(config)) {
+                is Outcome.Success -> Unit
+                is Outcome.Failure -> {
+                    _loadState.value =
+                        CatalogLoadState(errorRes = categories.error.messageRes)
+                    return
+                }
+            }
+        }
+        val hidden = settings.hiddenCategories(ContentType.SERIES).first()
+        var categoryIds = if (forceAll) {
+            repo.seriesCategoryIds(hidden)
+        } else {
+            repo.unloadedSeriesCategoryIds(hidden)
+        }
+        if (categoryIds.isEmpty() && categories.value.size <= 2) {
+            when (val categoriesResult = repo.refreshSeriesCategories(config)) {
+                is Outcome.Success -> {
+                    categoryIds = if (forceAll) repo.seriesCategoryIds(hidden)
+                    else repo.unloadedSeriesCategoryIds(hidden)
+                }
+                is Outcome.Failure -> {
+                    _loadState.value =
+                        CatalogLoadState(errorRes = categoriesResult.error.messageRes)
+                    return
+                }
+            }
+        }
+        if (categoryIds.isEmpty()) {
+            _loadState.value = CatalogLoadState()
+            return
+        }
+        _loadState.value = CatalogLoadState(loading = true, total = categoryIds.size)
+        categoryIds.forEachIndexed { index, categoryId ->
+            when (val result = repo.refreshSeriesCategory(config, categoryId, force = forceAll)) {
+                is Outcome.Success -> {
+                    _loadState.value = CatalogLoadState(
+                        loading = true,
+                        completed = index + 1,
+                        total = categoryIds.size,
+                    )
+                }
+                is Outcome.Failure -> {
+                    _loadState.value = CatalogLoadState(
+                        completed = index,
+                        total = categoryIds.size,
+                        errorRes = result.error.messageRes,
+                    )
+                    return
+                }
+            }
+        }
+        _loadState.value = CatalogLoadState()
     }
 
     /**
@@ -154,14 +273,14 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
     val items: Flow<PagingData<Series>> =
         combine(
             selectedCategory,
-            query.debounce(250).distinctUntilChanged(),
+            _query.debounce(250).distinctUntilChanged(),
             _sort,
             settings.hiddenCategories(ContentType.SERIES)
         ) { catId, q, sort, hidden -> GridParams(catId, q, sort, hidden) }
             .flatMapLatest { (catId, q, sort, hidden) ->
                 val hiddenList = hidden.toList()
                 when {
-                    q.isNotEmpty() -> repo.pagingSeriesSearch(q, hiddenList)
+                    q.isNotEmpty() -> repo.pagingSeriesSearch(q, hiddenList, sort)
                     // "You may like" always shows highest-rated first, regardless of
                     // the grid's current sort selection.
                     catId == CAT_POPULAR -> repo.pagingSeriesAll(ContentSort.RATING, hiddenList)

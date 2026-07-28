@@ -73,10 +73,19 @@ interface ChannelDao {
     @Query("""
         SELECT c.* FROM channels c
         JOIN channels_fts ON c.id = channels_fts.id
+        LEFT JOIN channel_overrides o ON o.channelId = c.id
         WHERE channels_fts MATCH :query AND c.type = :type
+          AND COALESCE(o.hidden, 0) = 0
+          AND (c.categoryId IS NULL OR c.categoryId NOT IN (:hiddenCategories))
+          AND (:radio < 0 OR c.isRadio = :radio)
         ORDER BY c.name LIMIT 200
     """)
-    fun searchFts(query: String, type: String): Flow<List<ChannelEntity>>
+    fun searchFts(
+        query: String,
+        type: String,
+        hiddenCategories: List<String>,
+        radio: Int,
+    ): Flow<List<ChannelEntity>>
 
     @Query("SELECT * FROM channels WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): ChannelEntity?

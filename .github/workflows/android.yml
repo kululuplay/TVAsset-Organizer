@@ -1,0 +1,177 @@
+name: Android CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: IptvPlayer
+
+jobs:
+  verify:
+    name: Test, lint and debug build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+      TELEMETRY_INGEST_KEY: ${{ secrets.TELEMETRY_INGEST_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            IptvPlayer/*.gradle.kts
+            IptvPlayer/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Scan current tree for secrets
+        working-directory: .
+        run: python3 scripts/scan_secrets.py
+
+      - name: Verify Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Test, lint and assemble debug
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon \
+            :app:testDebugUnitTest \
+            :app:lintDebug \
+            :app:assembleDebug \
+            --stacktrace
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: iptv-player-debug
+          path: IptvPlayer/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-lint
+          path: IptvPlayer/app/build/reports/lint-results-debug.html
+          if-no-files-found: ignore
+
+  release:
+    name: Signed release
+    needs: verify
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+      TELEMETRY_INGEST_KEY: ${{ secrets.TELEMETRY_INGEST_KEY }}
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            IptvPlayer/*.gradle.kts
+            IptvPlayer/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Validate release secrets
+        run: |
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is required for a signed release"
+              exit 1
+            fi
+          done
+
+      - name: Decode release keystore
+        id: keystore
+        run: |
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          echo "path=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
+
+      - name: Build signed release APK
+        env:
+          KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon :app:assembleRelease --stacktrace
+
+      - name: Read version
+        id: version
+        run: |
+          value=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
+          if [ -z "$value" ]; then
+            echo "::error::Could not read versionName"
+            exit 1
+          fi
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+
+      - name: Stage release APK
+        run: |
+          mkdir -p release-assets
+          cp app/build/outputs/apk/release/app-release.apk \
+            "release-assets/KululuIPTV-v${{ steps.version.outputs.value }}.apk"
+
+      - name: Check immutable release tag
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${{ steps.version.outputs.value }}"
+          if gh release view "$tag" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish GitHub release
+        if: steps.existing.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.value }}
+          name: Kululu IPTV v${{ steps.version.outputs.value }}
+          body: Automated signed build from commit ${{ github.sha }}.
+          make_latest: true
+          files: IptvPlayer/release-assets/*.apk
+          fail_on_unmatched_files: true
+
+      - name: Upload signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: iptv-player-release
+          path: IptvPlayer/release-assets/*.apk
+          if-no-files-found: error

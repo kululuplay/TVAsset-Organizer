@@ -5,6 +5,7 @@
      which are added programmatically into sectionContainer. Scrollable for small
      panels. -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/bg_login_aurora"
@@ -33,7 +34,7 @@
                 android:padding="@dimen/space_l"
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_sort"
-                android:tint="@color/text_primary"
+                app:tint="@color/text_primary"
                 android:contentDescription="@null" />
 
             <LinearLayout

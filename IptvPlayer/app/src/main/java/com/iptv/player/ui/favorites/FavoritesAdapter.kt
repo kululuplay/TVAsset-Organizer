@@ -59,7 +59,7 @@ class FavoritesAdapter(
                 title.text = itemView.context.getString(R.string.adult_locked_title)
                 type.visibility = View.GONE
                 poster.scaleType = ImageView.ScaleType.FIT_CENTER
-                poster.setImageResource(R.drawable.ic_lock)
+                poster.load(R.drawable.ic_lock) { crossfade(false) }
                 return
             }
             type.visibility = View.VISIBLE
@@ -76,7 +76,7 @@ class FavoritesAdapter(
 
             val placeholder = LogoPlaceholder.forName(itemView.context, item.title)
             if (item.posterUrl.isNullOrBlank()) {
-                poster.setImageDrawable(placeholder)
+                poster.load(placeholder) { crossfade(false) }
             } else {
                 poster.load(item.posterUrl) {
                     placeholder(placeholder); error(placeholder)

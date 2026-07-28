@@ -3,12 +3,13 @@
  * DataStore-backed settings + saved login. Holds the active source config,
  * player mode, language, parental PIN, TMDB key, aspect ratio, active profile,
  * last-watched channel and UI toggles (clock, screensaver).
- * NOTE: credentials/PIN are stored locally for convenience; treat the device as
- * trusted. (Encryption can be layered on later via EncryptedSharedPreferences.)
+ * Credentials, PINs and user API keys are field-encrypted with an Android
+ * Keystore-backed key before they enter DataStore.
  */
 package com.iptv.player.data.prefs
 
 import android.content.Context
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -16,6 +17,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.iptv.player.BuildConfig
 import com.iptv.player.data.model.AspectRatio
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.ContentSort
@@ -25,13 +27,17 @@ import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.data.model.SourceConfig
 import com.iptv.player.data.model.SourceType
+import com.iptv.player.security.SecureValueCodec
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
-class SettingsStore(private val context: Context) {
+class SettingsStore(
+    private val context: Context,
+    private val secureValues: SecureValueCodec,
+) {
 
     private object Keys {
         val SOURCE_TYPE = stringPreferencesKey("source_type")
@@ -62,6 +68,7 @@ class SettingsStore(private val context: Context) {
         val PREF_AUDIO_TRACK = stringPreferencesKey("pref_audio_track")
         val PREF_SUBTITLE_TRACK = stringPreferencesKey("pref_subtitle_track")
         val EXPIRY_WARN_SUPPRESSED = longPreferencesKey("expiry_warn_suppressed")
+        val SECURE_STORAGE_MIGRATED = booleanPreferencesKey("secure_storage_migrated_v1")
 
         // Content Manager: per-content-type hidden categories + custom order.
         val HIDDEN_CATS_LIVE = stringSetPreferencesKey("hidden_cats_live")
@@ -117,23 +124,76 @@ class SettingsStore(private val context: Context) {
 
     // ---- Playback -------------------------------------------------------
 
-    val playerMode: Flow<PlayerMode> = context.dataStore.data.map {
-        PlayerMode.fromName(it[Keys.PLAYER_MODE])
+    val playerMode: Flow<PlayerMode> = context.dataStore.data.map { prefs ->
+        resolvedPlaybackSelection(prefs).first
     }
 
     suspend fun setPlayerMode(mode: PlayerMode) =
-        context.dataStore.edit { it[Keys.PLAYER_MODE] = mode.name }
+        context.dataStore.edit { prefs ->
+            // Read the normalized value, not the raw legacy pair. Otherwise an
+            // old EXOPLAYER+SOFTWARE record is displayed as Hardware but silently
+            // turns back into Software when the user later selects AUTO/VLC.
+            val decoder = resolvedPlaybackSelection(prefs).second
+            prefs[Keys.PLAYER_MODE] = mode.name
+            // ExoPlayer is a MediaCodec engine and cannot honour "software only".
+            prefs[Keys.DECODER_MODE] =
+                if (mode == PlayerMode.EXOPLAYER && decoder == DecoderMode.SOFTWARE) {
+                    DecoderMode.HARDWARE.name
+                } else {
+                    decoder.name
+                }
+        }
 
     /** Decoder strategy: AUTO (hw + software fallback), HARDWARE, SOFTWARE. */
-    val decoderMode: Flow<DecoderMode> = context.dataStore.data.map {
-        DecoderMode.fromName(it[Keys.DECODER_MODE])
+    val decoderMode: Flow<DecoderMode> = context.dataStore.data.map { prefs ->
+        resolvedPlaybackSelection(prefs).second
     }
 
-    suspend fun getDecoderMode(): DecoderMode =
-        DecoderMode.fromName(context.dataStore.data.first()[Keys.DECODER_MODE])
+    suspend fun getDecoderMode(): DecoderMode {
+        val prefs = context.dataStore.data.first()
+        return resolvedPlaybackSelection(prefs).second
+    }
 
     suspend fun setDecoderMode(mode: DecoderMode) =
-        context.dataStore.edit { it[Keys.DECODER_MODE] = mode.name }
+        context.dataStore.edit { prefs ->
+            val player = PlayerMode.fromName(prefs[Keys.PLAYER_MODE])
+            prefs[Keys.DECODER_MODE] = mode.name
+            // Choosing software is an explicit request for VLC's software path.
+            if (mode == DecoderMode.SOFTWARE && player == PlayerMode.EXOPLAYER) {
+                prefs[Keys.PLAYER_MODE] = PlayerMode.VLC.name
+            }
+        }
+
+    /** Atomically update the two playback-routing axes (avoids transient conflicts). */
+    suspend fun setPlaybackSelection(player: PlayerMode, decoder: DecoderMode) =
+        context.dataStore.edit {
+            it[Keys.PLAYER_MODE] = player.name
+            it[Keys.DECODER_MODE] =
+                if (player == PlayerMode.EXOPLAYER && decoder == DecoderMode.SOFTWARE) {
+                    DecoderMode.HARDWARE.name
+                } else {
+                    decoder.name
+                }
+        }
+
+    /**
+     * Resolves legacy invalid pairs without exposing a contradictory UI/runtime
+     * state. New writes are normalized above; this keeps upgrades safe before the
+     * next settings edit persists the canonical pair.
+     */
+    private fun resolvedPlaybackSelection(
+        prefs: Preferences,
+    ): Pair<PlayerMode, DecoderMode> {
+        val player = PlayerMode.fromName(prefs[Keys.PLAYER_MODE])
+        val storedDecoder = DecoderMode.fromName(prefs[Keys.DECODER_MODE])
+        val decoder =
+            if (player == PlayerMode.EXOPLAYER && storedDecoder == DecoderMode.SOFTWARE) {
+                DecoderMode.HARDWARE
+            } else {
+                storedDecoder
+            }
+        return player to decoder
+    }
 
     val streamFormat: Flow<StreamFormat> = context.dataStore.data.map {
         StreamFormat.fromName(it[Keys.LIVE_STREAM_FORMAT])
@@ -254,26 +314,34 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[Keys.LOCK_ADULT] = enabled }
 
     /** Defaults to [DEFAULT_PIN] until the user sets their own. */
-    suspend fun getPin(): String? = context.dataStore.data.first()[Keys.PIN] ?: DEFAULT_PIN
+    suspend fun getPin(): String? =
+        context.dataStore.data.first()[Keys.PIN]
+            ?.let(secureValues::decrypt)
+            ?: DEFAULT_PIN
 
     suspend fun setPin(pin: String) =
-        context.dataStore.edit { it[Keys.PIN] = pin }
+        context.dataStore.edit { it[Keys.PIN] = secureValues.encrypt(pin) }
 
     suspend fun hasPin(): Boolean = !getPin().isNullOrEmpty()
 
     // ---- TMDB -----------------------------------------------------------
 
-    // Falls back to a built-in key so poster/detail enrichment works out of the
-    // box; a user-saved key (if any) still takes precedence.
+    // A user-saved key takes precedence over the optional CI-injected default.
     val tmdbKey: Flow<String> = context.dataStore.data.map {
-        it[Keys.TMDB_KEY]?.takeIf(String::isNotBlank) ?: DEFAULT_TMDB_KEY
+        secureValues.decrypt(it[Keys.TMDB_KEY]).takeIf(String::isNotBlank)
+            ?: DEFAULT_TMDB_KEY
     }
 
     suspend fun getTmdbKey(): String =
-        context.dataStore.data.first()[Keys.TMDB_KEY]?.takeIf(String::isNotBlank) ?: DEFAULT_TMDB_KEY
+        secureValues.decrypt(context.dataStore.data.first()[Keys.TMDB_KEY])
+            .takeIf(String::isNotBlank)
+            ?: DEFAULT_TMDB_KEY
 
     suspend fun setTmdbKey(key: String) =
-        context.dataStore.edit { it[Keys.TMDB_KEY] = key }
+        context.dataStore.edit {
+            if (key.isBlank()) it.remove(Keys.TMDB_KEY)
+            else it[Keys.TMDB_KEY] = secureValues.encrypt(key)
+        }
 
     // ---- Profiles -------------------------------------------------------
 
@@ -340,22 +408,55 @@ class SettingsStore(private val context: Context) {
         val type = runCatching { SourceType.valueOf(typeName) }.getOrNull() ?: return null
         return SourceConfig(
             type = type,
-            serverUrl = prefs[Keys.SERVER_URL].orEmpty(),
-            username = prefs[Keys.USERNAME].orEmpty(),
-            password = prefs[Keys.PASSWORD].orEmpty(),
-            m3uUrl = prefs[Keys.M3U_URL].orEmpty()
+            serverUrl = secureValues.decrypt(prefs[Keys.SERVER_URL]),
+            username = secureValues.decrypt(prefs[Keys.USERNAME]),
+            password = secureValues.decrypt(prefs[Keys.PASSWORD]),
+            m3uUrl = secureValues.decrypt(prefs[Keys.M3U_URL])
         )
     }
 
     suspend fun saveSource(config: SourceConfig) {
+        // Encrypt before opening the DataStore transaction: secure-storage failure
+        // aborts the save and never falls back to writing cleartext credentials.
+        val serverUrl = secureValues.encrypt(config.serverUrl)
+        val username = secureValues.encrypt(config.username)
+        val password = secureValues.encrypt(config.password)
+        val m3uUrl = secureValues.encrypt(config.m3uUrl)
         context.dataStore.edit { prefs ->
             prefs[Keys.SOURCE_TYPE] = config.type.name
-            prefs[Keys.SERVER_URL] = config.serverUrl
-            prefs[Keys.USERNAME] = config.username
-            prefs[Keys.PASSWORD] = config.password
-            prefs[Keys.M3U_URL] = config.m3uUrl
+            prefs[Keys.SERVER_URL] = serverUrl
+            prefs[Keys.USERNAME] = username
+            prefs[Keys.PASSWORD] = password
+            prefs[Keys.M3U_URL] = m3uUrl
         }
     }
+
+    /**
+     * One-time/lazy migration for installs created before secure field storage.
+     * Safe to run on every launch: versioned envelopes are left untouched.
+     */
+    suspend fun migrateSensitiveValues() {
+        context.dataStore.edit { prefs ->
+            fun migrate(key: Preferences.Key<String>) {
+                val value = prefs[key] ?: return
+                if (value.isNotBlank() && !secureValues.isEncrypted(value)) {
+                    prefs[key] = secureValues.encrypt(value)
+                }
+            }
+            migrate(Keys.SERVER_URL)
+            migrate(Keys.USERNAME)
+            migrate(Keys.PASSWORD)
+            migrate(Keys.M3U_URL)
+            migrate(Keys.PIN)
+            migrate(Keys.TMDB_KEY)
+        }
+    }
+
+    suspend fun isSecureStorageMigrated(): Boolean =
+        context.dataStore.data.first()[Keys.SECURE_STORAGE_MIGRATED] ?: false
+
+    suspend fun markSecureStorageMigrated() =
+        context.dataStore.edit { it[Keys.SECURE_STORAGE_MIGRATED] = true }
 
     suspend fun clearSource() {
         context.dataStore.edit { prefs ->
@@ -428,7 +529,7 @@ class SettingsStore(private val context: Context) {
         /** Default parental PIN used until the user sets their own. */
         const val DEFAULT_PIN = "0000"
 
-        /** Built-in TMDB key so movie/series enrichment works without setup. */
-        const val DEFAULT_TMDB_KEY = "d03661ebe50f70d41b0a67b7f6e4c14f"
+        /** Optional CI-injected TMDB key; blank means the user can supply one. */
+        val DEFAULT_TMDB_KEY: String = BuildConfig.TMDB_API_KEY
     }
 }

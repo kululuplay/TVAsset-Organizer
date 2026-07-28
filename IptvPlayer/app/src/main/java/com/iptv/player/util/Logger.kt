@@ -58,8 +58,12 @@ object Logger {
             runCatching {
                 val out = File(dir, SHARE_FILE)
                 FileWriter(out, false).use { w ->
-                    File(dir, FILE_OLD).takeIf { it.exists() }?.let { w.append(it.readText()) }
-                    File(dir, FILE).takeIf { it.exists() }?.let { w.append(it.readText()) }
+                    File(dir, FILE_OLD).takeIf { it.exists() }?.let {
+                        w.append(SensitiveDataRedactor.redact(it.readText()))
+                    }
+                    File(dir, FILE).takeIf { it.exists() }?.let {
+                        w.append(SensitiveDataRedactor.redact(it.readText()))
+                    }
                 }
                 out.takeIf { it.length() > 0 }
             }.getOrNull()
@@ -72,18 +76,21 @@ object Logger {
         return synchronized(lock) {
             runCatching {
                 val text = File(dir, FILE).takeIf { it.exists() }?.readText().orEmpty()
-                if (text.length > maxChars) text.takeLast(maxChars) else text
+                val tail = if (text.length > maxChars) text.takeLast(maxChars) else text
+                SensitiveDataRedactor.redact(tail)
             }.getOrDefault("")
         }
     }
 
     private fun write(level: String, tag: String, msg: String, tr: Throwable?) {
+        val safeMessage = SensitiveDataRedactor.redact(msg)
+        val safeStack = tr?.let { SensitiveDataRedactor.redact(Log.getStackTraceString(it)) }
         // Always mirror to logcat for tethered debugging.
         when (level) {
-            "E" -> Log.e(tag, msg, tr)
-            "W" -> Log.w(tag, msg, tr)
-            "D" -> Log.d(tag, msg)
-            else -> Log.i(tag, msg)
+            "E" -> Log.e(tag, safeMessage + safeStack?.let { "\n$it" }.orEmpty())
+            "W" -> Log.w(tag, safeMessage + safeStack?.let { "\n$it" }.orEmpty())
+            "D" -> Log.d(tag, safeMessage)
+            else -> Log.i(tag, safeMessage)
         }
         val dir = logDir ?: return
         synchronized(lock) {
@@ -93,8 +100,8 @@ object Logger {
                 FileWriter(file, true).use { w ->
                     w.append(timestamp.format(Date())).append(' ')
                         .append(level).append('/').append(tag).append(": ")
-                        .append(msg).append('\n')
-                    if (tr != null) w.append(Log.getStackTraceString(tr)).append('\n')
+                        .append(safeMessage).append('\n')
+                    if (safeStack != null) w.append(safeStack).append('\n')
                 }
             }
         }
@@ -134,7 +141,9 @@ object Logger {
         synchronized(lock) {
             runCatching {
                 val summary =
-                    "${throwable.javaClass.name}: ${throwable.message ?: ""}".take(500)
+                    SensitiveDataRedactor.redact(
+                        "${throwable.javaClass.name}: ${throwable.message ?: ""}",
+                    ).take(500)
                 FileWriter(File(dir, MARKER), false).use { w ->
                     w.append(System.currentTimeMillis().toString())
                         .append('\n')

@@ -17,7 +17,8 @@
  *     relayout would otherwise resize the SurfaceView, tearing down + recreating
  *     its surface ~1s in and greening the new surface on Amlogic. Decoder fallback
  *     + disabled tunneling guard the decode path; if no first frame arrives after
- *     READY the decoder is stuck -> onVideoInvalid -> libVLC software fallback.
+ *     READY the decoder is stuck -> onVideoInvalid, then the controller applies
+ *     the selected engine/decoder policy.
  */
 package com.iptv.player.player
 
@@ -26,6 +27,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
@@ -34,6 +36,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -49,15 +52,17 @@ import androidx.media3.ui.PlayerView
 import com.iptv.player.R
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.util.AppInfo
-import com.iptv.player.util.DeviceCaps
 import com.iptv.player.util.PlaybackLog
 
+@OptIn(markerClass = [UnstableApi::class])
 class ExoPlayerEngine(
     private val context: Context,
     /** When false (default) audio is decoded to PCM; true allows HDMI passthrough. */
     private val allowPassthrough: Boolean = false,
     /** Buffer size (user "Buffer size" setting) -> DefaultLoadControl durations. */
-    private val bufferMode: BufferMode = BufferMode.NORMAL
+    private val bufferMode: BufferMode = BufferMode.NORMAL,
+    /** AUTO may try another MediaCodec decoder; explicit Hardware must not. */
+    private val allowDecoderFallback: Boolean = true,
 ) : PlayerEngine {
 
     override val engineName: String = "ExoPlayer"
@@ -187,7 +192,6 @@ class ExoPlayerEngine(
                     "videoInputFormat ${format.width}x${format.height} " +
                         "${format.sampleMimeType} fps=${format.frameRate}"
                 )
-                maybeFlagGreenProneProfile(format)
             }
 
             override fun onDroppedVideoFrames(
@@ -227,8 +231,9 @@ class ExoPlayerEngine(
      *
      * Forcing [AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES] (stereo PCM only)
      * disables passthrough, so audio is decoded to PCM on-device and audible.
-     * [setEnableDecoderFallback] lets Exo drop to another (software) decoder
-     * instead of leaving a green/blank surface.
+     * Decoder fallback is enabled only for the AUTO decoder policy. Explicit
+     * Hardware disables it so Media3 cannot silently move onto a secondary
+     * software codec behind the Player Engine/Decoder settings.
      */
     private fun buildRenderersFactory(): DefaultRenderersFactory =
         object : DefaultRenderersFactory(context) {
@@ -247,7 +252,7 @@ class ExoPlayerEngine(
                 }
                 return builder.build()
             }
-        }.setEnableDecoderFallback(true)
+        }.setEnableDecoderFallback(allowDecoderFallback)
 
     /**
      * If the media carries an audio track but none could be selected (the codec
@@ -273,70 +278,6 @@ class ExoPlayerEngine(
                     "(state=${player?.playbackState}, groups=${tracks.groups.size})"
             )
             listener?.onAudioUnavailable()
-        }
-    }
-
-    /**
-     * Proactive per-stream software fallback for profiles a hardware decoder is
-     * known to mishandle, detected from the input format (the no-frame watchdog
-     * can't catch a decoder that pushes a green/garbage frame — onRenderedFirstFrame
-     * fires and satisfies it). One-shot per stream (guarded by [videoReported]).
-     *
-     * Two cases:
-     *  - Amlogic + MPEG2: the OMX.amlogic.mpeg2.decoder genuinely fails (renders
-     *    ~1.5s then ERROR_CODE_DECODING_FAILED), so route it to libVLC SW up front.
-     *  - Non-Amlogic + H.264 1080p@high-fps: a green-prone profile on some hardware
-     *    decoders.
-     *
-     * The H.264 heuristic is INTENTIONALLY SKIPPED on Amlogic: real-device testing
-     * proved ExoPlayer's MediaCodec->Surface path plays every H.264 profile there
-     * flawlessly (incl. 1080p@50 and UHD) — the old greening was a libVLC vout
-     * problem, not a MediaCodec one. Pre-emptively bouncing those streams to libVLC
-     * also dragged UHD onto the stuttering libVLC HW path. On Amlogic we keep the
-     * proven ExoPlayer+HW path and deviate only REACTIVELY (onDecodeError / no-frame
-     * watchdog / quick-decode-failure counter). Do NOT reintroduce a proactive
-     * Amlogic H.264 downgrade here.
-     */
-    private fun maybeFlagGreenProneProfile(format: Format) {
-        if (videoReported) return
-        // Proactive MPEG2 -> software on Amlogic. The Amlogic hardware MPEG2 decoder
-        // (OMX.amlogic.mpeg2.decoder) is unreliable on this box: it renders a frame,
-        // plays ~1.5s, then fails with ERROR_CODE_DECODING_FAILED and loops. SD MPEG2
-        // is light, so route it to libVLC software decode the moment we see the codec
-        // — before the glitch — rather than waiting for the reactive failure counter.
-        if (DeviceCaps.isAmlogic && format.sampleMimeType == MimeTypes.VIDEO_MPEG2) {
-            videoReported = true
-            PlaybackLog.log(
-                context, engineName,
-                "Amlogic MPEG2 ${format.width}x${format.height} -> proactive software fallback"
-            )
-            listener?.onVideoInvalid()
-            return
-        }
-        // The proactive H.264 1080p@50 downgrade is DISABLED on Amlogic. Real-device
-        // testing on the Amlogic stick shows ExoPlayer's native MediaCodec->Surface
-        // pipeline plays every H.264 profile flawlessly, including 1080p@50 and UHD —
-        // the greening was a libVLC-vout problem, not a MediaCodec one. Pre-emptively
-        // bouncing these working streams to libVLC SW also dragged UHD onto the
-        // libVLC HW path (via the SOFTWARE_SLOW escalation), which is exactly where
-        // UHD stutters. So on Amlogic we keep the proven ExoPlayer+HW path and only
-        // deviate REACTIVELY when a stream actually fails (onDecodeError / no-frame
-        // watchdog) or for the genuinely broken MPEG2 codec handled above. The
-        // proactive heuristic stays for non-Amlogic devices running explicit ExoPlayer.
-        if (DeviceCaps.isAmlogic) return
-        val h264 = format.sampleMimeType == MimeTypes.VIDEO_H264
-        val is1080p = format.height >= GREEN_PRONE_MIN_HEIGHT || format.width >= GREEN_PRONE_MIN_WIDTH
-        // frameRate is Format.NO_VALUE (-1f) when unknown, so the >= check already
-        // excludes it; only genuine high-frame-rate streams trip the threshold.
-        val highFps = format.frameRate >= GREEN_PRONE_MIN_FPS
-        if (h264 && is1080p && highFps) {
-            videoReported = true
-            PlaybackLog.log(
-                context, engineName,
-                "green-prone HW profile H264 ${format.width}x${format.height}" +
-                    "@${format.frameRate}fps -> software fallback"
-            )
-            listener?.onVideoInvalid()
         }
     }
 
@@ -476,12 +417,5 @@ class ExoPlayerEngine(
         /** If no frame renders this long after READY, treat video as failed. */
         private const val NO_FRAME_TIMEOUT_MS = 6000L
 
-        // The green-prone Amlogic profile: H.264 at 1080p with a high frame rate
-        // (1080p@50/60). Normal 1080i broadcasts report ~25fps (field-coded), so
-        // the >=49 threshold separates the failing progressive 50/60fps streams
-        // from the interlaced ones that decode fine on hardware.
-        private const val GREEN_PRONE_MIN_HEIGHT = 1080
-        private const val GREEN_PRONE_MIN_WIDTH = 1920
-        private const val GREEN_PRONE_MIN_FPS = 49f
     }
 }

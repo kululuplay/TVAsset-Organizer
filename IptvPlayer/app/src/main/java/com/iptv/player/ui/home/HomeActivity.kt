@@ -13,10 +13,12 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.graphics.drawable.Drawable
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
 import android.widget.Toast
 import android.view.KeyEvent
+import android.view.inputmethod.EditorInfo
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -59,7 +61,10 @@ class HomeActivity : BaseActivity() {
     /** When true, this screen shows radio stations only (launched as the Radio folder). */
     private val radioMode: Boolean by lazy { intent.getBooleanExtra(EXTRA_RADIO_MODE, false) }
     private val viewModel: HomeViewModel by lazy {
-        ViewModelProvider(this, HomeViewModel.Factory(radioMode))[HomeViewModel::class.java]
+        ViewModelProvider(
+            this,
+            HomeViewModel.Factory(application, radioMode),
+        )[HomeViewModel::class.java]
     }
 
     private lateinit var categoryAdapter: CategoryAdapter
@@ -96,18 +101,15 @@ class HomeActivity : BaseActivity() {
     /** Adult categories the user has already unlocked this session (avoid re-prompting). */
     private val unlockedCategories = mutableSetOf<String>()
 
+    /** Adult channels surfaced outside their category and unlocked for this session. */
+    private val unlockedChannels = mutableSetOf<String>()
+
+    /** Current parental setting; refreshed before each STARTED collection begins. */
+    private var adultLockEnabled = false
+
     /** Live preview player bound to the preview card (one connection at a time). */
     private var previewController: PlayerController? = null
     private var debugBinder: DebugOverlayBinder? = null
-
-    /**
-     * TEMP — seamless preview->fullscreen validation spike. Whether the live
-     * preview surface is currently scaled up to fill the window. See
-     * expandFullscreenSpike() for what this validates on the box.
-     */
-    private var fsSpikeExpanded = false
-    private val fsSpikeHidden = mutableListOf<View>()
-    private var fsSpikeSavedForeground: Drawable? = null
 
     /**
      * Safety net for the reverse hand-off: if no fresh frame event arrives after
@@ -118,6 +120,9 @@ class HomeActivity : BaseActivity() {
 
     /** Debounce job so scrolling channels doesn't thrash the single stream socket. */
     private var previewJob: kotlinx.coroutines.Job? = null
+
+    /** A failed preview uses OK as Retry instead of promoting a dead controller. */
+    private var previewFailed = false
 
     companion object {
         /** Optional category id to open on (e.g. Favorites from the dashboard). */
@@ -166,6 +171,7 @@ class HomeActivity : BaseActivity() {
         setContentView(binding.root)
 
         setupLists()
+        setupSearch()
         observe()
         observeNewContent()
 
@@ -218,31 +224,13 @@ class HomeActivity : BaseActivity() {
      * around inside the lists. Other keys fall through to normal handling.
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        // --- TEMP: seamless-fullscreen validation spike ---
-        // While the spike fullscreen is active, swallow every key so the browse UI
-        // underneath can't react; BACK/MENU collapse back to the small preview.
-        if (fsSpikeExpanded) {
-            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 &&
-                (event.keyCode == KeyEvent.KEYCODE_BACK || event.keyCode == KeyEvent.KEYCODE_MENU)
-            ) {
-                collapseFullscreenSpike()
-            }
-            return true
-        }
         if (event.action == KeyEvent.ACTION_DOWN) {
-            // MENU (Fire TV options / Sony action-menu button) on a PLAYING preview
-            // runs the in-place scale-to-fullscreen spike (no reconnect, no restart).
-            if (event.keyCode == KeyEvent.KEYCODE_MENU && event.repeatCount == 0 &&
-                previewController != null && previewingChannel != null
-            ) {
-                expandFullscreenSpike()
-                return true
-            }
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT -> when {
                     // Drill back to categories from the channel list (mirrors Back).
                     inChannelView && binding.channelList.hasFocus() -> {
-                        showCategories()
+                        if (viewModel.query.value.isNotEmpty()) exitSearch()
+                        else showCategories()
                         return true
                     }
                     // LEFT from the focusable preview card returns to the left list
@@ -272,6 +260,10 @@ class HomeActivity : BaseActivity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
+        if (viewModel.query.value.isNotEmpty()) {
+            exitSearch()
+            return
+        }
         // Back from the channel list returns to the category list, matching the
         // 2-pane drill-down. Otherwise leave the screen as usual.
         if (inChannelView) {
@@ -317,6 +309,7 @@ class HomeActivity : BaseActivity() {
                 Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             }
         )
+        channelAdapter.lockedProvider = ::isChannelLocked
         binding.channelList.layoutManager = LinearLayoutManager(this)
         binding.channelList.adapter = channelAdapter
         // Same fix as the category list: the channel list re-emits on favorite
@@ -333,8 +326,48 @@ class HomeActivity : BaseActivity() {
         // after browsing other channel names still expands what's on screen),
         // falling back to the focused channel when nothing is previewing yet.
         binding.previewCard.setOnClickListener {
-            (previewingChannel ?: currentInfoChannel)?.let { openPlayer(it) }
+            (previewingChannel ?: currentInfoChannel)?.let {
+                if (previewFailed) startPreviewFor(it) else openPlayer(it)
+            }
         }
+        binding.refreshButton.setOnClickListener { viewModel.refresh() }
+        binding.retryButton.setOnClickListener { viewModel.refresh() }
+        binding.browserTitle.setText(if (radioMode) R.string.nav_radio else R.string.nav_live)
+    }
+
+    private fun setupSearch() {
+        binding.searchInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val query = s?.toString().orEmpty()
+                viewModel.setQuery(query)
+                if (query.isNotBlank()) {
+                    binding.categoryList.visibility = View.GONE
+                    binding.channelList.visibility = View.VISIBLE
+                    pendingScrollReset = true
+                    clearPreview()
+                } else if (binding.searchInput.hasFocus()) {
+                    showCategories()
+                }
+            }
+
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+        binding.searchInput.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEARCH && currentChannels.isNotEmpty()) {
+                focusRow(binding.channelList, 0)
+                true
+            } else {
+                false
+            }
+        }
+    }
+
+    private fun exitSearch() {
+        binding.searchInput.text?.clear()
+        showCategories()
+        binding.searchInput.clearFocus()
     }
 
     private fun observe() {
@@ -342,6 +375,12 @@ class HomeActivity : BaseActivity() {
         // don't do submitList / EPG / UI work off-screen, and resubscribes on START.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // Read the lock before starting channel collection, so the first
+                // adapter bind cannot briefly expose an adult name or logo.
+                adultLockEnabled = ServiceLocator.settings.lockAdult.first() &&
+                    ServiceLocator.settings.hasPin()
+                channelAdapter.refreshVisible(binding.channelList)
+
                 launch {
                     viewModel.categories.collectLatest { cats ->
                         categoryAdapter.submitList(cats) {
@@ -365,11 +404,6 @@ class HomeActivity : BaseActivity() {
                     viewModel.channels.collectLatest { channels ->
                         currentChannels = channels
                         channelAdapter.submitList(channels) {
-                            // While the validation fullscreen spike is expanded, don't
-                            // touch focus or the preview: a focus jump or clearPreview()
-                            // (which releases the controller) would black out the video
-                            // mid-fullscreen. The list itself is still submitted above.
-                            if (fsSpikeExpanded) return@submitList
                             if (pendingScrollReset) {
                                 pendingScrollReset = false
                                 binding.channelList.scrollToPosition(0)
@@ -398,12 +432,22 @@ class HomeActivity : BaseActivity() {
                                 // channel: that would leak its name/logo/EPG before the
                                 // PIN is entered. Only metadata is gated here; playback
                                 // is already guarded in drillIntoCategory/openPlayer.
-                                if (first != null && !isCurrentCategoryLocked()) showInfo(first)
+                                if (
+                                    first != null &&
+                                    !isCurrentCategoryLocked() &&
+                                    !isChannelLocked(first)
+                                ) {
+                                    showInfo(first)
+                                }
                                 else clearPreview()
                             }
                         }
-                        binding.emptyState.visibility =
-                            if (channels.isEmpty()) View.VISIBLE else View.GONE
+                        renderBrowseState()
+                    }
+                }
+                launch {
+                    viewModel.loadState.collectLatest {
+                        renderBrowseState()
                     }
                 }
                 // Time-driven now/next refresh: rolls the "live now" program + EPG dots
@@ -416,6 +460,26 @@ class HomeActivity : BaseActivity() {
                     }
                 }
             }
+        }
+    }
+
+    private fun renderBrowseState() {
+        val state = viewModel.loadState.value
+        binding.loadingIndicator.visibility = if (state.loading) View.VISIBLE else View.GONE
+        val failed = state.errorRes != null
+        binding.loadErrorContainer.visibility = if (failed) View.VISIBLE else View.GONE
+        state.errorRes?.let { binding.loadErrorText.setText(it) }
+        binding.refreshButton.isEnabled = !state.loading
+        binding.refreshButton.alpha = if (state.loading) 0.5f else 1f
+
+        binding.emptyState.setText(
+            if (viewModel.query.value.isNotEmpty()) R.string.empty_search
+            else R.string.empty_channels
+        )
+        val empty = currentChannels.isEmpty() && !state.loading && !failed
+        binding.emptyState.visibility = if (empty) View.VISIBLE else View.GONE
+        if (failed && currentChannels.isEmpty()) {
+            binding.retryButton.post { binding.retryButton.requestFocus() }
         }
     }
 
@@ -452,6 +516,10 @@ class HomeActivity : BaseActivity() {
     private val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
 
     private fun showInfo(channel: Channel) {
+        if (isChannelLocked(channel)) {
+            showLockedInfo(channel)
+            return
+        }
         // Re-selecting the channel already shown (e.g. the list re-emits on a favorite
         // toggle, or a refocus) shouldn't re-fetch its guide or rebuild the panel.
         if (channel.id == currentInfoChannel?.id && currentPrograms.isNotEmpty()) return
@@ -509,8 +577,8 @@ class HomeActivity : BaseActivity() {
         binding.previewTitle.text = ChannelText.clean(channel.name)
         val placeholder = LogoPlaceholder.forName(this, channel.name)
         if (channel.logoUrl.isNullOrBlank()) {
-            binding.infoLogo.setImageDrawable(placeholder)
-            binding.previewCaptionLogo.setImageDrawable(placeholder)
+            binding.infoLogo.load(placeholder) { crossfade(false) }
+            binding.previewCaptionLogo.load(placeholder) { crossfade(false) }
         } else {
             binding.infoLogo.load(channel.logoUrl) {
                 placeholder(placeholder); error(placeholder)
@@ -560,12 +628,31 @@ class HomeActivity : BaseActivity() {
         binding.previewNumber.text = ""
         binding.previewTitle.text = ""
         binding.previewProgram.text = ""
-        binding.infoLogo.setImageDrawable(null)
-        binding.previewCaptionLogo.setImageDrawable(null)
+        binding.infoLogo.load(null)
+        binding.previewCaptionLogo.load(null)
+        binding.previewStatus.visibility = View.GONE
         nowNextJob?.cancel()
         currentPrograms = emptyList()
         epgAdapter.submitList(emptyList())
         binding.epgEmpty.visibility = View.GONE
+    }
+
+    /** Renders a metadata-free parental-lock state for an adult channel. */
+    private fun showLockedInfo(channel: Channel) {
+        nowNextJob?.cancel()
+        stopPreview()
+        currentInfoChannel = channel
+        currentPrograms = emptyList()
+        epgAdapter.submitList(emptyList())
+        binding.epgEmpty.visibility = View.GONE
+        binding.catchupHint.visibility = View.GONE
+        binding.previewNumber.text = ""
+        binding.previewTitle.setText(R.string.adult_locked_title)
+        binding.previewProgram.text = ""
+        binding.infoLogo.load(R.drawable.ic_lock) { crossfade(false) }
+        binding.previewCaptionLogo.load(R.drawable.ic_lock) { crossfade(false) }
+        binding.previewStatus.setText(R.string.pin_locked_content)
+        binding.previewStatus.visibility = View.VISIBLE
     }
 
     /**
@@ -594,6 +681,13 @@ class HomeActivity : BaseActivity() {
         return cat.isAdult() && cat.id !in unlockedCategories
     }
 
+    /** True when exposing this channel would bypass the enabled parental lock. */
+    private fun isChannelLocked(channel: Channel): Boolean =
+        adultLockEnabled &&
+            channel.isAdult() &&
+            channel.categoryId !in unlockedCategories &&
+            channel.id !in unlockedChannels
+
     /**
      * Drills into a category from the category list, prompting for the PIN first
      * on locked (adult) categories. Shared by OK/click and the RIGHT-arrow shortcut.
@@ -602,6 +696,7 @@ class HomeActivity : BaseActivity() {
         if (category.isAdult() && category.id !in unlockedCategories) {
             PinLockHelper.guard(this, isAdult = true) {
                 unlockedCategories.add(category.id)
+                channelAdapter.refreshVisible(binding.channelList)
                 enterChannelView()
             }
         } else {
@@ -682,115 +777,57 @@ class HomeActivity : BaseActivity() {
     }
 
     private fun openPlayer(channel: Channel) {
-        PinLockHelper.guard(this, isAdult = channel.isAdult()) {
-            val controller = previewController
-            if (previewingChannel?.id == channel.id && controller != null) {
-                // Seamless fullscreen: hand the still-playing preview controller to
-                // PlayerActivity instead of releasing + reconnecting. Detach our
-                // refs first (without releasing) so onStop can't tear it down, mark
-                // the hand-off so onStop skips stopPreview, then park + launch.
-                handingOverPreview = true
-                previewController = null
-                previewingChannel = null
-                previewJob?.cancel()
-                captionJob?.cancel()
-                ServiceLocator.handOverLiveController(controller)
-                val intent = Intent(this, PlayerActivity::class.java).apply {
-                    putExtra(PlayerActivity.EXTRA_CHANNEL_ID, channel.id)
-                    putExtra(PlayerActivity.EXTRA_CATEGORY_ID, lastSelectedCategoryId)
-                    putExtra(PlayerActivity.EXTRA_RADIO_MODE, radioMode)
-                    putExtra(PlayerActivity.EXTRA_ADOPT_PREVIEW, true)
-                }
-                startActivity(intent)
-            } else {
-                // Free the preview socket before the full player connects (single-connection).
-                stopPreview()
-                val intent = Intent(this, PlayerActivity::class.java).apply {
-                    putExtra(PlayerActivity.EXTRA_CHANNEL_ID, channel.id)
-                    putExtra(PlayerActivity.EXTRA_CATEGORY_ID, lastSelectedCategoryId)
-                    putExtra(PlayerActivity.EXTRA_RADIO_MODE, radioMode)
-                }
-                startActivity(intent)
+        if (isChannelLocked(channel)) {
+            PinLockHelper.guard(this, isAdult = true) {
+                unlockedChannels.add(channel.id)
+                channelAdapter.refreshVisible(binding.channelList)
+                openPlayer(channel)
             }
+            return
+        }
+
+        val controller = previewController
+        if (previewingChannel?.id == channel.id && controller != null) {
+            // Seamless fullscreen: hand the still-playing preview controller to
+            // PlayerActivity instead of releasing + reconnecting. Detach our
+            // refs first (without releasing) so onStop can't tear it down, mark
+            // the hand-off so onStop skips stopPreview, then park + launch.
+            handingOverPreview = true
+            previewController = null
+            previewingChannel = null
+            previewJob?.cancel()
+            captionJob?.cancel()
+            ServiceLocator.handOverLiveController(controller)
+            val intent = Intent(this, PlayerActivity::class.java).apply {
+                putExtra(PlayerActivity.EXTRA_CHANNEL_ID, channel.id)
+                putExtra(PlayerActivity.EXTRA_CATEGORY_ID, playbackCategoryId(channel))
+                putExtra(PlayerActivity.EXTRA_RADIO_MODE, radioMode)
+                putExtra(PlayerActivity.EXTRA_ADOPT_PREVIEW, true)
+                putExtra(PlayerActivity.EXTRA_PARENTAL_AUTHORIZED, true)
+                channel.categoryId
+                    ?.takeIf { it in unlockedCategories }
+                    ?.let { putExtra(PlayerActivity.EXTRA_AUTHORIZED_CATEGORY_ID, it) }
+            }
+            startActivity(intent)
+        } else {
+            // Free the preview socket before the full player connects (single-connection).
+            stopPreview()
+            val intent = Intent(this, PlayerActivity::class.java).apply {
+                putExtra(PlayerActivity.EXTRA_CHANNEL_ID, channel.id)
+                putExtra(PlayerActivity.EXTRA_CATEGORY_ID, playbackCategoryId(channel))
+                putExtra(PlayerActivity.EXTRA_RADIO_MODE, radioMode)
+                putExtra(PlayerActivity.EXTRA_PARENTAL_AUTHORIZED, true)
+                channel.categoryId
+                    ?.takeIf { it in unlockedCategories }
+                    ?.let { putExtra(PlayerActivity.EXTRA_AUTHORIZED_CATEGORY_ID, it) }
+            }
+            startActivity(intent)
         }
     }
 
-    // ---------------------------------------------------------------------------
-    // TEMP: seamless preview -> fullscreen validation spike (Amlogic surface test)
-    // Goal: prove the live preview surface can scale to fullscreen WITHOUT a
-    // reconnect/restart (no rebind, no play()) and without greening / underlay
-    // misalignment on the box. A View scale transform never resizes the
-    // SurfaceView buffer, so the surface is not recreated (the green/restart
-    // trigger) and playback never stops. Additive only: the normal
-    // OK -> PlayerActivity fullscreen is untouched. Removed once the real
-    // in-place fullscreen lands.
-    // ---------------------------------------------------------------------------
-    private fun hideForSpike(v: View) {
-        if (v.visibility == View.VISIBLE) {
-            v.visibility = View.INVISIBLE
-            fsSpikeHidden.add(v)
-        }
-    }
-
-    private fun expandFullscreenSpike() {
-        val v = binding.previewVideo
-        if (fsSpikeExpanded || v.width == 0 || v.height == 0) return
-        // Let the scaled surface paint past every ancestor's bounds.
-        binding.root.clipChildren = false
-        binding.root.clipToPadding = false
-        binding.rightPane.clipChildren = false
-        binding.previewCard.clipChildren = false
-        // Drop the preview card's focus ring so it can't float over the video.
-        fsSpikeSavedForeground = binding.previewCard.foreground
-        binding.previewCard.foreground = null
-        // Hide everything except the video so nothing composites over the surface
-        // hole and the underlay shows edge-to-edge.
-        fsSpikeHidden.clear()
-        hideForSpike(binding.leftPane)
-        (binding.epgList.parent as? View)?.let { hideForSpike(it) }
-        for (i in 0 until binding.previewCard.childCount) {
-            val c = binding.previewCard.getChildAt(i)
-            if (c !== v) hideForSpike(c)
-        }
-        // Scale + translate the video's current rect to fill the whole window.
-        val loc = IntArray(2)
-        v.getLocationInWindow(loc)
-        val decor = window.decorView
-        v.pivotX = 0f
-        v.pivotY = 0f
-        v.scaleX = decor.width.toFloat() / v.width
-        v.scaleY = decor.height.toFloat() / v.height
-        v.translationX = -loc[0].toFloat()
-        v.translationY = -loc[1].toFloat()
-        // Screen-on is held app-wide by BaseActivity; nothing to toggle here.
-        fsSpikeExpanded = true
-    }
-
-    private fun collapseFullscreenSpike() {
-        if (!fsSpikeExpanded) return
-        val v = binding.previewVideo
-        v.scaleX = 1f
-        v.scaleY = 1f
-        v.translationX = 0f
-        v.translationY = 0f
-        fsSpikeHidden.forEach { it.visibility = View.VISIBLE }
-        fsSpikeHidden.clear()
-        binding.previewCard.foreground = fsSpikeSavedForeground
-        fsSpikeSavedForeground = null
-        binding.previewCard.clipChildren = true
-        binding.rightPane.clipChildren = true
-        binding.root.clipChildren = true
-        binding.root.clipToPadding = true
-        // Do NOT clear FLAG_KEEP_SCREEN_ON: BaseActivity holds it app-wide.
-        fsSpikeExpanded = false
-        // Hiding the panes dropped D-pad focus; restore it on an interactive
-        // collapse (BACK/MENU) so the user isn't left with nothing focused. Skip
-        // during onStop (not resumed), where we only reset transform/visibility.
-        if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-            if (inChannelView) focusFirstChannel()
-            else lastSelectedCategoryId?.let { focusCategory(it) }
-        }
-    }
+    /** Search results zap within their real category; browse keeps synthetic scopes. */
+    private fun playbackCategoryId(channel: Channel): String? =
+        if (viewModel.query.value.isNotEmpty()) channel.categoryId else lastSelectedCategoryId
 
     /** Opens the catch-up/archive browser, pre-focusing the previewed channel. */
     private fun openCatchup() {
@@ -807,7 +844,7 @@ class HomeActivity : BaseActivity() {
      * screen. Navigating to another channel resets this (see onFocused).
      */
     private fun onChannelClicked(channel: Channel) {
-        if (previewingChannel?.id == channel.id && previewController != null) {
+        if (previewingChannel?.id == channel.id && previewController != null && !previewFailed) {
             openPlayer(channel)
         } else {
             // Gate the preview for adult channels surfaced in Favorites/Recent,
@@ -815,8 +852,11 @@ class HomeActivity : BaseActivity() {
             // live video PIN-free. Skip the prompt inside an adult category the
             // user already unlocked (drillIntoCategory) so we don't re-ask per
             // channel; a real locked category can't be browsed without unlocking.
-            if (channel.isAdult() && lastSelectedCategoryId !in unlockedCategories) {
+            if (isChannelLocked(channel)) {
                 PinLockHelper.guard(this, isAdult = true) {
+                    unlockedChannels.add(channel.id)
+                    channelAdapter.refreshVisible(binding.channelList)
+                    showInfo(channel)
                     startPreviewFor(channel)
                 }
             } else {
@@ -829,6 +869,9 @@ class HomeActivity : BaseActivity() {
     private fun startPreviewFor(channel: Channel) {
         currentInfoChannel = channel
         previewingChannel = channel
+        previewFailed = false
+        binding.previewStatus.setText(R.string.buffering)
+        binding.previewStatus.visibility = View.VISIBLE
         // Lock the on-video caption to the channel we're about to play so it stays
         // correct even as the user browses other channel names afterwards.
         lockCaptionToPreview(channel)
@@ -871,10 +914,15 @@ class HomeActivity : BaseActivity() {
      * fullscreen player) where onPlaying may not fire again.
      */
     private fun buildPreviewCallback() = object : PlayerController.Callback {
-        override fun onBuffering() {}
+        override fun onBuffering() {
+            binding.previewStatus.setText(R.string.buffering)
+            binding.previewStatus.visibility = View.VISIBLE
+        }
         override fun onPlaying(engineName: String) {
             previewLogoHandler.removeCallbacksAndMessages(null)
             binding.infoLogo.visibility = View.GONE
+            binding.previewStatus.visibility = View.GONE
+            previewFailed = false
             // Live preview is rendering: hold the screen on so a long watch on the
             // Home preview never lets Fire TV / Android TV slip into standby.
             binding.previewVideo.keepScreenOn = true
@@ -882,6 +930,8 @@ class HomeActivity : BaseActivity() {
         override fun onVideoResumed() {
             previewLogoHandler.removeCallbacksAndMessages(null)
             binding.infoLogo.visibility = View.GONE
+            binding.previewStatus.visibility = View.GONE
+            previewFailed = false
             binding.previewVideo.keepScreenOn = true
         }
         override fun onFatalError() {
@@ -890,8 +940,14 @@ class HomeActivity : BaseActivity() {
             previewLogoHandler.removeCallbacksAndMessages(null)
             binding.infoLogo.visibility = View.VISIBLE
             binding.previewVideo.keepScreenOn = false
+            previewFailed = true
+            binding.previewStatus.setText(R.string.preview_playback_failed)
+            binding.previewStatus.visibility = View.VISIBLE
         }
-        override fun onRetrying(attempt: Int) {}
+        override fun onRetrying(attempt: Int) {
+            binding.previewStatus.text = getString(R.string.reconnecting, attempt)
+            binding.previewStatus.visibility = View.VISIBLE
+        }
     }
 
     /**
@@ -904,8 +960,11 @@ class HomeActivity : BaseActivity() {
     private fun reAdoptHandedBackPreview(controller: PlayerController, channelId: String?) {
         handingOverPreview = false
         previewController = controller
+        previewFailed = false
         controller.setCallback(buildPreviewCallback())
         binding.infoLogo.visibility = View.VISIBLE
+        binding.previewStatus.setText(R.string.buffering)
+        binding.previewStatus.visibility = View.VISIBLE
         // Safety net: rebind() restarts the stream and the fresh frame event hides
         // the logo, but if that event never arrives, force-clear the logo so the
         // preview can't stay hidden behind it indefinitely.
@@ -954,8 +1013,10 @@ class HomeActivity : BaseActivity() {
         previewController?.release()
         previewController = null
         previewingChannel = null
+        previewFailed = false
         captionPrograms = emptyList()
         binding.infoLogo.visibility = View.VISIBLE
+        binding.previewStatus.visibility = View.GONE
         // Preview is gone: release the screen-on hold so we're not pinning the
         // display awake when nothing is playing on Home.
         binding.previewVideo.keepScreenOn = false
@@ -983,9 +1044,6 @@ class HomeActivity : BaseActivity() {
 
     override fun onStop() {
         super.onStop()
-        // Reset the validation spike's transform/visibility so returning on-screen
-        // isn't stuck in the expanded test state.
-        if (fsSpikeExpanded) collapseFullscreenSpike()
         if (handingOverPreview) {
             // The live controller was handed to the fullscreen player, which now
             // owns the single connection. Don't release it; just clear our local

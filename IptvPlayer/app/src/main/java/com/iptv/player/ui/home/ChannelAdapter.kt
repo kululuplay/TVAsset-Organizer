@@ -26,6 +26,25 @@ class ChannelAdapter(
     private val onToggleFavorite: (Channel) -> Unit
 ) : ListAdapter<Channel, ChannelAdapter.VH>(DIFF) {
 
+    /**
+     * Returns true when a row must hide its channel metadata behind the parental
+     * lock. Kept as a predicate so Home can honour its session unlocks while the
+     * global Search screen can apply the settings-level lock directly.
+     */
+    var lockedProvider: (Channel) -> Boolean = { false }
+
+    /**
+     * Re-binds only attached rows after parental-lock state changes. This avoids
+     * replacing the list (and disturbing TV focus) merely to update masking.
+     */
+    fun refreshVisible(recyclerView: RecyclerView) {
+        for (i in 0 until recyclerView.childCount) {
+            val holder =
+                recyclerView.getChildViewHolder(recyclerView.getChildAt(i)) as? VH ?: continue
+            holder.boundChannel?.let { holder.bind(it) }
+        }
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_channel, parent, false)
@@ -43,15 +62,43 @@ class ChannelAdapter(
         private val favStar: ImageView = itemView.findViewById(R.id.favStar)
         private val catchupBadge: ImageView = itemView.findViewById(R.id.catchupBadge)
 
+        var boundChannel: Channel? = null
+            private set
+
         fun bind(channel: Channel) {
+            boundChannel = channel
+
+            itemView.setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus) onFocused(channel)
+            }
+            itemView.setOnClickListener { onClicked(channel) }
+
+            if (lockedProvider(channel)) {
+                name.setText(R.string.adult_locked_title)
+                number.text = ""
+                favStar.visibility = View.GONE
+                catchupBadge.visibility = View.GONE
+                logo.scaleType = ImageView.ScaleType.FIT_CENTER
+                // Use Coil for the replacement too: it cancels any in-flight
+                // request for the real logo, preventing a late artwork leak.
+                logo.load(R.drawable.ic_lock) {
+                    crossfade(false)
+                }
+                itemView.setOnLongClickListener { true }
+                return
+            }
+
             name.text = ChannelText.clean(channel.name)
             number.text = channel.number?.toString() ?: ""
             favStar.visibility = if (channel.isFavorite) View.VISIBLE else View.GONE
             catchupBadge.visibility = if (channel.catchupDays > 0) View.VISIBLE else View.GONE
+            logo.scaleType = ImageView.ScaleType.FIT_CENTER
 
             val placeholder = LogoPlaceholder.forName(itemView.context, channel.name)
             if (channel.logoUrl.isNullOrBlank()) {
-                logo.setImageDrawable(placeholder)
+                logo.load(placeholder) {
+                    crossfade(false)
+                }
             } else {
                 logo.load(channel.logoUrl) {
                     crossfade(false)
@@ -62,10 +109,6 @@ class ChannelAdapter(
                 }
             }
 
-            itemView.setOnFocusChangeListener { _, hasFocus ->
-                if (hasFocus) onFocused(channel)
-            }
-            itemView.setOnClickListener { onClicked(channel) }
             itemView.setOnLongClickListener {
                 onToggleFavorite(channel)
                 true

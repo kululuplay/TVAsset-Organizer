@@ -75,6 +75,8 @@ class SettingsActivity : BaseActivity() {
     private var bufferModeValue: TextView? = null
     private var passthroughSwitch: SwitchCompat? = null
     private var debugOverlaySwitch: SwitchCompat? = null
+    private var selectedPlayerMode = PlayerMode.AUTO
+    private var selectedDecoderMode = DecoderMode.AUTO
 
     private var autoSyncEnabled = false
     private var autoSyncHours = 12
@@ -328,18 +330,26 @@ class SettingsActivity : BaseActivity() {
 
     private fun buildPlayerPanel() {
         val c = binding.playerContainer
+        addSectionHeader(c, getString(R.string.settings_live_player_header))
+        addPanelDescription(c, getString(R.string.settings_player_scope_desc))
         listOf(PlayerMode.AUTO, PlayerMode.EXOPLAYER, PlayerMode.VLC).forEach { mode ->
             val row = LayoutInflater.from(this)
                 .inflate(R.layout.item_settings_choice, c, false)
             row.findViewById<TextView>(R.id.cTitle).text = playerModeLabel(mode)
+            row.findViewById<TextView>(R.id.cSubtitle).apply {
+                text = playerModeDescription(mode)
+                visibility = View.VISIBLE
+            }
             val icon = row.findViewById<ImageView>(R.id.cIcon)
             icon.setImageResource(R.drawable.ic_check)
             icon.imageTintList = ContextCompat.getColorStateList(this, R.color.settings_row_text)
             icon.visibility = View.INVISIBLE
-            row.setOnClickListener { viewModel.setPlayerMode(mode) }
+            row.setOnClickListener { selectPlayerMode(mode) }
             c.addView(row)
             playerRows[mode] = row
         }
+
+        addSectionHeader(c, getString(R.string.settings_playback_tuning_header))
 
         // Decoder strategy (Auto / Hardware / Software) for the green-screen fix.
         val decoderRow = inflateMaster(c, getString(R.string.settings_decoder_mode))
@@ -665,6 +675,21 @@ class SettingsActivity : BaseActivity() {
         container.addView(header)
     }
 
+    private fun addPanelDescription(container: LinearLayout, description: String) {
+        container.addView(TextView(this).apply {
+            text = description
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.text_secondary))
+            textSize = 16f
+            setLineSpacing(0f, 1.12f)
+            setPadding(
+                0,
+                0,
+                0,
+                resources.getDimensionPixelSize(R.dimen.space_m),
+            )
+        })
+    }
+
     private fun addInfoRow(container: LinearLayout, label: String, value: String): TextView {
         val row = LayoutInflater.from(this).inflate(R.layout.item_settings_info, container, false)
         row.findViewById<TextView>(R.id.iLabel).text = label
@@ -727,6 +752,7 @@ class SettingsActivity : BaseActivity() {
         }
         lifecycleScope.launch {
             viewModel.playerMode.collectLatest { mode ->
+                selectedPlayerMode = mode
                 playerRows.forEach { (m, row) ->
                     row.findViewById<ImageView>(R.id.cIcon).visibility =
                         if (m == mode) View.VISIBLE else View.INVISIBLE
@@ -734,7 +760,10 @@ class SettingsActivity : BaseActivity() {
             }
         }
         lifecycleScope.launch {
-            viewModel.decoderMode.collectLatest { decoderModeValue?.text = decoderModeLabel(it) }
+            viewModel.decoderMode.collectLatest {
+                selectedDecoderMode = it
+                decoderModeValue?.text = decoderModeLabel(it)
+            }
         }
         lifecycleScope.launch {
             viewModel.streamFormat.collectLatest { streamFormatValue?.text = streamFormatLabel(it) }
@@ -813,6 +842,29 @@ class SettingsActivity : BaseActivity() {
         }
     )
 
+    private fun playerModeDescription(mode: PlayerMode): String = getString(
+        when (mode) {
+            PlayerMode.AUTO -> R.string.settings_player_auto_desc
+            PlayerMode.EXOPLAYER -> R.string.settings_player_exo_desc
+            PlayerMode.VLC -> R.string.settings_player_vlc_desc
+        }
+    )
+
+    private fun selectPlayerMode(mode: PlayerMode) {
+        if (mode == PlayerMode.EXOPLAYER && selectedDecoderMode == DecoderMode.SOFTWARE) {
+            AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
+                .setTitle(R.string.settings_player_exo)
+                .setMessage(R.string.settings_exo_requires_hardware)
+                .setPositiveButton(android.R.string.ok) { _, _ ->
+                    viewModel.setPlaybackSelection(PlayerMode.EXOPLAYER, DecoderMode.HARDWARE)
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+            return
+        }
+        viewModel.setPlayerMode(mode)
+    }
+
     private fun decoderModeLabel(mode: DecoderMode): String = getString(
         when (mode) {
             DecoderMode.AUTO -> R.string.settings_decoder_auto
@@ -826,7 +878,24 @@ class SettingsActivity : BaseActivity() {
         val labels = modes.map { decoderModeLabel(it) }.toTypedArray()
         AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
             .setTitle(R.string.settings_decoder_mode)
-            .setItems(labels) { _, which -> viewModel.setDecoderMode(modes[which]) }
+            .setItems(labels) { _, which ->
+                val selected = modes[which]
+                if (
+                    selected == DecoderMode.SOFTWARE &&
+                    selectedPlayerMode == PlayerMode.EXOPLAYER
+                ) {
+                    AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
+                        .setTitle(R.string.settings_decoder_software)
+                        .setMessage(R.string.settings_software_requires_vlc)
+                        .setPositiveButton(android.R.string.ok) { _, _ ->
+                            viewModel.setPlaybackSelection(PlayerMode.VLC, DecoderMode.SOFTWARE)
+                        }
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show()
+                } else {
+                    viewModel.setDecoderMode(selected)
+                }
+            }
             .show()
     }
 
@@ -864,7 +933,7 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun sharePlaybackLog() {
-        val file = PlaybackLog.file(this)
+        val file = PlaybackLog.shareableFile(this)
         if (file == null || !file.exists()) {
             Toast.makeText(this, R.string.settings_playback_log_empty, Toast.LENGTH_SHORT).show()
             return

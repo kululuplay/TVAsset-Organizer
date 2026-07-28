@@ -15,6 +15,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.paging.LoadState
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.databinding.ActivitySearchBinding
 import com.iptv.player.ui.common.BaseActivity
@@ -50,6 +51,7 @@ class SearchActivity : BaseActivity() {
     private var hasMovies = false
     private var hasSeries = false
     private var hasQuery = false
+    private var adultLocked = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,6 +60,7 @@ class SearchActivity : BaseActivity() {
 
         setupLists()
         setupSearch()
+        binding.catalogRetryButton.setOnClickListener { viewModel.retryCatalog() }
         observe()
     }
 
@@ -71,12 +74,7 @@ class SearchActivity : BaseActivity() {
         lifecycleScope.launch {
             val locked = ServiceLocator.settings.lockAdult.first() &&
                 ServiceLocator.settings.hasPin()
-            if (movieAdapter.adultLocked != locked) {
-                movieAdapter.adultLocked = locked
-                seriesAdapter.adultLocked = locked
-                movieAdapter.refreshVisible(binding.movieGrid)
-                seriesAdapter.refreshVisible(binding.seriesGrid)
-            }
+            applyAdultMask(locked)
         }
     }
 
@@ -84,10 +82,11 @@ class SearchActivity : BaseActivity() {
         liveAdapter = ChannelAdapter(
             onFocused = { },
             onClicked = { ch ->
-                PinLockHelper.guard(this, isAdult = ch.isAdult()) { openLive(ch.id) }
+                PinLockHelper.guard(this, isAdult = ch.isAdult()) { openLive(ch) }
             },
             onToggleFavorite = { /* favorite toggling isn't offered from search */ }
         )
+        liveAdapter.lockedProvider = { adultLocked && it.isAdult() }
         binding.liveList.layoutManager = LinearLayoutManager(this)
         binding.liveList.adapter = liveAdapter
 
@@ -125,23 +124,21 @@ class SearchActivity : BaseActivity() {
     }
 
     private fun observe() {
-        lifecycleScope.launch {
-            viewModel.channels.collectLatest { list ->
-                liveAdapter.submitList(list)
-                hasLive = list.isNotEmpty()
-                updateEmptyState()
-            }
-        }
         // Mask adult posters/titles from the very first paging bind: read the
-        // parental-lock setting BEFORE starting the movie/series submitData
-        // collectors, in the SAME coroutine, so the DataStore read can't race the
-        // first bind and leak adult artwork. Changes while away are handled in
-        // onResume via refreshVisible (notify* is unsafe on a Paging adapter).
+        // parental-lock setting BEFORE starting any result collector, in the SAME
+        // coroutine, so the DataStore read can't race the first live/poster bind
+        // and leak adult metadata. Changes while away are handled in onResume.
         lifecycleScope.launch {
             val locked = ServiceLocator.settings.lockAdult.first() &&
                 ServiceLocator.settings.hasPin()
-            movieAdapter.adultLocked = locked
-            seriesAdapter.adultLocked = locked
+            applyAdultMask(locked)
+            launch {
+                viewModel.channels.collectLatest { list ->
+                    liveAdapter.submitList(list)
+                    hasLive = list.isNotEmpty()
+                    updateEmptyState()
+                }
+            }
             launch {
                 viewModel.movies.collectLatest { data -> movieAdapter.submitData(data) }
             }
@@ -165,19 +162,58 @@ class SearchActivity : BaseActivity() {
                 }
             }
         }
+        lifecycleScope.launch {
+            viewModel.catalogState.collectLatest { state ->
+                val visible = state.loading || state.errorRes != null
+                binding.catalogStatusRow.visibility = if (visible) View.VISIBLE else View.GONE
+                binding.catalogProgress.visibility = if (state.loading) View.VISIBLE else View.GONE
+                binding.catalogRetryButton.visibility =
+                    if (state.errorRes != null) View.VISIBLE else View.GONE
+                binding.catalogStatusText.text = when {
+                    state.loading -> getString(
+                        R.string.catalog_loading_progress,
+                        state.completed,
+                        state.total,
+                    )
+                    state.errorRes != null -> getString(state.errorRes)
+                    else -> ""
+                }
+                updateEmptyState()
+            }
+        }
+    }
+
+    /** Applies parental masking without invalidating Paging adapters or TV focus. */
+    private fun applyAdultMask(locked: Boolean) {
+        if (adultLocked == locked &&
+            movieAdapter.adultLocked == locked &&
+            seriesAdapter.adultLocked == locked
+        ) {
+            return
+        }
+        adultLocked = locked
+        movieAdapter.adultLocked = locked
+        seriesAdapter.adultLocked = locked
+        liveAdapter.refreshVisible(binding.liveList)
+        movieAdapter.refreshVisible(binding.movieGrid)
+        seriesAdapter.refreshVisible(binding.seriesGrid)
     }
 
     /** Show the "no results" hint only once a query is entered and nothing matched. */
     private fun updateEmptyState() {
-        val nothing = hasQuery && !hasLive && !hasMovies && !hasSeries
+        val catalogState = viewModel.catalogState.value
+        val nothing = hasQuery && !hasLive && !hasMovies && !hasSeries &&
+            !catalogState.loading && catalogState.errorRes == null
         binding.emptyState.visibility = if (nothing) View.VISIBLE else View.GONE
         binding.resultsRow.visibility = if (nothing) View.GONE else View.VISIBLE
     }
 
-    private fun openLive(id: String) {
+    private fun openLive(channel: com.iptv.player.data.model.Channel) {
         startActivity(
             Intent(this, PlayerActivity::class.java)
-                .putExtra(PlayerActivity.EXTRA_CHANNEL_ID, id)
+                .putExtra(PlayerActivity.EXTRA_CHANNEL_ID, channel.id)
+                .putExtra(PlayerActivity.EXTRA_CATEGORY_ID, channel.categoryId)
+                .putExtra(PlayerActivity.EXTRA_PARENTAL_AUTHORIZED, true)
         )
     }
 

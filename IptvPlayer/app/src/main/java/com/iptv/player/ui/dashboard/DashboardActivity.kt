@@ -178,12 +178,12 @@ class DashboardActivity : BaseActivity() {
     private fun wireCards() {
         configCard(binding.tileLive, R.drawable.ic_tv, R.drawable.bg_badge_live,
             R.string.nav_live, R.string.dash_sub_live, R.drawable.bg_tile_hero) {
-            open(HomeActivity::class.java)
+            openScreen(HomeActivity::class.java)
         }
         configCard(binding.tileMovies, R.drawable.ic_movie, R.drawable.bg_badge_movies,
-            R.string.nav_movies, R.string.dash_sub_movies) { open(VodActivity::class.java) }
+            R.string.nav_movies, R.string.dash_sub_movies) { openScreen(VodActivity::class.java) }
         configCard(binding.tileSeries, R.drawable.ic_series, R.drawable.bg_badge_series,
-            R.string.nav_series, R.string.dash_sub_series) { open(SeriesActivity::class.java) }
+            R.string.nav_series, R.string.dash_sub_series) { openScreen(SeriesActivity::class.java) }
         // Radio stations live in their own folder; Live TV excludes them.
         configCard(binding.tileRadio, R.drawable.ic_radio, R.drawable.bg_badge_radio,
             R.string.nav_radio, R.string.dash_sub_radio) {
@@ -193,17 +193,17 @@ class DashboardActivity : BaseActivity() {
             )
         }
         configCard(binding.tileSettings, R.drawable.ic_settings, R.drawable.bg_badge_settings,
-            R.string.nav_settings, R.string.dash_sub_settings) { open(SettingsActivity::class.java) }
+            R.string.nav_settings, R.string.dash_sub_settings) { openScreen(SettingsActivity::class.java) }
         // Unified favorites across channels, movies and series (not just Live TV).
         configCard(binding.tileFavorites, R.drawable.ic_star, R.drawable.bg_badge_favorites,
-            R.string.nav_favorites, R.string.dash_sub_favorites) { open(FavoritesActivity::class.java) }
+            R.string.nav_favorites, R.string.dash_sub_favorites) { openScreen(FavoritesActivity::class.java) }
 
         configCard(binding.tileContinue, R.drawable.ic_clock, R.drawable.bg_badge_catchup,
             R.string.section_continue_watching, R.string.dash_sub_continue) {
-            open(ContinueWatchingActivity::class.java)
+            openScreen(ContinueWatchingActivity::class.java)
         }
         configCard(binding.tileSearch, R.drawable.ic_search, R.drawable.bg_badge_search,
-            R.string.action_search, R.string.dash_sub_search) { open(SearchActivity::class.java) }
+            R.string.action_search, R.string.dash_sub_search) { openScreen(SearchActivity::class.java) }
         // İstek & Şikayet: opens a modal that posts to the crash-receiver ops panel.
         configCard(binding.tileRequest, R.drawable.ic_feedback, R.drawable.bg_badge_request,
             R.string.dash_request, R.string.dash_sub_request) { RequestDialog.show(this) }
@@ -276,7 +276,7 @@ class DashboardActivity : BaseActivity() {
         }
     }
 
-    private fun open(target: Class<*>) {
+    private fun openScreen(target: Class<*>) {
         startActivity(Intent(this, target))
     }
 

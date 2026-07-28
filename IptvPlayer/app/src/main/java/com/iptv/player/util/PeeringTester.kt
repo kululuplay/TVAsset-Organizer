@@ -254,6 +254,7 @@ object PeeringTester {
      * panel can show each box's last peering test. Best-effort; never throws.
      */
     suspend fun upload(context: Context, summary: String) {
+        if (!Telemetry.isEnabled) return
         runCatching {
             val json = JSONObject().apply {
                 put("deviceId", DeviceId.get(context))

@@ -13,6 +13,11 @@
     <string name="action_close">إغلاق</string>
     <string name="loading">جارٍ التحميل…</string>
     <string name="search_hint">بحث…</string>
+    <string name="search_movies_hint">بحث في الأفلام…</string>
+    <string name="search_series_hint">بحث في المسلسلات…</string>
+    <string name="search_channels_hint">بحث في القنوات…</string>
+    <string name="search_results_title">نتائج البحث</string>
+    <string name="catalog_loading_progress">جارٍ تحميل الكتالوج %1$d/%2$d…</string>
 
     <string name="wizard_welcome_title">مرحباً</string>
     <string name="wizard_welcome_subtitle">لنُعدّ خدمتك في خطوات قليلة.</string>
@@ -51,9 +56,12 @@
     <string name="empty_channels">لا يوجد شيء هنا بعد.</string>
     <string name="empty_favorites">لم تُضف أي مفضلات بعد.</string>
     <string name="empty_search">لا توجد نتائج.</string>
+    <string name="empty_movies">لا توجد أفلام في هذا العرض.</string>
+    <string name="empty_series">لا توجد مسلسلات في هذا العرض.</string>
     <string name="added_to_favorites">أُضيف إلى المفضلة</string>
     <string name="removed_from_favorites">أُزيل من المفضلة</string>
     <string name="channel_count">%1$d قناة</string>
+    <string name="preview_playback_failed">تعذر تشغيل المعاينة. اضغط موافق لإعادة المحاولة.</string>
 
     <string name="buffering">جارٍ التحميل…</string>
     <string name="reconnecting">جارٍ إعادة الاتصال… (%1$d)</string>
@@ -90,15 +98,42 @@
     <string name="detail_year">السنة</string>
     <string name="detail_rating">التقييم</string>
     <string name="detail_plot">القصة</string>
+    <string name="detail_more_in_category">المزيد من %1$s</string>
+    <string name="detail_more_to_watch">محتويات أخرى للمشاهدة</string>
+    <string name="sort_label">الترتيب</string>
+    <string name="sort_recent">الأحدث</string>
+    <string name="sort_az">أ–ي</string>
+    <string name="sort_rating">التقييم</string>
+    <string name="sort_year">السنة</string>
     <string name="series_season">الموسم %1$d</string>
     <string name="series_episode">الحلقة %1$d</string>
 
     <string name="settings_title">الإعدادات</string>
     <string name="settings_playback">التشغيل</string>
-    <string name="settings_player_mode">محرك التشغيل</string>
+    <string name="settings_player_mode">محرك البث التلفزيوني المباشر</string>
+    <string name="settings_live_player_header">محرك البث المباشر</string>
+    <string name="settings_player_scope_desc">يبدأ الوضع التلقائي البث المباشر عبر تسريع ExoPlayer العتادي، ولا ينتقل إلى VLC إلا عند فشل التشغيل فعلياً. تستخدم الأفلام والمسلسلات والمشاهدة اللاحقة VLC لدعم أوسع للصيغ ومسارات الصوت والترجمة. تنطبق إعدادات وحدة فك الترميز والتخزين المؤقت وتمرير الصوت أدناه على كليهما.</string>
+    <string name="settings_playback_tuning_header">ضبط التشغيل</string>
     <string name="settings_player_auto">تلقائي (موصى به)</string>
+    <string name="settings_player_auto_desc">ExoPlayer العتادي أولاً، ثم انتقال مضبوط إلى VLC</string>
     <string name="settings_player_exo">ExoPlayer</string>
+    <string name="settings_player_exo_desc">استخدام ExoPlayer فقط دون تبديل المحرك تلقائياً</string>
     <string name="settings_player_vlc">VLC</string>
+    <string name="settings_player_vlc_desc">استخدام VLC فقط؛ قد يبدّل فك الترميز التلقائي داخله</string>
+    <string name="settings_exo_requires_hardware">يستخدم ExoPlayer مسار MediaCodec في الجهاز ولا يمكنه فرض فك الترميز البرمجي في VLC. سيُغيّر فك الترميز إلى العتاد فقط.</string>
+    <string name="settings_software_requires_vlc">يتطلب فك الترميز البرمجي VLC. سيُغيّر محرك التشغيل إلى VLC.</string>
+    <string name="settings_decoder_mode">وحدة فك الترميز</string>
+    <string name="settings_decoder_auto">تلقائي (عتاد مع انتقال برمجي)</string>
+    <string name="settings_decoder_hardware">العتاد فقط</string>
+    <string name="settings_decoder_software">البرنامج فقط</string>
+    <string name="settings_stream_format">صيغة البث المباشر</string>
+    <string name="settings_stream_format_ts">MPEG-TS ‏(.ts) — الأكثر توافقاً</string>
+    <string name="settings_stream_format_hls">HLS ‏(.m3u8) — متكيّف</string>
+    <string name="settings_buffer">حجم التخزين المؤقت</string>
+    <string name="settings_buffer_low">منخفض (تبديل سريع)</string>
+    <string name="settings_buffer_normal">عادي (موصى به)</string>
+    <string name="settings_buffer_high">مرتفع (توقفات أقل)</string>
+    <string name="settings_debug_overlay">طبقة التصحيح (المشغّل والمعاينة)</string>
     <string name="settings_language">اللغة</string>
     <string name="settings_general">عام</string>
     <string name="settings_account">الحساب</string>
@@ -122,6 +157,7 @@
     <string name="pin_wrong">رمز خاطئ.</string>
     <string name="pin_mismatch">الرمزان غير متطابقين.</string>
     <string name="pin_locked_content">هذا المحتوى مقفل.</string>
+    <string name="adult_locked_title">مقفل</string>
 
     <string name="diag_title">التشخيص</string>
     <string name="diag_run">تشغيل الاختبارات</string>
@@ -146,7 +182,7 @@
 
     <string name="about_title">حول</string>
     <string name="about_version">الإصدار %1$s</string>
-    <string name="about_update_available">يتوفر تحديث.</string>
+    <string name="about_update_available">يتوفر التحديث v%1$s.</string>
     <string name="about_update_required">يتوفر تحديث مطلوب. يرجى التحديث للمتابعة.</string>
     <string name="about_update_now">حدّث الآن</string>
 
@@ -157,6 +193,7 @@
     <string name="error_account_in_use">قد يكون هذا الحساب مستخدماً على جهاز آخر.</string>
     <string name="error_stream_not_responding">البث لا يستجيب حالياً، تتم إعادة المحاولة.</string>
     <string name="error_empty_playlist">لم يتم العثور على قنوات في هذه القائمة.</string>
+    <string name="error_cannot_play_content">تعذّر تشغيل هذا المحتوى. تحقق من الاتصال أو جرّب وحدة فك ترميز أخرى.</string>
     <string name="error_unknown">حدث خطأ ما. يرجى المحاولة مرة أخرى.</string>
     <!-- Added for feature wiring (translated) -->
     <string name="about_check_update">التحقق من التحديثات</string>

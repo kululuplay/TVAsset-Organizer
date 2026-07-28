@@ -1,9 +1,9 @@
 /*
  * VlcPlayerEngine.kt
- * Software-capable playback backend using libVLC. Used as the automatic fallback
- * when ExoPlayer greens out (hardware H.264 failure) or can't decode an audio
- * codec (AC-3/E-AC-3/MP2/DTS). libVLC decodes everything in software to PCM, so
- * it is the safety net that guarantees both picture and sound on weak sticks.
+ * Hardware/software-capable playback backend using libVLC. AUTO can route here
+ * after a confirmed ExoPlayer failure; an explicit VLC selection stays here.
+ * With software decode enabled, libVLC is also the broad codec/container safety
+ * net for streams unsupported by a device MediaCodec.
  *
  * Real-stick fixes:
  *   - Audio: AudioTrack output, SPDIF/passthrough OFF by default (:no-spdif) so
@@ -21,8 +21,8 @@
  *     other native MediaCodec->Surface path and is selectable as the engine.
  *     Software deinterlace applies ONLY on the forceSoftware path. See the Amlogic
  *     green-screen memory note.
- *   - forceSoftware: disable MediaCodec entirely for streams where the hardware
- *     decoder produced a green/blank frame.
+ *   - forceSoftware: disable MediaCodec entirely when the decoder policy or
+ *     evidence-based fallback selects VLC software.
  */
 package com.iptv.player.player
 
@@ -34,7 +34,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import com.iptv.player.util.AppInfo
-import com.iptv.player.util.DeviceCaps
 import com.iptv.player.util.PlaybackLog
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
@@ -64,18 +63,17 @@ class VlcPlayerEngine(
     private var audioDelayMs = 0L
     private var subtitleDelayMs = 0L
 
-    // One-shot per stream so the green-prone profile check fires at most once.
+    // One-shot per stream so the decode-profile check fires at most once.
     // AtomicBoolean: maybeRouteByProfile() runs from BOTH the VLC native event
     // thread (Playing/Vout/Buffering) and the main thread (delayed re-checks), so
-    // the claim must be a compare-and-set to avoid a double fallback under a race.
-    private val greenCheckDone = AtomicBoolean(false)
+    // the claim must be a compare-and-set to avoid a double route under a race.
+    private val profileCheckDone = AtomicBoolean(false)
 
-    // Re-check scheduler. The green-prone routing keys on the track frame rate,
-    // but for live TS streams VLC often reports frameRateDen=0 (fps unknown) on
-    // the first Playing/Vout event, so a 1080p50 stream wrongly looks like a
-    // normal channel and stays on the green-prone Amlogic hardware decoder. The
-    // frame rate populates a moment later (the diagnostics overlay proves it), so
-    // we re-run the check a few times after start until fps is known.
+    // Re-check scheduler. Resolution is often still 0x0 on the first Playing/Vout
+    // event, so re-read briefly until the track is populated. The only proactive
+    // route retained is software -> hardware for UHD, where software decode cannot
+    // keep up. Device/profile guesses were removed because they made AUTO abandon
+    // a healthy hardware path on the latest real-stick verification.
     private val profileHandler = Handler(Looper.getMainLooper())
 
     // Silent-audio self-heal. libVLC normally auto-selects an audio track, but a
@@ -240,70 +238,29 @@ class VlcPlayerEngine(
     }
 
     /**
-     * Resolution-aware decode routing, evaluated once the video output exists (so
-     * track dimensions/frame rate are populated). Two opposite moves:
-     *
-     *  - Software path + UHD/4K (≥1440p): no TV-box CPU can software-decode 4K at
-     *    80–100 Mbps in real time, so it stutters. Escalate THIS stream to the
-     *    hardware decoder (onSoftwareTooSlow -> controller restarts on VLC_HW).
-     *  - Hardware path + the Amlogic-green-prone profile — 1080p-class at a high
-     *    frame rate (1080p@50/60 H.264) but NOT UHD — drop to software for THIS
-     *    stream only (onVideoInvalid -> controller restarts on VLC_SW). 4K is
-     *    excluded so true UHD keeps the hardware path it needs.
-     *
-     * Keyed on resolution + frame rate (no codec gate: libVLC's track codec field
-     * is not safely typed across versions). Normal channels — lower resolution, or
-     * ~25fps interlaced 1080i — stay where they are.
+     * Resolution-aware decode routing, evaluated once the video track is known.
+     * Software-decoded UHD/4K is reported to the controller because TV-box CPUs
+     * cannot sustain it. Hardware playback is left alone: fallback is driven by
+     * real decoder/output failures, never a broad device/profile guess.
      */
     private fun maybeRouteByProfile() {
-        if (greenCheckDone.get()) return
+        if (profileCheckDone.get()) return
         val track = mediaPlayer?.currentVideoTrack ?: return
         // Dimensions are frequently still 0x0 on the first Playing/Vout event for
-        // live TS (and at startup before the video track is parsed). Routing on
-        // 0x0 is harmful: isUhd is false, so on Amlogic (greenProne = !isUhd) it
-        // fires a premature software fallback — which for a real 4K HEVC stream is
-        // unplayable. Bail without claiming so the rechecks re-run once the true
-        // resolution is known (4K -> isUhd -> stays on hardware).
+        // live TS. Bail without claiming so the rechecks can identify a real UHD
+        // stream before deciding whether a software path is viable.
         if (track.width <= 0 || track.height <= 0) return
-        val den = track.frameRateDen
-        val fps = if (den > 0) track.frameRateNum.toFloat() / den else 0f
         val isUhd = track.height >= UHD_MIN_HEIGHT || track.width >= UHD_MIN_WIDTH
 
-        if (forceSoftware) {
-            // 4K cannot be software-decoded in real time -> escalate to hardware.
-            if (isUhd && claimRouting()) {
-                PlaybackLog.log(
-                    context, engineName,
-                    "UHD ${track.width}x${track.height} on software -> hardware escalation"
-                )
-                listener?.onSoftwareTooSlow()
-            }
-            return
-        }
-
-        // Hardware path: 4K must always stay on hardware (software can't keep up).
-        // Below 4K, what counts as green-prone depends on the box:
-        //   - Amlogic: the libVLC hardware underlay greens on EVERY non-UHD profile
-        //     (1080i@25, 576p, 1080p@50…) through the box compositor — confirmed in
-        //     the field — and the failure is a display-plane issue with no runtime
-        //     signal, so we treat the whole non-UHD hardware path as green-prone and
-        //     drop to software (where avcodec-hw=none renders real, displayable
-        //     frames). ExoPlayer remains the box's working hardware-video path.
-        //   - Other boxes: only the classic 1080p@50/60 high-bitrate H.264 profile
-        //     trips the hardware decoder, so keep the narrow heuristic there.
-        val greenProneProfile = if (DeviceCaps.isAmlogic) {
-            !isUhd
-        } else {
-            !isUhd &&
-                (track.height >= GREEN_PRONE_MIN_HEIGHT || track.width >= GREEN_PRONE_MIN_WIDTH) &&
-                fps >= GREEN_PRONE_MIN_FPS
-        }
-        if (greenProneProfile && claimRouting()) {
+        if (forceSoftware && isUhd && claimRouting()) {
             PlaybackLog.log(
                 context, engineName,
-                "green-prone HW profile ${track.width}x${track.height}@${fps}fps -> software fallback"
+                "UHD ${track.width}x${track.height} on software -> hardware escalation"
             )
-            listener?.onVideoInvalid()
+            listener?.onSoftwareTooSlow()
+        } else {
+            // Track is populated and no proactive route is needed.
+            claimRouting()
         }
     }
 
@@ -313,20 +270,18 @@ class VlcPlayerEngine(
      * caller must NOT emit a duplicate fallback.
      */
     private fun claimRouting(): Boolean {
-        if (!greenCheckDone.compareAndSet(false, true)) return false
+        if (!profileCheckDone.compareAndSet(false, true)) return false
         profileHandler.removeCallbacksAndMessages(null)
         return true
     }
 
     /**
-     * Re-run the profile check a few times after playback starts. The frame rate
-     * is frequently still unknown (frameRateDen=0) on the first Playing/Vout for
-     * live TS, so a single early read misses 1080p50/60 and leaves it greening on
-     * the hardware decoder. Cheap and self-cancelling: maybeRouteByProfile()
-     * returns immediately once greenCheckDone is set.
+     * Re-run the profile check briefly after playback starts because VLC often
+     * reports 0x0 dimensions on the first Playing/Vout event. Cheap and
+     * self-cancelling once [profileCheckDone] is claimed.
      */
     private fun scheduleProfileRechecks() {
-        if (greenCheckDone.get()) return
+        if (profileCheckDone.get()) return
         profileHandler.removeCallbacksAndMessages(null)
         for (delay in PROFILE_RECHECK_DELAYS_MS) {
             profileHandler.postDelayed({ maybeRouteByProfile() }, delay)
@@ -364,7 +319,7 @@ class VlcPlayerEngine(
     override fun play(url: String, reset: Boolean) {
         val vlc = libVlc ?: return
         val mp = mediaPlayer ?: return
-        greenCheckDone.set(false)
+        profileCheckDone.set(false)
         profileHandler.removeCallbacksAndMessages(null)
         // Reset the silent-audio guard on the main thread, then hand the blocking
         // stop -> setMedia -> play sequence to the VLC ops thread as ONE runnable
@@ -514,7 +469,7 @@ class VlcPlayerEngine(
     /**
      * Read the live video track for the diagnostics overlay. width/height and the
      * frame-rate num/den are proven-safe across libVLC versions (already used by
-     * the green-prone profile check). codec is read through an Any?-typed helper
+     * the resolution profile check). codec is read through an Any?-typed helper
      * so it compiles whether libVLC exposes it as an Int fourcc or a String;
      * bitrate (bits/s) is converted to kbps. Null fields render as "—".
      */
@@ -569,13 +524,6 @@ class VlcPlayerEngine(
     }
 
     companion object {
-        // Green-prone Amlogic profile: 1080p at a high frame rate (1080p@50/60).
-        // Broadcast 1080i reports ~25fps (field-coded) so the >=49 threshold keeps
-        // it on hardware; only progressive 1080p50/60 trips the software fallback.
-        private const val GREEN_PRONE_MIN_HEIGHT = 1080
-        private const val GREEN_PRONE_MIN_WIDTH = 1920
-        private const val GREEN_PRONE_MIN_FPS = 49f
-
         // UHD/4K threshold (QHD 1440p and up). Above this, software decode can't
         // keep up with 80–100 Mbps streams, so the hardware decoder is mandatory.
         private const val UHD_MIN_HEIGHT = 1440
