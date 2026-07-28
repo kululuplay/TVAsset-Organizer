@@ -7,6 +7,7 @@ package com.iptv.player.ui.series
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
@@ -37,7 +38,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
-class SeriesViewModel(app: Application) : AndroidViewModel(app) {
+class SeriesViewModel(
+    app: Application,
+    private val savedStateHandle: SavedStateHandle,
+) : AndroidViewModel(app) {
 
     private val repo = ServiceLocator.repository
     private val settings = ServiceLocator.settings
@@ -45,6 +49,8 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
     companion object {
         const val CAT_ALL = "__all__"
         const val CAT_POPULAR = "__popular__"
+        private const val STATE_CATEGORY = "series_vm_category"
+        private const val STATE_QUERY = "series_vm_query"
     }
 
     private val _loadState = MutableStateFlow(CatalogLoadState())
@@ -83,9 +89,10 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val selectedCategory = MutableStateFlow<String?>(null)
-    private val _query = MutableStateFlow("")
-    val query: StateFlow<String> = _query
+    private val selectedCategory =
+        savedStateHandle.getStateFlow<String?>(STATE_CATEGORY, null)
+    val query: StateFlow<String> =
+        savedStateHandle.getStateFlow(STATE_QUERY, "")
 
     /** The currently selected category id (survives config changes). */
     val selectedCategoryId: String? get() = selectedCategory.value
@@ -96,13 +103,27 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
 
     private var selectionLoadJob: Job? = null
     private var catalogLoadJob: Job? = null
+    private var sortRestoreJob: Job? = null
 
     init {
         // Restore the user's last-used sort so it survives process death.
-        viewModelScope.launch { _sort.value = settings.contentSort(ContentType.SERIES).first() }
+        sortRestoreJob = viewModelScope.launch {
+            _sort.value = settings.contentSort(ContentType.SERIES).first()
+        }
+        // SavedStateHandle can restore the browse mode before the category list
+        // reattaches. Resume any lazy fetch here; the Activity's later selection
+        // callback is intentionally idempotent.
+        when {
+            query.value.isNotEmpty() -> ensureFullCatalog()
+            selectedCategory.value != null -> scheduleSelectedCategoryLoad()
+        }
     }
 
     fun setSort(order: ContentSort) {
+        if (_sort.value == order) return
+        // A very fast D-pad click during startup must win over the asynchronous
+        // DataStore restore instead of being overwritten a frame later.
+        sortRestoreJob?.cancel()
         _sort.value = order
         viewModelScope.launch { settings.setContentSort(ContentType.SERIES, order) }
     }
@@ -115,14 +136,15 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
      * for every row the user passes.
      */
     fun selectCategory(categoryId: String) {
-        selectedCategory.value = categoryId
+        if (selectedCategory.value == categoryId) return
+        savedStateHandle[STATE_CATEGORY] = categoryId
         scheduleSelectedCategoryLoad()
     }
 
     fun setQuery(text: String) {
         val normalized = text.trim()
-        if (_query.value == normalized) return
-        _query.value = normalized
+        if (query.value == normalized) return
+        savedStateHandle[STATE_QUERY] = normalized
         selectionLoadJob?.cancel()
         if (normalized.isNotEmpty()) {
             ensureFullCatalog()
@@ -133,7 +155,7 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
 
     fun retryLoad() {
         val categoryId = selectedCategory.value
-        if (_query.value.isNotEmpty() || categoryId == null ||
+        if (query.value.isNotEmpty() || categoryId == null ||
             categoryId == CAT_ALL || categoryId == CAT_POPULAR
         ) {
             ensureFullCatalog()
@@ -159,7 +181,7 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
         selectionLoadJob?.cancel()
         selectionLoadJob = viewModelScope.launch {
             delay(300)
-            if (_query.value.isNotEmpty() ||
+            if (query.value.isNotEmpty() ||
                 categoryId == CAT_ALL || categoryId == CAT_POPULAR
             ) {
                 ensureFullCatalog()
@@ -273,7 +295,7 @@ class SeriesViewModel(app: Application) : AndroidViewModel(app) {
     val items: Flow<PagingData<Series>> =
         combine(
             selectedCategory,
-            _query.debounce(250).distinctUntilChanged(),
+            query.debounce(250).distinctUntilChanged(),
             _sort,
             settings.hiddenCategories(ContentType.SERIES)
         ) { catId, q, sort, hidden -> GridParams(catId, q, sort, hidden) }
