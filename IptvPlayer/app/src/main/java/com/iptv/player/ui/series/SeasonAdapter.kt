@@ -66,9 +66,16 @@ class SeasonAdapter(
             title.text = itemView.context.getString(R.string.series_season, season.seasonNumber)
             itemView.isSelected = season.seasonNumber == selectedNumber
             itemView.setOnFocusChangeListener { _, hasFocus ->
-                if (hasFocus) onSelected(season)
+                if (hasFocus) currentSeason()?.let(onSelected)
             }
-            itemView.setOnClickListener { onSelected(season) }
+            itemView.setOnClickListener { currentSeason()?.let(onSelected) }
+            itemView.contentDescription = title.text
+        }
+
+        private fun currentSeason(): Season? {
+            val position = bindingAdapterPosition
+            if (position == RecyclerView.NO_POSITION || position >= itemCount) return null
+            return getItem(position)
         }
     }
 

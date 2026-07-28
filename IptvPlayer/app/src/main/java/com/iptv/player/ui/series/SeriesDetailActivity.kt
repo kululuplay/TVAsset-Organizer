@@ -11,6 +11,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
+import android.widget.Toast
+import androidx.core.view.ViewCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -37,12 +39,29 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 class SeriesDetailActivity : BaseActivity() {
 
     companion object {
         const val EXTRA_SERIES_ID = "extra_series_id"
         private const val PLOT_COLLAPSED = 3
+
+        private const val STATE_SEASON = "series_detail_season"
+        private const val STATE_EPISODE_POSITION = "series_detail_episode_position"
+        private const val STATE_FOCUS_ZONE = "series_detail_focus_zone"
+        private const val STATE_SCROLL_Y = "series_detail_scroll_y"
+        private const val STATE_PLOT_EXPANDED = "series_detail_plot_expanded"
+
+        private const val FOCUS_PLAY = 0
+        private const val FOCUS_SEASON = 1
+        private const val FOCUS_EPISODE = 2
+        private const val FOCUS_RETRY = 3
+        private const val FOCUS_SIMILAR = 4
+        private const val FOCUS_TRAILER = 5
+        private const val FOCUS_FAVORITE = 6
+        private const val FOCUS_MORE = 7
+        private const val FOCUS_HEADER_RETRY = 8
     }
 
     private lateinit var binding: ActivitySeriesDetailBinding
@@ -62,6 +81,9 @@ class SeriesDetailActivity : BaseActivity() {
     private var latestResume: ContinueItem? = null
     private var isFavorite = false
     private var seasonsJob: Job? = null
+    private var headerJob: Job? = null
+    private var favoriteJob: Job? = null
+    private var resumeJob: Job? = null
     private var castJob: Job? = null
     private var similarJob: Job? = null
     private var seasonsLoading = true
@@ -71,6 +93,15 @@ class SeriesDetailActivity : BaseActivity() {
     // The "Similar" rail is the last focusable rail; it only exists once data
     // arrives, so episode cards must learn to drop down into it only when it shows.
     private var similarVisible = false
+    private var similarLoaded = false
+    private val episodePositionBySeason = mutableMapOf<Int, Int>()
+    private var episodesReadyForSeason: Int? = null
+    private var focusEpisodeAfterCommit = false
+    private var restoredSeasonNumber: Int? = null
+    private var restoredEpisodePosition = 0
+    private var restoredFocusZone = FOCUS_PLAY
+    private var restoredScrollY = 0
+    private var initialFocusRestored = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -83,8 +114,24 @@ class SeriesDetailActivity : BaseActivity() {
             return
         }
         seriesId = id
+        restoredSeasonNumber =
+            savedInstanceState?.takeIf { it.containsKey(STATE_SEASON) }?.getInt(STATE_SEASON)
+        restoredEpisodePosition =
+            savedInstanceState?.getInt(STATE_EPISODE_POSITION, 0) ?: 0
+        restoredSeasonNumber?.let {
+            episodePositionBySeason[it] = restoredEpisodePosition
+        }
+        restoredFocusZone =
+            savedInstanceState?.getInt(STATE_FOCUS_ZONE, FOCUS_PLAY) ?: FOCUS_PLAY
+        restoredScrollY = savedInstanceState?.getInt(STATE_SCROLL_Y, 0) ?: 0
+        plotExpanded = savedInstanceState?.getBoolean(STATE_PLOT_EXPANDED, false) ?: false
 
         setupLists()
+        ViewCompat.setAccessibilityHeading(binding.detailTitle, true)
+        ViewCompat.setAccessibilityHeading(binding.seasonsLabel, true)
+        ViewCompat.setAccessibilityHeading(binding.episodesLabel, true)
+        ViewCompat.setAccessibilityHeading(binding.castLabel, true)
+        ViewCompat.setAccessibilityHeading(binding.similarLabel, true)
         binding.playButton.setOnClickListener { onPlay() }
         binding.trailerButton.setOnClickListener { openTrailer() }
         binding.favoriteButton.setOnClickListener { toggleFavorite(id) }
@@ -92,21 +139,52 @@ class SeriesDetailActivity : BaseActivity() {
             restoreFocusAfterSeasonRetry = true
             loadSeasons(id)
         }
+        binding.headerRetryButton.setOnClickListener {
+            loadHeader(id)
+            loadSeasons(id)
+        }
 
         lifecycleScope.launch {
             similarAdapter.adultLocked =
                 settings.lockAdult.first() && settings.hasPin()
+            // Do not start any path that can populate Similar until the adult
+            // mask is known; otherwise protected artwork can flash for one frame.
             loadHeader(id)
             loadFavorite(id)
             loadSeasons(id)
         }
 
-        // Open at the top with Play focused; otherwise the ScrollView can auto-scroll
-        // to whichever rail grabs focus first as the lists populate.
+        // Keep a stable fallback target while async detail/episode data arrives.
+        // The exact saved focus zone is restored as soon as its rail is attached.
         binding.scrollBody.post {
-            binding.scrollBody.scrollTo(0, 0)
-            binding.playButton.requestFocus()
+            binding.scrollBody.scrollTo(0, restoredScrollY)
+            binding.favoriteButton.requestFocus()
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        currentSeason?.seasonNumber?.let { outState.putInt(STATE_SEASON, it) }
+        val episodePosition = currentSeason?.seasonNumber
+            ?.let { episodePositionBySeason[it] }
+            ?: restoredEpisodePosition
+        outState.putInt(STATE_EPISODE_POSITION, episodePosition)
+        outState.putInt(STATE_SCROLL_Y, binding.scrollBody.scrollY)
+        outState.putBoolean(STATE_PLOT_EXPANDED, plotExpanded)
+        outState.putInt(
+            STATE_FOCUS_ZONE,
+            when {
+                binding.seasonList.hasFocus() -> FOCUS_SEASON
+                binding.episodeList.hasFocus() -> FOCUS_EPISODE
+                binding.episodeRetryButton.hasFocus() -> FOCUS_RETRY
+                binding.similarList.hasFocus() -> FOCUS_SIMILAR
+                binding.trailerButton.hasFocus() -> FOCUS_TRAILER
+                binding.favoriteButton.hasFocus() -> FOCUS_FAVORITE
+                binding.detailMore.hasFocus() -> FOCUS_MORE
+                binding.headerRetryButton.hasFocus() -> FOCUS_HEADER_RETRY
+                else -> FOCUS_PLAY
+            },
+        )
+        super.onSaveInstanceState(outState)
     }
 
     override fun onResume() {
@@ -128,7 +206,12 @@ class SeriesDetailActivity : BaseActivity() {
         (binding.seasonList.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
             ?.supportsChangeAnimations = false
 
-        episodeAdapter = EpisodeAdapter(onClicked = { playEpisode(it) })
+        episodeAdapter = EpisodeAdapter(
+            onFocused = { episode, position ->
+                episodePositionBySeason[episode.seasonNumber] = position
+            },
+            onClicked = { playEpisode(it) },
+        )
         binding.episodeList.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.episodeList.adapter = episodeAdapter
@@ -137,6 +220,8 @@ class SeriesDetailActivity : BaseActivity() {
         // the user is on when resume progress lands.
         (binding.episodeList.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
             ?.supportsChangeAnimations = false
+        binding.episodeList.setHasFixedSize(true)
+        binding.episodeList.setItemViewCacheSize(6)
 
         binding.similarList.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
@@ -144,10 +229,13 @@ class SeriesDetailActivity : BaseActivity() {
         // Same focus-stability guard the season/episode rails use.
         (binding.similarList.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
             ?.supportsChangeAnimations = false
+        binding.similarList.setHasFixedSize(true)
 
         binding.castList.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.castList.adapter = castAdapter
+        binding.castList.setHasFixedSize(true)
+        binding.seasonList.setHasFixedSize(true)
 
         setupFocusLinks()
     }
@@ -161,9 +249,9 @@ class SeriesDetailActivity : BaseActivity() {
      */
     private fun setupFocusLinks() {
         attachVerticalFocus(binding.seasonList) {
-            it.nextFocusUpId = R.id.playButton
+            it.nextFocusUpId = focusPrimaryActionId()
             it.nextFocusDownId =
-                if (currentSeason?.episodes?.isNotEmpty() == true) {
+                if (currentSeasonHasPlayableEpisodes()) {
                     R.id.episodeList
                 } else {
                     R.id.episodeRetryButton
@@ -174,7 +262,7 @@ class SeriesDetailActivity : BaseActivity() {
             it.nextFocusDownId = if (similarVisible) R.id.similarList else View.NO_ID
         }
         attachVerticalFocus(binding.similarList) {
-            it.nextFocusUpId = R.id.episodeList
+            it.nextFocusUpId = focusTargetAboveSimilar()
             it.nextFocusDownId = View.NO_ID
         }
     }
@@ -190,7 +278,8 @@ class SeriesDetailActivity : BaseActivity() {
 
     /** Per-episode progress + the last-watched episode for a one-tap Play resume. */
     private fun loadResumeState(id: String) {
-        lifecycleScope.launch {
+        resumeJob?.cancel()
+        resumeJob = lifecycleScope.launch {
             // Resume metadata is a non-essential overlay; a lookup failure (e.g. a
             // stale local cache) must never stop the series page from opening.
             val progress: Map<String, Long>
@@ -215,20 +304,41 @@ class SeriesDetailActivity : BaseActivity() {
     }
 
     private fun onPlay() {
-        val latest = latestResume
+        val latest = latestResume?.takeIf { it.streamUrl.isNotBlank() }
         if (latest != null) {
             resumeLatest(latest)
             return
         }
-        currentSeason?.episodes?.firstOrNull()?.let { playEpisode(it) }
+        currentSeason?.episodes
+            ?.firstOrNull { it.streamUrl.isNotBlank() }
+            ?.let { playEpisode(it) }
     }
 
     private fun resumeLatest(item: ContinueItem) {
+        val episodeTitle = seasonAdapter.currentList
+            .asSequence()
+            .flatMap { it.episodes.asSequence() }
+            .firstOrNull {
+                it.id == item.contentId.removePrefix("ep_") ||
+                    (
+                        it.seasonNumber == item.seasonNumber &&
+                            it.episodeNumber == item.episodeNumber
+                    )
+            }
+            ?.title
+            ?.takeIf { it.isNotBlank() }
+            ?: getString(
+                R.string.episode_se_format,
+                item.seasonNumber,
+                item.episodeNumber,
+            )
         val intent = Intent(this, VodPlayerActivity::class.java).apply {
             putExtra(VodPlayerActivity.EXTRA_STREAM_URL, item.streamUrl)
-            putExtra(VodPlayerActivity.EXTRA_TITLE, item.title)
+            putExtra(VodPlayerActivity.EXTRA_TITLE, episodeTitle)
             putExtra(VodPlayerActivity.EXTRA_RESUME_ID, item.contentId)
             putExtra(VodPlayerActivity.EXTRA_RESUME_TYPE, item.kind.raw)
+            // Continue Watching keeps the series title while the player chrome
+            // presents the exact episode title resolved above.
             putExtra(VodPlayerActivity.EXTRA_RESUME_TITLE, item.title)
             putExtra(VodPlayerActivity.EXTRA_POSTER_URL, item.posterUrl)
             putExtra(VodPlayerActivity.EXTRA_SERIES_ID, item.seriesId)
@@ -240,7 +350,22 @@ class SeriesDetailActivity : BaseActivity() {
     }
 
     private fun loadHeader(id: String) {
-        lifecycleScope.launch {
+        headerJob?.cancel()
+        val retryInPlace =
+            binding.headerErrorContainer.visibility == View.VISIBLE &&
+                binding.headerRetryButton.hasFocus()
+        if (seriesName.isBlank()) {
+            binding.heroContent.visibility = View.INVISIBLE
+            binding.headerLoadingContainer.visibility =
+                if (retryInPlace) View.GONE else View.VISIBLE
+            binding.headerErrorContainer.visibility =
+                if (retryInPlace) View.VISIBLE else View.GONE
+            if (retryInPlace) {
+                binding.headerRetryButton.isClickable = false
+                binding.headerRetryButton.alpha = 0.58f
+            }
+        }
+        headerJob = lifecycleScope.launch {
             val series: Series? = try {
                 repo.getSeriesCached(id)
             } catch (ce: CancellationException) {
@@ -248,10 +373,22 @@ class SeriesDetailActivity : BaseActivity() {
             } catch (t: Throwable) {
                 null
             }
+            binding.headerLoadingContainer.visibility = View.GONE
             if (series != null) {
+                binding.headerErrorContainer.visibility = View.GONE
                 bindHeader(series)
                 loadSimilar(series)
                 loadCast(series)
+            } else if (seriesName.isBlank()) {
+                binding.headerErrorContainer.visibility = View.VISIBLE
+                binding.headerRetryButton.isClickable = true
+                binding.headerRetryButton.alpha = 1f
+                restoreDetailFocusIfReady()
+                if (!initialFocusRestored) {
+                    binding.headerRetryButton.post {
+                        if (!initialFocusRestored) binding.headerRetryButton.requestFocus()
+                    }
+                }
             }
         }
     }
@@ -280,6 +417,7 @@ class SeriesDetailActivity : BaseActivity() {
     /** Loads other series from the same category into the "Similar" rail. */
     private fun loadSimilar(series: Series) {
         similarJob?.cancel()
+        similarLoaded = false
         similarJob = lifecycleScope.launch {
             val similar = try {
                 repo.similarSeries(series)
@@ -309,10 +447,13 @@ class SeriesDetailActivity : BaseActivity() {
             // Newly attached episode cards pick this up via setupFocusLinks(); also
             // re-point the cards that are already on screen so Down reaches Similar.
             similarVisible = show
+            similarLoaded = true
             val downId = if (show) R.id.similarList else View.NO_ID
             for (i in 0 until binding.episodeList.childCount) {
                 binding.episodeList.getChildAt(i).nextFocusDownId = downId
             }
+            updateSeasonFocusLinks()
+            restoreDetailFocusIfReady()
         }
     }
 
@@ -328,12 +469,19 @@ class SeriesDetailActivity : BaseActivity() {
     }
 
     private fun bindHeader(series: Series) {
+        val retryHadFocus = binding.headerRetryButton.hasFocus()
+        binding.headerRetryButton.isClickable = true
+        binding.headerRetryButton.alpha = 1f
+        binding.headerLoadingContainer.visibility = View.GONE
+        binding.headerErrorContainer.visibility = View.GONE
+        binding.heroContent.visibility = View.VISIBLE
         seriesName = series.name
         seriesPoster = series.posterUrl
         seriesTrailer = series.trailerUrl
         episodeAdapter.fallbackPoster = series.posterUrl
 
         binding.detailTitle.text = series.name
+        binding.detailPoster.contentDescription = null
 
         val placeholder = LogoPlaceholder.forName(this, series.name)
         val backdrop = series.backdropUrl ?: series.posterUrl
@@ -353,6 +501,14 @@ class SeriesDetailActivity : BaseActivity() {
         }
 
         RatingStars.apply(binding.ratingStars, series.rating)
+        val visibleRating = series.rating?.takeIf { it > 0.0 }
+        binding.ratingContainer.visibility =
+            if (visibleRating != null) View.VISIBLE else View.GONE
+        binding.ratingContainer.contentDescription = visibleRating?.let {
+                getString(R.string.detail_rating) + " " +
+                    String.format(Locale.getDefault(), "%.1f", it)
+            }
+            ?: ""
 
         val year = series.releaseDate?.take(4)?.takeIf { it.isNotBlank() }
         binding.detailYear.text = year ?: ""
@@ -364,17 +520,23 @@ class SeriesDetailActivity : BaseActivity() {
         binding.detailPlot.text = series.plot.orEmpty()
         val hasPlot = !series.plot.isNullOrBlank()
         binding.detailPlot.visibility = if (hasPlot) View.VISIBLE else View.GONE
-        plotExpanded = false
-        binding.detailPlot.maxLines = PLOT_COLLAPSED
-        binding.detailMore.setText(R.string.detail_more)
+        binding.detailPlot.maxLines = if (plotExpanded) Int.MAX_VALUE else PLOT_COLLAPSED
+        binding.detailMore.setText(
+            if (plotExpanded) R.string.detail_less else R.string.detail_more,
+        )
         binding.detailMore.visibility = View.GONE
         if (hasPlot) {
             binding.detailPlot.post {
-                val layout = binding.detailPlot.layout
-                val lastLine = (layout?.lineCount ?: 0) - 1
-                val ellipsized =
-                    lastLine >= 0 && (layout?.getEllipsisCount(lastLine) ?: 0) > 0
-                binding.detailMore.visibility = if (ellipsized) View.VISIBLE else View.GONE
+                if (plotExpanded) {
+                    binding.detailMore.visibility = View.VISIBLE
+                } else {
+                    val layout = binding.detailPlot.layout
+                    val lastLine = (layout?.lineCount ?: 0) - 1
+                    val ellipsized =
+                        lastLine >= 0 && (layout?.getEllipsisCount(lastLine) ?: 0) > 0
+                    binding.detailMore.visibility =
+                        if (ellipsized) View.VISIBLE else View.GONE
+                }
             }
         }
         binding.detailMore.setOnClickListener {
@@ -384,14 +546,27 @@ class SeriesDetailActivity : BaseActivity() {
             binding.detailMore.setText(
                 if (plotExpanded) R.string.detail_less else R.string.detail_more
             )
+            // Expanding reflows the ScrollView; keep the toggle itself visible so
+            // the viewer can collapse the synopsis without hunting for focus.
+            binding.detailMore.post {
+                binding.scrollBody.requestChildFocus(binding.detailMore, binding.detailMore)
+            }
         }
 
+        val trailerHadFocus = binding.trailerButton.hasFocus()
         binding.trailerButton.visibility =
             if (series.trailerUrl.isNullOrBlank()) View.GONE else View.VISIBLE
+        if (trailerHadFocus && binding.trailerButton.visibility != View.VISIBLE) {
+            binding.favoriteButton.requestFocus()
+        }
+        if (retryHadFocus) focusPrimaryAction()
+        if (currentFocus == null) binding.favoriteButton.requestFocus()
+        restoreDetailFocusIfReady()
     }
 
     private fun loadFavorite(id: String) {
-        lifecycleScope.launch {
+        favoriteJob?.cancel()
+        favoriteJob = lifecycleScope.launch {
             isFavorite = try {
                 repo.isContentFavorite("series_" + id)
             } catch (ce: CancellationException) {
@@ -404,15 +579,33 @@ class SeriesDetailActivity : BaseActivity() {
     }
 
     private fun toggleFavorite(id: String) {
-        lifecycleScope.launch {
-            isFavorite = try {
-                repo.toggleFavorite("series_" + id)
+        if (!binding.favoriteButton.isClickable) return
+        favoriteJob?.cancel()
+        binding.favoriteButton.isClickable = false
+        binding.favoriteButton.alpha = 0.58f
+        favoriteJob = lifecycleScope.launch {
+            try {
+                isFavorite =
+                    repo.toggleFavorite("series_" + id)
+                renderFavorite()
+                Toast.makeText(
+                    this@SeriesDetailActivity,
+                    if (isFavorite) R.string.added_to_favorites
+                    else R.string.removed_from_favorites,
+                    Toast.LENGTH_SHORT,
+                ).show()
             } catch (ce: CancellationException) {
                 throw ce
             } catch (t: Throwable) {
-                return@launch
+                Toast.makeText(
+                    this@SeriesDetailActivity,
+                    R.string.error_unknown,
+                    Toast.LENGTH_SHORT,
+                ).show()
+            } finally {
+                binding.favoriteButton.isClickable = true
+                binding.favoriteButton.alpha = 1f
             }
-            renderFavorite()
         }
     }
 
@@ -420,12 +613,34 @@ class SeriesDetailActivity : BaseActivity() {
         binding.favoriteButton.setImageResource(
             if (isFavorite) R.drawable.ic_heart_filled else R.drawable.ic_heart
         )
+        binding.favoriteButton.isSelected = isFavorite
+        binding.favoriteButton.isActivated = isFavorite
+        binding.favoriteButton.contentDescription = getString(R.string.section_favorites)
+        ViewCompat.setStateDescription(
+            binding.favoriteButton,
+            getString(
+                if (isFavorite) R.string.favorite_state_on
+                else R.string.favorite_state_off,
+            ),
+        )
+        restoreDetailFocusIfReady()
     }
 
     private fun loadSeasons(id: String) {
         seasonsJob?.cancel()
+        val retryInPlace =
+            restoreFocusAfterSeasonRetry &&
+                binding.episodeEmptyContainer.visibility == View.VISIBLE &&
+                binding.episodeRetryButton.hasFocus()
         seasonsLoading = true
-        binding.episodeEmptyContainer.visibility = View.GONE
+        binding.episodeEmptyContainer.visibility =
+            if (retryInPlace) View.VISIBLE else View.GONE
+        if (retryInPlace) {
+            // Keep the focused retry surface in place while the request runs. If it
+            // vanished here Android TV would hand focus to an arbitrary neighbour.
+            binding.episodeRetryButton.isClickable = false
+            binding.episodeRetryButton.alpha = 0.58f
+        }
         renderPlayState()
         seasonsJob = lifecycleScope.launch {
             // 1) Show cached episodes instantly on a repeat visit so the list
@@ -439,13 +654,16 @@ class SeriesDetailActivity : BaseActivity() {
             }
             val hasCache = cached.isNotEmpty()
             if (hasCache) {
+                val target = preferredSeason(cached)
                 seasonAdapter.submitList(cached) {
-                    showSeason(cached.first())
+                    showSeason(target)
                     restoreSeasonRetryFocus()
+                    restoreDetailFocusIfReady()
                 }
             }
             // Spinner only on a cold open with nothing cached to display yet.
-            binding.loading.visibility = if (hasCache) View.GONE else View.VISIBLE
+            binding.loading.visibility =
+                if (hasCache || retryInPlace) View.GONE else View.VISIBLE
 
             // 2) Refresh from the network (also re-caches episodes for next time).
             val seasons = try {
@@ -457,8 +675,17 @@ class SeriesDetailActivity : BaseActivity() {
                 emptyList<Season>()
             }
             binding.loading.visibility = View.GONE
+            binding.episodeRetryButton.isClickable = true
+            binding.episodeRetryButton.alpha = 1f
 
-            repo.getSeriesCached(id)?.let { refreshed ->
+            val refreshed = try {
+                repo.getSeriesCached(id)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                null
+            }
+            refreshed?.let {
                 bindHeader(refreshed)
                 loadSimilar(refreshed)
                 loadCast(refreshed)
@@ -471,8 +698,15 @@ class SeriesDetailActivity : BaseActivity() {
                 currentSeason = null
                 seasonsLoading = false
                 binding.episodeEmptyContainer.visibility = View.VISIBLE
+                seasonAdapter.setSelected(null)
                 seasonAdapter.submitList(emptyList())
-                episodeAdapter.submitList(emptyList())
+                episodesReadyForSeason = null
+                focusEpisodeAfterCommit = false
+                binding.episodeList.visibility = View.INVISIBLE
+                episodeAdapter.submitList(emptyList()) {
+                    updateSeasonFocusLinks()
+                    restoreDetailFocusIfReady()
+                }
                 updateSeasonFocusLinks()
                 renderPlayState()
                 if (restoreFocusAfterSeasonRetry) {
@@ -481,19 +715,24 @@ class SeriesDetailActivity : BaseActivity() {
                         binding.episodeRetryButton.requestFocus()
                     }
                 }
+                restoreDetailFocusIfReady()
                 return@launch
             }
             // Apply refreshed metadata and episodes while preserving the season
             // the viewer was browsing.
-            val selectedSeason = currentSeason?.seasonNumber
-            val target = seasons.firstOrNull { it.seasonNumber == selectedSeason }
-                ?: seasons.first()
+            val target = preferredSeason(seasons)
             seasonsLoading = false
             seasonAdapter.submitList(seasons) {
                 showSeason(target)
                 restoreSeasonRetryFocus()
+                restoreDetailFocusIfReady()
             }
         }
+    }
+
+    private fun preferredSeason(seasons: List<Season>): Season {
+        val preferred = currentSeason?.seasonNumber ?: restoredSeasonNumber
+        return seasons.firstOrNull { it.seasonNumber == preferred } ?: seasons.first()
     }
 
     private fun restoreSeasonRetryFocus() {
@@ -505,30 +744,59 @@ class SeriesDetailActivity : BaseActivity() {
     private fun showSeason(season: Season) {
         currentSeason = season
         seasonAdapter.setSelected(season.seasonNumber)
-        episodeAdapter.submitList(season.episodes) { updateSeasonFocusLinks() }
+        episodesReadyForSeason = null
+        focusEpisodeAfterCommit = false
+        binding.episodeList.visibility = View.INVISIBLE
+        // Providers occasionally return placeholder episodes without a playable
+        // URL. Do not expose dead OK targets in a TV rail.
+        val playableEpisodes = season.episodes.filter { it.streamUrl.isNotBlank() }
+        val submittedSeason = season.seasonNumber
+        episodeAdapter.submitList(playableEpisodes) {
+            if (currentSeason?.seasonNumber != submittedSeason) return@submitList
+            episodesReadyForSeason = submittedSeason
+            binding.episodeList.visibility =
+                if (playableEpisodes.isNotEmpty()) View.VISIBLE else View.INVISIBLE
+            updateSeasonFocusLinks()
+            if (focusEpisodeAfterCommit && playableEpisodes.isNotEmpty()) {
+                focusEpisodeAfterCommit = false
+                focusCurrentEpisode()
+            }
+            restoreDetailFocusIfReady()
+        }
         binding.episodeEmptyContainer.visibility =
-            if (season.episodes.isEmpty()) View.VISIBLE else View.GONE
+            if (playableEpisodes.isEmpty()) View.VISIBLE else View.GONE
         updateSeasonFocusLinks()
         renderPlayState()
     }
 
     private fun updateSeasonFocusLinks() {
         val downId =
-            if (currentSeason?.episodes?.isNotEmpty() == true) {
+            if (hasReadyEpisodes()) {
                 R.id.episodeList
             } else {
                 R.id.episodeRetryButton
             }
         for (i in 0 until binding.seasonList.childCount) {
-            binding.seasonList.getChildAt(i).nextFocusDownId = downId
+            binding.seasonList.getChildAt(i).apply {
+                nextFocusUpId = focusPrimaryActionId()
+                nextFocusDownId = downId
+            }
+        }
+        val similarUpId = focusTargetAboveSimilar()
+        for (i in 0 until binding.similarList.childCount) {
+            binding.similarList.getChildAt(i).nextFocusUpId = similarUpId
         }
     }
 
     private fun renderPlayState() {
-        val latest = latestResume
-        val playable = latest != null || currentSeason?.episodes?.isNotEmpty() == true
+        val latest = latestResume?.takeIf { it.streamUrl.isNotBlank() }
+        val playable = latest != null ||
+            currentSeason?.episodes?.any { it.streamUrl.isNotBlank() } == true
+        val playHadFocus = binding.playButton.hasFocus()
         binding.playButton.isClickable = playable
-        binding.playButton.alpha = if (playable) 1f else 0.48f
+        binding.playButton.isEnabled = playable
+        binding.playButton.isFocusable = playable
+        binding.playButton.alpha = if (playable) 1f else 0.42f
         binding.playLabel.text = when {
             latest != null -> getString(R.string.resume_continue) + "  " +
                 getString(
@@ -540,12 +808,40 @@ class SeriesDetailActivity : BaseActivity() {
             seasonsLoading || !resumeLoaded -> getString(R.string.loading)
             else -> getString(R.string.detail_play)
         }
+        binding.playButton.contentDescription = binding.playLabel.text
+        updateSeasonFocusLinks()
+        if (playHadFocus && !playable) {
+            when {
+                seasonAdapter.itemCount > 0 -> focusCurrentSeason()
+                binding.episodeEmptyContainer.visibility == View.VISIBLE ->
+                    binding.episodeRetryButton.requestFocus()
+                else -> binding.favoriteButton.requestFocus()
+            }
+        }
+        restoreDetailFocusIfReady()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN) {
-            when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_DOWN -> when {
+            val rtl = binding.root.layoutDirection == View.LAYOUT_DIRECTION_RTL
+            val towardEnd =
+                if (rtl) KeyEvent.KEYCODE_DPAD_LEFT else KeyEvent.KEYCODE_DPAD_RIGHT
+            val towardStart =
+                if (rtl) KeyEvent.KEYCODE_DPAD_RIGHT else KeyEvent.KEYCODE_DPAD_LEFT
+            when {
+                event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN -> when {
+                    binding.headerRetryButton.hasFocus() -> {
+                        when {
+                            seasonAdapter.itemCount > 0 -> focusCurrentSeason()
+                            binding.episodeEmptyContainer.visibility == View.VISIBLE ->
+                                binding.episodeRetryButton.requestFocus()
+                        }
+                        return true
+                    }
+                    binding.detailMore.hasFocus() -> {
+                        focusPrimaryAction()
+                        return true
+                    }
                     binding.playButton.hasFocus() ||
                         binding.trailerButton.hasFocus() ||
                         binding.favoriteButton.hasFocus() -> {
@@ -557,8 +853,10 @@ class SeriesDetailActivity : BaseActivity() {
                         return true
                     }
                     binding.seasonList.hasFocus() -> {
-                        if (episodeAdapter.itemCount > 0) {
-                            binding.episodeList.requestFocusAt(0)
+                        if (hasReadyEpisodes()) {
+                            focusCurrentEpisode()
+                        } else if (currentSeasonHasPlayableEpisodes()) {
+                            focusEpisodeAfterCommit = true
                         } else if (binding.episodeEmptyContainer.visibility == View.VISIBLE) {
                             binding.episodeRetryButton.requestFocus()
                         }
@@ -569,21 +867,67 @@ class SeriesDetailActivity : BaseActivity() {
                         binding.similarList.requestFocusAt(0)
                         return true
                     }
+                    binding.episodeRetryButton.hasFocus() && similarVisible -> {
+                        binding.similarList.requestFocusAt(0)
+                        return true
+                    }
                 }
-                KeyEvent.KEYCODE_DPAD_UP -> when {
+                event.keyCode == KeyEvent.KEYCODE_DPAD_UP -> when {
+                    binding.seasonList.hasFocus() -> {
+                        focusPrimaryAction()
+                        return true
+                    }
+                    binding.playButton.hasFocus() ||
+                        binding.trailerButton.hasFocus() ||
+                        binding.favoriteButton.hasFocus() -> {
+                        if (binding.detailMore.visibility == View.VISIBLE) {
+                            binding.detailMore.requestFocus()
+                            return true
+                        }
+                    }
                     binding.episodeRetryButton.hasFocus() -> {
                         if (seasonAdapter.itemCount > 0) focusCurrentSeason()
-                        else binding.playButton.requestFocus()
+                        else focusPrimaryAction()
                         return true
                     }
                     binding.episodeList.hasFocus() -> {
                         focusCurrentSeason()
                         return true
                     }
-                    binding.similarList.hasFocus() && episodeAdapter.itemCount > 0 -> {
-                        binding.episodeList.requestFocusAt(0)
+                    binding.similarList.hasFocus() -> {
+                        when {
+                            hasReadyEpisodes() -> focusCurrentEpisode()
+                            binding.episodeEmptyContainer.visibility == View.VISIBLE ->
+                                binding.episodeRetryButton.requestFocus()
+                            seasonAdapter.itemCount > 0 -> focusCurrentSeason()
+                            else -> focusPrimaryAction()
+                        }
                         return true
                     }
+                }
+                event.keyCode == towardEnd && binding.playButton.hasFocus() -> {
+                    if (binding.trailerButton.visibility == View.VISIBLE) {
+                        binding.trailerButton.requestFocus()
+                    } else {
+                        binding.favoriteButton.requestFocus()
+                    }
+                    return true
+                }
+                event.keyCode == towardEnd && binding.trailerButton.hasFocus() -> {
+                    binding.favoriteButton.requestFocus()
+                    return true
+                }
+                event.keyCode == towardStart && binding.favoriteButton.hasFocus() -> {
+                    if (binding.trailerButton.visibility == View.VISIBLE) {
+                        binding.trailerButton.requestFocus()
+                    } else if (binding.playButton.isEnabled) {
+                        binding.playButton.requestFocus()
+                    }
+                    return true
+                }
+                event.keyCode == towardStart && binding.trailerButton.hasFocus() -> {
+                    if (binding.playButton.isEnabled) binding.playButton.requestFocus()
+                    return true
                 }
             }
         }
@@ -597,7 +941,137 @@ class SeriesDetailActivity : BaseActivity() {
         binding.seasonList.requestFocusAt(position)
     }
 
+    private fun focusCurrentEpisode() {
+        if (!hasReadyEpisodes()) {
+            if (currentSeasonHasPlayableEpisodes()) {
+                focusEpisodeAfterCommit = true
+            }
+            return
+        }
+        val season = currentSeason?.seasonNumber
+        val position = season?.let { episodePositionBySeason[it] } ?: 0
+        binding.episodeList.requestFocusAt(position.coerceAtLeast(0))
+    }
+
+    private fun focusPrimaryAction() {
+        if (binding.playButton.isEnabled) {
+            binding.playButton.requestFocus()
+        } else {
+            binding.favoriteButton.requestFocus()
+        }
+    }
+
+    private fun focusPrimaryActionId(): Int =
+        if (binding.playButton.isEnabled) R.id.playButton else R.id.favoriteButton
+
+    private fun focusTargetAboveSimilar(): Int = when {
+        hasReadyEpisodes() -> R.id.episodeList
+        binding.episodeEmptyContainer.visibility == View.VISIBLE -> R.id.episodeRetryButton
+        seasonAdapter.itemCount > 0 -> R.id.seasonList
+        binding.playButton.isEnabled -> R.id.playButton
+        else -> R.id.favoriteButton
+    }
+
+    /**
+     * Async rails cannot be focused until their adapter commit has attached a
+     * child. Restore once, at the same logical item the viewer was using.
+     */
+    private fun restoreDetailFocusIfReady() {
+        if (initialFocusRestored) return
+        val restored = when (restoredFocusZone) {
+            FOCUS_PLAY -> when {
+                binding.playButton.isEnabled -> binding.playButton.requestFocus()
+                binding.headerErrorContainer.visibility == View.VISIBLE ->
+                    binding.headerRetryButton.requestFocus()
+                !seasonsLoading &&
+                    binding.episodeEmptyContainer.visibility == View.VISIBLE ->
+                    binding.episodeRetryButton.requestFocus()
+                else -> false
+            }
+            FOCUS_SEASON -> {
+                if (seasonAdapter.itemCount > 0) {
+                    focusCurrentSeason()
+                    true
+                } else {
+                    false
+                }
+            }
+            FOCUS_EPISODE -> {
+                if (hasReadyEpisodes()) {
+                    focusCurrentEpisode()
+                    true
+                } else {
+                    false
+                }
+            }
+            FOCUS_RETRY -> {
+                if (binding.episodeEmptyContainer.visibility == View.VISIBLE) {
+                    binding.episodeRetryButton.requestFocus()
+                } else {
+                    false
+                }
+            }
+            FOCUS_SIMILAR -> when {
+                similarVisible && similarAdapter.itemCount > 0 -> {
+                    binding.similarList.requestFocusAt(0)
+                    true
+                }
+                similarLoaded -> {
+                    when {
+                        hasReadyEpisodes() -> focusCurrentEpisode()
+                        seasonAdapter.itemCount > 0 -> focusCurrentSeason()
+                        else -> focusPrimaryAction()
+                    }
+                    true
+                }
+                else -> false
+            }
+            FOCUS_TRAILER -> when {
+                binding.trailerButton.visibility == View.VISIBLE ->
+                    binding.trailerButton.requestFocus()
+                seriesName.isNotBlank() ||
+                    binding.headerErrorContainer.visibility == View.VISIBLE ->
+                    binding.favoriteButton.requestFocus()
+                else -> false
+            }
+            FOCUS_FAVORITE -> {
+                if (binding.heroContent.visibility == View.VISIBLE) {
+                    binding.favoriteButton.requestFocus()
+                } else {
+                    false
+                }
+            }
+            FOCUS_MORE -> when {
+                binding.detailMore.visibility == View.VISIBLE ->
+                    binding.detailMore.requestFocus()
+                seriesName.isNotBlank() ||
+                    binding.headerErrorContainer.visibility == View.VISIBLE -> {
+                    focusPrimaryAction()
+                    true
+                }
+                else -> false
+            }
+            FOCUS_HEADER_RETRY -> {
+                if (binding.headerErrorContainer.visibility == View.VISIBLE) {
+                    binding.headerRetryButton.requestFocus()
+                } else {
+                    false
+                }
+            }
+            else -> false
+        }
+        if (restored) initialFocusRestored = true
+    }
+
+    private fun hasReadyEpisodes(): Boolean =
+        episodesReadyForSeason == currentSeason?.seasonNumber &&
+            episodeAdapter.itemCount > 0
+
+    private fun currentSeasonHasPlayableEpisodes(): Boolean =
+        currentSeason?.episodes?.any { it.streamUrl.isNotBlank() } == true
+
     private fun playEpisode(episode: Episode) {
+        if (episode.streamUrl.isBlank()) return
         val intent = Intent(this, VodPlayerActivity::class.java).apply {
             putExtra(VodPlayerActivity.EXTRA_STREAM_URL, episode.streamUrl)
             putExtra(VodPlayerActivity.EXTRA_TITLE, episode.title)
@@ -614,7 +1088,7 @@ class SeriesDetailActivity : BaseActivity() {
     }
 
     private fun openTrailer() {
-        val url = seriesTrailer ?: return
+        val url = seriesTrailer?.takeIf { it.isNotBlank() } ?: return
         startActivity(Intent(this, TrailerActivity::class.java).apply {
             putExtra(TrailerActivity.EXTRA_TRAILER_URL, url)
             putExtra(TrailerActivity.EXTRA_TITLE, seriesName)

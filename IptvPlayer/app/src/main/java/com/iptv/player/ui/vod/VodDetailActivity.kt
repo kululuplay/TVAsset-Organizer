@@ -7,9 +7,12 @@
 package com.iptv.player.ui.vod
 
 import android.content.Intent
+import android.graphics.Rect
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
+import android.widget.Toast
+import androidx.core.view.ViewCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import coil.load
@@ -32,11 +35,15 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 class VodDetailActivity : BaseActivity() {
 
     companion object {
         const val EXTRA_VOD_ID = "extra_vod_id"
+
+        private const val PLOT_COLLAPSED_LINES = 4
+        private const val STATE_PLOT_EXPANDED = "vod_plot_expanded"
     }
 
     private lateinit var binding: ActivityVodDetailBinding
@@ -49,6 +56,8 @@ class VodDetailActivity : BaseActivity() {
     private var hasResume = false
     private var isFavorite = false
     private var detailLoadJob: Job? = null
+    private var favoriteJob: Job? = null
+    private var plotExpanded = false
 
     // The cached pass and the detailed pass each kick off cast/similar enrichment.
     // Tracked so a re-load cancels the previous (cached) coroutine before starting
@@ -61,6 +70,7 @@ class VodDetailActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityVodDetailBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        plotExpanded = savedInstanceState?.getBoolean(STATE_PLOT_EXPANDED) == true
 
         binding.castList.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
@@ -80,6 +90,24 @@ class VodDetailActivity : BaseActivity() {
         binding.trailerButton.setOnClickListener { openTrailer() }
         binding.favoriteButton.setOnClickListener { toggleFavorite(id) }
         binding.detailRetryButton.setOnClickListener { load(id) }
+        binding.detailMore.setOnClickListener {
+            plotExpanded = !plotExpanded
+            renderPlotExpansion()
+            binding.detailMore.post {
+                binding.detailMore.requestRectangleOnScreen(
+                    Rect(0, 0, binding.detailMore.width, binding.detailMore.height),
+                    true,
+                )
+            }
+        }
+        ViewCompat.setAccessibilityHeading(binding.detailTitle, true)
+        ViewCompat.setAccessibilityHeading(binding.detailPlotLabel, true)
+        ViewCompat.setAccessibilityHeading(binding.castLabel, true)
+        ViewCompat.setAccessibilityHeading(binding.similarLabel, true)
+        ViewCompat.setAccessibilityPaneTitle(
+            binding.detailContentPanel,
+            getString(R.string.nav_movies),
+        )
         renderColdState(loading = true)
 
         lifecycleScope.launch {
@@ -92,8 +120,18 @@ class VodDetailActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         current?.let { item ->
-            lifecycleScope.launch { refreshUserState(item.id) }
+            lifecycleScope.launch {
+                similarAdapter.adultLocked =
+                    settings.lockAdult.first() && settings.hasPin()
+                similarAdapter.refreshVisible(binding.similarList)
+                refreshUserState(item.id)
+            }
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(STATE_PLOT_EXPANDED, plotExpanded)
+        super.onSaveInstanceState(outState)
     }
 
     private fun load(id: String) {
@@ -103,7 +141,13 @@ class VodDetailActivity : BaseActivity() {
             // 1) Render the cached record instantly so the poster, title and a
             //    working Play button appear at once instead of waiting on the
             //    (sometimes slow) detail API. The stream URL is already cached.
-            val cached = repo.getVodCached(id)
+            val cached = try {
+                repo.getVodCached(id)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                null
+            }
             if (cached != null) showItem(cached)
 
             // 2) Enrich (plot, cast, director, trailer, better poster) in the
@@ -135,30 +179,44 @@ class VodDetailActivity : BaseActivity() {
         loadSimilar(item)
         binding.playButton.post {
             if (currentFocus == null || binding.detailRetryButton.hasFocus()) {
-                binding.playButton.requestFocus()
+                if (binding.playButton.isEnabled) {
+                    binding.playButton.requestFocus()
+                } else {
+                    binding.favoriteButton.requestFocus()
+                }
             }
         }
     }
 
     /** Refreshes resume/favorite state after returning from the player. */
     private suspend fun refreshUserState(id: String) {
-        hasResume = try {
-            repo.getResume("vod_$id") > 0L
-        } catch (ce: CancellationException) {
-            throw ce
-        } catch (t: Throwable) {
-            false
-        }
-        isFavorite = try {
-            repo.isContentFavorite("vod_$id")
-        } catch (ce: CancellationException) {
-            throw ce
-        } catch (t: Throwable) {
-            false
+        if (favoriteJob?.isActive == true) return
+        // Do not allow a favorite toggle to race the initial DB read and then be
+        // visually overwritten by an older result landing a frame later.
+        binding.favoriteButton.isEnabled = false
+        try {
+            hasResume = try {
+                repo.getResume("vod_$id") > 0L
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                false
+            }
+            isFavorite = try {
+                repo.isContentFavorite("vod_$id")
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                false
+            }
+        } finally {
+            binding.favoriteButton.isEnabled =
+                current != null && favoriteJob?.isActive != true
         }
         binding.playLabel.setText(
             if (hasResume) R.string.resume_continue else R.string.detail_play
         )
+        binding.playButton.contentDescription = binding.playLabel.text
         renderFavorite()
     }
 
@@ -168,9 +226,10 @@ class VodDetailActivity : BaseActivity() {
         binding.detailError.visibility =
             if (error && current == null) View.VISIBLE else View.GONE
         val available = current != null
-        binding.playButton.isEnabled = available
-        binding.favoriteButton.isEnabled = available
-        binding.playButton.alpha = if (available) 1f else 0.45f
+        val playable = current?.streamUrl?.isNotBlank() == true
+        binding.playButton.isEnabled = playable
+        binding.favoriteButton.isEnabled = available && favoriteJob?.isActive != true
+        binding.playButton.alpha = if (playable) 1f else 0.45f
         binding.favoriteButton.alpha = if (available) 1f else 0.45f
         if (error && current == null) {
             binding.detailRetryButton.post { binding.detailRetryButton.requestFocus() }
@@ -221,10 +280,13 @@ class VodDetailActivity : BaseActivity() {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN) {
+            val rtl = binding.root.layoutDirection == View.LAYOUT_DIRECTION_RTL
+            val towardActions =
+                if (rtl) KeyEvent.KEYCODE_DPAD_RIGHT else KeyEvent.KEYCODE_DPAD_LEFT
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_UP ->
                     if (binding.similarList.hasFocus()) {
-                        binding.playButton.requestFocus()
+                        focusLastAction()
                         return true
                     }
                 KeyEvent.KEYCODE_DPAD_DOWN ->
@@ -237,18 +299,28 @@ class VodDetailActivity : BaseActivity() {
                         binding.similarList.requestFocusAt(0)
                         return true
                     }
-                KeyEvent.KEYCODE_DPAD_LEFT ->
+                towardActions ->
                     if (binding.similarList.hasFocus()) {
                         val focused = currentFocus ?: return super.dispatchKeyEvent(event)
                         val holder = binding.similarList.findContainingViewHolder(focused)
                         if (holder?.bindingAdapterPosition == 0) {
-                            binding.favoriteButton.requestFocus()
+                            focusLastAction()
                             return true
                         }
                     }
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    private fun focusLastAction() {
+        when {
+            binding.favoriteButton.visibility == View.VISIBLE &&
+                binding.favoriteButton.isEnabled -> binding.favoriteButton.requestFocus()
+            binding.trailerButton.visibility == View.VISIBLE &&
+                binding.trailerButton.isEnabled -> binding.trailerButton.requestFocus()
+            else -> binding.playButton.requestFocus()
+        }
     }
 
     private fun bind(item: VodItem) {
@@ -271,10 +343,22 @@ class VodDetailActivity : BaseActivity() {
             }
         }
 
-        RatingStars.apply(binding.ratingStars, item.rating)
+        val rating = item.rating?.takeIf { it > 0.0 }
+        RatingStars.apply(binding.ratingStars, rating)
+        binding.ratingContainer.visibility = if (rating != null) View.VISIBLE else View.GONE
+        binding.detailRatingValue.text = rating?.let {
+            String.format(Locale.getDefault(), "%.1f", it)
+        }.orEmpty()
+        binding.ratingContainer.contentDescription = rating?.let {
+            "${getString(R.string.detail_rating)} ${
+                String.format(Locale.getDefault(), "%.1f", it)
+            }"
+        }
 
         val year = item.releaseDate?.take(4)?.takeIf { it.isNotBlank() }
         binding.detailYear.text = year ?: ""
+        binding.detailYear.contentDescription =
+            year?.let { "${getString(R.string.detail_year)} $it" }
         binding.detailYear.visibility = if (year != null) View.VISIBLE else View.GONE
 
         val duration = item.durationSecs?.takeIf { it > 0 }?.let { formatDuration(it) }
@@ -282,15 +366,52 @@ class VodDetailActivity : BaseActivity() {
         binding.detailDuration.visibility = if (duration != null) View.VISIBLE else View.GONE
 
         binding.detailGenre.text = item.genre.orEmpty()
+        binding.detailGenre.contentDescription = item.genre?.takeIf { it.isNotBlank() }?.let {
+            "${getString(R.string.detail_genre)} $it"
+        }
         binding.detailGenre.visibility = if (item.genre.isNullOrBlank()) View.GONE else View.VISIBLE
 
+        binding.detailDirector.text = item.director.orEmpty()
+        binding.detailDirectorRow.visibility =
+            if (item.director.isNullOrBlank()) View.GONE else View.VISIBLE
+
         binding.detailPlot.text = item.plot.orEmpty()
-        binding.detailPlot.visibility = if (item.plot.isNullOrBlank()) View.GONE else View.VISIBLE
+        val hasPlot = !item.plot.isNullOrBlank()
+        binding.detailPlotLabel.visibility = if (hasPlot) View.VISIBLE else View.GONE
+        binding.detailPlot.visibility = if (hasPlot) View.VISIBLE else View.GONE
+        if (!hasPlot) binding.detailMore.visibility = View.GONE
+        renderPlotExpansion()
+        if (hasPlot) {
+            val boundId = item.id
+            binding.detailPlot.post {
+                if (current?.id != boundId || plotExpanded) return@post
+                val layout = binding.detailPlot.layout
+                val finalLine = (layout?.lineCount ?: 0) - 1
+                val ellipsized =
+                    finalLine >= 0 && (layout?.getEllipsisCount(finalLine) ?: 0) > 0
+                val moreHadFocus = binding.detailMore.hasFocus()
+                binding.detailMore.visibility = if (ellipsized) View.VISIBLE else View.GONE
+                if (!ellipsized && moreHadFocus) {
+                    binding.playButton.requestFocus()
+                }
+            }
+        }
 
         binding.trailerButton.visibility =
             if (item.trailerUrl.isNullOrBlank()) View.GONE else View.VISIBLE
 
         loadCast(item)
+    }
+
+    private fun renderPlotExpansion() {
+        binding.detailPlot.maxLines =
+            if (plotExpanded) Int.MAX_VALUE else PLOT_COLLAPSED_LINES
+        binding.detailMore.setText(
+            if (plotExpanded) R.string.detail_less else R.string.detail_more
+        )
+        if (plotExpanded && binding.detailPlot.visibility == View.VISIBLE) {
+            binding.detailMore.visibility = View.VISIBLE
+        }
     }
 
     /**
@@ -319,20 +440,37 @@ class VodDetailActivity : BaseActivity() {
         val h = secs / 3600
         val m = (secs % 3600) / 60
         val s = secs % 60
-        return if (h > 0) String.format("%d:%02d:%02d", h, m, s)
-        else String.format("%d:%02d", m, s)
+        return if (h > 0) {
+            String.format(Locale.getDefault(), "%d:%02d:%02d", h, m, s)
+        } else {
+            String.format(Locale.getDefault(), "%d:%02d", m, s)
+        }
     }
 
     private fun toggleFavorite(id: String) {
-        lifecycleScope.launch {
-            isFavorite = try {
-                repo.toggleFavorite("vod_" + id)
+        if (favoriteJob?.isActive == true) return
+        binding.favoriteButton.isEnabled = false
+        favoriteJob = lifecycleScope.launch {
+            try {
+                isFavorite = repo.toggleFavorite("vod_$id")
+                renderFavorite()
+                Toast.makeText(
+                    this@VodDetailActivity,
+                    if (isFavorite) R.string.added_to_favorites
+                    else R.string.removed_from_favorites,
+                    Toast.LENGTH_SHORT,
+                ).show()
             } catch (ce: CancellationException) {
                 throw ce
             } catch (t: Throwable) {
-                return@launch
+                Toast.makeText(
+                    this@VodDetailActivity,
+                    R.string.error_unknown,
+                    Toast.LENGTH_SHORT,
+                ).show()
+            } finally {
+                binding.favoriteButton.isEnabled = current != null
             }
-            renderFavorite()
         }
     }
 
@@ -340,10 +478,24 @@ class VodDetailActivity : BaseActivity() {
         binding.favoriteButton.setImageResource(
             if (isFavorite) R.drawable.ic_heart_filled else R.drawable.ic_heart
         )
+        binding.favoriteButton.isSelected = isFavorite
+        binding.favoriteButton.isActivated = isFavorite
+        binding.favoriteButton.contentDescription = getString(R.string.section_favorites)
+        ViewCompat.setStateDescription(
+            binding.favoriteButton,
+            getString(
+                if (isFavorite) R.string.favorite_state_on
+                else R.string.favorite_state_off
+            ),
+        )
     }
 
     private fun launchPlayer(autoResume: Boolean) {
         val item = current ?: return
+        if (item.streamUrl.isBlank()) {
+            Toast.makeText(this, R.string.error_cannot_play_content, Toast.LENGTH_SHORT).show()
+            return
+        }
         val intent = Intent(this, VodPlayerActivity::class.java).apply {
             putExtra(VodPlayerActivity.EXTRA_STREAM_URL, item.streamUrl)
             putExtra(VodPlayerActivity.EXTRA_TITLE, item.name)

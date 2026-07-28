@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dense left reading area and bottom vignette while retaining backdrop color. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="0"
+                android:startColor="#FC070A10"
+                android:centerColor="#D90A0E17"
+                android:endColor="#33070A10" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="90"
+                android:startColor="#F2070A10"
+                android:centerColor="#22070A10"
+                android:endColor="#00070A10" />
+        </shape>
+    </item>
+</layer-list>

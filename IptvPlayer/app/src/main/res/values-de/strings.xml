@@ -60,10 +60,13 @@
     <string name="empty_series">In dieser Ansicht wurden keine Serien gefunden.</string>
     <string name="added_to_favorites">Zu Favoriten hinzugefügt</string>
     <string name="removed_from_favorites">Aus Favoriten entfernt</string>
+    <string name="favorite_state_on">In Favoriten</string>
+    <string name="favorite_state_off">Nicht in Favoriten</string>
     <string name="channel_count">%1$d Kanäle</string>
     <string name="preview_playback_failed">Vorschau konnte nicht abgespielt werden. Zum Wiederholen OK drücken.</string>
 
     <string name="buffering">Wird geladen…</string>
+    <string name="player_seek_position">Wiedergabeposition</string>
     <string name="reconnecting">Erneut verbinden… (%1$d)</string>
     <string name="player_mode_label">Player</string>
     <string name="audio_track">Audio</string>

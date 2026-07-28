@@ -2,15 +2,19 @@
 <!-- Cast member: circular head-shot over a colored initial fallback + name.
      Display only (not focusable). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="84dp"
+    android:layout_width="96dp"
     android:layout_height="wrap_content"
+    android:contentDescription="@null"
+    android:importantForAccessibility="yes"
     android:orientation="vertical"
     android:gravity="center_horizontal"
-    android:layout_marginEnd="@dimen/space_m">
+    android:layout_marginEnd="@dimen/space_s">
 
     <FrameLayout
-        android:layout_width="64dp"
-        android:layout_height="64dp">
+        android:layout_width="70dp"
+        android:layout_height="70dp"
+        android:background="@drawable/bg_cast_avatar_ring"
+        android:padding="3dp">
 
         <TextView
             android:id="@+id/castInitial"
@@ -18,6 +22,7 @@
             android:layout_height="match_parent"
             android:background="@drawable/bg_cast_circle"
             android:gravity="center"
+            android:importantForAccessibility="no"
             android:textColor="@color/text_primary"
             android:textSize="@dimen/text_title"
             android:textStyle="bold" />
@@ -28,7 +33,8 @@
             android:layout_height="match_parent"
             android:scaleType="centerCrop"
             android:visibility="gone"
-            android:contentDescription="@null" />
+            android:contentDescription="@null"
+            android:importantForAccessibility="no" />
     </FrameLayout>
 
     <TextView
@@ -36,9 +42,11 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/space_xs"
+        android:ellipsize="end"
         android:gravity="center"
-        android:textColor="@color/text_secondary"
-        android:textSize="@dimen/text_caption"
+        android:importantForAccessibility="no"
         android:maxLines="2"
-        android:ellipsize="end" />
+        android:minHeight="38dp"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/text_small" />
 </LinearLayout>
