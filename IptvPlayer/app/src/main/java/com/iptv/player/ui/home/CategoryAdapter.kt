@@ -71,7 +71,11 @@ class CategoryAdapter(
 
         fun bind(category: Category) {
             title.text = category.name
-            count.text = category.count?.toString() ?: ""
+            count.text = category.count?.toString().orEmpty()
+            count.visibility = if (category.count == null) View.GONE else View.VISIBLE
+            itemView.contentDescription = category.count?.let {
+                "${category.name}, $it"
+            } ?: category.name
             itemView.isSelected = category.id == selectedId
             itemView.setOnFocusChangeListener { _, hasFocus ->
                 if (hasFocus) currentCategory()?.let(onFocused)
