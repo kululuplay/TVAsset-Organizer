@@ -55,6 +55,9 @@ class VodActivity : BaseActivity() {
     /** The category currently shown, so the header title can follow the sort. */
     private var currentCategory: Category? = null
 
+    /** Latest Paging refresh state, updated by the load-state collector. */
+    private var adapterRefreshSettled = false
+
     /** Sort orders cycled by the header button, in display order. */
     private val sortCycle = listOf(
         ContentSort.RECENT, ContentSort.NAME, ContentSort.RATING, ContentSort.YEAR
@@ -222,9 +225,8 @@ class VodActivity : BaseActivity() {
     }
 
     private fun renderEmptyState() {
-        val refreshSettled = vodAdapter.loadStateFlow.value.refresh is LoadState.NotLoading
         val catalogState = viewModel.loadState.value
-        val empty = refreshSettled && vodAdapter.itemCount == 0 &&
+        val empty = adapterRefreshSettled && vodAdapter.itemCount == 0 &&
             !catalogState.loading && catalogState.errorRes == null
         binding.emptyState.setText(
             if (viewModel.query.value.isNotEmpty()) R.string.empty_search
@@ -331,6 +333,7 @@ class VodActivity : BaseActivity() {
                 // Empty state: only once the refresh has settled with nothing to show.
                 launch {
                     vodAdapter.loadStateFlow.collectLatest { state ->
+                        adapterRefreshSettled = state.refresh is LoadState.NotLoading
                         renderEmptyState()
                     }
                 }

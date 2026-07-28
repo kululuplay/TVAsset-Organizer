@@ -55,6 +55,9 @@ class SeriesActivity : BaseActivity() {
     /** The category currently shown, so the header title can follow the sort. */
     private var currentCategory: Category? = null
 
+    /** Latest Paging refresh state, updated by the load-state collector. */
+    private var adapterRefreshSettled = false
+
     /** Sort orders cycled by the header button, in display order. */
     private val sortCycle = listOf(
         ContentSort.RECENT, ContentSort.NAME, ContentSort.RATING, ContentSort.YEAR
@@ -217,9 +220,8 @@ class SeriesActivity : BaseActivity() {
     }
 
     private fun renderEmptyState() {
-        val refreshSettled = seriesAdapter.loadStateFlow.value.refresh is LoadState.NotLoading
         val catalogState = viewModel.loadState.value
-        val empty = refreshSettled && seriesAdapter.itemCount == 0 &&
+        val empty = adapterRefreshSettled && seriesAdapter.itemCount == 0 &&
             !catalogState.loading && catalogState.errorRes == null
         binding.emptyState.setText(
             if (viewModel.query.value.isNotEmpty()) R.string.empty_search
@@ -325,6 +327,7 @@ class SeriesActivity : BaseActivity() {
                 // Empty state: only once the refresh has settled with nothing to show.
                 launch {
                     seriesAdapter.loadStateFlow.collectLatest { state ->
+                        adapterRefreshSettled = state.refresh is LoadState.NotLoading
                         renderEmptyState()
                     }
                 }
