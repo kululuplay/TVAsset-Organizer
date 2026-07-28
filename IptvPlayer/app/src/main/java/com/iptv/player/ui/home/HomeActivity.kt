@@ -176,6 +176,7 @@ class HomeActivity : BaseActivity() {
 
         setupLists()
         setupSearch()
+        setupFocusGraph()
         observe()
         observeNewContent()
 
@@ -359,6 +360,12 @@ class HomeActivity : BaseActivity() {
             viewModel.refresh()
         }
         binding.browserTitle.setText(if (radioMode) R.string.nav_radio else R.string.nav_live)
+        binding.browserIcon.setImageResource(if (radioMode) R.drawable.ic_radio else R.drawable.ic_tv)
+        binding.previewHeaderTitle.setText(
+            if (radioMode) R.string.radio_preview_title else R.string.live_preview_title
+        )
+        binding.previewCard.contentDescription = binding.previewHeaderTitle.text
+        updateBrowseHeader()
     }
 
     private fun setupSearch() {
@@ -380,6 +387,7 @@ class HomeActivity : BaseActivity() {
                     binding.categoryList.visibility = View.VISIBLE
                     binding.channelList.visibility = View.GONE
                 }
+                updateBrowseHeader()
             }
 
             override fun afterTextChanged(s: Editable?) = Unit
@@ -406,6 +414,35 @@ class HomeActivity : BaseActivity() {
         binding.searchInput.hideSoftKeyboard()
         binding.searchInput.clearFocus()
         showCategories()
+    }
+
+    /**
+     * Explicit focus edges prevent Android's geometric focus search from jumping
+     * outside the visible pane on dense TV layouts. Dynamic LEFT/RIGHT drill
+     * behaviour remains in [dispatchKeyEvent].
+     */
+    private fun setupFocusGraph() {
+        binding.refreshButton.nextFocusDownId = binding.searchInput.id
+        binding.refreshButton.nextFocusLeftId = binding.refreshButton.id
+        binding.refreshButton.nextFocusRightId = binding.previewCard.id
+        binding.refreshButton.nextFocusUpId = binding.refreshButton.id
+        binding.searchInput.nextFocusUpId = binding.refreshButton.id
+        binding.searchInput.nextFocusRightId = binding.previewCard.id
+        binding.categoryList.nextFocusRightId = binding.previewCard.id
+        binding.channelList.nextFocusRightId = binding.previewCard.id
+        binding.previewCard.nextFocusUpId = binding.refreshButton.id
+        binding.previewCard.nextFocusRightId = binding.previewCard.id
+        binding.previewCard.nextFocusDownId = binding.previewCard.id
+    }
+
+    /** Keeps the rail label and count synchronized with its currently visible list. */
+    private fun updateBrowseHeader() {
+        val showingChannels = inChannelView || viewModel.query.value.isNotBlank()
+        binding.browseModeLabel.setText(
+            if (showingChannels) R.string.channels_title else R.string.categories_title
+        )
+        val count = if (showingChannels) currentChannels.size else categoryAdapter.itemCount
+        binding.browseCount.text = getString(R.string.browse_count_format, count)
     }
 
     private fun observe() {
@@ -435,12 +472,14 @@ class HomeActivity : BaseActivity() {
                                 viewModel.selectCategory(target.id)
                                 focusCategory(target.id)
                             }
+                            updateBrowseHeader()
                         }
                     }
                 }
                 launch {
                     viewModel.channels.collectLatest { channels ->
                         currentChannels = channels
+                        updateBrowseHeader()
                         channelAdapter.submitList(channels) {
                             if (pendingScrollReset) {
                                 pendingScrollReset = false
@@ -503,9 +542,20 @@ class HomeActivity : BaseActivity() {
 
     private fun renderBrowseState() {
         val state = viewModel.loadState.value
-        binding.loadingIndicator.visibility = if (state.loading) View.VISIBLE else View.GONE
         val failed = state.errorRes != null
-        binding.loadErrorContainer.visibility = if (failed) View.VISIBLE else View.GONE
+        // Favorites/Recent are synthetic rows and do not prove that a usable
+        // live catalogue exists. A first-load failure must still show Retry when
+        // those two placeholders are the only rows available.
+        val hasRealCategories = categoryAdapter.currentList.any {
+            it.id != HomeViewModel.CAT_FAVORITES && it.id != HomeViewModel.CAT_RECENT
+        }
+        val hasCachedBrowseData = hasRealCategories || currentChannels.isNotEmpty()
+        val blockingLoading = state.loading && !hasCachedBrowseData
+        val blockingFailure = failed && !hasCachedBrowseData
+        binding.loadingIndicator.visibility =
+            if (blockingLoading) View.VISIBLE else View.GONE
+        binding.loadErrorContainer.visibility =
+            if (blockingFailure) View.VISIBLE else View.GONE
         state.errorRes?.let { binding.loadErrorText.setText(it) }
         // Keep an already-focused refresh control in the D-pad graph while the
         // request runs; disabling it makes Android TV eject focus unpredictably.
@@ -516,9 +566,13 @@ class HomeActivity : BaseActivity() {
             if (viewModel.query.value.isNotEmpty()) R.string.empty_search
             else R.string.empty_channels
         )
-        val empty = currentChannels.isEmpty() && !state.loading && !failed
+        val showingChannels = inChannelView || viewModel.query.value.isNotBlank()
+        val visibleItemCount =
+            if (showingChannels) currentChannels.size else categoryAdapter.itemCount
+        val empty =
+            visibleItemCount == 0 && !state.loading && !blockingFailure
         binding.emptyState.visibility = if (empty) View.VISIBLE else View.GONE
-        if (failed && currentChannels.isEmpty()) {
+        if (blockingFailure) {
             binding.retryButton.post { binding.retryButton.requestFocus() }
         } else if (restoreFocusAfterRetry && !state.loading) {
             restoreFocusAfterRetry = false
@@ -570,9 +624,13 @@ class HomeActivity : BaseActivity() {
             showLockedInfo(channel)
             return
         }
+        binding.guideChannelTitle.text = ChannelText.clean(channel.name)
         // Re-selecting the channel already shown (e.g. the list re-emits on a favorite
         // toggle, or a refocus) shouldn't re-fetch its guide or rebuild the panel.
-        if (channel.id == currentInfoChannel?.id && currentPrograms.isNotEmpty()) return
+        if (channel.id == currentInfoChannel?.id && currentPrograms.isNotEmpty()) {
+            binding.epgLoading.visibility = View.GONE
+            return
+        }
         // Browsing other channel names must NOT stop the live preview: the preview
         // only switches/stops on an explicit OK (see onChannelClicked). Focus just
         // moves the info/EPG panel; the on-video caption stays on the playing
@@ -590,6 +648,7 @@ class HomeActivity : BaseActivity() {
         currentPrograms = emptyList()
         epgAdapter.submitList(emptyList())
         binding.epgEmpty.visibility = View.GONE
+        binding.epgLoading.visibility = View.VISIBLE
 
         nowNextJob?.cancel()
         nowNextJob = lifecycleScope.launch {
@@ -608,6 +667,7 @@ class HomeActivity : BaseActivity() {
                     val idx = programs.indexOfFirst { it.isLiveAt(now) }
                     if (idx >= 0) binding.epgList.scrollToPosition(idx)
                 }
+                binding.epgLoading.visibility = View.GONE
                 binding.epgEmpty.visibility =
                     if (programs.isEmpty()) View.VISIBLE else View.GONE
             } catch (e: CancellationException) {
@@ -616,6 +676,7 @@ class HomeActivity : BaseActivity() {
                 // Best-effort guide: never let an EPG fetch crash the UI coroutine.
                 currentPrograms = emptyList()
                 epgAdapter.submitList(emptyList())
+                binding.epgLoading.visibility = View.GONE
                 binding.epgEmpty.visibility = View.VISIBLE
             }
         }
@@ -623,8 +684,13 @@ class HomeActivity : BaseActivity() {
 
     /** Renders a channel's static metadata (number + logos + title) into the caption. */
     private fun bindCaptionMeta(channel: Channel) {
-        binding.previewNumber.text = channel.number?.toString() ?: ""
+        val number = channel.number?.toString().orEmpty()
+        binding.previewNumber.text = number
+        binding.previewNumber.visibility = if (number.isEmpty()) View.GONE else View.VISIBLE
+        binding.previewLiveBadge.visibility = View.VISIBLE
+        binding.previewCaptionLogoPlate.visibility = View.VISIBLE
         binding.previewTitle.text = ChannelText.clean(channel.name)
+        if (previewingChannel == null) binding.infoLogo.visibility = View.VISIBLE
         val placeholder = LogoPlaceholder.forName(this, channel.name)
         if (channel.logoUrl.isNullOrBlank()) {
             binding.infoLogo.load(placeholder) { crossfade(false) }
@@ -675,16 +741,23 @@ class HomeActivity : BaseActivity() {
         currentInfoChannel = null
         stopPreview()
         binding.catchupHint.visibility = View.GONE
+        binding.guideChannelTitle.text = ""
         binding.previewNumber.text = ""
+        binding.previewNumber.visibility = View.GONE
+        binding.previewLiveBadge.visibility = View.GONE
+        binding.previewCaptionLogoPlate.visibility = View.GONE
         binding.previewTitle.text = ""
         binding.previewProgram.text = ""
         binding.infoLogo.load(null)
+        binding.infoLogo.visibility = View.INVISIBLE
         binding.previewCaptionLogo.load(null)
         binding.previewStatus.visibility = View.GONE
+        binding.previewLoading.visibility = View.GONE
         nowNextJob?.cancel()
         currentPrograms = emptyList()
         epgAdapter.submitList(emptyList())
         binding.epgEmpty.visibility = View.GONE
+        binding.epgLoading.visibility = View.GONE
     }
 
     /** Renders a metadata-free parental-lock state for an adult channel. */
@@ -695,10 +768,16 @@ class HomeActivity : BaseActivity() {
         currentPrograms = emptyList()
         epgAdapter.submitList(emptyList())
         binding.epgEmpty.visibility = View.GONE
+        binding.epgLoading.visibility = View.GONE
         binding.catchupHint.visibility = View.GONE
+        binding.guideChannelTitle.setText(R.string.adult_locked_title)
         binding.previewNumber.text = ""
+        binding.previewNumber.visibility = View.GONE
+        binding.previewLiveBadge.visibility = View.GONE
+        binding.previewCaptionLogoPlate.visibility = View.VISIBLE
         binding.previewTitle.setText(R.string.adult_locked_title)
         binding.previewProgram.text = ""
+        binding.infoLogo.visibility = View.VISIBLE
         binding.infoLogo.load(R.drawable.ic_lock) { crossfade(false) }
         binding.previewCaptionLogo.load(R.drawable.ic_lock) { crossfade(false) }
         binding.previewStatus.setText(R.string.pin_locked_content)
@@ -760,10 +839,14 @@ class HomeActivity : BaseActivity() {
 
     /** Drills from the category list into its channel list. */
     private fun enterChannelView() {
-        if (currentChannels.isEmpty()) return
+        if (currentChannels.isEmpty()) {
+            Toast.makeText(this, R.string.empty_channels, Toast.LENGTH_SHORT).show()
+            return
+        }
         categoryAdapter.setSelected(lastSelectedCategoryId)
         binding.channelList.visibility = View.VISIBLE
         binding.categoryList.visibility = View.GONE
+        updateBrowseHeader()
         focusFirstChannel()
     }
 
@@ -771,6 +854,7 @@ class HomeActivity : BaseActivity() {
     private fun showCategories() {
         binding.categoryList.visibility = View.VISIBLE
         binding.channelList.visibility = View.GONE
+        updateBrowseHeader()
         val id = lastSelectedCategoryId
         if (id != null) focusCategory(id)
         else if (categoryAdapter.itemCount > 0) focusRow(binding.categoryList, 0)
@@ -926,6 +1010,7 @@ class HomeActivity : BaseActivity() {
         currentInfoChannel = channel
         previewingChannel = channel
         previewFailed = false
+        binding.previewLoading.visibility = View.VISIBLE
         binding.previewStatus.setText(R.string.buffering)
         binding.previewStatus.visibility = View.VISIBLE
         // Lock the on-video caption to the channel we're about to play so it stays
@@ -971,12 +1056,14 @@ class HomeActivity : BaseActivity() {
      */
     private fun buildPreviewCallback() = object : PlayerController.Callback {
         override fun onBuffering() {
+            binding.previewLoading.visibility = View.VISIBLE
             binding.previewStatus.setText(R.string.buffering)
             binding.previewStatus.visibility = View.VISIBLE
         }
         override fun onPlaying(engineName: String) {
             previewLogoHandler.removeCallbacksAndMessages(null)
             binding.infoLogo.visibility = View.GONE
+            binding.previewLoading.visibility = View.GONE
             binding.previewStatus.visibility = View.GONE
             previewFailed = false
             // Live preview is rendering: hold the screen on so a long watch on the
@@ -986,6 +1073,7 @@ class HomeActivity : BaseActivity() {
         override fun onVideoResumed() {
             previewLogoHandler.removeCallbacksAndMessages(null)
             binding.infoLogo.visibility = View.GONE
+            binding.previewLoading.visibility = View.GONE
             binding.previewStatus.visibility = View.GONE
             previewFailed = false
             binding.previewVideo.keepScreenOn = true
@@ -997,10 +1085,12 @@ class HomeActivity : BaseActivity() {
             binding.infoLogo.visibility = View.VISIBLE
             binding.previewVideo.keepScreenOn = false
             previewFailed = true
+            binding.previewLoading.visibility = View.GONE
             binding.previewStatus.setText(R.string.preview_playback_failed)
             binding.previewStatus.visibility = View.VISIBLE
         }
         override fun onRetrying(attempt: Int) {
+            binding.previewLoading.visibility = View.VISIBLE
             binding.previewStatus.text = getString(R.string.reconnecting, attempt)
             binding.previewStatus.visibility = View.VISIBLE
         }
@@ -1019,6 +1109,7 @@ class HomeActivity : BaseActivity() {
         previewFailed = false
         controller.setCallback(buildPreviewCallback())
         binding.infoLogo.visibility = View.VISIBLE
+        binding.previewLoading.visibility = View.VISIBLE
         binding.previewStatus.setText(R.string.buffering)
         binding.previewStatus.visibility = View.VISIBLE
         // Safety net: rebind() restarts the stream and the fresh frame event hides
@@ -1072,6 +1163,7 @@ class HomeActivity : BaseActivity() {
         previewFailed = false
         captionPrograms = emptyList()
         binding.infoLogo.visibility = View.VISIBLE
+        binding.previewLoading.visibility = View.GONE
         binding.previewStatus.visibility = View.GONE
         // Preview is gone: release the screen-on hold so we're not pinning the
         // display awake when nothing is playing on Home.
@@ -1111,11 +1203,13 @@ class HomeActivity : BaseActivity() {
             previewingChannel = null
             captionPrograms = emptyList()
             binding.infoLogo.visibility = View.VISIBLE
+            binding.previewLoading.visibility = View.GONE
         } else {
             stopPreview()
         }
         // Stop any in-flight EPG fetch so the guide isn't loaded off-screen.
         nowNextJob?.cancel()
+        binding.epgLoading.visibility = View.GONE
         // Drop any pending number-zap commit so a delayed lookup can't launch the
         // player after we've left the screen (and to release the buffer/refs).
         zap.cancel()

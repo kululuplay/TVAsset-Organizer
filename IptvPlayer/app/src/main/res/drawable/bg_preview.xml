@@ -1,14 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Live preview surface: a dark purple-tinted gradient with rounded corners,
-     used behind the focused channel logo until playback opens. -->
+<!-- Preview surface: a restrained cinema gradient behind video and artwork. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <corners android:radius="@dimen/tile_radius" />
+    <corners android:radius="22dp" />
     <gradient
-        android:angle="135"
-        android:startColor="#241834"
-        android:centerColor="#1A1426"
-        android:endColor="#10101C"
+        android:angle="315"
+        android:startColor="#17263A"
+        android:centerColor="#141827"
+        android:endColor="#241231"
         android:type="linear" />
-    <stroke android:width="1dp" android:color="@color/glass_stroke" />
+    <stroke android:width="1dp" android:color="#2EFFFFFF" />
 </shape>

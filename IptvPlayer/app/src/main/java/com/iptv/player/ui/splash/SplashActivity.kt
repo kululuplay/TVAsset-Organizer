@@ -21,6 +21,7 @@ import android.os.SystemClock
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.DecelerateInterpolator
+import android.view.animation.LinearInterpolator
 import android.view.animation.OvershootInterpolator
 import androidx.lifecycle.lifecycleScope
 import com.iptv.player.data.ServiceLocator
@@ -49,9 +50,7 @@ class SplashActivity : BaseActivity() {
         if (isFinishing || isDestroyed) return@Runnable
         startBreathingPulse()
         startGlowPulse()
-        startDotPulse(binding.dot1, 0)
-        startDotPulse(binding.dot2, 160)
-        startDotPulse(binding.dot3, 320)
+        startOrbitSpin()
     }
 
     companion object {
@@ -77,30 +76,48 @@ class SplashActivity : BaseActivity() {
     /**
      * Cinematic entrance: the halo + badge fade and scale in with a slight
      * overshoot, the wordmark and tagline rise into place, then the badge keeps
-     * a gentle breathing pulse, the halo glows in and out, and the three dots
-     * bounce in a staggered loop while content prefetches.
+     * a gentle breathing pulse while the halo and orbit move subtly as the real
+     * prefetch progress rail advances.
      */
     private fun playEntranceAnimations() {
+        val version = runCatching {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: "—"
+        binding.splashVersion.text = getString(com.iptv.player.R.string.dash_version, version)
+
+        binding.splashProgressFill.post {
+            binding.splashProgressFill.pivotX =
+                if (binding.root.layoutDirection == View.LAYOUT_DIRECTION_RTL) {
+                    binding.splashProgressFill.width.toFloat()
+                } else {
+                    0f
+                }
+        }
+
         // Badge pops in with an overshoot.
         binding.logoBadge.apply {
-            scaleX = 0.7f
-            scaleY = 0.7f
+            scaleX = 0.78f
+            scaleY = 0.78f
             animate().alpha(1f).scaleX(1f).scaleY(1f)
                 .setStartDelay(120).setDuration(620)
-                .setInterpolator(OvershootInterpolator(1.6f))
+                .setInterpolator(OvershootInterpolator(1.25f))
                 .start()
         }
 
-        // Halo fades in behind the badge.
+        // Halo and the thin orbit fade in behind the brand monolith.
         binding.logoGlow.animate()
             .alpha(1f).setStartDelay(120).setDuration(720)
             .setInterpolator(DecelerateInterpolator()).start()
+        binding.logoOrbit.animate()
+            .alpha(1f).setStartDelay(180).setDuration(720)
+            .setInterpolator(DecelerateInterpolator()).start()
 
-        // Wordmark and tagline rise into place, staggered.
+        // Wordmark, tagline and the stage panel rise into place, staggered.
         riseIn(binding.appName, delay = 320)
         riseIn(binding.tagline, delay = 440)
-        binding.splashStatus.animate()
-            .alpha(1f).setStartDelay(560).setDuration(500).start()
+        riseIn(binding.statusPanel, delay = 540)
+        binding.splashVersion.animate()
+            .alpha(1f).setStartDelay(620).setDuration(420).start()
 
         // Idle loops once the entrance has settled.
         binding.root.postDelayed(idleLoopsRunnable, 760)
@@ -143,34 +160,47 @@ class SplashActivity : BaseActivity() {
         animators += glow
     }
 
-    /** A single dot bounces (scale + fade) on a staggered, looping schedule. */
-    private fun startDotPulse(dot: View, startDelay: Long) {
-        val anim = ObjectAnimator.ofPropertyValuesHolder(
-            dot,
-            android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 0.6f, 1f),
-            android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.6f, 1f),
-            android.animation.PropertyValuesHolder.ofFloat(View.ALPHA, 0.35f, 1f)
-        ).apply {
-            duration = 520
-            this.startDelay = startDelay
-            repeatMode = ValueAnimator.REVERSE
+    /** Slow orbit adds motion without the busy three-dot loader used previously. */
+    private fun startOrbitSpin() {
+        val orbit = ObjectAnimator.ofFloat(binding.logoOrbit, View.ROTATION, 45f, 405f).apply {
+            duration = 12_000
             repeatCount = ValueAnimator.INFINITE
-            interpolator = AccelerateDecelerateInterpolator()
+            interpolator = LinearInterpolator()
             start()
         }
-        animators += anim
+        animators += orbit
     }
 
     private fun dp(value: Float): Float = value * resources.displayMetrics.density
+
+    /** Moves the progress rail to the prefetch stage currently visible to the user. */
+    private fun renderStage(stage: SplashPrefetch.Stage) {
+        binding.splashStatus.setText(stage.labelRes)
+        val fraction = when (stage) {
+            SplashPrefetch.Stage.STARTING -> 0.08f
+            SplashPrefetch.Stage.LIVE -> 0.32f
+            SplashPrefetch.Stage.EPG -> 0.58f
+            SplashPrefetch.Stage.LIBRARY -> 0.82f
+            SplashPrefetch.Stage.READY -> 1f
+        }
+        binding.splashProgressFill.animate()
+            .scaleX(fraction)
+            .setDuration(240)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+    }
 
     override fun onDestroy() {
         binding.root.removeCallbacks(idleLoopsRunnable)
         listOf(
             binding.logoBadge,
             binding.logoGlow,
+            binding.logoOrbit,
             binding.appName,
             binding.tagline,
-            binding.splashStatus,
+            binding.statusPanel,
+            binding.splashVersion,
+            binding.splashProgressFill,
         ).forEach { it.animate().cancel() }
         animators.forEach { it.cancel() }
         animators.clear()
@@ -226,7 +256,7 @@ class SplashActivity : BaseActivity() {
         // Reflect prefetch progress in the status line while the splash is up.
         val statusJob = lifecycleScope.launch {
             SplashPrefetch.stage.collect { stage ->
-                binding.splashStatus.setText(stage.labelRes)
+                renderStage(stage)
             }
         }
 

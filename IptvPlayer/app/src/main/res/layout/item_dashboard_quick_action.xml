@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Compact horizontal action for the lower dashboard rail. Keeps long
+     translated labels readable and makes every D-pad target at least 80dp tall. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_tile_surface"
+    android:clickable="true"
+    android:clipChildren="false"
+    android:focusable="true"
+    android:focusableInTouchMode="false"
+    android:foreground="@drawable/bg_dashboard_tile_focus"
+    android:stateListAnimator="@animator/dashboard_tile_focus">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="@dimen/space_s">
+
+        <ImageView
+            android:id="@+id/quickIcon"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="@drawable/bg_badge_catchup"
+            android:contentDescription="@string/section_continue_watching"
+            android:padding="10dp"
+            android:src="@drawable/ic_clock"
+            app:tint="@color/text_primary" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/quickTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/quickSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_small" />
+        </LinearLayout>
+
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:alpha="0.7"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_arrow_right"
+            app:tint="@color/text_secondary" />
+    </LinearLayout>
+</FrameLayout>

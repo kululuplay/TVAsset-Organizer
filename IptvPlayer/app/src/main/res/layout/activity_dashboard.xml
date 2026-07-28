@@ -1,122 +1,88 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Post-login launcher home, redesigned reference-style. A slim brand bar (logo +
-     name on the left, a network-signal chip and Refresh on the right). Below it a
-     hero header that pairs a left-aligned "what to watch?" prompt with a large,
-     right-aligned clock/date and weather read-out (the signature element). Then two
-     rows of gradient destination cards (Live hero / Movies / Series / Radio, and
-     Favorites / Continue / Search / Settings) covering every section. Footer keeps
-     the contact chips, account and version. Fully D-pad driven; cards scale + show a
-     brand-pink ring on focus. All view IDs are preserved for DashboardActivity. -->
+<!-- Modern Android TV launcher. A large Live hero anchors the screen, the four
+     primary libraries form a compact editorial grid, and personal/utilities sit
+     in a dedicated quick-action rail. Everything fits a 960x540dp TV viewport
+     without scrolling and has an explicit D-pad target. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_login_aurora"
+    android:background="@drawable/bg_dashboard_modern"
+    android:clipChildren="false"
     android:paddingHorizontal="@dimen/safe_area_h"
     android:paddingVertical="@dimen/safe_area_v">
 
-    <!-- ===== Top bar: brand (left) + status cluster (right) ===== -->
     <LinearLayout
         android:id="@+id/topBar"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:layout_height="48dp"
         android:gravity="center_vertical"
-        app:layout_constraintStart_toStartOf="parent"
+        android:orientation="horizontal"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
-        <!-- Brand -->
-        <ImageView
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="@drawable/bg_logo_badge"
-            android:padding="9dp"
-            android:src="@drawable/ic_tv"
-            app:tint="@color/text_primary"
-            android:contentDescription="@string/app_name" />
+        <FrameLayout
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_splash_logo_panel"
+            android:padding="9dp">
 
-        <TextView
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@string/app_name"
+                android:src="@drawable/ic_kululu_logo" />
+        </FrameLayout>
+
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/app_name"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_title"
-            android:textStyle="bold"
-            android:letterSpacing="0.01"
-            android:layout_marginStart="@dimen/space_m" />
+            android:layout_marginStart="12dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.04"
+                android:text="@string/app_name"
+                android:textColor="@color/text_primary"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:text="@string/app_tagline"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_small" />
+        </LinearLayout>
 
         <Space
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="1dp"
             android:layout_weight="1" />
 
-        <!-- Weather pill (moved up next to the status cluster) -->
-        <LinearLayout
-            android:id="@+id/weatherChip"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:background="@drawable/bg_time_chip"
-            android:paddingHorizontal="@dimen/space_m"
-            android:paddingVertical="@dimen/space_s"
-            android:layout_marginEnd="@dimen/space_m">
-
-            <ImageView
-                android:id="@+id/weatherIcon"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
-                android:src="@drawable/ic_weather_clouds"
-                app:tint="@color/text_primary"
-                android:contentDescription="@string/weather_unavailable" />
-
-            <TextView
-                android:id="@+id/weatherText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/space_s"
-                android:text="@string/weather_unavailable"
-                android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_caption"
-                android:textStyle="bold"
-                android:maxLines="1" />
-        </LinearLayout>
-
-        <!-- Date pill -->
-        <TextView
-            android:id="@+id/dateText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_time_chip"
-            android:paddingHorizontal="@dimen/space_m"
-            android:paddingVertical="@dimen/space_s"
-            android:layout_marginEnd="@dimen/space_m"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_caption"
-            android:textStyle="bold"
-            android:maxLines="1" />
-
-        <!-- Network signal chip -->
         <LinearLayout
             android:id="@+id/signalChip"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
+            android:layout_height="36dp"
+            android:layout_marginEnd="10dp"
             android:background="@drawable/bg_time_chip"
-            android:paddingHorizontal="@dimen/space_m"
-            android:paddingVertical="@dimen/space_s"
-            android:layout_marginEnd="@dimen/space_m">
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp">
 
             <ImageView
                 android:id="@+id/signalIcon"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+                android:layout_width="17dp"
+                android:layout_height="17dp"
+                android:contentDescription="@string/signal_good"
                 android:src="@drawable/ic_signal"
-                app:tint="@color/success"
-                android:contentDescription="@string/signal_good" />
+                app:tint="@color/success" />
 
             <TextView
                 android:id="@+id/signalText"
@@ -124,305 +90,330 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="@dimen/space_s"
                 android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_caption"
+                android:textSize="@dimen/text_small"
                 android:textStyle="bold" />
         </LinearLayout>
 
-        <!-- Refresh -->
         <ImageButton
             android:id="@+id/btnRefresh"
             style="@style/Widget.Iptv.IconButton"
-            android:src="@drawable/ic_refresh"
-            android:contentDescription="@string/action_refresh" />
+            android:contentDescription="@string/action_refresh"
+            android:src="@drawable/ic_refresh" />
     </LinearLayout>
 
-    <!-- ===== Scrollable body ===== -->
-    <ScrollView
-        android:id="@+id/scrollBody"
+    <LinearLayout
+        android:id="@+id/dashboardBody"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginTop="@dimen/space_l"
-        android:clipToPadding="false"
-        android:fillViewport="true"
-        android:scrollbars="none"
-        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="10dp"
+        android:clipChildren="false"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toTopOf="@id/footer"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/topBar"
-        app:layout_constraintBottom_toTopOf="@id/footer">
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/topBar">
 
         <LinearLayout
+            android:id="@+id/heroHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-            <!-- Hero header: prompt (left) + big clock/weather read-out (right) -->
             <LinearLayout
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="bottom"
-                android:baselineAligned="false">
+                android:layout_weight="1"
+                android:orientation="vertical">
 
-                <!-- Prompt -->
-                <LinearLayout
-                    android:layout_width="0dp"
+                <TextView
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                    android:includeFontPadding="false"
+                    android:text="@string/dash_prompt_title"
+                    android:textColor="@color/text_primary"
+                    android:textSize="27sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/dash_prompt_subtitle"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="@dimen/text_small" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/weatherChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_time_chip"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="12dp">
+
+                    <ImageView
+                        android:id="@+id/weatherIcon"
+                        android:layout_width="17dp"
+                        android:layout_height="17dp"
+                        android:contentDescription="@string/weather_unavailable"
+                        android:src="@drawable/ic_weather_clouds"
+                        app:tint="@color/text_primary" />
 
                     <TextView
+                        android:id="@+id/weatherText"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/dash_prompt_title"
-                        android:textColor="@color/text_primary"
-                        android:textSize="@dimen/text_big_title"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/space_xs"
-                        android:text="@string/dash_prompt_subtitle"
+                        android:layout_marginStart="@dimen/space_s"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:maxWidth="190dp"
+                        android:text="@string/weather_unavailable"
                         android:textColor="@color/text_secondary"
-                        android:textSize="@dimen/text_caption" />
+                        android:textSize="@dimen/text_small"
+                        android:textStyle="bold" />
                 </LinearLayout>
 
-                <!-- Clock read-out: hidden by default; the user turns it on in
-                     Settings (weather + date now live in the top status cluster). -->
+                <TextView
+                    android:id="@+id/dateText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="@dimen/space_s"
+                    android:background="@drawable/bg_time_chip"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:paddingHorizontal="12dp"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_small"
+                    android:textStyle="bold" />
+
                 <com.iptv.player.ui.common.ClockView
                     android:id="@+id/clock"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:gravity="end"
-                    android:layout_marginStart="@dimen/space_l"
+                    android:layout_marginStart="12dp"
+                    android:includeFontPadding="false"
+                    android:letterSpacing="0.02"
                     android:textColor="@color/text_primary"
-                    android:textSize="@dimen/text_clock"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.01"
-                    android:includeFontPadding="false" />
-            </LinearLayout>
-
-            <!-- Primary row: content destinations, with Live TV as a wide hero. -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="190dp"
-                android:orientation="horizontal"
-                android:layout_marginTop="@dimen/space_l">
-
-                <include
-                    android:id="@+id/tileLive"
-                    layout="@layout/item_dashboard_card"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="2"
-                    android:layout_marginEnd="@dimen/space_m" />
-
-                <include
-                    android:id="@+id/tileMovies"
-                    layout="@layout/item_dashboard_card"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="@dimen/space_m" />
-
-                <include
-                    android:id="@+id/tileSeries"
-                    layout="@layout/item_dashboard_card"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="@dimen/space_m" />
-
-                <include
-                    android:id="@+id/tileRadio"
-                    layout="@layout/item_dashboard_card"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1" />
-            </LinearLayout>
-
-            <!-- Secondary row: personal + utility destinations, five even cards.
-                 Taller than the primary cards' label area so two-line titles
-                 ("İzlemeye Devam Et", "İstek & Şikayet") never clip. -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="180dp"
-                android:orientation="horizontal"
-                android:layout_marginTop="@dimen/space_m">
-
-                <include
-                    android:id="@+id/tileFavorites"
-                    layout="@layout/item_dashboard_card"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="@dimen/space_m" />
-
-                <include
-                    android:id="@+id/tileContinue"
-                    layout="@layout/item_dashboard_card"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="@dimen/space_m" />
-
-                <include
-                    android:id="@+id/tileSearch"
-                    layout="@layout/item_dashboard_card"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="@dimen/space_m" />
-
-                <include
-                    android:id="@+id/tileSettings"
-                    layout="@layout/item_dashboard_card"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="@dimen/space_m" />
-
-                <include
-                    android:id="@+id/tileRequest"
-                    layout="@layout/item_dashboard_card"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1" />
+                    android:textSize="34sp"
+                    android:textStyle="bold" />
             </LinearLayout>
         </LinearLayout>
-    </ScrollView>
 
-    <!-- ===== Footer: contact (left) + account & version (right) ===== -->
-    <LinearLayout
-        android:id="@+id/footer"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginTop="@dimen/space_m"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent">
-
-        <!-- Website chip -->
         <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:background="@drawable/bg_time_chip"
-            android:paddingHorizontal="@dimen/space_m"
-            android:paddingVertical="@dimen/space_s">
+            android:id="@+id/primaryDestinations"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="12dp"
+            android:layout_weight="1"
+            android:clipChildren="false"
+            android:orientation="horizontal">
 
-            <ImageView
-                android:layout_width="18dp"
-                android:layout_height="18dp"
-                android:src="@drawable/ic_globe"
-                app:tint="@color/accent_cyan"
-                android:contentDescription="@string/dash_website" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/space_s"
-                android:text="@string/dash_website"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_caption"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <!-- WhatsApp chip -->
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:background="@drawable/bg_time_chip"
-            android:layout_marginStart="@dimen/space_s"
-            android:paddingHorizontal="@dimen/space_m"
-            android:paddingVertical="@dimen/space_s">
-
-            <ImageView
-                android:layout_width="18dp"
-                android:layout_height="18dp"
-                android:src="@drawable/ic_whatsapp"
-                app:tint="@color/accent_emerald"
-                android:contentDescription="@string/dash_whatsapp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/space_s"
-                android:text="@string/dash_whatsapp"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_caption"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1" />
-
-        <!-- Account + app version -->
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="end">
-
-            <TextView
-                android:id="@+id/footerUser"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_caption"
-                android:textStyle="bold"
-                android:maxLines="1"
-                android:ellipsize="end" />
+            <include
+                android:id="@+id/tileLive"
+                layout="@layout/item_dashboard_card"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="12dp"
+                android:layout_weight="1.05" />
 
             <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="end"
-                android:layout_marginTop="2dp">
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1.35"
+                android:clipChildren="false"
+                android:orientation="vertical">
 
-                <TextView
-                    android:id="@+id/footerExpiry"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="@color/text_muted"
-                    android:textSize="@dimen/text_caption" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:clipChildren="false"
+                    android:orientation="horizontal">
 
-                <TextView
-                    android:id="@+id/footerVersion"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="@dimen/space_m"
-                    android:textColor="@color/text_muted"
-                    android:textSize="@dimen/text_caption" />
+                    <include
+                        android:id="@+id/tileMovies"
+                        layout="@layout/item_dashboard_card"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginEnd="12dp"
+                        android:layout_weight="1" />
+
+                    <include
+                        android:id="@+id/tileSeries"
+                        layout="@layout/item_dashboard_card"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_weight="1"
+                    android:clipChildren="false"
+                    android:orientation="horizontal">
+
+                    <include
+                        android:id="@+id/tileRadio"
+                        layout="@layout/item_dashboard_card"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginEnd="12dp"
+                        android:layout_weight="1" />
+
+                    <include
+                        android:id="@+id/tileFavorites"
+                        layout="@layout/item_dashboard_card"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1" />
+                </LinearLayout>
             </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/quickActions"
+            android:layout_width="match_parent"
+            android:layout_height="84dp"
+            android:layout_marginTop="12dp"
+            android:clipChildren="false"
+            android:orientation="horizontal">
+
+            <include
+                android:id="@+id/tileContinue"
+                layout="@layout/item_dashboard_quick_action"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="12dp"
+                android:layout_weight="1" />
+
+            <include
+                android:id="@+id/tileSearch"
+                layout="@layout/item_dashboard_quick_action"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="12dp"
+                android:layout_weight="1" />
+
+            <include
+                android:id="@+id/tileSettings"
+                layout="@layout/item_dashboard_quick_action"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="12dp"
+                android:layout_weight="1" />
+
+            <include
+                android:id="@+id/tileRequest"
+                layout="@layout/item_dashboard_quick_action"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1" />
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Floating connectivity/outage banner (bottom-center pill). Shown when the
-         device is offline (cached content) or the portal is unreachable and the
-         Dashboard is auto-retrying; hidden the moment a sync succeeds. Overlaid
-         so it never shifts the existing layout. Wired in DashboardActivity. -->
+    <LinearLayout
+        android:id="@+id/footer"
+        android:layout_width="0dp"
+        android:layout_height="34dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@string/dash_website"
+            android:src="@drawable/ic_globe"
+            app:tint="@color/accent_cyan" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="@string/dash_website"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_small"
+            android:textStyle="bold" />
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginStart="@dimen/space_m"
+            android:contentDescription="@string/dash_whatsapp"
+            android:src="@drawable/ic_whatsapp"
+            app:tint="@color/accent_emerald" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="@string/dash_whatsapp"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_small"
+            android:textStyle="bold" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/footerUser"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:maxWidth="220dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_small"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/footerExpiry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:maxLines="1"
+            android:textColor="@color/text_muted"
+            android:textSize="@dimen/text_small" />
+
+        <TextView
+            android:id="@+id/footerVersion"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:maxLines="1"
+            android:textColor="@color/text_muted"
+            android:textSize="@dimen/text_small" />
+    </LinearLayout>
+
     <TextView
         android:id="@+id/statusBanner"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:background="@drawable/bg_time_chip"
+        android:background="@drawable/bg_splash_status_panel"
+        android:elevation="12dp"
         android:paddingHorizontal="@dimen/space_l"
         android:paddingVertical="@dimen/space_s"
         android:textColor="@color/text_primary"
         android:textSize="@dimen/text_caption"
         android:textStyle="bold"
         android:visibility="gone"
-        android:elevation="8dp"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
 </androidx.constraintlayout.widget.ConstraintLayout>

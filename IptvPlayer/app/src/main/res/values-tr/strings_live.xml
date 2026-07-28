@@ -4,4 +4,9 @@
     <string name="channels_title">Kanallar</string>
     <string name="live_label">CANLI</string>
     <string name="next_label">Sıradaki</string>
+    <string name="live_preview_title">Canlı önizleme</string>
+    <string name="radio_preview_title">Radyo önizleme</string>
+    <string name="live_preview_hint">Tamam · Tam ekran</string>
+    <string name="program_guide_title">Program rehberi</string>
+    <string name="browse_count_format">%1$d</string>
 </resources>
