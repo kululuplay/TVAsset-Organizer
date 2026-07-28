@@ -543,10 +543,14 @@ class HomeActivity : BaseActivity() {
         return true
     }
 
-    private fun isConfirmKey(keyCode: Int): Boolean =
-        KeyEvent.isConfirmKey(keyCode) ||
-            keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER ||
-            keyCode == KeyEvent.KEYCODE_BUTTON_A
+    private fun isConfirmKey(keyCode: Int): Boolean = when (keyCode) {
+        KeyEvent.KEYCODE_DPAD_CENTER,
+        KeyEvent.KEYCODE_ENTER,
+        KeyEvent.KEYCODE_SPACE,
+        KeyEvent.KEYCODE_NUMPAD_ENTER,
+        KeyEvent.KEYCODE_BUTTON_A -> true
+        else -> false
+    }
 
     private fun cancelsNumberZap(keyCode: Int): Boolean = when (keyCode) {
         KeyEvent.KEYCODE_DPAD_LEFT,

@@ -483,10 +483,14 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
      * Android TV remotes normally emit one of the framework confirm keys; USB
      * numpads and game controllers can instead emit NUMPAD_ENTER / BUTTON_A.
      */
-    private fun isGlobalConfirmKey(keyCode: Int): Boolean =
-        KeyEvent.isConfirmKey(keyCode) ||
-            keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER ||
-            keyCode == KeyEvent.KEYCODE_BUTTON_A
+    private fun isGlobalConfirmKey(keyCode: Int): Boolean = when (keyCode) {
+        KeyEvent.KEYCODE_DPAD_CENTER,
+        KeyEvent.KEYCODE_ENTER,
+        KeyEvent.KEYCODE_SPACE,
+        KeyEvent.KEYCODE_NUMPAD_ENTER,
+        KeyEvent.KEYCODE_BUTTON_A -> true
+        else -> false
+    }
 
     override fun onBackPressed() {
         // Back peels overlays one at a time: stats first, then info, then exit.
