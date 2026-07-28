@@ -377,7 +377,7 @@
                 android:nextFocusUp="@id/episodeList"
                 android:clipChildren="false"
                 android:clipToPadding="false"
-                android:preserveFocusAfterLayout="true"
+                app:preserveFocusAfterLayout="true"
                 android:visibility="gone" />
         </LinearLayout>
     </ScrollView>

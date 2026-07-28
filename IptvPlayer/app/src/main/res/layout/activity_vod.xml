@@ -39,7 +39,7 @@
             android:clipChildren="false"
             android:clipToPadding="false"
             android:focusable="false"
-            android:preserveFocusAfterLayout="true" />
+            app:preserveFocusAfterLayout="true" />
     </LinearLayout>
 
     <!-- Right: section header + poster grid -->
@@ -163,7 +163,7 @@
                 android:layout_height="match_parent"
                 android:clipChildren="false"
                 android:clipToPadding="false"
-                android:preserveFocusAfterLayout="true" />
+                app:preserveFocusAfterLayout="true" />
 
             <TextView
                 android:id="@+id/emptyState"

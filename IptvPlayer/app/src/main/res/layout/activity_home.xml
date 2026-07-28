@@ -93,7 +93,7 @@
                 android:layout_height="match_parent"
                 android:clipChildren="false"
                 android:clipToPadding="false"
-                android:preserveFocusAfterLayout="true"
+                app:preserveFocusAfterLayout="true"
                 android:paddingBottom="@dimen/space_m" />
 
             <androidx.recyclerview.widget.RecyclerView
@@ -102,7 +102,7 @@
                 android:layout_height="match_parent"
                 android:clipChildren="false"
                 android:clipToPadding="false"
-                android:preserveFocusAfterLayout="true"
+                app:preserveFocusAfterLayout="true"
                 android:paddingBottom="@dimen/space_m"
                 android:visibility="gone" />
 
