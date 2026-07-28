@@ -727,7 +727,7 @@
                                 android:layout_height="match_parent"
                                 android:contentDescription="@string/channels_title"
                                 android:src="@drawable/ic_tv"
-                                android:tint="@color/live_cyan" />
+                                app:tint="@color/live_cyan" />
                         </FrameLayout>
 
                         <LinearLayout
