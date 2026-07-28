@@ -34,7 +34,7 @@
             android:background="@drawable/bg_logo_badge"
             android:padding="9dp"
             android:src="@drawable/ic_tv"
-            android:tint="@color/text_primary"
+            app:tint="@color/text_primary"
             android:contentDescription="@string/app_name" />
 
         <TextView
@@ -69,7 +69,7 @@
                 android:layout_width="18dp"
                 android:layout_height="18dp"
                 android:src="@drawable/ic_weather_clouds"
-                android:tint="@color/text_primary"
+                app:tint="@color/text_primary"
                 android:contentDescription="@string/weather_unavailable" />
 
             <TextView
@@ -115,7 +115,7 @@
                 android:layout_width="18dp"
                 android:layout_height="18dp"
                 android:src="@drawable/ic_signal"
-                android:tint="@color/success"
+                app:tint="@color/success"
                 android:contentDescription="@string/signal_good" />
 
             <TextView
@@ -318,7 +318,7 @@
                 android:layout_width="18dp"
                 android:layout_height="18dp"
                 android:src="@drawable/ic_globe"
-                android:tint="@color/accent_cyan"
+                app:tint="@color/accent_cyan"
                 android:contentDescription="@string/dash_website" />
 
             <TextView
@@ -346,7 +346,7 @@
                 android:layout_width="18dp"
                 android:layout_height="18dp"
                 android:src="@drawable/ic_whatsapp"
-                android:tint="@color/accent_emerald"
+                app:tint="@color/accent_emerald"
                 android:contentDescription="@string/dash_whatsapp" />
 
             <TextView

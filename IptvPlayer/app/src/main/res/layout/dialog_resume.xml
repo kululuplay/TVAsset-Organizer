@@ -2,6 +2,7 @@
 <!-- Modern "resume playback" prompt. Shows the exact stopped-at timestamp in a
      highlighted chip; primary CTA = resume, secondary = start over. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="560dp"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -40,7 +41,7 @@
             android:layout_height="28dp"
             android:src="@drawable/ic_play"
             android:contentDescription="@null"
-            android:tint="@color/accent" />
+            app:tint="@color/accent" />
 
         <LinearLayout
             android:layout_width="0dp"

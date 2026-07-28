@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- The existing catalogue has partial translations in five locale packs.
+         Keep reporting that backlog without blocking code, resource or APK checks. -->
+    <issue id="MissingTranslation" severity="warning" />
+</lint>

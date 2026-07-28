@@ -191,7 +191,7 @@
                                 android:layout_width="20dp"
                                 android:layout_height="20dp"
                                 android:src="@drawable/ic_play"
-                                android:tint="#101820"
+                                app:tint="#101820"
                                 android:layout_marginEnd="@dimen/space_s"
                                 android:contentDescription="@null" />
 

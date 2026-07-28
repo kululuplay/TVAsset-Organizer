@@ -86,7 +86,7 @@
                 android:focusableInTouchMode="false"
                 android:padding="@dimen/space_s"
                 android:src="@drawable/ic_refresh"
-                android:tint="@color/text_primary" />
+                app:tint="@color/text_primary" />
 
             <TextView
                 android:id="@+id/sortButton"

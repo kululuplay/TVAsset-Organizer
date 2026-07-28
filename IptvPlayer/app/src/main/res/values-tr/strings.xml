@@ -210,7 +210,7 @@
 
     <string name="about_title">Hakkında</string>
     <string name="about_version">Sürüm %1$s</string>
-    <string name="about_update_available">Bir güncelleme mevcut.</string>
+    <string name="about_update_available">v%1$s güncellemesi mevcut.</string>
     <string name="about_update_required">Zorunlu bir güncelleme var. Devam etmek için lütfen güncelleyin.</string>
     <string name="about_update_now">Şimdi güncelle</string>
 

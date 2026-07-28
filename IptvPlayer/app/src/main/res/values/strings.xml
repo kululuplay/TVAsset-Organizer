@@ -238,7 +238,7 @@
     <!-- About -->
     <string name="about_title">About</string>
     <string name="about_version">Version %1$s</string>
-    <string name="about_update_available">An update is available.</string>
+    <string name="about_update_available">Update v%1$s is available.</string>
     <string name="about_update_required">A required update is available. Please update to continue.</string>
     <string name="about_update_now">Update now</string>
 

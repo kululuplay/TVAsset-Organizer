@@ -182,7 +182,7 @@
 
     <string name="about_title">حول</string>
     <string name="about_version">الإصدار %1$s</string>
-    <string name="about_update_available">يتوفر تحديث.</string>
+    <string name="about_update_available">يتوفر التحديث v%1$s.</string>
     <string name="about_update_required">يتوفر تحديث مطلوب. يرجى التحديث للمتابعة.</string>
     <string name="about_update_now">حدّث الآن</string>
 

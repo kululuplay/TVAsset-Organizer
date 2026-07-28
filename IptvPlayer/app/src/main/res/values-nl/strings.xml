@@ -181,7 +181,7 @@
 
     <string name="about_title">Over</string>
     <string name="about_version">Versie %1$s</string>
-    <string name="about_update_available">Er is een update beschikbaar.</string>
+    <string name="about_update_available">Update v%1$s is beschikbaar.</string>
     <string name="about_update_required">Een vereiste update is beschikbaar. Werk bij om door te gaan.</string>
     <string name="about_update_now">Nu bijwerken</string>
 

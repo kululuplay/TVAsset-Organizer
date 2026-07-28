@@ -181,7 +181,7 @@
 
     <string name="about_title">Über</string>
     <string name="about_version">Version %1$s</string>
-    <string name="about_update_available">Ein Update ist verfügbar.</string>
+    <string name="about_update_available">Update v%1$s ist verfügbar.</string>
     <string name="about_update_required">Ein erforderliches Update ist verfügbar. Bitte aktualisieren Sie.</string>
     <string name="about_update_now">Jetzt aktualisieren</string>
 

@@ -35,6 +35,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -52,6 +53,7 @@ import com.iptv.player.data.model.BufferMode
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.PlaybackLog
 
+@UnstableApi
 class ExoPlayerEngine(
     private val context: Context,
     /** When false (default) audio is decoded to PCM; true allows HDMI passthrough. */
