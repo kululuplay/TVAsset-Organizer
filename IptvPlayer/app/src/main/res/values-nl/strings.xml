@@ -60,10 +60,13 @@
     <string name="empty_series">Geen series gevonden in deze weergave.</string>
     <string name="added_to_favorites">Toegevoegd aan favorieten</string>
     <string name="removed_from_favorites">Verwijderd uit favorieten</string>
+    <string name="favorite_state_on">In favorieten</string>
+    <string name="favorite_state_off">Niet in favorieten</string>
     <string name="channel_count">%1$d kanalen</string>
     <string name="preview_playback_failed">Voorbeeld kon niet worden afgespeeld. Druk op OK om opnieuw te proberen.</string>
 
     <string name="buffering">Laden…</string>
+    <string name="player_seek_position">Afspeelpositie</string>
     <string name="reconnecting">Opnieuw verbinden… (%1$d)</string>
     <string name="player_mode_label">Speler</string>
     <string name="audio_track">Audio</string>
