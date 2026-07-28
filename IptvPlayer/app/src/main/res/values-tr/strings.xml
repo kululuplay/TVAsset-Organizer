@@ -63,10 +63,13 @@
     <string name="empty_series">Bu görünümde dizi bulunamadı.</string>
     <string name="added_to_favorites">Favorilere eklendi</string>
     <string name="removed_from_favorites">Favorilerden çıkarıldı</string>
+    <string name="favorite_state_on">Favorilerde</string>
+    <string name="favorite_state_off">Favorilerde değil</string>
     <string name="channel_count">%1$d kanal</string>
     <string name="preview_playback_failed">Önizleme oynatılamadı. Tekrar denemek için Tamam\'a basın.</string>
 
     <string name="buffering">Yükleniyor…</string>
+    <string name="player_seek_position">Oynatma konumu</string>
     <string name="reconnecting">Yeniden bağlanıyor… (%1$d)</string>
     <string name="player_mode_label">Oynatıcı</string>
     <string name="audio_track">Ses</string>
