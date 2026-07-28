@@ -38,6 +38,7 @@ class CastAdapter : ListAdapter<CastMember, CastAdapter.VH>(DIFF) {
 
         fun bind(person: CastMember) {
             name.text = person.name
+            itemView.contentDescription = person.name
             initial.text = person.name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
             // The colored initial sits underneath; the photo (when present)
             // covers it. Hiding the photo when there's no URL reveals the initial.
@@ -47,6 +48,7 @@ class CastAdapter : ListAdapter<CastMember, CastAdapter.VH>(DIFF) {
             } else {
                 photo.visibility = View.VISIBLE
                 photo.load(person.photoUrl) {
+                    crossfade(false)
                     transformations(CircleCropTransformation())
                 }
             }
