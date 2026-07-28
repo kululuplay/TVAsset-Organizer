@@ -1,261 +1,873 @@
 /*
- * SpeedTester.kt
- * Measures the customer's real download bandwidth the way browser speed tests
- * (Ookla / fast.com) do: SEVERAL parallel HTTP/1.1 connections to a CDN, a
- * warm-up period that is excluded from the average (TCP slow-start + TLS ramp),
- * and a clock that starts at the FIRST RECEIVED BYTE rather than at request
- * creation. Emits a live Mbps estimate via [onProgress] (delivered on the main
- * thread without ever blocking the download loops) and returns the final
- * average. Returns -1.0 when the test could not run (no connection / server
- * error).
- *
- * Why parallel: a single TCP stream is capped by congestion-window growth and
- * any packet loss on the path — 4-5 Mbps on a fast line is a classic
- * single-stream artifact, which is exactly why browser tests open 4-16 sockets.
- * HTTP/1.1 is forced because OkHttp would otherwise multiplex all "parallel"
- * requests onto ONE HTTP/2 connection (one congestion window + h2 flow-control
- * windows), silently defeating the parallelism.
+ * Copyright (c) TVAsset Organizer contributors.
  */
 package com.iptv.player.util
 
-import com.iptv.player.data.ServiceLocator
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.ConnectionPool
+import okhttp3.Dispatcher
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
+import okhttp3.Response
+import java.io.IOException
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ThreadFactory
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
-import kotlin.coroutines.cancellation.CancellationException
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.coroutineContext
+import kotlin.coroutines.resume
+import kotlin.math.ceil
+import kotlin.math.max
 
+/**
+ * Bounded, multi-CDN download speed test designed for Android TV hardware.
+ *
+ * The test deliberately has no IPTV/portal fallback. Downloading a subscriber's
+ * stream URL would measure that provider's throttle and could put credentials in
+ * an unrelated request path. Ten public-CDN transfers run concurrently instead.
+ *
+ * HTTP body reads happen on this object's private OkHttp dispatcher. The
+ * orchestration coroutine only samples atomic counters, and cancellation calls
+ * [Call.cancel] immediately, including while DNS, TLS or a body read is blocked.
+ */
 object SpeedTester {
 
-    // Keyless speed-test endpoints that serve an arbitrary byte count from a global
-    // CDN, so the result reflects the customer's true line speed rather than a
-    // possibly throttled IPTV origin. The cap is large enough that even a fast line
-    // never drains it within the window; we always stop on the timer. We try them
-    // in order so a single CDN being unreachable/blocked on the customer's network
-    // doesn't doom the whole test.
-    // Several geographically diverse mirrors: a single host failing DNS (e.g.
-    // speed.hetzner.de returning UnknownHostException on some ISPs) or being
-    // WAF-challenged (Cloudflare 403 on a bare network) must not doom the test.
-    // Cloudflare's anycast __down is first (closest PoP, most reliable globally);
-    // OVH, Tele2 and Hetzner are HTTPS fallbacks if the customer's network can't
-    // reach the one ahead of it.
-    private val DOWNLOAD_URLS = listOf(
-        "https://speed.cloudflare.com/__down?bytes=500000000",
-        "https://proof.ovh.net/files/1Gb.dat",
-        "https://speedtest.tele2.net/1GB.zip",
-        "https://speed.hetzner.de/1GB.bin"
+    enum class Phase {
+        CONNECTING,
+        WARMING_UP,
+        MEASURING
+    }
+
+    enum class FailureReason {
+        INSUFFICIENT_ACTIVE_STREAMS,
+        INSUFFICIENT_SAMPLES,
+        INSUFFICIENT_DATA,
+        BUSY,
+        TIMEOUT,
+        INTERNAL_ERROR
+    }
+
+    data class Progress(
+        val phase: Phase,
+        val elapsedMs: Long,
+        val mbps: Double,
+        val activeStreams: Int,
+        val startedStreams: Int,
+        val cancelledStreams: Int,
+        val completedStreams: Int,
+        val failedStreams: Int,
+        val attemptedStreams: Int,
+        val activeCdnCount: Int,
+        val sampleCount: Int
     )
 
-    // Some CDN/WAF front-ends (notably Cloudflare) challenge or 403 requests that
-    // carry a bare, non-browser User-Agent. Send a realistic browser UA so the
-    // download isn't blocked; ServiceLocator's UA interceptor leaves this intact
-    // because it only stamps the app identity when no UA is already set.
-    private const val BROWSER_USER_AGENT =
-        "Mozilla/5.0 (Linux; Android 10; Android TV) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    data class EndpointStats(
+        val cdn: String,
+        val host: String,
+        val attemptedStreams: Int,
+        val connectingStreams: Int,
+        val activeStreams: Int,
+        val stalledStreams: Int,
+        val startedStreams: Int,
+        val cancelledStreams: Int,
+        val completedStreams: Int,
+        val failedStreams: Int,
+        val transferredBytes: Long,
+        val protocols: List<String>
+    )
 
-    // Four sockets saturate a typical home line without stressing weak TV boxes:
-    // they already sustain a 4K TLS video stream, so four bulk downloads are cheap.
-    private const val PARALLEL_STREAMS = 4
+    sealed interface Result {
+        val endpointStats: List<EndpointStats>
 
-    // Bytes/time before this mark (measured from the first received byte) are
-    // EXCLUDED from the final average: TCP slow-start and the per-connection TLS
-    // ramp would otherwise drag the mean well below the line's steady rate.
-    private const val WARMUP_NS = 1_500_000_000L
+        data class Success(
+            val mbps: Double,
+            val medianMbps: Double,
+            val peakMbps: Double,
+            val measuredBytes: Long,
+            val totalDurationMs: Long,
+            val measurementDurationMs: Long,
+            val samplesMbps: List<Double>,
+            val activeStreamHighWaterMark: Int,
+            override val endpointStats: List<EndpointStats>
+        ) : Result
 
-    // Counted measurement window after the warm-up (total active test ~9.5s).
-    private const val MEASURE_NS = 8_000_000_000L
+        data class Failure(
+            val reason: FailureReason,
+            val diagnostic: String,
+            val elapsedMs: Long,
+            val validSampleCount: Int,
+            val activeStreamHighWaterMark: Int,
+            override val endpointStats: List<EndpointStats>
+        ) : Result
+    }
 
-    // If no stream has produced a single byte within this budget the endpoint is
-    // unreachable/blocked -> fail this URL so the caller tries the next mirror.
-    private const val CONNECT_WAIT_NS = 8_000_000_000L
+    private data class Endpoint(
+        val name: String,
+        val url: String
+    ) {
+        val host: String = url.toHttpUrlOrNull()?.host.orEmpty()
+    }
 
-    private const val EMIT_INTERVAL_MS = 250L
-    private const val BUFFER_SIZE = 64 * 1024
+    private enum class StreamStatus {
+        CONNECTING,
+        ACTIVE,
+        COMPLETED,
+        FAILED,
+        CANCELLED
+    }
 
-    // A dedicated client derived from the shared one but WITHOUT the
-    // RetryInterceptor and with a hard call timeout: retries + backoff would only
-    // stretch a doomed attempt for minutes, and the timeout bounds the worst-case
-    // "failed" wait even when every endpoint is unreachable. HTTP/1.1 is forced so
-    // each parallel request really gets its own TCP connection (see file header).
+    private class StreamState(
+        val id: Int,
+        val endpoint: Endpoint
+    ) {
+        val bytes = AtomicLong(0L)
+        val firstByteAtNs = AtomicLong(0L)
+        val lastByteAtNs = AtomicLong(0L)
+        val status = AtomicReference(StreamStatus.CONNECTING)
+        val protocol = AtomicReference<String?>(null)
+        val failure = AtomicReference<String?>(null)
+
+        fun recordBytes(count: Int, nowNs: Long) {
+            if (count <= 0 || status.get() == StreamStatus.CANCELLED) return
+            firstByteAtNs.compareAndSet(0L, nowNs)
+            lastByteAtNs.set(nowNs)
+            status.compareAndSet(StreamStatus.CONNECTING, StreamStatus.ACTIVE)
+            bytes.addAndGet(count.toLong())
+        }
+
+        fun complete() {
+            if (bytes.get() > 0L) {
+                status.compareAndSet(StreamStatus.ACTIVE, StreamStatus.COMPLETED)
+            } else {
+                fail("empty_body")
+            }
+        }
+
+        fun fail(code: String) {
+            while (true) {
+                val previous = status.get()
+                if (
+                    previous == StreamStatus.COMPLETED ||
+                    previous == StreamStatus.CANCELLED ||
+                    previous == StreamStatus.FAILED
+                ) {
+                    return
+                }
+                if (status.compareAndSet(previous, StreamStatus.FAILED)) {
+                    failure.compareAndSet(null, code)
+                    return
+                }
+            }
+        }
+
+        fun cancel() {
+            while (true) {
+                val previous = status.get()
+                if (
+                    previous == StreamStatus.COMPLETED ||
+                    previous == StreamStatus.FAILED ||
+                    previous == StreamStatus.CANCELLED
+                ) {
+                    return
+                }
+                if (status.compareAndSet(previous, StreamStatus.CANCELLED)) return
+            }
+        }
+
+        fun isTransferring(nowNs: Long): Boolean {
+            if (status.get() != StreamStatus.ACTIVE) return false
+            val lastByteNs = lastByteAtNs.get()
+            return lastByteNs > 0L &&
+                nowNs - lastByteNs <= ACTIVE_STREAM_FRESHNESS_NS
+        }
+
+        fun hasStarted(): Boolean = firstByteAtNs.get() != 0L
+    }
+
+    private class RunState(
+        val startedAtNs: Long,
+        val streams: List<StreamState>,
+        val totalBytes: AtomicLong = AtomicLong(0L)
+    ) {
+        @Volatile
+        var activeStreamHighWaterMark: Int = 0
+
+        @Volatile
+        var validSampleCount: Int = 0
+
+        fun updateHighWaterMark(nowNs: Long): Int {
+            val active = activeStreamCount(nowNs)
+            return updateHighWaterMark(active)
+        }
+
+        fun updateHighWaterMark(active: Int): Int {
+            activeStreamHighWaterMark = max(activeStreamHighWaterMark, active)
+            return active
+        }
+
+        fun activeStreamCount(nowNs: Long): Int {
+            return streams.count { it.isTransferring(nowNs) }
+        }
+    }
+
+    private val endpoints = listOf(
+        Endpoint(
+            name = "Cloudflare",
+            url = "https://speed.cloudflare.com/__down?bytes=500000000"
+        ),
+        Endpoint(
+            name = "OVH",
+            url = "https://proof.ovh.net/files/1Gb.dat"
+        ),
+        Endpoint(
+            name = "Tele2",
+            url = "https://speedtest.tele2.net/1GB.zip"
+        ),
+        Endpoint(
+            name = "Hetzner",
+            url = "https://fsn1-speed.hetzner.com/1GB.bin"
+        )
+    )
+
+    private const val STREAM_COUNT = 10
+    // Requiring half of the ten requested streams is enough to reject a
+    // single-route result without penalising slower sticks whose TLS handshakes
+    // cannot all finish together. Two independent CDN hosts are still mandatory.
+    private const val MIN_ACTIVE_STREAMS = 5
+    private const val MIN_ACTIVE_CDNS = 2
+    private const val MIN_VALID_SAMPLES = 10
+    private const val MIN_MEASURED_BYTES = 64L * 1024L
+    private const val MIN_EXPECTED_BODY_BYTES = 32L * 1024L * 1024L
+
+    private const val TOTAL_TIMEOUT_MS = 12_000L
+    private const val STARTUP_TIMEOUT_MS = 3_500L
+    private const val WARMUP_MS = 1_500L
+    private const val TARGET_MEASUREMENT_MS = 9_000L
+    private const val CLEANUP_RESERVE_MS = 250L
+    private const val SAMPLE_INTERVAL_MS = 500L
+    private const val PROGRESS_INTERVAL_MS = 250L
+    private const val STARTUP_POLL_MS = 50L
+    private const val MIN_SAMPLE_INTERVAL_NS = 300_000_000L
+    private const val ACTIVE_STREAM_FRESHNESS_NS = 1_250_000_000L
+    private const val BUFFER_SIZE = 128 * 1024
+
+    private const val USER_AGENT =
+        "Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+
+    private val httpThreadIndex = AtomicInteger(0)
+    private val measurementMutex = Mutex()
+
+    /**
+     * A fully isolated client: speed-test saturation cannot consume the app's
+     * playback/API dispatcher slots, connection pool or retry interceptors.
+     *
+     * The isolated client deliberately uses HTTP/1.1 so ten concurrent requests
+     * remain ten independent TCP flows. HTTP/2 would multiplex requests for the
+     * same CDN onto one socket and can under-fill fast links on TV-class devices.
+     */
     private val speedClient: OkHttpClient by lazy {
-        ServiceLocator.httpClient.newBuilder()
-            .apply { interceptors().removeAll { it is RetryInterceptor } }
+        val threadFactory = ThreadFactory { runnable ->
+            Thread(
+                runnable,
+                "speed-test-http-${httpThreadIndex.incrementAndGet()}"
+            ).apply { isDaemon = true }
+        }
+        val executor = ThreadPoolExecutor(
+            STREAM_COUNT,
+            STREAM_COUNT,
+            30L,
+            TimeUnit.SECONDS,
+            LinkedBlockingQueue<Runnable>(),
+            threadFactory
+        ).apply {
+            // Reclaim all ten thread stacks between infrequent tests. Threads are
+            // recreated lazily when the next measurement is requested.
+            allowCoreThreadTimeOut(true)
+        }
+        val dispatcher = Dispatcher(executor).apply {
+            maxRequests = STREAM_COUNT
+            maxRequestsPerHost = STREAM_COUNT
+        }
+        OkHttpClient.Builder()
+            .dispatcher(dispatcher)
+            .connectionPool(ConnectionPool(0, 1L, TimeUnit.SECONDS))
             .protocols(listOf(Protocol.HTTP_1_1))
-            .callTimeout(20, TimeUnit.SECONDS)
+            .connectTimeout(3L, TimeUnit.SECONDS)
+            .readTimeout(4L, TimeUnit.SECONDS)
+            .callTimeout(TOTAL_TIMEOUT_MS + 1_000L, TimeUnit.MILLISECONDS)
+            .retryOnConnectionFailure(false)
+            .followRedirects(true)
+            .followSslRedirects(true)
             .build()
     }
 
     /**
-     * Runs the test against the public CDN mirrors first (true unthrottled line
-     * speed), then against any [fallbackUrls] — typically the customer's own IPTV
-     * portal. Many IPTV boxes sit on locked-down networks that only whitelist the
-     * portal host, so every public mirror is unreachable and the test would show
-     * a bare failure; the portal is the one endpoint guaranteed to be reachable
-     * (their streams play), so it keeps the test from erroring out entirely.
+     * Runs one bounded test and reports structured diagnostics.
+     *
+     * [onProgress] is delivered on the caller's dispatcher through a conflated
+     * channel. A slow UI therefore cannot back-pressure the network readers or
+     * the sampling clock.
      */
-    suspend fun measureMbps(
-        fallbackUrls: List<String> = emptyList(),
-        onProgress: (Double) -> Unit
-    ): Double {
-        for (url in DOWNLOAD_URLS + fallbackUrls) {
-            val mbps = measureFrom(url, onProgress)
-            if (mbps >= 0) return mbps
+    suspend fun measure(
+        onProgress: (Progress) -> Unit = {}
+    ): Result {
+        if (!measurementMutex.tryLock()) {
+            return Result.Failure(
+                reason = FailureReason.BUSY,
+                diagnostic = "speed_test_already_running",
+                elapsedMs = 0L,
+                validSampleCount = 0,
+                activeStreamHighWaterMark = 0,
+                endpointStats = emptyList()
+            )
         }
-        return -1.0
+        return try {
+            measureInternal(onProgress)
+        } finally {
+            measurementMutex.unlock()
+        }
     }
 
-    private suspend fun measureFrom(
-        url: String,
-        onProgress: (Double) -> Unit
-    ): Double = withContext(Dispatchers.IO) {
-        // Shared counters the reader coroutines feed; the orchestrator below only
-        // ever READS them, so progress emission can never stall a download loop.
-        val totalBytes = AtomicLong(0L)
-        val firstByteAtNs = AtomicLong(0L)
+    private suspend fun measureInternal(
+        onProgress: (Progress) -> Unit
+    ): Result = coroutineScope {
+        val callbackContext = currentCoroutineContext().minusKey(Job)
+        val callbackScope = CoroutineScope(callbackContext + SupervisorJob())
+        val progressChannel = Channel<Progress>(Channel.CONFLATED)
+        callbackScope.launch {
+            for (progress in progressChannel) {
+                runCatching { onProgress(progress) }
+            }
+        }
+
+        val startedAtNs = System.nanoTime()
+        // Kotlin's radix conversion works on every supported Android API level;
+        // java.lang.Long.toUnsignedString(long, radix) is API 26+ on Android.
+        val sessionId = startedAtNs.toString(36)
+        val streams = List(STREAM_COUNT) { index ->
+            StreamState(
+                id = index,
+                endpoint = endpoints[index % endpoints.size]
+            )
+        }
+        val runState = RunState(startedAtNs, streams)
 
         try {
-            coroutineScope {
-                val readers = List(PARALLEL_STREAMS) {
-                    launch { streamOnce(url, totalBytes, firstByteAtNs) }
-                }
-
-                // Wait for the first byte from ANY stream. Connect/DNS/TLS time is
-                // deliberately NOT part of the measurement — the old version started
-                // the clock before the request was even sent, which billed the
-                // handshake as seconds of zero-byte transfer.
-                val connectDeadline = System.nanoTime() + CONNECT_WAIT_NS
-                while (firstByteAtNs.get() == 0L) {
-                    if (readers.all { it.isCompleted } || System.nanoTime() >= connectDeadline) {
-                        readers.forEach { it.cancel() }
-                        return@coroutineScope -1.0
+            try {
+                withTimeout(TOTAL_TIMEOUT_MS) {
+                    withContext(Dispatchers.Default) {
+                        runMeasurement(runState, sessionId) { progress ->
+                            progressChannel.trySend(progress)
+                        }
                     }
-                    delay(50)
                 }
-
-                val t0 = firstByteAtNs.get()
-                var warmDone = false
-                var warmBytes = 0L
-                var warmAtNs = t0
-
-                while (true) {
-                    delay(EMIT_INTERVAL_MS)
-                    val now = System.nanoTime()
-                    val bytes = totalBytes.get()
-
-                    if (!warmDone && now - t0 >= WARMUP_NS) {
-                        // Snapshot at the end of the warm-up; the final average only
-                        // counts bytes/time past this point.
-                        warmDone = true
-                        warmBytes = bytes
-                        warmAtNs = now
-                    }
-
-                    // Live estimate: once the post-warm-up window has enough data,
-                    // show its rate (matches the final number); before that, show
-                    // the since-first-byte average so the needle moves immediately.
-                    val liveMbps = if (warmDone && now - warmAtNs >= 750_000_000L) {
-                        (bytes - warmBytes) * 8.0 / 1_000_000.0 / ((now - warmAtNs) / 1e9)
-                    } else if (now > t0) {
-                        bytes * 8.0 / 1_000_000.0 / ((now - t0) / 1e9)
-                    } else {
-                        -1.0
-                    }
-                    if (liveMbps >= 0) {
-                        withContext(Dispatchers.Main) { onProgress(liveMbps) }
-                    }
-
-                    val allDone = readers.all { it.isCompleted }
-                    if (allDone || (warmDone && now - warmAtNs >= MEASURE_NS)) break
-                }
-
-                val endNs = System.nanoTime()
-                val endBytes = totalBytes.get()
-                readers.forEach { it.cancel() }
-
-                if (warmDone && endNs > warmAtNs && endBytes > warmBytes) {
-                    // Normal path: steady-state average over the post-warm-up window.
-                    (endBytes - warmBytes) * 8.0 / 1_000_000.0 / ((endNs - warmAtNs) / 1e9)
-                } else if (endBytes > 0L && endNs > t0) {
-                    // Streams drained/died before the warm-up window filled (small
-                    // fallback file, flaky mirror): fall back to the overall average
-                    // rather than reporting a failure for a test that moved data.
-                    endBytes * 8.0 / 1_000_000.0 / ((endNs - t0) / 1e9)
-                } else {
-                    -1.0
-                }
+            } catch (_: TimeoutCancellationException) {
+                // Distinguish our own deadline from cancellation of the caller.
+                currentCoroutineContext().ensureActive()
+                runState.failure(
+                    reason = FailureReason.TIMEOUT,
+                    validSampleCount = runState.validSampleCount,
+                    diagnostic = "speed_test_deadline_exceeded"
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                runState.failure(
+                    reason = FailureReason.INTERNAL_ERROR,
+                    validSampleCount = runState.validSampleCount,
+                    diagnostic = error.javaClass.simpleName.ifBlank { "internal_error" }
+                )
             }
-        } catch (ce: CancellationException) {
-            throw ce
-        } catch (_: Throwable) {
-            -1.0
+        } finally {
+            // Progress is advisory; the final Result is authoritative. Cancelling
+            // this independent scope is immediate and never extends the network
+            // deadline while waiting for a UI callback to drain.
+            progressChannel.cancel()
+            callbackScope.cancel()
         }
     }
 
     /**
-     * One download leg: opens [url], streams the body and feeds the shared
-     * counters. Failures are swallowed (the orchestrator judges the test by the
-     * byte counters, and sibling streams keep running); cancellation propagates.
+     * Compatibility helper for screens that only need the displayed number.
+     * Failure is represented as -1.0; no portal/fallback URL is accepted.
      */
-    private suspend fun streamOnce(
-        url: String,
-        totalBytes: AtomicLong,
-        firstByteAtNs: AtomicLong
-    ) {
-        // Guard request construction: Request.Builder().url(String) throws on a
-        // malformed URL, so a bad fallback target must fail this leg quietly
-        // rather than crash the whole coroutine.
-        val request = try {
-            Request.Builder()
-                .url(url)
-                .header("User-Agent", BROWSER_USER_AGENT)
-                .build()
-        } catch (ce: CancellationException) {
-            throw ce
-        } catch (_: Throwable) {
-            return
+    suspend fun measureMbps(onProgress: (Double) -> Unit): Double {
+        return when (
+            val result = measure { progress ->
+                if (progress.mbps > 0.0) onProgress(progress.mbps)
+            }
+        ) {
+            is Result.Success -> result.mbps
+            is Result.Failure -> -1.0
         }
-        val call = speedClient.newCall(request)
+    }
 
-        // Tie the blocking OkHttp call to the coroutine lifecycle: if this leg is
-        // cancelled (timer elapsed / panel switch / onPause), abort the call so a
-        // blocked read() returns immediately instead of lingering on the network.
-        val cancelHandle = coroutineContext[Job]?.invokeOnCompletion { cause ->
-            if (cause != null) call.cancel()
+    private suspend fun runMeasurement(
+        state: RunState,
+        sessionId: String,
+        emit: (Progress) -> Unit
+    ): Result = coroutineScope {
+        val readers = state.streams.map { stream ->
+            launch {
+                streamOnce(
+                    state = stream,
+                    totalBytes = state.totalBytes,
+                    sessionId = sessionId
+                )
+            }
         }
 
         try {
-            call.execute().use { resp ->
-                val input = resp.body?.byteStream()
-                if (!resp.isSuccessful || input == null) return@use
-                val buf = ByteArray(BUFFER_SIZE)
-                while (true) {
-                    coroutineContext.ensureActive()
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    if (n > 0) {
-                        firstByteAtNs.compareAndSet(0L, System.nanoTime())
-                        totalBytes.addAndGet(n.toLong())
+            emit(state.progress(Phase.CONNECTING, mbps = 0.0, sampleCount = 0))
+            val startupDeadlineNs =
+                state.startedAtNs + TimeUnit.MILLISECONDS.toNanos(STARTUP_TIMEOUT_MS)
+            var lastProgressAtNs = state.startedAtNs
+
+            while (true) {
+                coroutineContext.ensureActive()
+                val nowNs = System.nanoTime()
+                val activeStreams = state.updateHighWaterMark(nowNs)
+                val activeCdns = state.activeCdnCount(nowNs)
+
+                if (
+                    nowNs - lastProgressAtNs >=
+                    TimeUnit.MILLISECONDS.toNanos(PROGRESS_INTERVAL_MS)
+                ) {
+                    emit(state.progress(Phase.CONNECTING, mbps = 0.0, sampleCount = 0))
+                    lastProgressAtNs = nowNs
+                }
+
+                if (
+                    activeStreams >= MIN_ACTIVE_STREAMS &&
+                    activeCdns >= MIN_ACTIVE_CDNS
+                ) {
+                    break
+                }
+                if (nowNs >= startupDeadlineNs || readers.all { it.isCompleted }) {
+                    return@coroutineScope state.failure(
+                        reason = FailureReason.INSUFFICIENT_ACTIVE_STREAMS,
+                        validSampleCount = 0,
+                        diagnostic =
+                            "active=$activeStreams/$MIN_ACTIVE_STREAMS," +
+                                " cdns=$activeCdns/$MIN_ACTIVE_CDNS"
+                    )
+                }
+                delay(STARTUP_POLL_MS)
+            }
+
+            val warmupStartedAtNs = System.nanoTime()
+            val warmupDeadlineNs =
+                warmupStartedAtNs + TimeUnit.MILLISECONDS.toNanos(WARMUP_MS)
+            emit(state.progress(Phase.WARMING_UP, mbps = 0.0, sampleCount = 0))
+
+            while (System.nanoTime() < warmupDeadlineNs) {
+                coroutineContext.ensureActive()
+                delay(PROGRESS_INTERVAL_MS)
+                state.updateHighWaterMark(System.nanoTime())
+                emit(state.progress(Phase.WARMING_UP, mbps = 0.0, sampleCount = 0))
+            }
+
+            val warmupCompletedAtNs = System.nanoTime()
+            val warmupActiveStreams =
+                state.updateHighWaterMark(warmupCompletedAtNs)
+            val warmupActiveCdns = state.activeCdnCount(warmupCompletedAtNs)
+            if (
+                warmupActiveStreams < MIN_ACTIVE_STREAMS ||
+                warmupActiveCdns < MIN_ACTIVE_CDNS
+            ) {
+                return@coroutineScope state.failure(
+                    reason = FailureReason.INSUFFICIENT_ACTIVE_STREAMS,
+                    validSampleCount = 0,
+                    diagnostic =
+                        "post_warmup_active=$warmupActiveStreams/$MIN_ACTIVE_STREAMS," +
+                            " cdns=$warmupActiveCdns/$MIN_ACTIVE_CDNS"
+                )
+            }
+
+            // This snapshot is the hard boundary: TLS/TCP ramp and all bytes read
+            // during warm-up are excluded from every sample and the final result.
+            val measurementStartedAtNs = System.nanoTime()
+            val measurementStartedBytes = state.totalBytes.get()
+            // Fast connections receive the full nine-second sample window. Slow
+            // DNS/TLS startup receives the remaining budget rather than pushing
+            // the complete operation beyond its twelve-second hard deadline.
+            val measurementDeadlineNs = minOf(
+                measurementStartedAtNs +
+                    TimeUnit.MILLISECONDS.toNanos(TARGET_MEASUREMENT_MS),
+                state.startedAtNs +
+                    TimeUnit.MILLISECONDS.toNanos(
+                        TOTAL_TIMEOUT_MS - CLEANUP_RESERVE_MS
+                    )
+            )
+            var previousSampleAtNs = measurementStartedAtNs
+            var previousSampleBytes = measurementStartedBytes
+            val previousStreamBytes = LongArray(state.streams.size) { index ->
+                state.streams[index].bytes.get()
+            }
+            val samples = mutableListOf<Double>()
+
+            emit(state.progress(Phase.MEASURING, mbps = 0.0, sampleCount = 0))
+
+            while (System.nanoTime() < measurementDeadlineNs) {
+                coroutineContext.ensureActive()
+                val remainingNs = measurementDeadlineNs - System.nanoTime()
+                if (remainingNs <= 0L) break
+                delay(
+                    minOf(
+                        SAMPLE_INTERVAL_MS,
+                        TimeUnit.NANOSECONDS.toMillis(remainingNs).coerceAtLeast(1L)
+                    )
+                )
+
+                val nowNs = System.nanoTime()
+                val nowBytes = state.totalBytes.get()
+                var activeStreams = 0
+                val activeCdnHosts = mutableSetOf<String>()
+                state.streams.forEachIndexed { index, stream ->
+                    val streamBytes = stream.bytes.get()
+                    if (streamBytes > previousStreamBytes[index]) {
+                        activeStreams += 1
+                        stream.endpoint.host.takeIf(String::isNotBlank)
+                            ?.let(activeCdnHosts::add)
+                    }
+                    previousStreamBytes[index] = streamBytes
+                }
+                state.updateHighWaterMark(activeStreams)
+                val activeCdns = activeCdnHosts.size
+                val intervalNs = nowNs - previousSampleAtNs
+
+                if (
+                    intervalNs >= MIN_SAMPLE_INTERVAL_NS &&
+                    activeStreams >= MIN_ACTIVE_STREAMS &&
+                    activeCdns >= MIN_ACTIVE_CDNS
+                ) {
+                    val sample = SpeedTestMath.mbpsBetween(
+                        startBytes = previousSampleBytes,
+                        endBytes = nowBytes,
+                        startNs = previousSampleAtNs,
+                        endNs = nowNs
+                    )
+                    if (sample > 0.0 && sample.isFinite()) samples += sample
+                }
+                state.validSampleCount = samples.size
+
+                previousSampleAtNs = nowNs
+                previousSampleBytes = nowBytes
+                emit(
+                    state.progress(
+                        phase = Phase.MEASURING,
+                        mbps = SpeedTestMath.p90(samples),
+                        sampleCount = samples.size,
+                        activeStreamsOverride = activeStreams,
+                        activeCdnCountOverride = activeCdns
+                    )
+                )
+
+                if (readers.all { it.isCompleted }) break
+            }
+
+            val measurementEndedAtNs = System.nanoTime()
+            val measuredBytes =
+                (state.totalBytes.get() - measurementStartedBytes).coerceAtLeast(0L)
+            val measurementDurationNs =
+                (measurementEndedAtNs - measurementStartedAtNs).coerceAtLeast(0L)
+
+            if (samples.size < MIN_VALID_SAMPLES) {
+                return@coroutineScope state.failure(
+                    reason = FailureReason.INSUFFICIENT_SAMPLES,
+                    validSampleCount = samples.size,
+                    diagnostic = "samples=${samples.size}/$MIN_VALID_SAMPLES"
+                )
+            }
+            if (measuredBytes < MIN_MEASURED_BYTES) {
+                return@coroutineScope state.failure(
+                    reason = FailureReason.INSUFFICIENT_DATA,
+                    validSampleCount = samples.size,
+                    diagnostic = "bytes=$measuredBytes/$MIN_MEASURED_BYTES"
+                )
+            }
+
+            Result.Success(
+                mbps = SpeedTestMath.p90(samples),
+                medianMbps = SpeedTestMath.median(samples),
+                peakMbps = samples.maxOrNull() ?: 0.0,
+                measuredBytes = measuredBytes,
+                totalDurationMs = state.elapsedMs(),
+                measurementDurationMs =
+                    TimeUnit.NANOSECONDS.toMillis(measurementDurationNs),
+                samplesMbps = samples.toList(),
+                activeStreamHighWaterMark = state.activeStreamHighWaterMark,
+                endpointStats = state.endpointStats()
+            )
+        } finally {
+            readers.forEach { it.cancel() }
+            readers.joinAll()
+        }
+    }
+
+    /**
+     * Uses OkHttp's asynchronous API so coroutine cancellation can cancel a call
+     * immediately. Body reads still block, but only private dispatcher threads.
+     */
+    private suspend fun streamOnce(
+        state: StreamState,
+        totalBytes: AtomicLong,
+        sessionId: String
+    ) {
+        val baseUrl = state.endpoint.url.toHttpUrlOrNull()
+        if (baseUrl == null) {
+            state.fail("invalid_url")
+            return
+        }
+        val cacheBustedUrl = baseUrl.newBuilder()
+            .addQueryParameter(
+                "tvasset_speedtest",
+                "$sessionId-${state.id}-${System.nanoTime()}"
+            )
+            .build()
+        val request = Request.Builder()
+            .url(cacheBustedUrl)
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "application/octet-stream,*/*;q=0.8")
+            .header("Accept-Encoding", "identity")
+            .header("Cache-Control", "no-cache, no-store")
+            .header("Pragma", "no-cache")
+            .build()
+        val call = speedClient.newCall(request)
+
+        suspendCancellableCoroutine<Unit> { continuation ->
+            continuation.invokeOnCancellation {
+                state.cancel()
+                call.cancel()
+            }
+            call.enqueue(
+                object : Callback {
+                    override fun onFailure(call: Call, error: IOException) {
+                        if (continuation.isActive) {
+                            state.fail(
+                                error.javaClass.simpleName.ifBlank { "network_failure" }
+                            )
+                            continuation.resume(Unit)
+                        }
+                    }
+
+                    override fun onResponse(call: Call, response: Response) {
+                        try {
+                            response.use { safeResponse ->
+                                if (!safeResponse.isSuccessful) {
+                                    state.fail("http_${safeResponse.code}")
+                                    return@use
+                                }
+                                val body = safeResponse.body
+                                if (body == null) {
+                                    state.fail("missing_body")
+                                    return@use
+                                }
+                                val contentLength = body.contentLength()
+                                if (
+                                    contentLength in 0L until MIN_EXPECTED_BODY_BYTES
+                                ) {
+                                    state.fail("body_too_small")
+                                    return@use
+                                }
+
+                                state.protocol.set(safeResponse.protocol.toString())
+                                val buffer = ByteArray(BUFFER_SIZE)
+                                body.byteStream().use { input ->
+                                    while (continuation.isActive) {
+                                        val read = input.read(buffer)
+                                        if (read < 0) {
+                                            state.complete()
+                                            break
+                                        }
+                                        if (read > 0) {
+                                            val nowNs = System.nanoTime()
+                                            state.recordBytes(read, nowNs)
+                                            totalBytes.addAndGet(read.toLong())
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (error: Throwable) {
+                            if (continuation.isActive) {
+                                state.fail(
+                                    error.javaClass.simpleName.ifBlank {
+                                        "body_read_failure"
+                                    }
+                                )
+                            }
+                        } finally {
+                            if (continuation.isActive) continuation.resume(Unit)
+                        }
                     }
                 }
-            }
-        } catch (ce: CancellationException) {
-            throw ce
-        } catch (_: Throwable) {
-            // This leg failed (403 challenge, reset, timeout). Siblings continue;
-            // if every leg fails the byte counter stays at zero and the
-            // orchestrator reports -1 so the next mirror is tried.
-        } finally {
-            cancelHandle?.dispose()
+            )
         }
+    }
+
+    private fun RunState.progress(
+        phase: Phase,
+        mbps: Double,
+        sampleCount: Int,
+        activeStreamsOverride: Int? = null,
+        activeCdnCountOverride: Int? = null
+    ): Progress {
+        val nowNs = System.nanoTime()
+        return Progress(
+            phase = phase,
+            elapsedMs = elapsedMs(),
+            mbps = mbps,
+            activeStreams = activeStreamsOverride ?: activeStreamCount(nowNs),
+            startedStreams = streams.count(StreamState::hasStarted),
+            cancelledStreams =
+                streams.count { it.status.get() == StreamStatus.CANCELLED },
+            completedStreams =
+                streams.count { it.status.get() == StreamStatus.COMPLETED },
+            failedStreams = streams.count { it.status.get() == StreamStatus.FAILED },
+            attemptedStreams = streams.size,
+            activeCdnCount = activeCdnCountOverride ?: activeCdnCount(nowNs),
+            sampleCount = sampleCount
+        )
+    }
+
+    private fun RunState.failure(
+        reason: FailureReason,
+        validSampleCount: Int,
+        diagnostic: String
+    ): Result.Failure {
+        return Result.Failure(
+            reason = reason,
+            diagnostic = diagnostic,
+            elapsedMs = elapsedMs(),
+            validSampleCount = validSampleCount,
+            activeStreamHighWaterMark = activeStreamHighWaterMark,
+            endpointStats = endpointStats()
+        )
+    }
+
+    private fun RunState.elapsedMs(): Long {
+        return TimeUnit.NANOSECONDS.toMillis(
+            (System.nanoTime() - startedAtNs).coerceAtLeast(0L)
+        )
+    }
+
+    private fun RunState.activeCdnCount(nowNs: Long): Int {
+        return streams.asSequence()
+            .filter { it.isTransferring(nowNs) }
+            .map { it.endpoint.host }
+            .filter(String::isNotBlank)
+            .distinct()
+            .count()
+    }
+
+    private fun RunState.endpointStats(): List<EndpointStats> {
+        val nowNs = System.nanoTime()
+        return streams.groupBy(StreamState::endpoint).map { (endpoint, group) ->
+            val activeStreams = group.count { it.isTransferring(nowNs) }
+            val stalledStreams = group.count {
+                it.status.get() == StreamStatus.ACTIVE &&
+                    !it.isTransferring(nowNs)
+            }
+            EndpointStats(
+                cdn = endpoint.name,
+                host = endpoint.host,
+                attemptedStreams = group.size,
+                connectingStreams =
+                    group.count { it.status.get() == StreamStatus.CONNECTING },
+                activeStreams = activeStreams,
+                stalledStreams = stalledStreams,
+                startedStreams = group.count(StreamState::hasStarted),
+                cancelledStreams =
+                    group.count { it.status.get() == StreamStatus.CANCELLED },
+                completedStreams =
+                    group.count { it.status.get() == StreamStatus.COMPLETED },
+                failedStreams =
+                    group.count { it.status.get() == StreamStatus.FAILED },
+                transferredBytes = group.sumOf { it.bytes.get() },
+                protocols = group.mapNotNull { it.protocol.get() }.distinct().sorted()
+            )
+        }
+    }
+}
+
+/**
+ * Pure arithmetic kept separate from Android/network code so boundary cases can
+ * be verified by local JVM tests.
+ */
+internal object SpeedTestMath {
+
+    /**
+     * Decimal megabits per second. 31,250,000 bytes in one second is 250 Mbps.
+     */
+    fun mbpsBetween(
+        startBytes: Long,
+        endBytes: Long,
+        startNs: Long,
+        endNs: Long
+    ): Double {
+        val byteDelta = endBytes - startBytes
+        val timeDeltaNs = endNs - startNs
+        if (byteDelta <= 0L || timeDeltaNs <= 0L) return 0.0
+        return byteDelta.toDouble() * 8_000.0 / timeDeltaNs.toDouble()
+    }
+
+    fun p90(samples: List<Double>): Double = percentile(samples, 0.90)
+
+    fun median(samples: List<Double>): Double {
+        val sorted = validSorted(samples)
+        if (sorted.isEmpty()) return 0.0
+        val middle = sorted.size / 2
+        return if (sorted.size % 2 == 0) {
+            (sorted[middle - 1] + sorted[middle]) / 2.0
+        } else {
+            sorted[middle]
+        }
+    }
+
+    /**
+     * Nearest-rank percentile. With ten samples p90 selects the ninth value, so
+     * one isolated high spike cannot inflate the reported result.
+     */
+    fun percentile(samples: List<Double>, percentile: Double): Double {
+        val sorted = validSorted(samples)
+        if (sorted.isEmpty()) return 0.0
+
+        val boundedPercentile = percentile.coerceIn(0.0, 1.0)
+        val rank = ceil(boundedPercentile * sorted.size)
+            .toInt()
+            .coerceIn(1, sorted.size)
+        return sorted[rank - 1]
+    }
+
+    private fun validSorted(samples: List<Double>): List<Double> {
+        return samples.asSequence()
+            .filter { it.isFinite() && it >= 0.0 }
+            .sorted()
+            .toList()
     }
 }

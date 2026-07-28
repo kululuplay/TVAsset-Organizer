@@ -1,31 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A detail-panel selectable row: title plus an optional trailing icon (language
-     flag, navigation arrow or a check mark). Focusable; turns white on focus. -->
+<!-- Detail choice row. Focus, current selection, subtitle hierarchy and icon state
+     remain legible from a 10-foot viewing distance. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:minHeight="@dimen/settings_row_min_h"
-    android:orientation="horizontal"
-    android:gravity="center_vertical"
+    android:layout_marginBottom="@dimen/space_s"
     android:background="@drawable/bg_settings_row"
+    android:clickable="true"
+    android:clipChildren="false"
     android:focusable="true"
     android:focusableInTouchMode="false"
-    android:paddingHorizontal="@dimen/space_m"
-    android:paddingVertical="@dimen/space_s"
-    android:layout_marginBottom="@dimen/space_s">
+    android:gravity="center_vertical"
+    android:minHeight="@dimen/settings_row_min_h"
+    android:orientation="horizontal"
+    android:paddingStart="@dimen/space_m"
+    android:paddingTop="@dimen/space_s"
+    android:paddingEnd="@dimen/space_m"
+    android:paddingBottom="@dimen/space_s"
+    android:stateListAnimator="@animator/control_focus">
 
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:orientation="vertical"
-        android:gravity="center_vertical">
+        android:duplicateParentState="true"
+        android:gravity="center_vertical"
+        android:orientation="vertical">
 
         <TextView
             android:id="@+id/cTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:duplicateParentState="true"
+            android:ellipsize="end"
+            android:maxLines="2"
             android:textColor="@color/settings_row_text"
             android:textSize="@dimen/text_body"
             android:textStyle="bold" />
@@ -34,21 +42,22 @@
             android:id="@+id/cSubtitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
+            android:layout_marginTop="@dimen/space_xs"
             android:duplicateParentState="true"
-            android:textColor="@color/settings_row_text"
-            android:textSize="@dimen/text_caption"
-            android:maxLines="2"
             android:ellipsize="end"
+            android:maxLines="2"
+            android:textColor="@color/settings_row_text_secondary"
+            android:textSize="@dimen/text_caption"
             android:visibility="gone" />
     </LinearLayout>
 
     <ImageView
         android:id="@+id/cIcon"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="@dimen/settings_flag_w"
+        android:layout_height="@dimen/settings_flag_h"
         android:layout_marginStart="@dimen/space_s"
-        android:duplicateParentState="true"
         android:contentDescription="@null"
+        android:duplicateParentState="true"
+        android:scaleType="centerInside"
         android:visibility="gone" />
 </LinearLayout>

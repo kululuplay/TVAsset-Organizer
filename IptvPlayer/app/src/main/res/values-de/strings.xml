@@ -153,7 +153,7 @@
     <string name="settings_diagnostics">Diagnose</string>
     <string name="settings_about">Über</string>
     <string name="settings_logout">Abmelden</string>
-    <string name="settings_logout_confirm">Abmelden und dieses Profil entfernen?</string>
+    <string name="settings_logout_confirm">Von dieser IPTV-Quelle auf diesem Gerät abmelden?</string>
 
     <string name="pin_enter">PIN eingeben</string>
     <string name="pin_set">4-stellige PIN festlegen</string>
@@ -234,6 +234,7 @@
     <string name="feature_live">Live-TV &amp; Sport in gestochen scharfem HD</string>
     <string name="feature_vod">Tausende Filme &amp; Serien</string>
     <string name="feature_multi">Auf jedem Bildschirm ansehen</string>
+    <string name="account_expiry_with_days">%1$s · %2$s</string>
     <!-- Master-detail redesign -->
     <string name="settings_general_info">Allgemeine Infos</string>
     <string name="settings_time_sync">Zeit &amp; Synchronisierung</string>
@@ -244,7 +245,60 @@
     <string name="settings_default_pin">Standard-PIN: %1$s</string>
     <string name="settings_enter_old_pin">Aktuelle PIN eingeben</string>
     <string name="settings_enter_new_pin">Neue PIN eingeben</string>
+    <string name="settings_confirm_new_pin">Neue PIN bestätigen</string>
     <string name="settings_pin_changed">PIN aktualisiert</string>
+    <string name="settings_pin_remote_hint">Verwenden Sie das Steuerkreuz oder die Zifferntasten. Drücken Sie zum Löschen die Zurück-Taste.</string>
+    <string name="settings_saved">Gespeichert</string>
+    <string name="settings_system_support">System &amp; Hilfe</string>
+    <string name="settings_toggle_state">%1$s, %2$s</string>
+    <string name="settings_selected_option">%1$s, ausgewählt</string>
+    <string name="settings_content_manager">Inhaltsverwaltung</string>
+    <string name="settings_share_playback_log">Wiedergabeprotokoll teilen</string>
+    <string name="settings_playback_log_empty">Noch kein Wiedergabeprotokoll vorhanden</string>
+    <string name="settings_share_unavailable">Keine App zum Teilen des Wiedergabeprotokolls verfügbar.</string>
+
+    <!-- Beschreibungen der Detailbereiche -->
+    <string name="settings_panel_general_desc">Konto-, Netzwerk- und Geräteinformationen</string>
+    <string name="settings_panel_language_desc">Die in der gesamten App verwendete Sprache auswählen</string>
+    <string name="settings_panel_parental_desc">Profile, Zugriff auf Erwachsenen-Inhalte und PIN verwalten</string>
+    <string name="settings_panel_content_desc">Sichtbare Kategorien und Sender auswählen</string>
+    <string name="settings_panel_player_desc">Wiedergabe-Engines, Dekodierung, Pufferung und Audio optimieren</string>
+    <string name="settings_panel_time_desc">Uhr, Bildschirmschoner und Hintergrundsynchronisierung</string>
+    <string name="settings_panel_tmdb_desc">Optionalen TMDB-Schlüssel für umfangreichere Filmdetails hinzufügen</string>
+    <string name="settings_panel_speed_desc">Aktuelle Downloadleistung der Verbindung messen</string>
+    <string name="settings_panel_system_desc">Diagnose, App-Informationen und Kontoaktionen</string>
+    <string name="settings_tmdb_input_hint">TMDB-API-Schlüssel eingeben</string>
+
+    <!-- Netzwerk und Geschwindigkeitstest -->
+    <string name="settings_network_info">Netzwerkinformationen</string>
+    <string name="settings_public_ip">Öffentliche IP-Adresse (IPv4)</string>
+    <string name="settings_speedtest">Geschwindigkeitstest</string>
+    <string name="speedtest_title">Internet-Geschwindigkeitstest</string>
+    <string name="speedtest_desc">Starten Sie den Test, um Ihre tatsächliche Downloadgeschwindigkeit zu messen. Er dauert etwa 10 Sekunden.</string>
+    <string name="speedtest_start">Test starten</string>
+    <string name="speedtest_retry">Erneut testen</string>
+    <string name="speedtest_running">Test läuft…</string>
+    <string name="speedtest_unit">Mbit/s</string>
+    <string name="speedtest_idle">—</string>
+    <string name="speedtest_meta">DOWNLOAD · CA. 10-SEKUNDEN-MESSUNG</string>
+    <string name="speedtest_progress">Fortschritt des Geschwindigkeitstests</string>
+    <string name="speedtest_phase_connecting">Verbindungen werden vorbereitet · %1$d/%2$d</string>
+    <string name="speedtest_phase_warming">Verbindungen werden aufgewärmt · %1$d/%2$d aktiv</string>
+    <string name="speedtest_phase_measuring">Dauerhafte Geschwindigkeit wird gemessen · %1$d/%2$d aktiv</string>
+    <string name="speedtest_method">Verwendet mehrere öffentliche CDNs und 10 parallele Download-Datenströme. Gemessen wird Ihre Internetverbindung, nicht der IPTV-Server.</string>
+    <string name="speedtest_data_notice">Der Test überträgt eine erhebliche Datenmenge. WLAN-Qualität, VPNs und Datenverkehr im Hintergrund können das Ergebnis beeinflussen.</string>
+    <string name="speedtest_result_meta">%1$d aktive Streams · %2$d MB · %3$.1f s</string>
+    <string name="speedtest_result_summary">%1$s · %2$s</string>
+    <string name="speedtest_failed">Test fehlgeschlagen. Bitte überprüfen Sie Ihre Verbindung.</string>
+    <string name="speedtest_tier_poor">Schwach</string>
+    <string name="speedtest_tier_normal">Normal</string>
+    <string name="speedtest_tier_good">Gut</string>
+    <string name="speedtest_tier_excellent">Hervorragend</string>
+    <string name="speedtest_msg_poor">Bei dieser Geschwindigkeit können Streams nicht stabil wiedergegeben werden.</string>
+    <string name="speedtest_msg_normal">Für HD-Streams ausreichend.</string>
+    <string name="speedtest_msg_good">Eine gute Geschwindigkeit für flüssiges Streaming.</string>
+    <string name="speedtest_msg_excellent">Hervorragend für alle Inhalte, einschließlich 4K.</string>
+
     <string name="settings_audio_passthrough">Audio-Passthrough (für AV-Receiver)</string>
     <string name="settings_audio_passthrough_warning">Nur aktivieren, wenn ein AV-Receiver oder eine Soundbar mit Dolby/DTS-Dekodierung angeschlossen ist. Auf Fernsehern und Beamern ohne Dekoder läuft das Bild, aber es gibt KEINEN Ton. Wenn der Ton fehlt, diese Option ausschalten.</string>
     <string name="settings_debug_overlay">Debug-Anzeige (Player und Vorschau)</string>

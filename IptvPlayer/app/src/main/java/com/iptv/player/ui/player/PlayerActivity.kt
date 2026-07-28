@@ -47,6 +47,10 @@ import java.util.Locale
 
 class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
+    /** Never cover an active live stream with the app idle screensaver. */
+    protected override val idleScreensaverEnabledForScreen: Boolean
+        get() = false
+
     companion object {
         const val EXTRA_CHANNEL_ID = "extra_channel_id"
         // Scopes up/down zapping to a real category, Favorites or Recent. Null

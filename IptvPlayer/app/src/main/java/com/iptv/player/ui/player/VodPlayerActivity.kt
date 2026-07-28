@@ -54,6 +54,10 @@ import org.videolan.libvlc.util.VLCVideoLayout
 
 class VodPlayerActivity : BaseActivity() {
 
+    /** Never cover movie, episode or catch-up playback with the idle saver. */
+    protected override val idleScreensaverEnabledForScreen: Boolean
+        get() = false
+
     companion object {
         const val EXTRA_STREAM_URL = "extra_stream_url"
         const val EXTRA_TITLE = "extra_title"

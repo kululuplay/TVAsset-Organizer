@@ -1,15 +1,15 @@
 /*
  * SettingsActivity.kt
- * A modern, D-pad friendly master-detail settings screen. The left rail lists
- * every entry (navigation rows, inline toggles and actions); focusing a nav row
- * swaps the right-hand detail panel to match it. All values stay bound to
- * SettingsViewModel so the screen reflects persisted state reactively.
+ * A modern, D-pad friendly master-detail settings screen. The left rail contains
+ * navigation categories only; settings, toggles and actions live in their
+ * matching detail panel. All values stay bound to SettingsViewModel so the
+ * screen reflects persisted state reactively.
  */
 package com.iptv.player.ui.settings
 
 import android.content.Intent
 import android.os.Build
-import android.text.InputType
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -18,10 +18,14 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.view.AccessibilityDelegateCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.iptv.player.R
@@ -29,10 +33,8 @@ import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
-import com.iptv.player.data.model.SourceType
 import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.data.prefs.SettingsStore
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import com.iptv.player.databinding.ActivitySettingsBinding
 import com.iptv.player.ui.content.ContentManagerActivity
 import com.iptv.player.ui.common.BaseActivity
@@ -45,7 +47,9 @@ import com.iptv.player.util.PlaybackLog
 import com.iptv.player.util.PublicIpProvider
 import com.iptv.player.util.SpeedTester
 import com.iptv.player.work.SyncScheduler
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -58,12 +62,28 @@ class SettingsActivity : BaseActivity() {
         ViewModelProvider(this)[SettingsViewModel::class.java]
     }
 
-    private enum class Panel { GENERAL, LANGUAGE, PIN, CATEGORIES, PLAYER, TIME, TMDB, SPEEDTEST }
+    private enum class Panel {
+        GENERAL,
+        LANGUAGE,
+        PIN,
+        CATEGORIES,
+        PLAYER,
+        TIME,
+        TMDB,
+        SPEEDTEST,
+        SYSTEM,
+    }
 
     private var selectedRow: View? = null
+    private var selectedPanel = Panel.GENERAL
+    private val panelRows = linkedMapOf<Panel, View>()
+    private var restorePanel = Panel.GENERAL
+    private var restoreDetailFocus = false
 
     // Reactive widgets we update from the ViewModel flows.
+    private var lockAdultRow: View? = null
     private var lockAdultSwitch: SwitchCompat? = null
+    private var lockAdultActionInFlight = false
     private var clockSwitch: SwitchCompat? = null
     private var screensaverValue: TextView? = null
     private var autoSyncSwitch: SwitchCompat? = null
@@ -77,30 +97,66 @@ class SettingsActivity : BaseActivity() {
     private var debugOverlaySwitch: SwitchCompat? = null
     private var selectedPlayerMode = PlayerMode.AUTO
     private var selectedDecoderMode = DecoderMode.AUTO
+    private var selectedStreamFormat = StreamFormat.TS
+    private var selectedBufferMode = BufferMode.NORMAL
+    private var selectedScreensaverMinutes = 10
 
     private var autoSyncEnabled = false
     private var autoSyncHours = 12
 
     // Running download speed-test coroutine (cancelled when leaving the panel).
     private var speedTestJob: kotlinx.coroutines.Job? = null
+    private var speedTestRunId = 0L
 
     // General-info network fetches (public IP + account); cancelled and relaunched
     // each time the General panel is rebuilt so a D-pad pass doesn't pile up calls.
     private var generalJob: kotlinx.coroutines.Job? = null
 
     // PIN entry state.
+    private enum class PinStage { CURRENT, NEW, CONFIRM }
+
     private val pinBoxViews = mutableListOf<TextView>()
     private val pinEntry = StringBuilder()
-    private var pinStageNew = false
+    private var pinStage = PinStage.CURRENT
+    private var pendingNewPin = ""
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
+        restorePanel = savedInstanceState
+            ?.getString(STATE_PANEL)
+            ?.let { runCatching { Panel.valueOf(it) }.getOrNull() }
+            ?: Panel.GENERAL
+        restoreDetailFocus = savedInstanceState?.getBoolean(STATE_DETAIL_FOCUS) == true
+
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        ViewCompat.setAccessibilityHeading(binding.detailTitle, true)
 
         buildPanels()
         buildRail()
         observe()
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (
+                    selectedPanel == Panel.PIN &&
+                    isFocusInside(binding.detailPin) &&
+                    pinEntry.isNotEmpty()
+                ) {
+                    onPinBackspace()
+                } else if (isFocusInside(binding.detailContainer)) {
+                    selectedRow?.requestFocus()
+                } else {
+                    finish()
+                }
+            }
+        })
+    }
+
+    override fun onSaveInstanceState(outState: android.os.Bundle) {
+        outState.putString(STATE_PANEL, selectedPanel.name)
+        outState.putBoolean(STATE_DETAIL_FOCUS, isFocusInside(binding.detailContainer))
+        super.onSaveInstanceState(outState)
     }
 
     override fun onResume() {
@@ -108,65 +164,42 @@ class SettingsActivity : BaseActivity() {
         binding.dateText.text = DateFormat
             .getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
             .format(Date())
+        // A background transition cancels account/IP I/O in onPause. Relaunch it
+        // when returning directly to General so placeholder rows cannot remain
+        // stuck after Home, the share sheet or another Activity covered Settings.
+        if (selectedRow != null && selectedPanel == Panel.GENERAL) loadGeneral()
     }
 
     override fun onPause() {
         super.onPause()
         // Don't keep a download running while the screen is in the background.
         cancelSpeedTest()
-        binding.speedProgress.visibility = View.GONE
-        binding.speedStart.isEnabled = true
-        binding.speedStart.alpha = 1f
-        binding.speedStart.setText(R.string.speedtest_start)
+        generalJob?.cancel()
+        generalJob = null
     }
 
     // ---- Left rail -----------------------------------------------------
 
     private fun buildRail() {
         val c = binding.settingsContainer
-        val first = addNavRow(c, getString(R.string.settings_general_info), Panel.GENERAL)
+        addNavRow(c, getString(R.string.settings_general_info), Panel.GENERAL)
         addNavRow(c, getString(R.string.settings_language), Panel.LANGUAGE)
         addNavRow(c, getString(R.string.settings_parental_pin), Panel.PIN)
         addNavRow(c, getString(R.string.settings_content_manager), Panel.CATEGORIES)
         addNavRow(c, getString(R.string.settings_player_mode), Panel.PLAYER)
         addNavRow(c, getString(R.string.settings_time_sync), Panel.TIME)
+        addNavRow(c, getString(R.string.settings_tmdb), Panel.TMDB)
         addNavRow(c, getString(R.string.settings_speedtest), Panel.SPEEDTEST)
+        addNavRow(c, getString(R.string.settings_system_support), Panel.SYSTEM)
 
-        lockAdultSwitch = addToggleRow(c, getString(R.string.settings_lock_adult)) { checked ->
-            if (checked) {
-                // Enabling the lock is a direct action.
-                viewModel.setLockAdult(true)
+        val initial = panelRows[restorePanel] ?: panelRows.getValue(Panel.GENERAL)
+        initial.post {
+            showPanel(restorePanel, initial)
+            if (restoreDetailFocus) {
+                firstFocusable(detailView(restorePanel))?.requestFocus()
             } else {
-                // Disabling the lock requires the PIN. The switch is bound to the
-                // persisted lockAdult flow (see observe()), so it stays visually ON
-                // until the PIN is confirmed; on cancel/wrong PIN nothing changes.
-                lifecycleScope.launch {
-                    val pin = ServiceLocator.settings.getPin()
-                    PinPromptDialog.show(
-                        context = this@SettingsActivity,
-                        expectedPin = pin,
-                        onSuccess = { viewModel.setLockAdult(false) },
-                        onCancel = { lockAdultSwitch?.isChecked = true }
-                    )
-                }
+                initial.requestFocus()
             }
-        }
-
-        addActionRow(c, getString(R.string.settings_profiles)) {
-            startActivity(Intent(this, ProfilesActivity::class.java))
-        }
-        addActionRow(c, getString(R.string.settings_diagnostics)) {
-            startActivity(Intent(this, DiagnosticsActivity::class.java))
-        }
-        addActionRow(c, getString(R.string.settings_about)) {
-            startActivity(Intent(this, AboutActivity::class.java))
-        }
-        addActionRow(c, getString(R.string.settings_logout)) { confirmLogout() }
-
-        // Open on General Info by default.
-        first.post {
-            showPanel(Panel.GENERAL, first)
-            first.requestFocus()
         }
     }
 
@@ -178,20 +211,8 @@ class SettingsActivity : BaseActivity() {
             firstFocusable(detailView(panel))?.requestFocus()
         }
         container.addView(row)
+        panelRows[panel] = row
         return row
-    }
-
-    private fun addToggleRow(
-        container: LinearLayout,
-        title: String,
-        onToggle: (Boolean) -> Unit
-    ): SwitchCompat {
-        val row = inflateMaster(container, title)
-        val sw = row.findViewById<SwitchCompat>(R.id.mSwitch)
-        sw.visibility = View.VISIBLE
-        row.setOnClickListener { onToggle(!sw.isChecked) }
-        container.addView(row)
-        return sw
     }
 
     private fun addActionRow(container: LinearLayout, title: String, action: () -> Unit): View {
@@ -218,6 +239,7 @@ class SettingsActivity : BaseActivity() {
         buildPinPanel()
         buildTmdbPanel()
         buildSpeedtestPanel()
+        buildSystemPanel()
     }
 
     private fun detailView(panel: Panel): View = when (panel) {
@@ -229,21 +251,143 @@ class SettingsActivity : BaseActivity() {
         Panel.TIME -> binding.detailTime
         Panel.TMDB -> binding.detailTmdb
         Panel.SPEEDTEST -> binding.detailSpeedtest
+        Panel.SYSTEM -> binding.detailSystem
     }
 
     private fun showPanel(panel: Panel, row: View) {
         // Stop any in-flight speed test when navigating away from its panel.
         if (panel != Panel.SPEEDTEST) cancelSpeedTest()
-        Panel.values().forEach { detailView(it).visibility = View.GONE }
+        val panelChanged = panel != selectedPanel || selectedRow == null
+        Panel.entries.forEach { detailView(it).visibility = View.GONE }
         detailView(panel).visibility = View.VISIBLE
+        selectedPanel = panel
+
+        binding.detailTitle.setText(panelTitle(panel))
+        binding.detailSubtitle.setText(panelSubtitle(panel))
+        binding.detailHeaderIcon.setImageResource(panelIcon(panel))
+        ViewCompat.setAccessibilityPaneTitle(
+            detailView(panel),
+            getString(panelTitle(panel)),
+        )
 
         if (selectedRow !== row) {
             selectedRow?.isSelected = false
             row.isSelected = true
             selectedRow = row
         }
-        if (panel == Panel.GENERAL) loadGeneral()
-        if (panel == Panel.PIN) resetPin()
+        if (panelChanged && panel == Panel.GENERAL) loadGeneral()
+        if (panelChanged && panel == Panel.PIN) resetPin()
+    }
+
+    private fun panelTitle(panel: Panel): Int = when (panel) {
+        Panel.GENERAL -> R.string.settings_general_info
+        Panel.LANGUAGE -> R.string.settings_language
+        Panel.PIN -> R.string.settings_parental
+        Panel.CATEGORIES -> R.string.settings_content_manager
+        Panel.PLAYER -> R.string.settings_player_mode
+        Panel.TIME -> R.string.settings_time_sync
+        Panel.TMDB -> R.string.settings_tmdb
+        Panel.SPEEDTEST -> R.string.settings_speedtest
+        Panel.SYSTEM -> R.string.settings_system_support
+    }
+
+    private fun panelSubtitle(panel: Panel): Int = when (panel) {
+        Panel.GENERAL -> R.string.settings_panel_general_desc
+        Panel.LANGUAGE -> R.string.settings_panel_language_desc
+        Panel.PIN -> R.string.settings_panel_parental_desc
+        Panel.CATEGORIES -> R.string.settings_panel_content_desc
+        Panel.PLAYER -> R.string.settings_panel_player_desc
+        Panel.TIME -> R.string.settings_panel_time_desc
+        Panel.TMDB -> R.string.settings_panel_tmdb_desc
+        Panel.SPEEDTEST -> R.string.settings_panel_speed_desc
+        Panel.SYSTEM -> R.string.settings_panel_system_desc
+    }
+
+    private fun panelIcon(panel: Panel): Int = when (panel) {
+        Panel.GENERAL -> R.drawable.ic_settings
+        Panel.LANGUAGE -> R.drawable.ic_globe
+        Panel.PIN -> R.drawable.ic_lock
+        Panel.CATEGORIES -> R.drawable.ic_sort
+        Panel.PLAYER -> R.drawable.ic_play
+        Panel.TIME -> R.drawable.ic_clock
+        Panel.TMDB -> R.drawable.ic_movie
+        Panel.SPEEDTEST -> R.drawable.ic_signal
+        Panel.SYSTEM -> R.drawable.ic_settings
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            if (selectedPanel == Panel.PIN && isFocusInside(binding.detailPin)) {
+                val digit = when (event.keyCode) {
+                    KeyEvent.KEYCODE_0, KeyEvent.KEYCODE_NUMPAD_0 -> "0"
+                    KeyEvent.KEYCODE_1, KeyEvent.KEYCODE_NUMPAD_1 -> "1"
+                    KeyEvent.KEYCODE_2, KeyEvent.KEYCODE_NUMPAD_2 -> "2"
+                    KeyEvent.KEYCODE_3, KeyEvent.KEYCODE_NUMPAD_3 -> "3"
+                    KeyEvent.KEYCODE_4, KeyEvent.KEYCODE_NUMPAD_4 -> "4"
+                    KeyEvent.KEYCODE_5, KeyEvent.KEYCODE_NUMPAD_5 -> "5"
+                    KeyEvent.KEYCODE_6, KeyEvent.KEYCODE_NUMPAD_6 -> "6"
+                    KeyEvent.KEYCODE_7, KeyEvent.KEYCODE_NUMPAD_7 -> "7"
+                    KeyEvent.KEYCODE_8, KeyEvent.KEYCODE_NUMPAD_8 -> "8"
+                    KeyEvent.KEYCODE_9, KeyEvent.KEYCODE_NUMPAD_9 -> "9"
+                    else -> null
+                }
+                if (digit != null) {
+                    if (event.repeatCount == 0) onPinDigit(digit)
+                    return true
+                }
+                if (event.keyCode == KeyEvent.KEYCODE_DEL) {
+                    onPinBackspace()
+                    return true
+                }
+                if (event.keyCode == KeyEvent.KEYCODE_CLEAR) {
+                    clearPinEntry()
+                    return true
+                }
+            }
+
+            val rtl = resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
+            val detailToRailKey =
+                if (rtl) KeyEvent.KEYCODE_DPAD_RIGHT else KeyEvent.KEYCODE_DPAD_LEFT
+            val railToDetailKey =
+                if (rtl) KeyEvent.KEYCODE_DPAD_LEFT else KeyEvent.KEYCODE_DPAD_RIGHT
+
+            if (
+                event.keyCode == detailToRailKey &&
+                isFocusInside(binding.detailContainer) &&
+                canLeaveEditTextTowardRail(currentFocus, detailToRailKey)
+            ) {
+                selectedRow?.requestFocus()
+                return true
+            }
+            if (
+                event.keyCode == railToDetailKey &&
+                currentFocus != null &&
+                panelRows.values.any { it === currentFocus }
+            ) {
+                firstFocusable(detailView(selectedPanel))?.requestFocus()
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    private fun canLeaveEditTextTowardRail(focused: View?, keyCode: Int): Boolean {
+        if (focused !is EditText) return true
+        if (focused.selectionStart != focused.selectionEnd) return false
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_LEFT -> focused.selectionStart <= 0
+            KeyEvent.KEYCODE_DPAD_RIGHT -> focused.selectionStart >= focused.text.length
+            else -> false
+        }
+    }
+
+    private fun isFocusInside(container: View): Boolean {
+        var node: View? = currentFocus
+        while (node != null) {
+            if (node === container) return true
+            node = node.parent as? View
+        }
+        return false
     }
 
     // General Info: account + device.
@@ -291,7 +435,11 @@ class SettingsActivity : BaseActivity() {
                 DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it))
             } ?: "—"
             expiryValue.text = if (info.daysRemaining != null && info.daysRemaining >= 0) {
-                "$expiry · " + getString(R.string.account_days_left, info.daysRemaining.toInt())
+                getString(
+                    R.string.account_expiry_with_days,
+                    expiry,
+                    getString(R.string.account_days_left, info.daysRemaining.toInt()),
+                )
             } else expiry
             val active = info.activeConnections ?: 0
             val maxText = info.maxConnections?.toString() ?: getString(R.string.account_unlimited)
@@ -376,6 +524,11 @@ class SettingsActivity : BaseActivity() {
         val passthroughRow = inflateMaster(c, getString(R.string.settings_audio_passthrough))
         passthroughSwitch = passthroughRow.findViewById<SwitchCompat>(R.id.mSwitch)
             .also { it.visibility = View.VISIBLE }
+        configureToggleRow(
+            passthroughRow,
+            getString(R.string.settings_audio_passthrough),
+            passthroughSwitch!!,
+        )
         passthroughRow.setOnClickListener {
             val turningOn = !passthroughSwitch!!.isChecked
             if (turningOn) {
@@ -389,7 +542,7 @@ class SettingsActivity : BaseActivity() {
                         viewModel.setAudioPassthrough(true)
                     }
                     .setNegativeButton(android.R.string.cancel, null)
-                    .show()
+                    .showTracked()
             } else {
                 viewModel.setAudioPassthrough(false)
             }
@@ -400,6 +553,11 @@ class SettingsActivity : BaseActivity() {
         val debugRow = inflateMaster(c, getString(R.string.settings_debug_overlay))
         debugOverlaySwitch = debugRow.findViewById<SwitchCompat>(R.id.mSwitch)
             .also { it.visibility = View.VISIBLE }
+        configureToggleRow(
+            debugRow,
+            getString(R.string.settings_debug_overlay),
+            debugOverlaySwitch!!,
+        )
         debugRow.setOnClickListener {
             viewModel.setDebugOverlay(!debugOverlaySwitch!!.isChecked)
         }
@@ -415,6 +573,7 @@ class SettingsActivity : BaseActivity() {
         val c = binding.timeContainer
         val clockRow = inflateMaster(c, getString(R.string.settings_clock))
         clockSwitch = clockRow.findViewById<SwitchCompat>(R.id.mSwitch).also { it.visibility = View.VISIBLE }
+        configureToggleRow(clockRow, getString(R.string.settings_clock), clockSwitch!!)
         clockRow.setOnClickListener { viewModel.setShowClock(!clockSwitch!!.isChecked) }
         c.addView(clockRow)
 
@@ -425,6 +584,7 @@ class SettingsActivity : BaseActivity() {
 
         val syncRow = inflateMaster(c, getString(R.string.settings_auto_sync))
         autoSyncSwitch = syncRow.findViewById<SwitchCompat>(R.id.mSwitch).also { it.visibility = View.VISIBLE }
+        configureToggleRow(syncRow, getString(R.string.settings_auto_sync), autoSyncSwitch!!)
         syncRow.setOnClickListener { toggleAutoSync() }
         c.addView(syncRow)
 
@@ -447,6 +607,60 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun buildPinPanel() {
+        val lockRow = inflateMaster(
+            binding.pinSettingsContainer,
+            getString(R.string.settings_lock_adult),
+        )
+        lockAdultRow = lockRow
+        lockAdultSwitch = lockRow.findViewById<SwitchCompat>(R.id.mSwitch).also {
+            it.visibility = View.VISIBLE
+        }
+        configureToggleRow(
+            lockRow,
+            getString(R.string.settings_lock_adult),
+            lockAdultSwitch!!,
+        )
+        lockRow.setOnClickListener {
+            if (lockAdultActionInFlight) return@setOnClickListener
+            lockAdultActionInFlight = true
+            lifecycleScope.launch {
+                val currentlyEnabled = ServiceLocator.settings.lockAdult.first()
+                if (!currentlyEnabled) {
+                    try {
+                        ServiceLocator.settings.setLockAdult(true)
+                    } finally {
+                        lockAdultActionInFlight = false
+                    }
+                } else {
+                    val pin = ServiceLocator.settings.getPin() ?: SettingsStore.DEFAULT_PIN
+                    PinPromptDialog.show(
+                        context = this@SettingsActivity,
+                        expectedPin = pin,
+                        onSuccess = {
+                            lifecycleScope.launch {
+                                try {
+                                    ServiceLocator.settings.setLockAdult(false)
+                                } finally {
+                                    lockAdultActionInFlight = false
+                                }
+                            }
+                        },
+                        onCancel = {
+                            lockAdultSwitch?.isChecked = true
+                            lockAdultActionInFlight = false
+                        },
+                    )
+                }
+            }
+        }
+        binding.pinSettingsContainer.addView(lockRow)
+        addActionRow(
+            binding.pinSettingsContainer,
+            getString(R.string.settings_profiles),
+        ) {
+            startActivity(Intent(this, ProfilesActivity::class.java))
+        }
+
         // Four display boxes.
         repeat(4) {
             val box = LayoutInflater.from(this)
@@ -454,14 +668,27 @@ class SettingsActivity : BaseActivity() {
             binding.pinBoxes.addView(box)
             pinBoxViews.add(box)
         }
-        // Keypad: 1-5 / 6-9 0 backspace.
+        // Familiar TV keypad: 1–9 / clear, 0, backspace. Keep it LTR so Arabic
+        // layouts don't reverse digits or the physical D-pad muscle memory.
         binding.pinKeys.orientation = LinearLayout.VERTICAL
-        val row1 = keypadRow(); listOf("1", "2", "3", "4", "5").forEach { addKey(row1, it) }
-        val row2 = keypadRow(); listOf("6", "7", "8", "9", "0").forEach { addKey(row2, it) }
-        addKey(row2, "⌫", backspace = true)
-        binding.pinKeys.addView(row1)
-        binding.pinKeys.addView(row2)
-        binding.pinHint.text = getString(R.string.settings_default_pin, SettingsStore.DEFAULT_PIN)
+        binding.pinKeys.layoutDirection = View.LAYOUT_DIRECTION_LTR
+        listOf(
+            listOf("1", "2", "3"),
+            listOf("4", "5", "6"),
+            listOf("7", "8", "9"),
+        ).forEach { labels ->
+            keypadRow().also { row ->
+                labels.forEach { addKey(row, it) }
+                binding.pinKeys.addView(row)
+            }
+        }
+        keypadRow().also { row ->
+            addKey(row, "C", clear = true)
+            addKey(row, "0")
+            addKey(row, "⌫", backspace = true)
+            binding.pinKeys.addView(row)
+        }
+        binding.pinHint.setText(R.string.settings_pin_remote_hint)
     }
 
     private fun keypadRow(): LinearLayout = LinearLayout(this).apply {
@@ -471,18 +698,45 @@ class SettingsActivity : BaseActivity() {
         ).also { it.bottomMargin = resources.getDimensionPixelSize(R.dimen.space_s) }
     }
 
-    private fun addKey(row: LinearLayout, label: String, backspace: Boolean = false) {
+    private fun addKey(
+        row: LinearLayout,
+        label: String,
+        backspace: Boolean = false,
+        clear: Boolean = false,
+    ) {
         val key = LayoutInflater.from(this).inflate(R.layout.item_pin_key, row, false) as TextView
         key.text = label
-        key.setOnClickListener { if (backspace) onPinBackspace() else onPinDigit(label) }
+        key.setOnClickListener {
+            when {
+                clear -> clearPinEntry()
+                backspace -> onPinBackspace()
+                else -> onPinDigit(label)
+            }
+        }
         row.addView(key)
     }
 
     private fun resetPin() {
-        pinStageNew = false
+        pinStage = PinStage.CURRENT
+        pendingNewPin = ""
         pinEntry.setLength(0)
         binding.pinPrompt.setText(R.string.settings_enter_old_pin)
+        binding.pinHint.setText(R.string.settings_pin_remote_hint)
         updatePinBoxes()
+        lifecycleScope.launch {
+            if (ServiceLocator.settings.getPin() == SettingsStore.DEFAULT_PIN) {
+                binding.pinHint.text = buildString {
+                    append(
+                        getString(
+                            R.string.settings_default_pin,
+                            SettingsStore.DEFAULT_PIN,
+                        ),
+                    )
+                    append('\n')
+                    append(getString(R.string.settings_pin_remote_hint))
+                }
+            }
+        }
     }
 
     private fun onPinDigit(d: String) {
@@ -499,25 +753,57 @@ class SettingsActivity : BaseActivity() {
         }
     }
 
+    private fun clearPinEntry() {
+        pinEntry.setLength(0)
+        updatePinBoxes()
+    }
+
     private fun handlePinComplete() {
         val entered = pinEntry.toString()
-        if (pinStageNew) {
-            viewModel.setPin(entered)
-            Toast.makeText(this, R.string.settings_pin_changed, Toast.LENGTH_SHORT).show()
-            resetPin()
-            return
-        }
-        lifecycleScope.launch {
-            val stored = ServiceLocator.settings.getPin() ?: SettingsStore.DEFAULT_PIN
-            if (entered == stored) {
-                pinStageNew = true
+        when (pinStage) {
+            PinStage.CURRENT -> lifecycleScope.launch {
+                val stored = ServiceLocator.settings.getPin() ?: SettingsStore.DEFAULT_PIN
+                if (entered == stored) {
+                    pinStage = PinStage.NEW
+                    pinEntry.setLength(0)
+                    binding.pinPrompt.setText(R.string.settings_enter_new_pin)
+                    updatePinBoxes()
+                } else {
+                    Toast.makeText(
+                        this@SettingsActivity,
+                        R.string.pin_wrong,
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    clearPinEntry()
+                }
+            }
+
+            PinStage.NEW -> {
+                pendingNewPin = entered
+                pinStage = PinStage.CONFIRM
                 pinEntry.setLength(0)
-                binding.pinPrompt.setText(R.string.settings_enter_new_pin)
+                binding.pinPrompt.setText(R.string.settings_confirm_new_pin)
                 updatePinBoxes()
-            } else {
-                Toast.makeText(this@SettingsActivity, R.string.pin_wrong, Toast.LENGTH_SHORT).show()
-                pinEntry.setLength(0)
-                updatePinBoxes()
+            }
+
+            PinStage.CONFIRM -> {
+                if (entered != pendingNewPin) {
+                    Toast.makeText(this, R.string.pin_mismatch, Toast.LENGTH_SHORT).show()
+                    pinStage = PinStage.NEW
+                    pendingNewPin = ""
+                    clearPinEntry()
+                    binding.pinPrompt.setText(R.string.settings_enter_new_pin)
+                    return
+                }
+                lifecycleScope.launch {
+                    ServiceLocator.settings.setPin(entered)
+                    Toast.makeText(
+                        this@SettingsActivity,
+                        R.string.settings_pin_changed,
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    resetPin()
+                }
             }
         }
     }
@@ -530,9 +816,28 @@ class SettingsActivity : BaseActivity() {
 
     private fun buildTmdbPanel() {
         binding.tmdbSave.setOnClickListener {
-            viewModel.setTmdbKey(binding.tmdbInput.text.toString().trim())
-            Toast.makeText(this, R.string.action_save, Toast.LENGTH_SHORT).show()
+            val key = binding.tmdbInput.text.toString().trim()
+            lifecycleScope.launch {
+                ServiceLocator.settings.setTmdbKey(key)
+                Toast.makeText(
+                    this@SettingsActivity,
+                    R.string.settings_saved,
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
         }
+    }
+
+    private fun buildSystemPanel() {
+        val c = binding.systemContainer
+        addActionRow(c, getString(R.string.settings_diagnostics)) {
+            startActivity(Intent(this, DiagnosticsActivity::class.java))
+        }
+        addActionRow(c, getString(R.string.settings_about)) {
+            startActivity(Intent(this, AboutActivity::class.java))
+        }
+        val logout = addActionRow(c, getString(R.string.settings_logout)) { confirmLogout() }
+        logout.contentDescription = getString(R.string.settings_logout)
     }
 
     // ---- Speed test ----------------------------------------------------
@@ -542,9 +847,22 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun runSpeedTest() {
-        if (speedTestJob?.isActive == true) return
-        binding.speedStatus.visibility = View.GONE
+        // A cancelled run keeps this slot until its OkHttp calls have unwound and
+        // SpeedTester has released the global single-run guard. This prevents an
+        // immediate retry from being misreported as a network failure (BUSY).
+        if (speedTestJob != null) return
+        val runId = ++speedTestRunId
+        binding.speedStatus.visibility = View.VISIBLE
+        binding.speedStatus.setText(R.string.speedtest_running)
+        binding.speedStatus.setTextColor(
+            ContextCompat.getColor(this, R.color.text_secondary),
+        )
+        binding.speedMeta.setText(R.string.speedtest_method)
+        binding.speedMeta.visibility = View.VISIBLE
         binding.speedProgress.visibility = View.VISIBLE
+        binding.speedProgress.isIndeterminate = false
+        binding.speedProgress.max = 100
+        binding.speedProgress.progress = 0
         binding.speedResult.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
         binding.speedResult.text = formatMbps(0.0)
         // Keep the button ENABLED so it retains D-pad focus while testing.
@@ -556,74 +874,90 @@ class SettingsActivity : BaseActivity() {
         binding.speedStart.alpha = 0.5f
         binding.speedStart.setText(R.string.speedtest_running)
 
-        speedTestJob = lifecycleScope.launch {
+        val job = lifecycleScope.launch(start = CoroutineStart.LAZY) {
             var completed = false
             try {
-                val mbps = SpeedTester.measureMbps(speedTestFallbackUrls()) { live ->
-                    binding.speedResult.text = formatMbps(live)
+                val result = SpeedTester.measure { progress ->
+                    if (runId != speedTestRunId) return@measure
+                    if (progress.mbps > 0.0) {
+                        binding.speedResult.text = formatMbps(progress.mbps)
+                    }
+                    binding.speedProgress.progress =
+                        ((progress.elapsedMs * 100L) / SPEED_TEST_EXPECTED_MS)
+                            .toInt()
+                            .coerceIn(1, 95)
+                    val phaseText = when (progress.phase) {
+                        SpeedTester.Phase.CONNECTING -> getString(
+                            R.string.speedtest_phase_connecting,
+                            progress.activeStreams,
+                            progress.attemptedStreams,
+                        )
+                        SpeedTester.Phase.WARMING_UP -> getString(
+                            R.string.speedtest_phase_warming,
+                            progress.activeStreams,
+                            progress.attemptedStreams,
+                        )
+                        SpeedTester.Phase.MEASURING -> getString(
+                            R.string.speedtest_phase_measuring,
+                            progress.activeStreams,
+                            progress.attemptedStreams,
+                        )
+                    }
+                    binding.speedStatus.text = phaseText
                 }
+                if (runId != speedTestRunId) return@launch
                 completed = true
-                if (mbps < 0) {
-                    binding.speedResult.text = getString(R.string.speedtest_idle)
-                    binding.speedStatus.visibility = View.VISIBLE
-                    binding.speedStatus.setText(R.string.speedtest_failed)
-                    binding.speedStatus.setTextColor(
-                        ContextCompat.getColor(this@SettingsActivity, R.color.danger)
-                    )
-                } else {
-                    showSpeedResult(mbps)
+                binding.speedProgress.progress = 100
+                when (result) {
+                    is SpeedTester.Result.Success -> {
+                        showSpeedResult(result.mbps)
+                        binding.speedMeta.text = getString(
+                            R.string.speedtest_result_meta,
+                            result.activeStreamHighWaterMark,
+                            (result.measuredBytes / 1_000_000L).toInt(),
+                            result.measurementDurationMs / 1_000.0,
+                        )
+                    }
+                    is SpeedTester.Result.Failure -> {
+                        binding.speedResult.text = getString(R.string.speedtest_idle)
+                        binding.speedStatus.visibility = View.VISIBLE
+                        binding.speedStatus.setText(R.string.speedtest_failed)
+                        binding.speedStatus.setTextColor(
+                            ContextCompat.getColor(this@SettingsActivity, R.color.danger)
+                        )
+                        binding.speedMeta.setText(R.string.speedtest_method)
+                        binding.speedStatus.announceForAccessibility(
+                            getString(R.string.speedtest_failed),
+                        )
+                    }
                 }
             } finally {
-                // Runs on normal completion AND on cancellation (panel switch /
-                // onPause), so the controls never get stuck in the running state.
-                binding.speedProgress.visibility = View.GONE
-                binding.speedStart.isEnabled = true
-                binding.speedStart.alpha = 1f
-                if (completed) {
-                    binding.speedStart.setText(R.string.speedtest_retry)
-                } else {
-                    // Cancelled before a result: reset to the initial state.
-                    binding.speedStart.setText(R.string.speedtest_start)
-                    binding.speedResult.text = getString(R.string.speedtest_idle)
-                    binding.speedStatus.visibility = View.GONE
-                }
-                speedTestJob = null
-            }
-        }
-    }
-
-    /**
-     * Fallback speed-test targets on the customer's OWN portal, tried only if the
-     * public CDN mirrors are all unreachable (common on locked-down IPTV boxes
-     * that whitelist just the portal host). For Xtream we pull the full m3u_plus
-     * playlist export — a large, unthrottled, always-reachable download; for M3U
-     * sources we re-fetch the playlist URL itself.
-     */
-    private suspend fun speedTestFallbackUrls(): List<String> {
-        val config = ServiceLocator.settings.getSourceConfig() ?: return emptyList()
-        return when (config.type) {
-            SourceType.XTREAM -> {
-                // Build via HttpUrl so credentials with reserved chars (& ? # space)
-                // are percent-encoded into a well-formed URL instead of corrupting
-                // the query string.
-                if (config.username.isBlank()) {
-                    emptyList()
-                } else {
-                    val url = config.serverUrl.trimEnd('/').toHttpUrlOrNull()
-                        ?.newBuilder()
-                        ?.addPathSegment("get.php")
-                        ?.addQueryParameter("username", config.username)
-                        ?.addQueryParameter("password", config.password)
-                        ?.addQueryParameter("type", "m3u_plus")
-                        ?.addQueryParameter("output", "ts")
-                        ?.build()
-                        ?.toString()
-                    if (url == null) emptyList() else listOf(url)
+                if (runId == speedTestRunId) {
+                    // Runs on normal completion AND on cancellation (panel switch /
+                    // onPause), so the controls never get stuck in the running state.
+                    binding.speedProgress.visibility = View.GONE
+                    binding.speedStart.isEnabled = true
+                    binding.speedStart.alpha = 1f
+                    if (completed) {
+                        binding.speedStart.setText(R.string.speedtest_retry)
+                    } else {
+                        // Cancelled before a result: reset to the initial state.
+                        binding.speedStart.setText(R.string.speedtest_start)
+                        binding.speedResult.text = getString(R.string.speedtest_idle)
+                        binding.speedStatus.visibility = View.GONE
+                    }
                 }
             }
-            SourceType.M3U_URL ->
-                if (config.m3uUrl.isBlank()) emptyList() else listOf(config.m3uUrl)
         }
+        // Assign before execution so even an immediate BUSY/failure completion
+        // cannot leave an already-completed Job stuck in the field.
+        speedTestJob = job
+        job.invokeOnCompletion {
+            binding.root.post {
+                if (speedTestJob === job) speedTestJob = null
+            }
+        }
+        job.start()
     }
 
     private fun showSpeedResult(mbps: Double) {
@@ -645,8 +979,13 @@ class SettingsActivity : BaseActivity() {
         val color = ContextCompat.getColor(this, colorRes)
         binding.speedResult.setTextColor(color)
         binding.speedStatus.visibility = View.VISIBLE
-        binding.speedStatus.text = "${getString(tierRes)} · ${getString(msgRes)}"
+        binding.speedStatus.text = getString(
+            R.string.speedtest_result_summary,
+            getString(tierRes),
+            getString(msgRes),
+        )
         binding.speedStatus.setTextColor(color)
+        binding.speedStatus.announceForAccessibility(binding.speedStatus.text)
     }
 
     private fun formatMbps(mbps: Double): String {
@@ -656,8 +995,17 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun cancelSpeedTest() {
-        speedTestJob?.cancel()
-        speedTestJob = null
+        val job = speedTestJob ?: return
+        speedTestRunId++
+        job.cancel()
+        binding.speedProgress.visibility = View.GONE
+        binding.speedStart.isEnabled = true
+        binding.speedStart.alpha = 1f
+        binding.speedStart.setText(R.string.speedtest_start)
+        binding.speedResult.setText(R.string.speedtest_idle)
+        binding.speedResult.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+        binding.speedStatus.visibility = View.GONE
+        binding.speedMeta.setText(R.string.speedtest_method)
     }
 
     // ---- Detail helpers ------------------------------------------------
@@ -671,6 +1019,7 @@ class SettingsActivity : BaseActivity() {
             val top = if (container.childCount == 0) 0
             else resources.getDimensionPixelSize(R.dimen.space_l)
             setPadding(0, top, 0, resources.getDimensionPixelSize(R.dimen.space_s))
+            ViewCompat.setAccessibilityHeading(this, true)
         }
         container.addView(header)
     }
@@ -699,14 +1048,36 @@ class SettingsActivity : BaseActivity() {
         return valueView
     }
 
+    private fun configureToggleRow(
+        row: View,
+        title: String,
+        switch: SwitchCompat,
+    ) {
+        row.contentDescription = title
+        ViewCompat.setAccessibilityDelegate(
+            row,
+            object : AccessibilityDelegateCompat() {
+                override fun onInitializeAccessibilityNodeInfo(
+                    host: View,
+                    info: AccessibilityNodeInfoCompat,
+                ) {
+                    super.onInitializeAccessibilityNodeInfo(host, info)
+                    info.className = SwitchCompat::class.java.name
+                    info.isCheckable = true
+                    info.isChecked = switch.isChecked
+                }
+            },
+        )
+    }
+
     private fun firstFocusable(view: View): View? {
-        if (view.isFocusable && view.visibility == View.VISIBLE) return view
+        if (view.visibility != View.VISIBLE || !view.isEnabled) return null
         if (view is ViewGroup) {
             for (i in 0 until view.childCount) {
                 firstFocusable(view.getChildAt(i))?.let { return it }
             }
         }
-        return null
+        return view.takeIf { it.isFocusable }
     }
 
     private fun flagFor(tag: String): Int = when (tag) {
@@ -722,13 +1093,21 @@ class SettingsActivity : BaseActivity() {
 
     private fun observe() {
         lifecycleScope.launch {
-            viewModel.lockAdult.collectLatest { lockAdultSwitch?.isChecked = it }
+            viewModel.lockAdult.collectLatest { enabled ->
+                lockAdultSwitch?.isChecked = enabled
+                lockAdultRow?.contentDescription = getString(
+                    R.string.settings_toggle_state,
+                    getString(R.string.settings_lock_adult),
+                    getString(if (enabled) R.string.settings_on else R.string.settings_off),
+                )
+            }
         }
         lifecycleScope.launch {
             viewModel.showClock.collectLatest { clockSwitch?.isChecked = it }
         }
         lifecycleScope.launch {
             viewModel.screensaverMinutes.collectLatest {
+                selectedScreensaverMinutes = it
                 screensaverValue?.text = if (it <= 0) getString(R.string.settings_screensaver_off)
                 else getString(R.string.settings_minutes, it)
             }
@@ -747,15 +1126,31 @@ class SettingsActivity : BaseActivity() {
         }
         lifecycleScope.launch {
             viewModel.languageTag.collectLatest { tag ->
-                languageRows.forEach { (t, row) -> row.isSelected = (t == tag) }
+                languageRows.forEach { (t, row) ->
+                    row.isSelected = t == tag
+                    row.contentDescription = if (t == tag) {
+                        getString(
+                            R.string.settings_selected_option,
+                            LocaleManager.displayName(t),
+                        )
+                    } else {
+                        LocaleManager.displayName(t)
+                    }
+                }
             }
         }
         lifecycleScope.launch {
             viewModel.playerMode.collectLatest { mode ->
                 selectedPlayerMode = mode
                 playerRows.forEach { (m, row) ->
+                    row.isSelected = m == mode
                     row.findViewById<ImageView>(R.id.cIcon).visibility =
                         if (m == mode) View.VISIBLE else View.INVISIBLE
+                    row.contentDescription = if (m == mode) {
+                        getString(R.string.settings_selected_option, playerModeLabel(m))
+                    } else {
+                        playerModeLabel(m)
+                    }
                 }
             }
         }
@@ -766,10 +1161,16 @@ class SettingsActivity : BaseActivity() {
             }
         }
         lifecycleScope.launch {
-            viewModel.streamFormat.collectLatest { streamFormatValue?.text = streamFormatLabel(it) }
+            viewModel.streamFormat.collectLatest {
+                selectedStreamFormat = it
+                streamFormatValue?.text = streamFormatLabel(it)
+            }
         }
         lifecycleScope.launch {
-            viewModel.bufferMode.collectLatest { bufferModeValue?.text = bufferModeLabel(it) }
+            viewModel.bufferMode.collectLatest {
+                selectedBufferMode = it
+                bufferModeValue?.text = bufferModeLabel(it)
+            }
         }
         lifecycleScope.launch {
             viewModel.audioPassthrough.collectLatest { passthroughSwitch?.isChecked = it }
@@ -786,6 +1187,9 @@ class SettingsActivity : BaseActivity() {
 
     // ---- Dialogs / actions ---------------------------------------------
 
+    private fun AlertDialog.Builder.showTracked(): AlertDialog =
+        show().also { trackIdleInteractions(it) }
+
     private fun showScreensaverDialog() {
         val options = listOf(0, 5, 10, 15, 30)
         val labels = options.map {
@@ -794,15 +1198,27 @@ class SettingsActivity : BaseActivity() {
         }.toTypedArray()
         AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
             .setTitle(R.string.settings_screensaver)
-            .setItems(labels) { _, which -> viewModel.setScreensaverMinutes(options[which]) }
-            .show()
+            .setSingleChoiceItems(
+                labels,
+                options.indexOf(selectedScreensaverMinutes).coerceAtLeast(0),
+            ) { dialog, which ->
+                viewModel.setScreensaverMinutes(options[which])
+                dialog.dismiss()
+            }
+            .showTracked()
     }
 
     private fun toggleAutoSync() {
-        val enabled = !autoSyncEnabled
-        viewModel.setAutoSyncEnabled(enabled)
-        if (enabled) SyncScheduler.schedule(this, autoSyncHours)
-        else SyncScheduler.cancel(this)
+        lifecycleScope.launch {
+            // Read the persisted value at click time. This avoids the short
+            // startup race where the first Flow emission has not reached the UI
+            // yet and the local default could toggle in the wrong direction.
+            val enabled = !ServiceLocator.settings.isAutoSyncEnabled()
+            val hours = ServiceLocator.settings.getAutoSyncHours()
+            ServiceLocator.settings.setAutoSyncEnabled(enabled)
+            if (enabled) SyncScheduler.schedule(this@SettingsActivity, hours)
+            else SyncScheduler.cancel(this@SettingsActivity)
+        }
     }
 
     private fun showAutoSyncIntervalDialog() {
@@ -810,12 +1226,16 @@ class SettingsActivity : BaseActivity() {
         val labels = options.map { getString(R.string.settings_every_hours, it) }.toTypedArray()
         AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
             .setTitle(R.string.settings_auto_sync_interval)
-            .setItems(labels) { _, which ->
+            .setSingleChoiceItems(
+                labels,
+                options.indexOf(autoSyncHours).coerceAtLeast(0),
+            ) { dialog, which ->
                 val hours = options[which]
                 viewModel.setAutoSyncHours(hours)
                 if (autoSyncEnabled) SyncScheduler.schedule(this, hours)
+                dialog.dismiss()
             }
-            .show()
+            .showTracked()
     }
 
     private fun confirmLogout() {
@@ -831,7 +1251,7 @@ class SettingsActivity : BaseActivity() {
                 }
             }
             .setNegativeButton(R.string.action_cancel, null)
-            .show()
+            .showTracked()
     }
 
     private fun playerModeLabel(mode: PlayerMode): String = getString(
@@ -859,7 +1279,7 @@ class SettingsActivity : BaseActivity() {
                     viewModel.setPlaybackSelection(PlayerMode.EXOPLAYER, DecoderMode.HARDWARE)
                 }
                 .setNegativeButton(android.R.string.cancel, null)
-                .show()
+                .showTracked()
             return
         }
         viewModel.setPlayerMode(mode)
@@ -878,7 +1298,11 @@ class SettingsActivity : BaseActivity() {
         val labels = modes.map { decoderModeLabel(it) }.toTypedArray()
         AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
             .setTitle(R.string.settings_decoder_mode)
-            .setItems(labels) { _, which ->
+            .setSingleChoiceItems(
+                labels,
+                modes.indexOf(selectedDecoderMode).coerceAtLeast(0),
+            ) { dialog, which ->
+                dialog.dismiss()
                 val selected = modes[which]
                 if (
                     selected == DecoderMode.SOFTWARE &&
@@ -891,12 +1315,12 @@ class SettingsActivity : BaseActivity() {
                             viewModel.setPlaybackSelection(PlayerMode.VLC, DecoderMode.SOFTWARE)
                         }
                         .setNegativeButton(android.R.string.cancel, null)
-                        .show()
+                        .showTracked()
                 } else {
                     viewModel.setDecoderMode(selected)
                 }
             }
-            .show()
+            .showTracked()
     }
 
     private fun streamFormatLabel(format: StreamFormat): String = getString(
@@ -911,8 +1335,14 @@ class SettingsActivity : BaseActivity() {
         val labels = formats.map { streamFormatLabel(it) }.toTypedArray()
         AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
             .setTitle(R.string.settings_stream_format)
-            .setItems(labels) { _, which -> viewModel.setStreamFormat(formats[which]) }
-            .show()
+            .setSingleChoiceItems(
+                labels,
+                formats.indexOf(selectedStreamFormat).coerceAtLeast(0),
+            ) { dialog, which ->
+                viewModel.setStreamFormat(formats[which])
+                dialog.dismiss()
+            }
+            .showTracked()
     }
 
     private fun bufferModeLabel(mode: BufferMode): String = getString(
@@ -928,8 +1358,14 @@ class SettingsActivity : BaseActivity() {
         val labels = modes.map { bufferModeLabel(it) }.toTypedArray()
         AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
             .setTitle(R.string.settings_buffer)
-            .setItems(labels) { _, which -> viewModel.setBufferMode(modes[which]) }
-            .show()
+            .setSingleChoiceItems(
+                labels,
+                modes.indexOf(selectedBufferMode).coerceAtLeast(0),
+            ) { dialog, which ->
+                viewModel.setBufferMode(modes[which])
+                dialog.dismiss()
+            }
+            .showTracked()
     }
 
     private fun sharePlaybackLog() {
@@ -947,7 +1383,13 @@ class SettingsActivity : BaseActivity() {
         runCatching {
             startActivity(Intent.createChooser(send, getString(R.string.settings_share_playback_log)))
         }.onFailure {
-            Toast.makeText(this, R.string.settings_playback_log_empty, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.settings_share_unavailable, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private companion object {
+        const val STATE_PANEL = "settings.panel"
+        const val STATE_DETAIL_FOCUS = "settings.detail_focus"
+        const val SPEED_TEST_EXPECTED_MS = 11_500L
     }
 }

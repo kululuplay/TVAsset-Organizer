@@ -195,7 +195,7 @@
     <string name="settings_diagnostics">Diagnostics</string>
     <string name="settings_about">About</string>
     <string name="settings_logout">Log out</string>
-    <string name="settings_logout_confirm">Log out and remove this profile?</string>
+    <string name="settings_logout_confirm">Log out of this IPTV source on this device?</string>
 
     <!-- Parental / PIN -->
     <string name="pin_enter">Enter PIN</string>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="0"
+                android:endColor="@color/settings_row_focus_end"
+                android:startColor="@color/settings_row_focus_start" />
+            <corners android:radius="@dimen/card_radius" />
+            <stroke
+                android:width="@dimen/focus_stroke"
+                android:color="@color/settings_row_focus_stroke" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/settings_row_selected" />
+            <corners android:radius="@dimen/card_radius" />
+            <stroke
+                android:width="1dp"
+                android:color="@color/settings_row_selected_stroke" />
+        </shape>
+    </item>
+</selector>
