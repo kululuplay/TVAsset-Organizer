@@ -27,6 +27,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
@@ -53,7 +54,7 @@ import com.iptv.player.data.model.BufferMode
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.PlaybackLog
 
-@UnstableApi
+@OptIn(markerClass = [UnstableApi::class])
 class ExoPlayerEngine(
     private val context: Context,
     /** When false (default) audio is decoded to PCM; true allows HDMI passthrough. */
