@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Desired cell width used to derive a responsive 3–6 column TV grid. -->
+    <dimen name="collection_card_min_width">164dp</dimen>
+    <dimen name="collection_card_text_height">44dp</dimen>
+    <dimen name="collection_header_icon">64dp</dimen>
+</resources>

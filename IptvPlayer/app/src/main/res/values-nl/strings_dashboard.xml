@@ -12,6 +12,41 @@
     <string name="dash_expires">Verloopt: %1$s</string>
     <string name="dash_user">Gebruiker: %1$s</string>
     <string name="dash_version">Versie %1$s</string>
+
+    <!-- Verzoeken en meldingen -->
+    <string name="dash_request">Verzoek en feedback</string>
+    <string name="dash_sub_request">Zenders, films en problemen</string>
+    <string name="request_title">Verzoek en feedback</string>
+    <string name="request_subtitle">Vraag inhoud aan of meld een probleem. We lezen elk bericht.</string>
+    <string name="request_type_channel">Livezender</string>
+    <string name="request_type_movie">Film</string>
+    <string name="request_type_series">Serie</string>
+    <string name="request_type_complaint">Klacht</string>
+    <string name="request_type_label">Waar gaat dit over?</string>
+    <string name="request_message_label">Details</string>
+    <string name="request_message_counter">%1$d / %2$d</string>
+    <string name="request_message_hint">Schrijf uw verzoek of klacht…</string>
+    <string name="request_privacy_hint">Vermeld voor uw veiligheid geen wachtwoorden of inloggegevens.</string>
+    <string name="request_send">Versturen</string>
+    <string name="request_sending">Versturen…</string>
+    <string name="request_retry">Opnieuw proberen</string>
+    <string name="request_empty">Schrijf eerst een bericht.</string>
+    <string name="request_sent">Bedankt! Uw bericht is verstuurd.</string>
+    <string name="request_failed">Versturen mislukt. Controleer uw verbinding en probeer het opnieuw.</string>
+    <string name="request_history_title">Uw verzoeken</string>
+    <string name="request_history_loading">Uw verzoeken worden geladen…</string>
+    <string name="request_history_empty">U hebt nog geen verzoeken verstuurd.</string>
+    <string name="request_history_failed">Uw verzoekgeschiedenis kon niet worden geladen.</string>
+    <string name="request_history_retry">Geschiedenis opnieuw laden</string>
+    <string name="request_status_new">In behandeling</string>
+    <string name="request_status_done">Opgelost</string>
+    <string name="request_type_other">Overig</string>
+    <string name="resolved_title_added">Uw verzoek is toegevoegd</string>
+    <string name="resolved_body_added">We hebben uw verzoek bekeken en de inhoud toegevoegd. Veel kijkplezier!</string>
+    <string name="resolved_title_complaint">Uw probleem is opgelost</string>
+    <string name="resolved_body_complaint">We hebben uw melding bekeken en opgelost. Bedankt!</string>
+    <string name="resolved_request_label">Uw verzoek</string>
+
     <string name="dash_offline_banner">Geen internetverbinding — opgeslagen inhoud wordt getoond</string>
     <string name="dash_portal_unreachable">Server niet bereikbaar — automatisch opnieuw proberen…</string>
     <string name="dash_reconnected_refreshing">Weer online — inhoud wordt bijgewerkt…</string>

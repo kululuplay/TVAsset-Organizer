@@ -1,53 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modern Home "İstek & Şikayet" dialog: brand badge, title + subtitle, a row of
-     four D-pad selectable type chips (live channel / movie / series / complaint),
-     a multiline message box and two CTAs (cancel + send). The chips + input + the
-     user's sent-request history live in a height-capped ScrollView so the on-screen
-     keyboard (with SOFT_INPUT_ADJUST_RESIZE set on the window) can never hide the
-     text being typed; the CTAs stay pinned below it. -->
+<!-- TV-first request/feedback modal. The compact horizontal header and capped
+     content area keep the pinned actions inside the 960x540dp reference frame.
+     Focusable history cards let remote users review older messages while the
+     ScrollView follows focus automatically. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="560dp"
+    android:id="@+id/requestDialogRoot"
+    android:layout_width="720dp"
     android:layout_height="wrap_content"
+    android:background="@drawable/bg_request_dialog"
     android:orientation="vertical"
-    android:background="@drawable/bg_dialog"
     android:padding="@dimen/space_l">
 
-    <ImageView
-        android:layout_width="72dp"
-        android:layout_height="72dp"
-        android:layout_gravity="center_horizontal"
-        android:background="@drawable/bg_badge_request"
-        android:padding="20dp"
-        android:src="@drawable/ic_feedback"
-        android:contentDescription="@null"
-        app:tint="@color/text_primary" />
-
-    <TextView
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_m"
-        android:text="@string/request_title"
-        android:textColor="@color/text_primary"
-        android:textSize="@dimen/text_title"
-        android:textStyle="bold"
-        android:gravity="center" />
+        android:gravity="center_vertical"
+        android:minHeight="56dp"
+        android:orientation="horizontal">
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_xs"
-        android:text="@string/request_subtitle"
-        android:textColor="@color/text_secondary"
-        android:textSize="@dimen/text_caption"
-        android:gravity="center" />
+        <ImageView
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:background="@drawable/bg_badge_request"
+            android:contentDescription="@null"
+            android:padding="14dp"
+            android:src="@drawable/ic_feedback"
+            app:tint="@color/text_primary" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_m"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/requestTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/request_title"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_title"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:text="@string/request_subtitle"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_small" />
+        </LinearLayout>
+    </LinearLayout>
 
     <com.iptv.player.ui.common.MaxHeightScrollView
+        android:id="@+id/requestScroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_l"
-        android:maxHeight="380dp"
+        android:layout_marginTop="12dp"
         android:fadeScrollbars="false"
+        android:fillViewport="false"
+        android:focusable="false"
+        android:maxHeight="276dp"
+        android:overScrollMode="ifContentScrolls"
         android:scrollbarStyle="outsideOverlay">
 
         <LinearLayout
@@ -55,124 +75,265 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Type selector: four D-pad focusable chips, single-select. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:baselineAligned="false">
+                android:background="@drawable/bg_request_section"
+                android:orientation="vertical"
+                android:padding="@dimen/space_m">
 
                 <TextView
-                    android:id="@+id/chipChannel"
-                    style="@style/Widget.Iptv.RequestChip"
-                    android:layout_marginEnd="@dimen/space_s"
-                    android:text="@string/request_type_channel" />
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/request_type_label"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_caption"
+                    android:textStyle="bold" />
+
+                <!-- Two rows prevent long German/French labels from clipping. -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_s"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/chipChannel"
+                        style="@style/Widget.Iptv.RequestChip"
+                        android:layout_marginEnd="@dimen/space_s"
+                        android:text="@string/request_type_channel" />
+
+                    <TextView
+                        android:id="@+id/chipMovie"
+                        style="@style/Widget.Iptv.RequestChip"
+                        android:text="@string/request_type_movie" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_s"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/chipSeries"
+                        style="@style/Widget.Iptv.RequestChip"
+                        android:layout_marginEnd="@dimen/space_s"
+                        android:text="@string/request_type_series" />
+
+                    <TextView
+                        android:id="@+id/chipComplaint"
+                        style="@style/Widget.Iptv.RequestChip"
+                        android:text="@string/request_type_complaint" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_m"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:labelFor="@id/requestMessage"
+                        android:text="@string/request_message_label"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_caption"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/requestMessageCounter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="@null"
+                        android:textColor="@color/text_muted"
+                        android:textSize="@dimen/text_small" />
+                </LinearLayout>
+
+                <EditText
+                    android:id="@+id/requestMessage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_s"
+                    android:background="@drawable/bg_request_input"
+                    android:gravity="top|start"
+                    android:hint="@string/request_message_hint"
+                    android:imeOptions="flagNoExtractUi|actionDone"
+                    android:inputType="textCapSentences|textMultiLine"
+                    android:maxHeight="132dp"
+                    android:maxLines="5"
+                    android:minHeight="96dp"
+                    android:minLines="3"
+                    android:padding="14dp"
+                    android:scrollbars="vertical"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_muted"
+                    android:textDirection="locale"
+                    android:textSize="@dimen/text_body" />
 
                 <TextView
-                    android:id="@+id/chipMovie"
-                    style="@style/Widget.Iptv.RequestChip"
-                    android:layout_marginEnd="@dimen/space_s"
-                    android:text="@string/request_type_movie" />
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_s"
+                    android:drawableStart="@drawable/ic_request_privacy"
+                    android:drawablePadding="@dimen/space_s"
+                    android:text="@string/request_privacy_hint"
+                    android:textColor="@color/text_muted"
+                    android:textSize="@dimen/text_small"
+                    app:drawableTint="@color/text_muted" />
 
                 <TextView
-                    android:id="@+id/chipSeries"
-                    style="@style/Widget.Iptv.RequestChip"
-                    android:layout_marginEnd="@dimen/space_s"
-                    android:text="@string/request_type_series" />
-
-                <TextView
-                    android:id="@+id/chipComplaint"
-                    style="@style/Widget.Iptv.RequestChip"
-                    android:text="@string/request_type_complaint" />
+                    android:id="@+id/requestInlineStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_s"
+                    android:accessibilityLiveRegion="polite"
+                    android:background="@drawable/bg_request_notice"
+                    android:padding="12dp"
+                    android:textSize="@dimen/text_caption"
+                    android:visibility="gone" />
             </LinearLayout>
 
-            <EditText
-                android:id="@+id/requestMessage"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_m"
-                android:background="@drawable/bg_input"
-                android:gravity="top|start"
-                android:hint="@string/request_message_hint"
-                android:imeOptions="flagNoExtractUi|actionDone"
-                android:inputType="textMultiLine|textCapSentences"
-                android:minLines="3"
-                android:maxLines="6"
-                android:minHeight="110dp"
-                android:padding="@dimen/space_m"
-                android:textColor="@color/text_primary"
-                android:textColorHint="@color/text_muted"
-                android:textSize="@dimen/text_body" />
-
-            <!-- Sent-request history (populated in code; hidden until loaded). -->
-            <TextView
-                android:id="@+id/requestHistoryHeader"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_l"
-                android:text="@string/request_history_title"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_caption"
-                android:textStyle="bold"
-                android:visibility="gone" />
-
-            <TextView
-                android:id="@+id/requestHistoryEmpty"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_s"
-                android:text="@string/request_history_empty"
-                android:textColor="@color/text_muted"
-                android:textSize="@dimen/text_caption"
-                android:visibility="gone" />
-
             <LinearLayout
-                android:id="@+id/requestHistory"
+                android:id="@+id/requestHistoryPanel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_xs"
-                android:orientation="vertical" />
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_request_section"
+                android:orientation="vertical"
+                android:padding="@dimen/space_m">
+
+                <TextView
+                    android:id="@+id/requestHistoryHeader"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/request_history_title"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_caption"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:id="@+id/requestHistoryStateRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_s"
+                    android:gravity="center_vertical"
+                    android:minHeight="40dp"
+                    android:orientation="horizontal"
+                    android:stateListAnimator="@animator/control_focus">
+
+                    <ProgressBar
+                        android:id="@+id/requestHistoryProgress"
+                        style="?android:attr/progressBarStyleSmall"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:importantForAccessibility="no"
+                        android:indeterminateTint="@color/brand_pink" />
+
+                    <TextView
+                        android:id="@+id/requestHistoryState"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/space_s"
+                        android:layout_weight="1"
+                        android:accessibilityLiveRegion="polite"
+                        android:text="@string/request_history_loading"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="@dimen/text_caption" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/requestHistoryRetry"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="@dimen/space_s"
+                    android:background="@drawable/bg_request_retry"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:minWidth="180dp"
+                    android:paddingStart="@dimen/space_m"
+                    android:paddingEnd="@dimen/space_m"
+                    android:stateListAnimator="@animator/control_focus"
+                    android:text="@string/request_history_retry"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_caption"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <LinearLayout
+                    android:id="@+id/requestHistory"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_s"
+                    android:orientation="vertical"
+                    android:visibility="gone" />
+            </LinearLayout>
         </LinearLayout>
     </com.iptv.player.ui.common.MaxHeightScrollView>
 
-    <!-- CTAs: cancel (secondary) + send (primary). D-pad focusable, pinned below. -->
+    <!-- Actions remain reachable when history is long or the IME is open. -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_l"
-        android:orientation="horizontal"
-        android:gravity="center">
+        android:layout_height="56dp"
+        android:layout_marginTop="12dp"
+        android:baselineAligned="false"
+        android:gravity="center"
+        android:orientation="horizontal">
 
         <TextView
             android:id="@+id/requestCancel"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:layout_height="match_parent"
             android:layout_marginEnd="@dimen/space_m"
-            android:background="@drawable/bg_button"
-            android:focusable="true"
-            android:gravity="center"
-            android:paddingHorizontal="@dimen/space_l"
-            android:paddingVertical="@dimen/space_m"
-            android:text="@string/action_cancel"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_body" />
-
-        <TextView
-            android:id="@+id/requestSend"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:background="@drawable/bg_button_primary"
-            android:drawableStart="@drawable/ic_feedback"
-            android:drawablePadding="@dimen/space_s"
+            android:background="@drawable/bg_request_retry"
+            android:clickable="true"
             android:focusable="true"
             android:gravity="center"
-            android:paddingHorizontal="@dimen/space_l"
-            android:paddingVertical="@dimen/space_m"
-            android:text="@string/request_send"
+            android:stateListAnimator="@animator/control_focus"
+            android:text="@string/action_cancel"
             android:textColor="@color/text_primary"
             android:textSize="@dimen/text_body"
             android:textStyle="bold" />
+
+        <FrameLayout
+            android:id="@+id/requestSend"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/bg_button_primary"
+            android:clickable="true"
+            android:descendantFocusability="blocksDescendants"
+            android:focusable="true"
+            android:stateListAnimator="@animator/control_focus">
+
+            <ProgressBar
+                android:id="@+id/requestSendProgress"
+                style="?android:attr/progressBarStyleSmall"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="start|center_vertical"
+                android:layout_marginStart="@dimen/space_m"
+                android:importantForAccessibility="no"
+                android:indeterminateTint="@color/text_primary"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/requestSendLabel"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:importantForAccessibility="no"
+                android:text="@string/request_send"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body"
+                android:textStyle="bold" />
+        </FrameLayout>
     </LinearLayout>
 </LinearLayout>

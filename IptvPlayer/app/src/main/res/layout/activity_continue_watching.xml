@@ -1,70 +1,168 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Dedicated "Continue Watching" page opened from the dashboard tile. Shows every
-     in-progress movie/episode in a poster grid; selecting one resumes from the saved
-     position. These items live ONLY here - they are no longer shown inline on the
-     dashboard. Fully D-pad driven over the cinematic aurora background. -->
-<androidx.constraintlayout.widget.ConstraintLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Continue Watching uses the same TV collection language as Favorites, with
+     clock branding and a responsive poster grid. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_login_aurora"
+    android:background="@drawable/bg_collections_root"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:orientation="vertical"
     android:paddingHorizontal="@dimen/safe_area_h"
     android:paddingVertical="@dimen/safe_area_v">
 
-    <!-- ===== Header ===== -->
     <LinearLayout
         android:id="@+id/header"
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:background="@drawable/bg_collection_header"
         android:gravity="center_vertical"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        android:orientation="horizontal"
+        android:padding="@dimen/space_m">
 
         <ImageView
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="@dimen/collection_header_icon"
+            android:layout_height="@dimen/collection_header_icon"
             android:background="@drawable/bg_badge_catchup"
-            android:padding="@dimen/space_s"
+            android:contentDescription="@null"
+            android:padding="@dimen/space_m"
+            android:scaleType="fitCenter"
             android:src="@drawable/ic_clock"
-            app:tint="@color/text_primary"
-            android:contentDescription="@string/section_continue_watching" />
+            app:tint="@color/text_primary" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_l"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/screenTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/section_continue_watching"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_title"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/collections_continue_hint"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_caption" />
+        </LinearLayout>
 
         <TextView
+            android:id="@+id/collectionCount"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/section_continue_watching"
+            android:layout_marginStart="@dimen/space_l"
+            android:background="@drawable/bg_collection_count"
+            android:gravity="center"
+            android:minHeight="40dp"
+            android:paddingHorizontal="@dimen/space_m"
             android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_big_title"
+            android:textSize="@dimen/text_caption"
             android:textStyle="bold"
-            android:layout_marginStart="@dimen/space_m" />
+            android:visibility="invisible" />
     </LinearLayout>
 
-    <!-- ===== Empty state ===== -->
-    <TextView
-        android:id="@+id/emptyText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/continue_empty"
-        android:textColor="@color/text_secondary"
-        android:textSize="@dimen/text_body"
-        android:visibility="gone"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent" />
-
-    <!-- ===== Grid ===== -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/continueGrid"
-        android:layout_width="0dp"
+    <FrameLayout
+        android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="@dimen/space_l"
+        android:layout_marginTop="@dimen/space_m"
+        android:layout_weight="1"
+        android:background="@drawable/bg_collection_grid_panel"
+        android:clipChildren="false"
         android:clipToPadding="false"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/header"
-        app:layout_constraintBottom_toBottomOf="parent" />
-</androidx.constraintlayout.widget.ConstraintLayout>
+        android:padding="@dimen/space_s">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/continueGrid"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:descendantFocusability="afterDescendants"
+            android:padding="@dimen/space_s"
+            android:scrollbars="none"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/stateContainer"
+            android:layout_width="460dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_collection_state"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="@dimen/space_l">
+
+            <ImageView
+                android:id="@+id/stateIcon"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:background="@drawable/bg_badge_catchup"
+                android:contentDescription="@null"
+                android:padding="@dimen/space_m"
+                android:src="@drawable/ic_clock"
+                android:visibility="gone"
+                app:tint="@color/text_primary" />
+
+            <ProgressBar
+                android:id="@+id/stateProgress"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:indeterminateTint="@color/brand_pink" />
+
+            <TextView
+                android:id="@+id/stateTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_m"
+                android:gravity="center"
+                android:text="@string/loading"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/emptyText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_s"
+                android:gravity="center"
+                android:lineSpacingExtra="2dp"
+                android:text="@string/continue_empty"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_caption"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/retryButton"
+                android:layout_width="wrap_content"
+                android:layout_height="56dp"
+                android:layout_marginTop="@dimen/space_l"
+                android:background="@drawable/bg_settings_action"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:gravity="center"
+                android:minWidth="160dp"
+                android:paddingHorizontal="@dimen/space_l"
+                android:text="@string/action_retry"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>

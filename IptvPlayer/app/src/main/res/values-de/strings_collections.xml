@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="collections_favorites_hint">OK zum Öffnen · OK zum Entfernen gedrückt halten</string>
+    <string name="collections_continue_hint">OK zum Fortsetzen · OK zum Entfernen aus der Liste gedrückt halten</string>
+    <string name="collections_error_title">Sammlung konnte nicht geladen werden</string>
+    <string name="collections_error_message">Beim Lesen Ihrer Mediathek ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.</string>
+    <string name="collections_remove_favorite_confirm">„%1$s“ aus den Favoriten entfernen?</string>
+    <string name="collections_remove_continue_confirm">„%1$s“ aus „Weiterschauen“ entfernen?</string>
+    <string name="collections_removed_continue">Aus „Weiterschauen“ entfernt</string>
+    <string name="collections_progress_percent">%1$d%% angesehen</string>
+    <plurals name="collections_item_count">
+        <item quantity="one">%d Element</item>
+        <item quantity="other">%d Elemente</item>
+    </plurals>
+</resources>

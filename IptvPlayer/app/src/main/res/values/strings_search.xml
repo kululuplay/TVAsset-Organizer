@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_global_subtitle">Search Live TV, movies and series from one place.</string>
+    <string name="search_filters">Content filters</string>
+    <string name="search_filter_all">All</string>
+    <string name="search_clear">Clear search</string>
+    <string name="search_idle_title">What would you like to watch?</string>
+    <string name="search_idle_message">Enter a title or channel name to search your library.</string>
+    <string name="search_loading">Searching your library…</string>
+    <string name="search_results_error">Some results could not be loaded.</string>
+    <string name="search_catalog_preparing">Preparing the full catalog…</string>
+</resources>

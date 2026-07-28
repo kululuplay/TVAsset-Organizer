@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_global_subtitle">ابحث في البث المباشر والأفلام والمسلسلات من مكان واحد.</string>
+    <string name="search_filters">مرشحات المحتوى</string>
+    <string name="search_filter_all">الكل</string>
+    <string name="search_clear">مسح البحث</string>
+    <string name="search_idle_title">ماذا تريد أن تشاهد؟</string>
+    <string name="search_idle_message">أدخل عنوانًا أو اسم قناة للبحث في مكتبتك.</string>
+    <string name="search_loading">جارٍ البحث في مكتبتك…</string>
+    <string name="search_results_error">تعذّر تحميل بعض النتائج.</string>
+    <string name="search_catalog_preparing">جارٍ إعداد الكتالوج الكامل…</string>
+</resources>

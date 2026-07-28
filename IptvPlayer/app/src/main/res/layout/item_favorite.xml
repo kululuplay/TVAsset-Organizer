@@ -1,45 +1,82 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Favorite card: poster/logo artwork, the title, and a small type label
-     (Live / Movie / Series). Focusable for D-pad; clicking opens the matching
-     player or detail screen for that content type. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="130dp"
+<!-- Responsive 2:3 artwork card. The root is the only focus/accessibility target;
+     type and favorite markers remain visual metadata inside it. -->
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:background="@drawable/bg_poster"
+    android:layout_margin="6dp"
+    android:background="@drawable/bg_collection_card"
+    android:clickable="true"
+    android:clipChildren="false"
+    android:descendantFocusability="blocksDescendants"
     android:focusable="true"
     android:focusableInTouchMode="false"
+    android:importantForAccessibility="yes"
+    android:longClickable="true"
     android:padding="@dimen/space_s"
-    android:layout_marginEnd="@dimen/space_s">
+    android:stateListAnimator="@animator/collection_card_focus">
 
     <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="180dp">
+        android:id="@+id/favArtwork"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@drawable/bg_poster_artwork"
+        android:clipToOutline="true"
+        app:layout_constraintDimensionRatio="2:3"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
         <ImageView
             android:id="@+id/favPoster"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:scaleType="centerCrop"
-            android:contentDescription="@string/section_favorites" />
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
+            android:scaleType="centerCrop" />
+
+        <TextView
+            android:id="@+id/favType"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:layout_gravity="bottom|start"
+            android:layout_margin="@dimen/space_s"
+            android:background="@drawable/bg_collection_chip"
+            android:gravity="center"
+            android:importantForAccessibility="no"
+            android:paddingHorizontal="@dimen/space_s"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_small"
+            android:textStyle="bold" />
+
+        <ImageView
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="top|end"
+            android:layout_margin="@dimen/space_s"
+            android:background="@drawable/bg_collection_chip"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
+            android:padding="7dp"
+            android:src="@drawable/ic_heart_filled"
+            app:tint="@color/brand_pink" />
     </FrameLayout>
 
     <TextView
         android:id="@+id/favTitle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_xs"
+        android:layout_width="0dp"
+        android:layout_height="@dimen/collection_card_text_height"
+        android:layout_marginTop="@dimen/space_s"
+        android:ellipsize="end"
+        android:importantForAccessibility="no"
+        android:maxLines="2"
         android:textColor="@color/text_primary"
         android:textSize="@dimen/text_caption"
-        android:maxLines="1"
-        android:ellipsize="end" />
-
-    <TextView
-        android:id="@+id/favType"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="@color/text_secondary"
-        android:textSize="@dimen/text_caption"
-        android:maxLines="1"
-        android:ellipsize="end" />
-</LinearLayout>
+        android:textStyle="bold"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/favArtwork" />
+</androidx.constraintlayout.widget.ConstraintLayout>

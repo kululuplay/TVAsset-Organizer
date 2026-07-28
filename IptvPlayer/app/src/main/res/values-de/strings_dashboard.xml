@@ -33,8 +33,14 @@
     <string name="request_type_movie">Film</string>
     <string name="request_type_series">Serie</string>
     <string name="request_type_complaint">Beschwerde</string>
+    <string name="request_type_label">Worum geht es?</string>
+    <string name="request_message_label">Details</string>
+    <string name="request_message_counter">%1$d / %2$d</string>
     <string name="request_message_hint">Schreiben Sie Ihre Anfrage oder Beschwerde…</string>
+    <string name="request_privacy_hint">Geben Sie zu Ihrer Sicherheit keine Passwörter oder Zugangsdaten ein.</string>
     <string name="request_send">Senden</string>
+    <string name="request_sending">Wird gesendet…</string>
+    <string name="request_retry">Erneut versuchen</string>
     <string name="request_empty">Bitte schreiben Sie zuerst eine Nachricht.</string>
     <string name="request_sent">Danke! Ihre Nachricht wurde gesendet.</string>
     <string name="request_failed">Senden fehlgeschlagen. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.</string>
@@ -59,7 +65,10 @@
 
     <!-- Anfrageverlauf (Liste gesendeter Anfragen im Anfrage & Feedback-Dialog) -->
     <string name="request_history_title">Ihre Anfragen</string>
+    <string name="request_history_loading">Ihre Anfragen werden geladen…</string>
     <string name="request_history_empty">Sie haben noch keine Anfrage gesendet.</string>
+    <string name="request_history_failed">Ihr Anfrageverlauf konnte nicht geladen werden.</string>
+    <string name="request_history_retry">Verlauf neu laden</string>
     <string name="request_status_new">Ausstehend</string>
     <string name="request_status_done">Erledigt</string>
     <string name="request_type_other">Sonstige</string>

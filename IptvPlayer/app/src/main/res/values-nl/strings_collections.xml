@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="collections_favorites_hint">OK om te openen · houd OK ingedrukt om te verwijderen</string>
+    <string name="collections_continue_hint">OK om verder te kijken · houd OK ingedrukt om uit de lijst te verwijderen</string>
+    <string name="collections_error_title">Collectie kan niet worden geladen</string>
+    <string name="collections_error_message">Er ging iets mis bij het lezen van je bibliotheek. Probeer het opnieuw.</string>
+    <string name="collections_remove_favorite_confirm">‘%1$s’ uit Favorieten verwijderen?</string>
+    <string name="collections_remove_continue_confirm">‘%1$s’ uit Verder kijken verwijderen?</string>
+    <string name="collections_removed_continue">Verwijderd uit Verder kijken</string>
+    <string name="collections_progress_percent">%1$d%% bekeken</string>
+    <plurals name="collections_item_count">
+        <item quantity="one">%d item</item>
+        <item quantity="other">%d items</item>
+    </plurals>
+</resources>

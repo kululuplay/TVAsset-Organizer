@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="collections_favorites_hint">Açmak için OK · kaldırmak için OK tuşuna basılı tutun</string>
+    <string name="collections_continue_hint">Devam etmek için OK · listeden kaldırmak için OK tuşuna basılı tutun</string>
+    <string name="collections_error_title">Koleksiyon yüklenemedi</string>
+    <string name="collections_error_message">Kitaplığınız okunurken bir sorun oluştu. Tekrar deneyin.</string>
+    <string name="collections_remove_favorite_confirm">“%1$s” Favorilerden kaldırılsın mı?</string>
+    <string name="collections_remove_continue_confirm">“%1$s” İzlemeye Devam Et listesinden kaldırılsın mı?</string>
+    <string name="collections_removed_continue">İzlemeye Devam Et listesinden kaldırıldı</string>
+    <string name="collections_progress_percent">%1$d%% izlendi</string>
+    <plurals name="collections_item_count">
+        <item quantity="one">%d içerik</item>
+        <item quantity="other">%d içerik</item>
+    </plurals>
+</resources>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_global_subtitle">Live-TV, Filme und Serien zentral durchsuchen.</string>
+    <string name="search_filters">Inhaltsfilter</string>
+    <string name="search_filter_all">Alle</string>
+    <string name="search_clear">Suche löschen</string>
+    <string name="search_idle_title">Was möchten Sie sehen?</string>
+    <string name="search_idle_message">Geben Sie einen Titel oder Sendernamen ein, um Ihre Mediathek zu durchsuchen.</string>
+    <string name="search_loading">Mediathek wird durchsucht…</string>
+    <string name="search_results_error">Einige Ergebnisse konnten nicht geladen werden.</string>
+    <string name="search_catalog_preparing">Der vollständige Katalog wird vorbereitet…</string>
+</resources>
