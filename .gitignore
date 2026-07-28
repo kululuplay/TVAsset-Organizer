@@ -4,6 +4,11 @@
 *.b64
 keystore.properties
 
+# Local service configuration and credentials.
+.env
+.env.*
+!.env.example
+
 # Node (crash-receiver backend)
 node_modules/
 npm-debug.log*

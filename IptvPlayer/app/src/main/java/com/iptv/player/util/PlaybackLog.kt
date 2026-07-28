@@ -26,6 +26,7 @@ import java.util.concurrent.CopyOnWriteArraySet
 object PlaybackLog {
 
     const val FILE_NAME = "playback.log"
+    private const val SHARE_FILE_NAME = "playback-share.log"
     private const val MAX_BYTES = 256 * 1024L
     private const val LOGCAT_TAG = "PlaybackLog"
 
@@ -49,9 +50,10 @@ object PlaybackLog {
 
     @Synchronized
     fun log(context: Context, tag: String, message: String) {
-        Log.d(LOGCAT_TAG, "[$tag] $message")
+        val safeMessage = SensitiveDataRedactor.redact(message)
+        Log.d(LOGCAT_TAG, "[$tag] $safeMessage")
         val now = Date()
-        val shortLine = "${shortStamp.format(now)} [$tag] $message"
+        val shortLine = "${shortStamp.format(now)} [$tag] $safeMessage"
         synchronized(ring) {
             ring.addLast(shortLine)
             while (ring.size > RING_CAPACITY) ring.removeFirst()
@@ -63,7 +65,7 @@ object PlaybackLog {
             val file = file(context) ?: return
             // Truncate when it grows past the cap so it never fills the disk.
             if (file.length() > MAX_BYTES) file.writeText("")
-            file.appendText("${stamp.format(now)} [$tag] $message\n")
+            file.appendText("${stamp.format(now)} [$tag] $safeMessage\n")
         }
     }
 
@@ -82,5 +84,18 @@ object PlaybackLog {
     fun file(context: Context): File? {
         val dir = context.getExternalFilesDir(null) ?: return null
         return File(dir, FILE_NAME)
+    }
+
+    /**
+     * Create a sanitized snapshot for sharing. This also cleans legacy lines
+     * written before central redaction existed.
+     */
+    fun shareableFile(context: Context): File? {
+        val source = file(context)?.takeIf { it.exists() } ?: return null
+        return runCatching {
+            File(source.parentFile, SHARE_FILE_NAME).apply {
+                writeText(SensitiveDataRedactor.redact(source.readText()))
+            }.takeIf { it.length() > 0L }
+        }.getOrNull()
     }
 }

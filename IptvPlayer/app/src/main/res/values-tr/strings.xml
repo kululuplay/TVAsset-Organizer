@@ -11,8 +11,14 @@
     <string name="action_back">Geri</string>
     <string name="action_continue">Devam et</string>
     <string name="action_close">Kapat</string>
+    <string name="action_refresh">Yenile</string>
     <string name="loading">Yükleniyor…</string>
     <string name="search_hint">Ara…</string>
+    <string name="search_movies_hint">Film ara…</string>
+    <string name="search_series_hint">Dizi ara…</string>
+    <string name="search_channels_hint">Kanal ara…</string>
+    <string name="search_results_title">Arama sonuçları</string>
+    <string name="catalog_loading_progress">Katalog yükleniyor %1$d/%2$d…</string>
 
     <string name="wizard_welcome_title">Hoş geldiniz</string>
     <string name="wizard_welcome_subtitle">Servisinizi birkaç adımda kuralım.</string>
@@ -54,9 +60,12 @@
     <string name="empty_channels">Burada henüz bir şey yok.</string>
     <string name="empty_favorites">Henüz favori eklemediniz.</string>
     <string name="empty_search">Sonuç bulunamadı.</string>
+    <string name="empty_movies">Bu görünümde film bulunamadı.</string>
+    <string name="empty_series">Bu görünümde dizi bulunamadı.</string>
     <string name="added_to_favorites">Favorilere eklendi</string>
     <string name="removed_from_favorites">Favorilerden çıkarıldı</string>
     <string name="channel_count">%1$d kanal</string>
+    <string name="preview_playback_failed">Önizleme oynatılamadı. Tekrar denemek için Tamam\'a basın.</string>
 
     <string name="buffering">Yükleniyor…</string>
     <string name="reconnecting">Yeniden bağlanıyor… (%1$d)</string>
@@ -100,6 +109,8 @@
     <string name="sort_year">Yıla göre</string>
     <string name="detail_plot">Konu</string>
     <string name="detail_similar">Benzer</string>
+    <string name="detail_more_in_category">%1$s kategorisinden daha fazlası</string>
+    <string name="detail_more_to_watch">İzleyebileceğiniz diğer içerikler</string>
     <string name="cat_recently_added">Son Eklenenler</string>
     <string name="cat_for_you">Beğenebilirsin</string>
     <string name="all_movies">Tüm Filmler</string>
@@ -110,10 +121,22 @@
 
     <string name="settings_title">Ayarlar</string>
     <string name="settings_playback">Oynatma</string>
-    <string name="settings_player_mode">Oynatıcı motoru</string>
+    <string name="settings_player_mode">Canlı TV oynatıcı motoru</string>
+    <string name="settings_live_player_header">Canlı TV motoru</string>
+    <string name="settings_player_scope_desc">Otomatik mod Canlı TV\'yi ExoPlayer donanım yoluyla başlatır ve yalnızca gerçek oynatma hatasında kontrollü olarak VLC\'ye geçer. Film, dizi ve Geri Sar; geniş format, ses ve altyazı desteği için VLC kullanır. Aşağıdaki decoder, tampon ve passthrough ayarları ikisine de uygulanır.</string>
+    <string name="settings_playback_tuning_header">Oynatma ayarları</string>
     <string name="settings_player_auto">Otomatik (önerilen)</string>
+    <string name="settings_player_auto_desc">Önce ExoPlayer donanım, gerekirse kontrollü VLC geçişi</string>
     <string name="settings_player_exo">ExoPlayer</string>
+    <string name="settings_player_exo_desc">Yalnızca ExoPlayer; motor sessizce değiştirilmez</string>
     <string name="settings_player_vlc">VLC</string>
+    <string name="settings_player_vlc_desc">Yalnızca VLC; Otomatik decoder VLC içinde yazılıma geçebilir</string>
+    <string name="settings_exo_requires_hardware">ExoPlayer cihazın MediaCodec yolunu kullanır ve VLC yazılım çözümünü zorlayamaz. Decoder “Yalnızca donanım” olarak değiştirilecek.</string>
+    <string name="settings_software_requires_vlc">Yazılım çözümü VLC gerektirir. Oynatıcı motoru VLC olarak değiştirilecek.</string>
+    <string name="settings_decoder_mode">Decoder</string>
+    <string name="settings_decoder_auto">Otomatik (donanım + yazılım yedeği)</string>
+    <string name="settings_decoder_hardware">Yalnızca donanım</string>
+    <string name="settings_decoder_software">Yalnızca yazılım</string>
     <string name="settings_stream_format">Canlı yayın formatı</string>
     <string name="settings_stream_format_ts">MPEG-TS (.ts) — en uyumlu</string>
     <string name="settings_stream_format_hls">HLS (.m3u8) — uyarlanır</string>
@@ -194,6 +217,7 @@
 
     <string name="error_no_internet">İnternet bağlantınızı kontrol edin.</string>
     <string name="error_cannot_connect">Sunucuya bağlanılamadı.</string>
+    <string name="error_cannot_play_content">Bu içerik oynatılamadı. Bağlantıyı kontrol edin veya farklı bir decoder deneyin.</string>
     <string name="error_bad_credentials">Kullanıcı adı veya şifre hatalı.</string>
     <string name="error_subscription_expired">Aboneliğinizin süresi doldu.</string>
     <string name="error_account_in_use">Bu hesap başka bir cihazda kullanımda olabilir.</string>

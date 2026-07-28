@@ -11,8 +11,14 @@
     <string name="action_back">Terug</string>
     <string name="action_continue">Doorgaan</string>
     <string name="action_close">Sluiten</string>
+    <string name="action_refresh">Vernieuwen</string>
     <string name="loading">Laden…</string>
     <string name="search_hint">Zoeken…</string>
+    <string name="search_movies_hint">Films zoeken…</string>
+    <string name="search_series_hint">Series zoeken…</string>
+    <string name="search_channels_hint">Zenders zoeken…</string>
+    <string name="search_results_title">Zoekresultaten</string>
+    <string name="catalog_loading_progress">Catalogus laden %1$d/%2$d…</string>
 
     <string name="wizard_welcome_title">Welkom</string>
     <string name="wizard_welcome_subtitle">Laten we je dienst in een paar stappen instellen.</string>
@@ -51,9 +57,12 @@
     <string name="empty_channels">Hier is nog niets.</string>
     <string name="empty_favorites">Je hebt nog geen favorieten.</string>
     <string name="empty_search">Geen resultaten gevonden.</string>
+    <string name="empty_movies">Geen films gevonden in deze weergave.</string>
+    <string name="empty_series">Geen series gevonden in deze weergave.</string>
     <string name="added_to_favorites">Toegevoegd aan favorieten</string>
     <string name="removed_from_favorites">Verwijderd uit favorieten</string>
     <string name="channel_count">%1$d kanalen</string>
+    <string name="preview_playback_failed">Voorbeeld kon niet worden afgespeeld. Druk op OK om opnieuw te proberen.</string>
 
     <string name="buffering">Laden…</string>
     <string name="reconnecting">Opnieuw verbinden… (%1$d)</string>
@@ -90,15 +99,41 @@
     <string name="detail_year">Jaar</string>
     <string name="detail_rating">Beoordeling</string>
     <string name="detail_plot">Verhaal</string>
+    <string name="detail_more_in_category">Meer uit %1$s</string>
+    <string name="detail_more_to_watch">Meer om te kijken</string>
+    <string name="sort_label">Sorteren</string>
+    <string name="sort_recent">Recent</string>
+    <string name="sort_az">A–Z</string>
+    <string name="sort_rating">Beoordeling</string>
+    <string name="sort_year">Jaar</string>
     <string name="series_season">Seizoen %1$d</string>
     <string name="series_episode">Aflevering %1$d</string>
 
     <string name="settings_title">Instellingen</string>
     <string name="settings_playback">Afspelen</string>
-    <string name="settings_player_mode">Speler-engine</string>
+    <string name="settings_player_mode">Live-tv-speler-engine</string>
+    <string name="settings_live_player_header">Live-tv-engine</string>
+    <string name="settings_player_scope_desc">Automatisch start live-tv met ExoPlayer-hardware en schakelt alleen bij een echte afspeelfout gecontroleerd over naar VLC. Films, series en terugkijken gebruiken VLC voor brede ondersteuning van formaten, audiotracks en ondertitels. Decoder, buffer en passthrough gelden voor beide.</string>
+    <string name="settings_playback_tuning_header">Afspeelinstellingen</string>
     <string name="settings_player_auto">Automatisch (aanbevolen)</string>
+    <string name="settings_player_auto_desc">Eerst ExoPlayer-hardware, daarna gecontroleerde VLC-fallback</string>
     <string name="settings_player_exo">ExoPlayer</string>
+    <string name="settings_player_exo_desc">Alleen ExoPlayer; nooit stil van engine wisselen</string>
     <string name="settings_player_vlc">VLC</string>
+    <string name="settings_player_vlc_desc">Alleen VLC; Auto-decoder mag binnen VLC wisselen</string>
+    <string name="settings_exo_requires_hardware">ExoPlayer gebruikt MediaCodec van het apparaat en kan VLC-softwaredecodering niet afdwingen. Decoder wordt ingesteld op ‘Alleen hardware’.</string>
+    <string name="settings_software_requires_vlc">Softwaredecodering vereist VLC. De speler-engine wordt ingesteld op VLC.</string>
+    <string name="settings_decoder_mode">Decoder</string>
+    <string name="settings_decoder_auto">Automatisch (hardware met software-fallback)</string>
+    <string name="settings_decoder_hardware">Alleen hardware</string>
+    <string name="settings_decoder_software">Alleen software</string>
+    <string name="settings_stream_format">Live-streamformaat</string>
+    <string name="settings_stream_format_ts">MPEG-TS (.ts) — meest compatibel</string>
+    <string name="settings_stream_format_hls">HLS (.m3u8) — adaptief</string>
+    <string name="settings_buffer">Buffergrootte</string>
+    <string name="settings_buffer_low">Laag (snel zappen)</string>
+    <string name="settings_buffer_normal">Normaal (aanbevolen)</string>
+    <string name="settings_buffer_high">Hoog (minder onderbrekingen)</string>
     <string name="settings_language">Taal</string>
     <string name="settings_general">Algemeen</string>
     <string name="settings_account">Account</string>
@@ -122,6 +157,7 @@
     <string name="pin_wrong">Verkeerde pincode.</string>
     <string name="pin_mismatch">Pincodes komen niet overeen.</string>
     <string name="pin_locked_content">Deze inhoud is vergrendeld.</string>
+    <string name="adult_locked_title">Vergrendeld</string>
 
     <string name="diag_title">Diagnostiek</string>
     <string name="diag_run">Tests uitvoeren</string>
@@ -152,6 +188,7 @@
 
     <string name="error_no_internet">Controleer je internetverbinding.</string>
     <string name="error_cannot_connect">Kan geen verbinding maken met de server.</string>
+    <string name="error_cannot_play_content">Deze inhoud kon niet worden afgespeeld. Controleer de verbinding of probeer een andere decoder.</string>
     <string name="error_bad_credentials">Onjuiste gebruikersnaam of wachtwoord.</string>
     <string name="error_subscription_expired">Je abonnement is verlopen.</string>
     <string name="error_account_in_use">Dit account wordt mogelijk op een ander apparaat gebruikt.</string>
@@ -206,6 +243,7 @@
     <string name="settings_pin_changed">Pincode bijgewerkt</string>
     <string name="settings_audio_passthrough">Audio-passthrough (voor AV-receivers)</string>
     <string name="settings_audio_passthrough_warning">Schakel dit alleen in als er een AV-receiver of soundbar met Dolby/DTS-decodering is aangesloten. Op tv\'s en beamers zonder decoder speelt het beeld af, maar is er GEEN geluid. Ontbreekt het geluid, zet deze optie dan uit.</string>
+    <string name="settings_debug_overlay">Debug-overlay (speler en voorbeeld)</string>
 
     <!-- Updatemelding (wordt automatisch bij het opstarten getoond) -->
     <string name="update_available_title">Update beschikbaar</string>

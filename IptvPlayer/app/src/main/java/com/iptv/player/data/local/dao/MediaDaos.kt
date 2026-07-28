@@ -122,7 +122,34 @@ interface VodDao {
           AND (v.categoryId IS NULL OR v.categoryId NOT IN (:hidden))
         ORDER BY v.addedAt DESC, v.name
     """)
-    fun pagingSearch(query: String, hidden: List<String>): PagingSource<Int, VodEntity>
+    fun pagingSearchRecent(query: String, hidden: List<String>): PagingSource<Int, VodEntity>
+
+    @Query("""
+        SELECT v.* FROM vod v
+        JOIN vod_fts ON v.id = vod_fts.id
+        WHERE vod_fts MATCH :query
+          AND (v.categoryId IS NULL OR v.categoryId NOT IN (:hidden))
+        ORDER BY v.name COLLATE NOCASE
+    """)
+    fun pagingSearchByName(query: String, hidden: List<String>): PagingSource<Int, VodEntity>
+
+    @Query("""
+        SELECT v.* FROM vod v
+        JOIN vod_fts ON v.id = vod_fts.id
+        WHERE vod_fts MATCH :query
+          AND (v.categoryId IS NULL OR v.categoryId NOT IN (:hidden))
+        ORDER BY v.rating DESC, v.name
+    """)
+    fun pagingSearchByRating(query: String, hidden: List<String>): PagingSource<Int, VodEntity>
+
+    @Query("""
+        SELECT v.* FROM vod v
+        JOIN vod_fts ON v.id = vod_fts.id
+        WHERE vod_fts MATCH :query
+          AND (v.categoryId IS NULL OR v.categoryId NOT IN (:hidden))
+        ORDER BY v.releaseDate DESC, v.name
+    """)
+    fun pagingSearchByYear(query: String, hidden: List<String>): PagingSource<Int, VodEntity>
 
     /** Movie count per category id, used for the category row badges. */
     @Query("""
@@ -135,9 +162,12 @@ interface VodDao {
     @Query("SELECT * FROM vod WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): VodEntity?
 
-    /** All movie ids in a category, used to detect newly-added movies on refresh. */
-    @Query("SELECT id FROM vod WHERE categoryId = :categoryId")
-    suspend fun idsForCategory(categoryId: String): List<String>
+    /** Cached movies in one category, used to preserve detail metadata on refresh. */
+    @Query("SELECT * FROM vod WHERE categoryId = :categoryId")
+    suspend fun itemsForCategory(categoryId: String): List<VodEntity>
+
+    @Query("DELETE FROM vod WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
 
     /** A handful of other movies in the same category, for the "Similar" rail. */
     @Query("SELECT * FROM vod WHERE categoryId = :categoryId AND id != :excludeId ORDER BY addedAt DESC, name LIMIT :limit")
@@ -167,6 +197,9 @@ interface VodCategoryDao {
 
     @Query("UPDATE vod_categories SET loaded = 1 WHERE id = :id")
     suspend fun markLoaded(id: String)
+
+    @Query("DELETE FROM vod_categories WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
 }
 
 @Dao
@@ -242,7 +275,34 @@ interface SeriesDao {
           AND (s.categoryId IS NULL OR s.categoryId NOT IN (:hidden))
         ORDER BY s.addedAt DESC, s.name
     """)
-    fun pagingSearch(query: String, hidden: List<String>): PagingSource<Int, SeriesEntity>
+    fun pagingSearchRecent(query: String, hidden: List<String>): PagingSource<Int, SeriesEntity>
+
+    @Query("""
+        SELECT s.* FROM series s
+        JOIN series_fts ON s.id = series_fts.id
+        WHERE series_fts MATCH :query
+          AND (s.categoryId IS NULL OR s.categoryId NOT IN (:hidden))
+        ORDER BY s.name COLLATE NOCASE
+    """)
+    fun pagingSearchByName(query: String, hidden: List<String>): PagingSource<Int, SeriesEntity>
+
+    @Query("""
+        SELECT s.* FROM series s
+        JOIN series_fts ON s.id = series_fts.id
+        WHERE series_fts MATCH :query
+          AND (s.categoryId IS NULL OR s.categoryId NOT IN (:hidden))
+        ORDER BY s.rating DESC, s.name
+    """)
+    fun pagingSearchByRating(query: String, hidden: List<String>): PagingSource<Int, SeriesEntity>
+
+    @Query("""
+        SELECT s.* FROM series s
+        JOIN series_fts ON s.id = series_fts.id
+        WHERE series_fts MATCH :query
+          AND (s.categoryId IS NULL OR s.categoryId NOT IN (:hidden))
+        ORDER BY s.releaseDate DESC, s.name
+    """)
+    fun pagingSearchByYear(query: String, hidden: List<String>): PagingSource<Int, SeriesEntity>
 
     /** Series count per category id, used for the category row badges. */
     @Query("""
@@ -258,9 +318,18 @@ interface SeriesDao {
     @Query("SELECT * FROM episodes WHERE seriesId = :seriesId ORDER BY seasonNumber, episodeNumber")
     suspend fun episodesFor(seriesId: String): List<EpisodeEntity>
 
-    /** All series ids in a category, used to detect newly-added series on refresh. */
-    @Query("SELECT id FROM series WHERE categoryId = :categoryId")
-    suspend fun idsForCategory(categoryId: String): List<String>
+    /** Cached series in one category, used to preserve detail metadata on refresh. */
+    @Query("SELECT * FROM series WHERE categoryId = :categoryId")
+    suspend fun itemsForCategory(categoryId: String): List<SeriesEntity>
+
+    @Query("DELETE FROM series WHERE id IN (:ids)")
+    suspend fun deleteSeriesByIds(ids: List<String>)
+
+    @Query("DELETE FROM episodes WHERE seriesId IN (:seriesIds)")
+    suspend fun deleteEpisodesForSeriesIds(seriesIds: List<String>)
+
+    @Query("DELETE FROM episodes WHERE seriesId = :seriesId")
+    suspend fun deleteEpisodesForSeries(seriesId: String)
 
     /** A handful of other series in the same category, for the "Similar" rail. */
     @Query("SELECT * FROM series WHERE categoryId = :categoryId AND id != :excludeId ORDER BY addedAt DESC, name LIMIT :limit")
@@ -382,6 +451,9 @@ interface SeriesCategoryDao {
 
     @Query("UPDATE series_categories SET loaded = 1 WHERE id = :id")
     suspend fun markLoaded(id: String)
+
+    @Query("DELETE FROM series_categories WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
 }
 
 // ---- Full-text search maintenance DAOs ----------------------------------

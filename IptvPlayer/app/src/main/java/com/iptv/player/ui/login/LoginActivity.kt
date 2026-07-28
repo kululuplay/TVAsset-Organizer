@@ -50,12 +50,10 @@ class LoginActivity : BaseActivity() {
     }
 
     private fun onConnect() {
-        // Fixed Xtream server: users only supply credentials. Must stay http://
-        // (not https) — the provider serves on plain HTTP over port 8080.
         viewModel.loginXtream(
             serverUrl = FIXED_SERVER_URL,
             username = binding.inputUsername.text.toString(),
-            password = binding.inputPassword.text.toString()
+            password = binding.inputPassword.text.toString(),
         )
     }
 

@@ -37,6 +37,9 @@ class SettingsViewModel : ViewModel() {
 
     fun setDecoderMode(mode: DecoderMode) = viewModelScope.launch { settings.setDecoderMode(mode) }
 
+    fun setPlaybackSelection(player: PlayerMode, decoder: DecoderMode) =
+        viewModelScope.launch { settings.setPlaybackSelection(player, decoder) }
+
     fun setStreamFormat(format: StreamFormat) =
         viewModelScope.launch { settings.setStreamFormat(format) }
 

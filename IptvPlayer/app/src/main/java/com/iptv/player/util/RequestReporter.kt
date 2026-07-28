@@ -30,6 +30,7 @@ object RequestReporter {
      */
     suspend fun send(context: Context, type: String, message: String): Boolean =
         withContext(Dispatchers.IO) {
+            if (!Telemetry.isEnabled) return@withContext false
             runCatching {
                 val app = context.applicationContext
                 val payload = JSONObject().apply {
@@ -68,6 +69,7 @@ object RequestReporter {
      */
     suspend fun fetchMine(context: Context): List<MyRequest> =
         withContext(Dispatchers.IO) {
+            if (!Telemetry.isEnabled) return@withContext emptyList()
             runCatching {
                 val app = context.applicationContext
                 val deviceId = java.net.URLEncoder.encode(DeviceId.get(app), "UTF-8")
@@ -107,6 +109,7 @@ object RequestReporter {
     suspend fun ack(context: Context, ids: List<Long>): Boolean =
         withContext(Dispatchers.IO) {
             if (ids.isEmpty()) return@withContext true
+            if (!Telemetry.isEnabled) return@withContext false
             runCatching {
                 val app = context.applicationContext
                 val payload = JSONObject().apply {

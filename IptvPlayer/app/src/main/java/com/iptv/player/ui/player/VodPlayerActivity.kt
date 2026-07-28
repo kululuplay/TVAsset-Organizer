@@ -1,7 +1,7 @@
 /*
  * VodPlayerActivity.kt
  * On-demand player for movies and series episodes. Built on libVLC so that, like
- * live TV, VOD always plays through VLC (the app's default engine) for the widest
+ * live TV, VOD deliberately plays through VLC for the widest
  * codec/container support (DTS/AC3/EAC3, AVI, MKV, …). Provides:
  *   - play/pause, a seekbar with current/total time
  *   - +10s / -10s skipping
@@ -28,6 +28,7 @@ import com.iptv.player.R
 import com.iptv.player.cast.CastController
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.AspectRatio
+import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.Episode
 import com.iptv.player.data.model.ResumeKind
@@ -40,6 +41,8 @@ import com.iptv.player.player.VlcOps
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NowPlaying
+import com.iptv.player.util.PlaybackLog
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -68,9 +71,6 @@ class VodPlayerActivity : BaseActivity() {
         const val EXTRA_AUTO_RESUME = "extra_auto_resume"
         private const val SKIP_MS = 10_000L
         private const val SAVE_INTERVAL_MS = 10_000L
-        // Buffer (ms) for smooth start-up and seeking on jittery connections.
-        private const val CACHING_MS = 3000
-
         // UHD/4K threshold (QHD 1440p+). Software decode can't keep up with 4K at
         // 80–100 Mbps, so above this we rebuild on the hardware decoder.
         private const val UHD_MIN_HEIGHT = 1440
@@ -82,6 +82,10 @@ class VodPlayerActivity : BaseActivity() {
         private const val TRACK_HINT_DEBOUNCE_MS = 1200L
         // Auto-hide the on-screen controls after this much inactivity.
         private const val CONTROLS_TIMEOUT_MS = 5000L
+        // A decoder path is considered recovered only after continuous playback.
+        private const val STABLE_PLAYBACK_MS = 10_000L
+        private const val VOD_RETRY_DELAY_MS = 1_000L
+        private const val TRACK_DISABLED = "__off__"
     }
 
     private lateinit var binding: ActivityVodPlayerBinding
@@ -101,11 +105,28 @@ class VodPlayerActivity : BaseActivity() {
     private var aspect: AspectRatio = AspectRatio.ORIGINAL
     private var userSeeking = false
 
-    // Mirrors live TV: when the global Decoder setting is SOFTWARE we disable
-    // MediaCodec and decode everything in software (matches PlayerController).
+    private var decoderMode = DecoderMode.AUTO
+    private var bufferMode = BufferMode.NORMAL
+    private var allowPassthrough = false
+
+    // Mirrors live TV: when Decoder is SOFTWARE, MediaCodec is disabled.
     private var forceSoftware = false
     // Set once we rebuild on hardware for a UHD/4K stream, so it happens at most once.
     private var uhdEscalated = false
+
+    // VOD error recovery: retry the current decode path once, then (AUTO decoder
+    // only) rebuild once on VLC software before showing the terminal Retry UI.
+    private var playbackErrorAttempts = 0
+    private var softwareFallbackAttempted = false
+    private var resumeAfterBackground = false
+    private var pauseAfterBackgroundRestore = false
+    private var backgroundResumePosition = 0L
+    @Volatile private var foreground = false
+    private val playbackOpsSeq = AtomicLong(0L)
+    private val stablePlaybackRunnable = Runnable {
+        playbackErrorAttempts = 0
+        softwareFallbackAttempted = false
+    }
 
     // Label for the live-device "now playing" panel (Film / Dizi / Geri Sar).
     private var nowKind = "Film"
@@ -117,6 +138,9 @@ class VodPlayerActivity : BaseActivity() {
     // Show the multi-language / subtitle hint at most once per playback session.
     private var trackHintShown = false
     private val trackHintRunnable = Runnable { showTrackHintIfAvailable() }
+    private var preferredAudioTrack: String? = null
+    private var preferredSubtitleTrack: String? = null
+    private val preferredTrackRunnable = Runnable { applyPreferredTracks() }
 
     // Controls (top/transport/bottom bars) auto-hide after a few seconds idle and
     // reappear on any key press or touch. Bars start visible (see the layout).
@@ -218,10 +242,22 @@ class VodPlayerActivity : BaseActivity() {
             width = track.width,
             height = track.height,
             fps = fps,
-            codec = (track.codec as? String),
+            codec = vodCodecLabel(track.codec),
             bitrateKbps = track.bitrate.takeIf { it > 0 }?.let { it / 1000 },
             engine = "VLC"
         )
+    }
+
+    private fun vodCodecLabel(codec: Any?): String? = when (codec) {
+        is String -> codec.trim().takeIf { it.isNotBlank() }
+        is Int -> {
+            if (codec == 0) null
+            else String(CharArray(4) { i -> ((codec shr (i * 8)) and 0xFF).toChar() })
+                .trim()
+                .takeIf { it.isNotBlank() }
+                ?.uppercase()
+        }
+        else -> null
     }
 
     override fun onUserInteraction() {
@@ -247,6 +283,13 @@ class VodPlayerActivity : BaseActivity() {
 
     private fun setupControls() {
         binding.backButton.setOnClickListener { finish() }
+        binding.retryButton.setOnClickListener {
+            binding.errorOverlay.visibility = View.GONE
+            binding.bufferingIndicator.visibility = View.VISIBLE
+            playbackErrorAttempts = 0
+            softwareFallbackAttempted = false
+            preparePlayback((mediaPlayer?.time ?: pendingSeekMs).coerceAtLeast(0L))
+        }
         binding.playPauseButton.setOnClickListener { togglePlayPause() }
         binding.skipForwardButton.setOnClickListener { seekBy(SKIP_MS) }
         binding.skipBackButton.setOnClickListener { seekBy(-SKIP_MS) }
@@ -308,11 +351,17 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     private fun initPlayer() {
-        // Read the global Decoder + aspect settings BEFORE building libVLC so VOD
-        // honours the same Decoder choice as live TV (PlayerController). With the
-        // default Decoder = SOFTWARE this decodes movies/series in software too.
+        // Read every shared playback setting BEFORE building libVLC. Player Engine
+        // itself is a Live-TV routing choice; on-demand content intentionally keeps
+        // VLC for broad MKV/AVI/DTS/subtitle support, while decoder, buffer, audio
+        // passthrough and aspect apply consistently to both paths.
         lifecycleScope.launch {
-            forceSoftware = settings.getDecoderMode() == DecoderMode.SOFTWARE
+            decoderMode = settings.getDecoderMode()
+            bufferMode = settings.getBufferMode()
+            allowPassthrough = settings.getAudioPassthrough()
+            preferredAudioTrack = settings.getPreferredAudioTrack()
+            preferredSubtitleTrack = settings.getPreferredSubtitleTrack()
+            forceSoftware = decoderMode == DecoderMode.SOFTWARE
             aspect = settings.aspectRatio.first()
             buildPlayer()
             val saved = resumeId?.let { repo.getResume(it) } ?: 0L
@@ -330,9 +379,10 @@ class VodPlayerActivity : BaseActivity() {
         // movies/series play as smoothly as channels. clock-jitter/synchro off stops
         // VLC stalling to "catch up" on irregular timestamps; skiploopfilter + fast
         // cut decode load on weak boxes; HW unless the Decoder setting forces SW.
+        val cachingMs = bufferMode.networkCachingMs
         val options = arrayListOf(
-            "--network-caching=$CACHING_MS",
-            "--file-caching=$CACHING_MS",
+            "--network-caching=$cachingMs",
+            "--file-caching=$cachingMs",
             // Irregular PCR/timestamps make VLC stall to resync; disabling the
             // jitter/synchro guards is the main fix for stutter.
             "--clock-jitter=0",
@@ -352,18 +402,16 @@ class VodPlayerActivity : BaseActivity() {
             // only skips disposable non-reference frames. Mirrors VlcPlayerEngine.
             "--avcodec-skiploopfilter=nonref",
             "--avcodec-fast",
-            // Decode audio to PCM (no SPDIF/passthrough) so AC-3/E-AC-3/DTS are
-            // always audible on plain HDMI sinks, and force a STEREO downmix so the
-            // output is 2.0. Some boxes (e.g. Amlogic) can't open a 6-channel PCM
-            // AudioTrack for 5.1 content ("too low audio sample frequency (0)" /
-            // "module not functional") and play picture with no sound; downmixing
-            // 5.1 -> 2.0 fixes it and leaves stereo content unchanged. Mirrors
-            // VlcPlayerEngine.
-            "--no-spdif",
-            "--stereo-mode=1",
             "--http-reconnect",
             "--http-user-agent=${AppInfo.USER_AGENT}"
         )
+        // Match the global passthrough setting. Default OFF decodes Dolby/DTS to
+        // stereo PCM; explicit opt-in leaves the encoded bitstream available to an
+        // AV receiver/soundbar.
+        if (!allowPassthrough) {
+            options.add("--no-spdif")
+            options.add("--stereo-mode=1")
+        }
         // Software-path deinterlace only: opaque HW buffers can't be filtered and
         // the Amlogic HW decoder deinterlaces natively; software decode emits raw
         // frames that bob CAN deinterlace.
@@ -398,6 +446,7 @@ class VodPlayerActivity : BaseActivity() {
                     // anything else with this (about-to-be-released) player.
                     if (maybeEscalateForUhd()) return@setEventListener
                     binding.bufferingIndicator.visibility = View.GONE
+                    binding.errorOverlay.visibility = View.GONE
                     binding.playPauseButton.setImageResource(R.drawable.ic_pause)
                     binding.playPauseButton.contentDescription = getString(R.string.player_pause)
                     // Restart the idle timer once real playback begins.
@@ -407,6 +456,11 @@ class VodPlayerActivity : BaseActivity() {
                         mp.setTime(pendingSeekMs)
                         pendingSeekMs = 0L
                     }
+                    val restoreAsPaused = pauseAfterBackgroundRestore
+                    if (restoreAsPaused) {
+                        pauseAfterBackgroundRestore = false
+                        mp.pause()
+                    }
                     applyAspect()
                     updateDuration()
                     // VLC parses audio/subtitle tracks shortly after playback
@@ -414,6 +468,14 @@ class VodPlayerActivity : BaseActivity() {
                     if (!trackHintShown) {
                         handler.removeCallbacks(trackHintRunnable)
                         handler.postDelayed(trackHintRunnable, TRACK_HINT_DEBOUNCE_MS)
+                    }
+                    handler.removeCallbacks(preferredTrackRunnable)
+                    handler.postDelayed(preferredTrackRunnable, TRACK_HINT_DEBOUNCE_MS)
+                    // A single frame is not enough to forgive a decode loop. Only
+                    // sustained playback resets the retry/fallback counters.
+                    handler.removeCallbacks(stablePlaybackRunnable)
+                    if (!restoreAsPaused) {
+                        handler.postDelayed(stablePlaybackRunnable, STABLE_PLAYBACK_MS)
                     }
                 }
                 MediaPlayer.Event.ESAdded -> {
@@ -423,6 +485,8 @@ class VodPlayerActivity : BaseActivity() {
                         handler.removeCallbacks(trackHintRunnable)
                         handler.postDelayed(trackHintRunnable, TRACK_HINT_DEBOUNCE_MS)
                     }
+                    handler.removeCallbacks(preferredTrackRunnable)
+                    handler.postDelayed(preferredTrackRunnable, TRACK_HINT_DEBOUNCE_MS)
                 }
                 MediaPlayer.Event.Paused -> {
                     binding.playPauseButton.setImageResource(R.drawable.ic_play)
@@ -439,7 +503,7 @@ class VodPlayerActivity : BaseActivity() {
                     onPlaybackFinished()
                 }
                 MediaPlayer.Event.EncounteredError -> {
-                    binding.bufferingIndicator.visibility = View.GONE
+                    handler.post { handlePlaybackError() }
                 }
                 MediaPlayer.Event.LengthChanged -> updateDuration()
             }
@@ -460,23 +524,36 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     private fun preparePlayback(positionMs: Long) {
+        // initPlayer may finish during onCreate, before onStart marks the screen
+        // foreground. Defer opening the subscription socket until STARTED; the
+        // same path also safely absorbs a delayed retry that fires while away.
+        if (!foreground) {
+            backgroundResumePosition = positionMs
+            resumeAfterBackground = true
+            return
+        }
         val vlc = libVlc ?: return
         val mp = mediaPlayer ?: return
         val url = streamUrl ?: return
         pendingSeekMs = positionMs
+        binding.errorOverlay.visibility = View.GONE
+        binding.bufferingIndicator.visibility = View.VISIBLE
+        val cachingMs = bufferMode.networkCachingMs
         val media = Media(vlc, android.net.Uri.parse(url)).apply {
             // Hardware decoding unless the global Decoder setting forces software
             // (mirrors VlcPlayerEngine on the live TV path).
             setHWDecoderEnabled(!forceSoftware, !forceSoftware)
-            addOption(":network-caching=$CACHING_MS")
-            addOption(":file-caching=$CACHING_MS")
+            addOption(":network-caching=$cachingMs")
+            addOption(":file-caching=$cachingMs")
             addOption(":clock-jitter=0")
             addOption(":clock-synchro=0")
             if (forceSoftware) addOption(":avcodec-hw=none")
-            addOption(":no-spdif")
-            // Force a 5.1 -> 2.0 stereo downmix (mirrors the instance option) so
-            // boxes that can't open a 6-channel PCM AudioTrack still get sound.
-            addOption(":stereo-mode=1")
+            if (!allowPassthrough) {
+                addOption(":no-spdif")
+                // Force a 5.1 -> 2.0 stereo downmix so boxes that cannot open a
+                // multichannel PCM AudioTrack still get sound.
+                addOption(":stereo-mode=1")
+            }
             if (forceSoftware) {
                 addOption(":deinterlace=1")
                 addOption(":deinterlace-mode=bob")
@@ -488,12 +565,74 @@ class VodPlayerActivity : BaseActivity() {
         // teardown (the live player released when this screen opened, or the UHD
         // escalation's old player) has fully closed its connection first
         // (single-connection contract), and the main thread never waits on it.
+        val operation = playbackOpsSeq.incrementAndGet()
         VlcOps.post {
-            mp.media = media
-            media.release()
-            mp.play()
+            try {
+                if (playbackOpsSeq.get() != operation || !foreground) return@post
+                mp.stop()
+                if (playbackOpsSeq.get() != operation || !foreground) return@post
+                mp.media = media
+                mp.play()
+            } catch (_: Throwable) {
+                // VlcOps also protects its worker thread, but this local catch is
+                // needed to leave the spinner and enter the normal retry/fallback
+                // ladder when a native stop/setMedia/play call itself throws.
+                runOnUiThread {
+                    if (
+                        playbackOpsSeq.get() == operation &&
+                        foreground &&
+                        !isFinishing &&
+                        !isDestroyed
+                    ) {
+                        handlePlaybackError()
+                    }
+                }
+            } finally {
+                media.release()
+            }
         }
         startTimers()
+    }
+
+    /**
+     * Recover an on-demand failure without leaving the viewer on a black screen.
+     * One same-path retry handles a transient CDN/network drop. If the decoder is
+     * AUTO and VLC hardware still fails, one software rebuild handles a genuine
+     * codec/MediaCodec problem. Explicit Hardware/Software choices are respected.
+     */
+    private fun handlePlaybackError() {
+        if (!foreground || isFinishing || isDestroyed) return
+        handler.removeCallbacks(stablePlaybackRunnable)
+        binding.bufferingIndicator.visibility = View.GONE
+        val resumeAt = (mediaPlayer?.time ?: pendingSeekMs).coerceAtLeast(0L)
+        PlaybackLog.log(
+            this,
+            "VOD",
+            "playback error attempt=$playbackErrorAttempts " +
+                "decoder=$decoderMode software=$forceSoftware",
+        )
+
+        when {
+            playbackErrorAttempts == 0 -> {
+                playbackErrorAttempts++
+                binding.bufferingIndicator.visibility = View.VISIBLE
+                handler.postDelayed(
+                    { if (!isFinishing && !isDestroyed) preparePlayback(resumeAt) },
+                    VOD_RETRY_DELAY_MS,
+                )
+            }
+            decoderMode == DecoderMode.AUTO &&
+                !forceSoftware &&
+                !softwareFallbackAttempted -> {
+                softwareFallbackAttempted = true
+                rebuildPlayer(resumeAt = resumeAt, useSoftware = true)
+            }
+            else -> {
+                binding.errorMessage.setText(R.string.error_cannot_play_content)
+                binding.errorOverlay.visibility = View.VISIBLE
+                binding.retryButton.requestFocus()
+            }
+        }
     }
 
     /**
@@ -504,7 +643,9 @@ class VodPlayerActivity : BaseActivity() {
      * software→hardware UHD escalation on the live TV path.
      */
     private fun maybeEscalateForUhd(): Boolean {
-        if (uhdEscalated || !forceSoftware) return false
+        // Explicit "Software only" must remain software. AUTO may recover UHD by
+        // moving back to hardware, where 4K decoding is realistically possible.
+        if (decoderMode != DecoderMode.AUTO || uhdEscalated || !forceSoftware) return false
         val track = mediaPlayer?.currentVideoTrack ?: return false
         if (track.height < UHD_MIN_HEIGHT && track.width < UHD_MIN_WIDTH) return false
         uhdEscalated = true
@@ -515,11 +656,18 @@ class VodPlayerActivity : BaseActivity() {
 
     /** Tears down the software player and rebuilds it on hardware, resuming at [resumeAt]. */
     private fun escalateToHardware(resumeAt: Long) {
-        // ANR fix (mirrors the live path): MediaPlayer.stop()/release() block on a
-        // stalled network, so the native teardown runs on the shared VLC ops
-        // thread. View/listener work stays on main; the rebuild is chained AFTER
-        // the release on the same FIFO thread so the old connection is fully
-        // closed before the new player opens one (single-connection contract).
+        rebuildPlayer(resumeAt = resumeAt, useSoftware = false)
+    }
+
+    /**
+     * Rebuild libVLC sequentially on the shared native-ops thread. This is used by
+     * decoder fallback/escalation and preserves the one-subscription-connection
+     * contract: old stop/release completes before the new Media starts.
+     */
+    private fun rebuildPlayer(resumeAt: Long, useSoftware: Boolean) {
+        handler.removeCallbacks(stablePlaybackRunnable)
+        binding.errorOverlay.visibility = View.GONE
+        binding.bufferingIndicator.visibility = View.VISIBLE
         val mp = mediaPlayer
         val vlc = libVlc
         mp?.setEventListener(null)
@@ -528,13 +676,22 @@ class VodPlayerActivity : BaseActivity() {
         libVlc = null
         videoLayout?.let { binding.videoContainer.removeView(it) }
         videoLayout = null
-        forceSoftware = false
+        forceSoftware = useSoftware
+        val operation = playbackOpsSeq.incrementAndGet()
         VlcOps.post {
-            mp?.stop()
-            mp?.release()
-            vlc?.release()
+            // Native teardown must be best-effort per call. A provider/socket can
+            // make stop() throw; release still has to run and the replacement UI
+            // must still be scheduled or the viewer is stranded on a spinner.
+            runCatching { mp?.stop() }
+            runCatching { mp?.release() }
+            runCatching { vlc?.release() }
             runOnUiThread {
-                if (isDestroyed || isFinishing) return@runOnUiThread
+                if (
+                    isDestroyed ||
+                    isFinishing ||
+                    !foreground ||
+                    playbackOpsSeq.get() != operation
+                ) return@runOnUiThread
                 buildPlayer()
                 preparePlayback(resumeAt)
             }
@@ -601,6 +758,9 @@ class VodPlayerActivity : BaseActivity() {
         trackHintShown = false
         autoResume = false
         uhdEscalated = false
+        playbackErrorAttempts = 0
+        softwareFallbackAttempted = false
+        forceSoftware = decoderMode == DecoderMode.SOFTWARE
         preparePlayback(0L)
         showControls()
     }
@@ -710,7 +870,40 @@ class VodPlayerActivity : BaseActivity() {
         }
         PlayerDialogs.showOptions(this, getString(titleRes), options) { which ->
             val id = ids[which]
-            if (isAudio) mp.setAudioTrack(id) else mp.setSpuTrack(id)
+            val token = if (!isAudio && id == -1) TRACK_DISABLED else labels[which]
+            if (isAudio) {
+                mp.setAudioTrack(id)
+                preferredAudioTrack = token
+                lifecycleScope.launch { settings.setPreferredAudioTrack(token) }
+            } else {
+                mp.setSpuTrack(id)
+                preferredSubtitleTrack = token
+                lifecycleScope.launch { settings.setPreferredSubtitleTrack(token) }
+            }
+        }
+    }
+
+    /**
+     * Re-apply the viewer's last language/subtitle choice when a matching VLC
+     * track exists. Tokens are human-readable track names because numeric VLC ids
+     * are stream-local and change between files.
+     */
+    private fun applyPreferredTracks() {
+        val mp = mediaPlayer ?: return
+        preferredAudioTrack
+            ?.takeIf { it.isNotBlank() && it != TRACK_DISABLED }
+            ?.let { token ->
+                mp.audioTracks
+                    ?.firstOrNull { it.id != -1 && it.name.equals(token, ignoreCase = true) }
+                    ?.let { if (mp.audioTrack != it.id) mp.setAudioTrack(it.id) }
+            }
+
+        when (val token = preferredSubtitleTrack) {
+            null, "" -> Unit
+            TRACK_DISABLED -> if (mp.spuTrack != -1) mp.setSpuTrack(-1)
+            else -> mp.spuTracks
+                ?.firstOrNull { it.id != -1 && it.name.equals(token, ignoreCase = true) }
+                ?.let { if (mp.spuTrack != it.id) mp.setSpuTrack(it.id) }
         }
     }
 
@@ -819,6 +1012,12 @@ class VodPlayerActivity : BaseActivity() {
 
     override fun onStart() {
         super.onStart()
+        foreground = true
+        if (resumeAfterBackground) {
+            resumeAfterBackground = false
+            if (mediaPlayer == null) buildPlayer()
+            preparePlayback(backgroundResumePosition)
+        }
         binding.titleText.text?.toString()?.takeIf { it.isNotBlank() }?.let {
             NowPlaying.set(this, it, nowKind)
         }
@@ -829,7 +1028,18 @@ class VodPlayerActivity : BaseActivity() {
         persistResume()
         handler.removeCallbacks(progressRunnable)
         handler.removeCallbacks(saveRunnable)
-        mediaPlayer?.pause()
+        handler.removeCallbacks(stablePlaybackRunnable)
+        foreground = false
+        val mp = mediaPlayer
+        backgroundResumePosition = (mp?.time ?: pendingSeekMs).coerceAtLeast(0L)
+        val wasPlaying = mp?.isPlaying == true ||
+            binding.bufferingIndicator.visibility == View.VISIBLE
+        resumeAfterBackground = mp != null
+        pauseAfterBackgroundRestore = mp != null && !wasPlaying
+        // Close the subscription connection in the background. Incrementing the
+        // sequence also cancels a queued prepare that has not opened yet.
+        playbackOpsSeq.incrementAndGet()
+        if (mp != null) VlcOps.post { runCatching { mp.stop() } }
         NowPlaying.clear(this)
     }
 
@@ -839,6 +1049,8 @@ class VodPlayerActivity : BaseActivity() {
         sleepTimer.release()
         castController.detach()
         handler.removeCallbacksAndMessages(null)
+        foreground = false
+        playbackOpsSeq.incrementAndGet()
         // ANR fix: stop()/release() block on a stalled network — backing out of a
         // stuck VOD must not freeze the UI. Events + views are cut on main, the
         // blocking native teardown runs on the shared VLC ops thread.
@@ -851,9 +1063,9 @@ class VodPlayerActivity : BaseActivity() {
         videoLayout = null
         if (mp != null || vlc != null) {
             VlcOps.post {
-                mp?.stop()
-                mp?.release()
-                vlc?.release()
+                runCatching { mp?.stop() }
+                runCatching { mp?.release() }
+                runCatching { vlc?.release() }
             }
         }
     }

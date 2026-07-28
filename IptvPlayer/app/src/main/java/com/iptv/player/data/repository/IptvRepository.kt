@@ -13,6 +13,7 @@ import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.map
 import androidx.room.withTransaction
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.iptv.player.data.local.AppDatabase
 import com.iptv.player.data.local.entity.ChannelEntity
 import com.iptv.player.data.local.entity.ChannelFtsEntity
@@ -60,6 +61,7 @@ import com.iptv.player.data.prefs.SettingsStore
 import com.iptv.player.data.remote.TmdbApi
 import com.iptv.player.data.remote.XtreamApi
 import com.iptv.player.data.remote.XtreamUrlBuilder
+import com.iptv.player.security.SecureValueCodec
 import com.iptv.player.util.AppError
 import com.iptv.player.util.Logger
 import com.iptv.player.util.Outcome
@@ -82,7 +84,8 @@ class IptvRepository(
     private val db: AppDatabase,
     private val httpClient: OkHttpClient,
     private val retrofitBuilder: Retrofit.Builder,
-    private val settings: SettingsStore
+    private val settings: SettingsStore,
+    private val secureValues: SecureValueCodec,
 ) {
 
     private val channelDao = db.channelDao()
@@ -98,6 +101,56 @@ class IptvRepository(
     private val resumeDao = db.resumeDao()
     private val watchedDao = db.watchedDao()
     private val epgMappingDao = db.epgMappingDao()
+
+    /**
+     * Encrypt sensitive values written by versions before secure field storage.
+     * The Room schema is unchanged; only column payloads gain a versioned AES-GCM
+     * envelope. The transaction makes an interrupted migration retryable.
+     */
+    suspend fun migrateSensitiveStorage() = withContext(Dispatchers.IO) {
+        if (settings.isSecureStorageMigrated()) return@withContext
+        settings.migrateSensitiveValues()
+        var migrated = 0
+        db.withTransaction {
+            val sql = db.openHelper.writableDatabase
+            migrated += migrateEncryptedColumn(sql, "channels", "id", "streamUrl")
+            migrated += migrateEncryptedColumn(sql, "vod", "id", "streamUrl")
+            migrated += migrateEncryptedColumn(sql, "episodes", "id", "streamUrl")
+            migrated += migrateEncryptedColumn(sql, "resume", "contentId", "streamUrl")
+            migrated += migrateEncryptedColumn(sql, "profiles", "id", "serverUrl")
+            migrated += migrateEncryptedColumn(sql, "profiles", "id", "username")
+            migrated += migrateEncryptedColumn(sql, "profiles", "id", "password")
+            migrated += migrateEncryptedColumn(sql, "profiles", "id", "m3uUrl")
+        }
+        settings.markSecureStorageMigrated()
+        Logger.i("SecureStorage", "encrypted $migrated legacy database values")
+    }
+
+    private fun migrateEncryptedColumn(
+        db: SupportSQLiteDatabase,
+        table: String,
+        idColumn: String,
+        valueColumn: String,
+    ): Int {
+        val pending = mutableListOf<Pair<String, String>>()
+        db.query(
+            "SELECT `$idColumn`, `$valueColumn` FROM `$table` " +
+                "WHERE `$valueColumn` IS NOT NULL AND `$valueColumn` != ''",
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val id = cursor.getString(0)
+                val value = cursor.getString(1)
+                if (!secureValues.isEncrypted(value)) pending += id to value
+            }
+        }
+        pending.forEach { (id, value) ->
+            db.execSQL(
+                "UPDATE `$table` SET `$valueColumn` = ? WHERE `$idColumn` = ?",
+                arrayOf(secureValues.encrypt(value), id),
+            )
+        }
+        return pending.size
+    }
     private val vodFtsDao = db.vodFtsDao()
     private val seriesFtsDao = db.seriesFtsDao()
     private val channelFtsDao = db.channelFtsDao()
@@ -167,13 +220,23 @@ class IptvRepository(
     fun observeRecent(limit: Int = 20): Flow<List<Channel>> =
         recentDao.observeRecentChannels(limit).map { list -> list.map { it.toModel() } }
 
-    fun search(query: String, type: ContentType): Flow<List<Channel>> {
+    fun search(
+        query: String,
+        type: ContentType,
+        hiddenCategories: List<String> = emptyList(),
+        radio: Int = -1,
+    ): Flow<List<Channel>> {
         val match = toFtsQuery(query)
         if (match.isBlank()) return flowOf(emptyList())
-        return channelDao.searchFts(match, type.name).map { list -> list.map { it.toModel() } }
+        return channelDao.searchFts(match, type.name, hiddenCategories, radio)
+            .map { list -> list.map { it.toModel() } }
     }
 
     suspend fun getChannel(id: String): Channel? = channelDao.getById(id)?.toModel()
+
+    suspend fun liveChannelCount(): Int = withContext(Dispatchers.IO) {
+        channelDao.countByType(ContentType.LIVE.name)
+    }
 
     /** Live channels that advertise a catch-up / timeshift archive. */
     fun observeCatchupChannels(): Flow<List<Channel>> =
@@ -488,10 +551,21 @@ class IptvRepository(
         }.flow.map { data -> data.map { it.toModel() } }
 
     /** Instant FTS search, paged. Empty input yields an empty page (no MATCH). */
-    fun pagingVodSearch(query: String, hidden: List<String> = emptyList()): Flow<PagingData<VodItem>> {
+    fun pagingVodSearch(
+        query: String,
+        hidden: List<String> = emptyList(),
+        sort: ContentSort = ContentSort.RECENT,
+    ): Flow<PagingData<VodItem>> {
         val match = toFtsQuery(query)
         if (match.isBlank()) return flowOf(PagingData.empty())
-        return Pager(pagingConfig) { vodDao.pagingSearch(match, hidden) }
+        return Pager(pagingConfig) {
+            when (sort) {
+                ContentSort.RECENT -> vodDao.pagingSearchRecent(match, hidden)
+                ContentSort.NAME -> vodDao.pagingSearchByName(match, hidden)
+                ContentSort.RATING -> vodDao.pagingSearchByRating(match, hidden)
+                ContentSort.YEAR -> vodDao.pagingSearchByYear(match, hidden)
+            }
+        }
             .flow.map { data -> data.map { it.toModel() } }
     }
     /**
@@ -514,8 +588,25 @@ class IptvRepository(
                     position = index,
                     loaded = id in alreadyLoaded
                 )
+            }.distinctBy { it.id }
+            val incomingIds = categories.mapTo(mutableSetOf()) { it.id }
+            val staleCategoryIds = vodCategoryDao.getAll()
+                .map { it.id }
+                .filterNot { it in incomingIds }
+            db.withTransaction {
+                if (staleCategoryIds.isNotEmpty()) {
+                    val staleMovieIds = mutableListOf<String>()
+                    for (id in staleCategoryIds) {
+                        staleMovieIds += vodDao.itemsForCategory(id).map { it.id }
+                    }
+                    if (staleMovieIds.isNotEmpty()) {
+                        vodDao.deleteByIds(staleMovieIds)
+                        vodFtsDao.deleteByIds(staleMovieIds)
+                    }
+                    vodCategoryDao.deleteByIds(staleCategoryIds)
+                }
+                if (categories.isNotEmpty()) vodCategoryDao.upsertAll(categories)
             }
-            vodCategoryDao.upsertAll(categories)
             Outcome.Success(categories.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
@@ -527,6 +618,20 @@ class IptvRepository(
     suspend fun isVodCategoryLoaded(categoryId: String): Boolean = withContext(Dispatchers.IO) {
         vodCategoryDao.getById(categoryId)?.loaded == true
     }
+
+    /** Visible movie categories that still need a first catalog download. */
+    suspend fun unloadedVodCategoryIds(hidden: Set<String>): List<String> =
+        withContext(Dispatchers.IO) {
+            vodCategoryDao.getAll()
+                .filter { !it.loaded && it.id !in hidden }
+                .map { it.id }
+        }
+
+    /** Every visible movie category, used by an explicit user refresh. */
+    suspend fun vodCategoryIds(hidden: Set<String>): List<String> =
+        withContext(Dispatchers.IO) {
+            vodCategoryDao.getAll().filter { it.id !in hidden }.map { it.id }
+        }
 
     /**
      * Lazily downloads a single movie category's movies and *merges* them into the
@@ -546,23 +651,45 @@ class IptvRepository(
             val api = buildXtreamApi(config.serverUrl)
             val catName = category?.name ?: "Uncategorized"
             val catPosition = category?.position ?: Int.MAX_VALUE
+            val existing = vodDao.itemsForCategory(categoryId).associateBy { it.id }
             val items = api.getVodStreams(config.username, config.password, categoryId)
-                .mapNotNull { s ->
-                    val id = s.streamId ?: return@mapNotNull null
+                .mapIndexedNotNull { position, s ->
+                    val id = s.streamId ?: return@mapIndexedNotNull null
+                    // Some Xtream panels ignore category_id and return the whole
+                    // catalog. Never let those rows leak into the selected category.
+                    if (s.categoryId != null && s.categoryId != categoryId) {
+                        return@mapIndexedNotNull null
+                    }
+                    val previous = existing[id]
                     VodEntity(
                         id = id,
                         name = s.name ?: "Unknown",
-                        streamUrl = XtreamUrlBuilder.movieUrl(
-                            config.serverUrl, config.username, config.password, id,
-                            s.containerExtension ?: "mp4"
+                        streamUrl = secureValues.encrypt(
+                            XtreamUrlBuilder.movieUrl(
+                                config.serverUrl, config.username, config.password, id,
+                                s.containerExtension ?: "mp4",
+                            ),
                         ),
-                        posterUrl = s.streamIcon?.takeIf { it.isNotBlank() },
-                        categoryId = s.categoryId ?: categoryId,
+                        posterUrl = s.streamIcon?.takeIf { it.isNotBlank() }
+                            ?: previous?.posterUrl,
+                        backdropUrl = previous?.backdropUrl,
+                        categoryId = categoryId,
                         categoryName = catName,
-                        rating = s.rating?.toDoubleOrNull(),
-                        plot = null, cast = null, director = null, genre = null,
-                        releaseDate = null, durationSecs = null, trailerUrl = null, tmdbId = null,
-                        addedAt = s.added?.trim()?.toLongOrNull() ?: 0L,
+                        rating = s.rating?.toDoubleOrNull() ?: previous?.rating,
+                        plot = previous?.plot,
+                        cast = previous?.cast,
+                        director = previous?.director,
+                        genre = previous?.genre,
+                        releaseDate = s.releaseDate?.takeIf { it.isNotBlank() }
+                            ?: s.year?.takeIf { it.isNotBlank() }
+                            ?: previous?.releaseDate,
+                        durationSecs = previous?.durationSecs,
+                        trailerUrl = previous?.trailerUrl,
+                        tmdbId = previous?.tmdbId,
+                        addedAt = s.added?.trim()?.toLongOrNull()
+                            ?: previous?.addedAt
+                            ?: 0L,
+                        position = position,
                         categoryPosition = catPosition
                     )
                 }
@@ -571,17 +698,25 @@ class IptvRepository(
             // load has no prior rows, so everything would look "new". Guard on
             // categoryId so a backend that ignores category filtering and returns the
             // whole catalog can't inflate this category's count.
-            val existingIds = vodDao.idsForCategory(categoryId).toSet()
-            val newCount = items.count { it.categoryId == categoryId && it.id !in existingIds }
+            val existingIds = existing.keys
+            val incomingIds = items.mapTo(mutableSetOf()) { it.id }
+            val staleIds = existingIds.filterNot { it in incomingIds }
+            val newCount = items.count { it.id !in existingIds }
             // Merge (REPLACE on id) — never clear, so other categories remain
             // cached. Keep the FTS index in lockstep (drop this batch's old rows
             // then re-insert), all atomically so search never sees a half index.
             db.withTransaction {
-                vodDao.upsertAll(items)
-                vodFtsDao.deleteByIds(items.map { it.id })
-                vodFtsDao.insertAll(items.map { VodFtsEntity(it.id, it.name) })
+                if (staleIds.isNotEmpty()) {
+                    vodDao.deleteByIds(staleIds)
+                    vodFtsDao.deleteByIds(staleIds)
+                }
+                if (items.isNotEmpty()) {
+                    vodDao.upsertAll(items)
+                    vodFtsDao.deleteByIds(items.map { it.id })
+                    vodFtsDao.insertAll(items.map { VodFtsEntity(it.id, it.name) })
+                }
+                vodCategoryDao.markLoaded(categoryId)
             }
-            vodCategoryDao.markLoaded(categoryId)
             // On a forced launch sweep, return the genuine new-count so the caller can
             // aggregate across categories and notify once; non-forced loads keep the
             // legacy item-count contract.
@@ -627,29 +762,54 @@ class IptvRepository(
 
     /** Loads full VOD detail on demand, enriching with TMDB when a key is set. */
     suspend fun getVodDetail(config: SourceConfig, id: String): VodItem? = withContext(Dispatchers.IO) {
-        val cached = vodDao.getById(id)?.toModel() ?: return@withContext null
-        if (config.type != SourceType.XTREAM) return@withContext enrichWithTmdb(cached, isMovie = true)
+        val cachedEntity = vodDao.getById(id) ?: return@withContext null
+        val cached = cachedEntity.toModel()
         val merged = try {
-            val api = buildXtreamApi(config.serverUrl)
-            val info = api.getVodInfo(config.username, config.password, id).info
-            cached.copy(
-                plot = info?.plot ?: cached.plot,
-                cast = info?.cast,
-                director = info?.director,
-                genre = info?.genre,
-                releaseDate = info?.releaseDate,
-                durationSecs = info?.durationSecs,
-                rating = info?.rating?.toDoubleOrNull() ?: cached.rating,
-                trailerUrl = youtube(info?.youtubeTrailer),
-                posterUrl = info?.movieImage?.takeIf { it.isNotBlank() } ?: cached.posterUrl,
-                tmdbId = info?.tmdbId
-            )
+            if (config.type == SourceType.XTREAM) {
+                val api = buildXtreamApi(config.serverUrl)
+                val info = api.getVodInfo(config.username, config.password, id).info
+                cached.copy(
+                    plot = info?.plot ?: cached.plot,
+                    cast = info?.cast ?: cached.cast,
+                    director = info?.director ?: cached.director,
+                    genre = info?.genre ?: cached.genre,
+                    releaseDate = info?.releaseDate ?: cached.releaseDate,
+                    durationSecs = info?.durationSecs ?: cached.durationSecs,
+                    rating = info?.rating?.toDoubleOrNull() ?: cached.rating,
+                    trailerUrl = youtube(info?.youtubeTrailer) ?: cached.trailerUrl,
+                    posterUrl = info?.movieImage?.takeIf { it.isNotBlank() } ?: cached.posterUrl,
+                    tmdbId = info?.tmdbId ?: cached.tmdbId
+                )
+            } else {
+                cached
+            }
         } catch (ce: CancellationException) {
             throw ce
         } catch (t: Throwable) {
             cached
         }
-        enrichWithTmdb(merged, isMovie = true)
+        val enriched = enrichWithTmdb(merged, isMovie = true)
+        // Detail metadata must survive leaving this screen. Keeping it in Room
+        // also makes year/rating sorts improve as titles are enriched.
+        vodDao.upsertAll(
+            listOf(
+                cachedEntity.copy(
+                    name = enriched.name,
+                    posterUrl = enriched.posterUrl,
+                    backdropUrl = enriched.backdropUrl,
+                    rating = enriched.rating,
+                    plot = enriched.plot,
+                    cast = enriched.cast,
+                    director = enriched.director,
+                    genre = enriched.genre,
+                    releaseDate = enriched.releaseDate,
+                    durationSecs = enriched.durationSecs,
+                    trailerUrl = enriched.trailerUrl,
+                    tmdbId = enriched.tmdbId,
+                ),
+            ),
+        )
+        enriched
     }
 
     /**
@@ -735,10 +895,21 @@ class IptvRepository(
         }.flow.map { data -> data.map { it.toModel() } }
 
     /** Instant FTS search, paged. Empty input yields an empty page (no MATCH). */
-    fun pagingSeriesSearch(query: String, hidden: List<String> = emptyList()): Flow<PagingData<Series>> {
+    fun pagingSeriesSearch(
+        query: String,
+        hidden: List<String> = emptyList(),
+        sort: ContentSort = ContentSort.RECENT,
+    ): Flow<PagingData<Series>> {
         val match = toFtsQuery(query)
         if (match.isBlank()) return flowOf(PagingData.empty())
-        return Pager(pagingConfig) { seriesDao.pagingSearch(match, hidden) }
+        return Pager(pagingConfig) {
+            when (sort) {
+                ContentSort.RECENT -> seriesDao.pagingSearchRecent(match, hidden)
+                ContentSort.NAME -> seriesDao.pagingSearchByName(match, hidden)
+                ContentSort.RATING -> seriesDao.pagingSearchByRating(match, hidden)
+                ContentSort.YEAR -> seriesDao.pagingSearchByYear(match, hidden)
+            }
+        }
             .flow.map { data -> data.map { it.toModel() } }
     }
 
@@ -762,8 +933,26 @@ class IptvRepository(
                     position = index,
                     loaded = id in alreadyLoaded
                 )
+            }.distinctBy { it.id }
+            val incomingIds = categories.mapTo(mutableSetOf()) { it.id }
+            val staleCategoryIds = seriesCategoryDao.getAll()
+                .map { it.id }
+                .filterNot { it in incomingIds }
+            db.withTransaction {
+                if (staleCategoryIds.isNotEmpty()) {
+                    val staleSeriesIds = mutableListOf<String>()
+                    for (id in staleCategoryIds) {
+                        staleSeriesIds += seriesDao.itemsForCategory(id).map { it.id }
+                    }
+                    if (staleSeriesIds.isNotEmpty()) {
+                        seriesDao.deleteEpisodesForSeriesIds(staleSeriesIds)
+                        seriesDao.deleteSeriesByIds(staleSeriesIds)
+                        seriesFtsDao.deleteByIds(staleSeriesIds)
+                    }
+                    seriesCategoryDao.deleteByIds(staleCategoryIds)
+                }
+                if (categories.isNotEmpty()) seriesCategoryDao.upsertAll(categories)
             }
-            seriesCategoryDao.upsertAll(categories)
             Outcome.Success(categories.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
@@ -775,6 +964,20 @@ class IptvRepository(
     suspend fun isSeriesCategoryLoaded(categoryId: String): Boolean = withContext(Dispatchers.IO) {
         seriesCategoryDao.getById(categoryId)?.loaded == true
     }
+
+    /** Visible series categories that still need a first catalog download. */
+    suspend fun unloadedSeriesCategoryIds(hidden: Set<String>): List<String> =
+        withContext(Dispatchers.IO) {
+            seriesCategoryDao.getAll()
+                .filter { !it.loaded && it.id !in hidden }
+                .map { it.id }
+        }
+
+    /** Every visible series category, used by an explicit user refresh. */
+    suspend fun seriesCategoryIds(hidden: Set<String>): List<String> =
+        withContext(Dispatchers.IO) {
+            seriesCategoryDao.getAll().filter { it.id !in hidden }.map { it.id }
+        }
 
     /**
      * Lazily downloads a single series category's series and *merges* them into
@@ -794,33 +997,60 @@ class IptvRepository(
             val api = buildXtreamApi(config.serverUrl)
             val catName = category?.name ?: "Uncategorized"
             val catPosition = category?.position ?: Int.MAX_VALUE
-            val items = api.getSeries(config.username, config.password, categoryId).mapNotNull { s ->
-                val id = s.seriesId ?: return@mapNotNull null
-                SeriesEntity(
-                    id = id,
-                    name = s.name ?: "Unknown",
-                    posterUrl = s.cover?.takeIf { it.isNotBlank() },
-                    categoryId = s.categoryId ?: categoryId,
-                    categoryName = catName,
-                    rating = s.rating?.toDoubleOrNull(),
-                    plot = s.plot, cast = s.cast, director = s.director, genre = s.genre,
-                    releaseDate = s.releaseDate, trailerUrl = youtube(s.youtubeTrailer), tmdbId = null,
-                    addedAt = s.lastModified?.trim()?.toLongOrNull() ?: 0L,
-                    categoryPosition = catPosition
-                )
-            }
+            val existing = seriesDao.itemsForCategory(categoryId).associateBy { it.id }
+            val items = api.getSeries(config.username, config.password, categoryId)
+                .mapIndexedNotNull { position, s ->
+                    val id = s.seriesId ?: return@mapIndexedNotNull null
+                    // Some panels ignore the category filter. Accept only rows
+                    // belonging to the requested category when an id is supplied.
+                    if (s.categoryId != null && s.categoryId != categoryId) {
+                        return@mapIndexedNotNull null
+                    }
+                    val previous = existing[id]
+                    SeriesEntity(
+                        id = id,
+                        name = s.name ?: "Unknown",
+                        posterUrl = s.cover?.takeIf { it.isNotBlank() }
+                            ?: previous?.posterUrl,
+                        backdropUrl = previous?.backdropUrl,
+                        categoryId = categoryId,
+                        categoryName = catName,
+                        rating = s.rating?.toDoubleOrNull() ?: previous?.rating,
+                        plot = s.plot ?: previous?.plot,
+                        cast = s.cast ?: previous?.cast,
+                        director = s.director ?: previous?.director,
+                        genre = s.genre ?: previous?.genre,
+                        releaseDate = s.releaseDate ?: previous?.releaseDate,
+                        trailerUrl = youtube(s.youtubeTrailer) ?: previous?.trailerUrl,
+                        tmdbId = previous?.tmdbId,
+                        addedAt = s.lastModified?.trim()?.toLongOrNull()
+                            ?: previous?.addedAt
+                            ?: 0L,
+                        position = position,
+                        categoryPosition = catPosition
+                    )
+                }
             // How many of these are genuinely new to the cache. Only meaningful on a
             // forced re-check of an already-loaded category (the launch sweep). Guard on
             // categoryId so a backend that ignores category filtering can't inflate it.
-            val existingIds = seriesDao.idsForCategory(categoryId).toSet()
-            val newCount = items.count { it.categoryId == categoryId && it.id !in existingIds }
+            val existingIds = existing.keys
+            val incomingIds = items.mapTo(mutableSetOf()) { it.id }
+            val staleIds = existingIds.filterNot { it in incomingIds }
+            val newCount = items.count { it.id !in existingIds }
             // Merge (REPLACE on id), keeping the FTS index in lockstep, atomically.
             db.withTransaction {
-                seriesDao.upsertSeries(items)
-                seriesFtsDao.deleteByIds(items.map { it.id })
-                seriesFtsDao.insertAll(items.map { SeriesFtsEntity(it.id, it.name) })
+                if (staleIds.isNotEmpty()) {
+                    seriesDao.deleteEpisodesForSeriesIds(staleIds)
+                    seriesDao.deleteSeriesByIds(staleIds)
+                    seriesFtsDao.deleteByIds(staleIds)
+                }
+                if (items.isNotEmpty()) {
+                    seriesDao.upsertSeries(items)
+                    seriesFtsDao.deleteByIds(items.map { it.id })
+                    seriesFtsDao.insertAll(items.map { SeriesFtsEntity(it.id, it.name) })
+                }
+                seriesCategoryDao.markLoaded(categoryId)
             }
-            seriesCategoryDao.markLoaded(categoryId)
             Outcome.Success(if (force) newCount else items.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
@@ -866,6 +1096,24 @@ class IptvRepository(
         try {
             val api = buildXtreamApi(config.serverUrl)
             val info = api.getSeriesInfo(config.username, config.password, seriesId)
+            val cachedEntity = seriesDao.getById(seriesId)
+            val detail = info.info
+            val enrichedSeries = cachedEntity?.toModel()?.let { cached ->
+                enrichWithTmdb(
+                    cached.copy(
+                        plot = detail?.plot ?: cached.plot,
+                        cast = detail?.cast ?: cached.cast,
+                        director = detail?.director ?: cached.director,
+                        genre = detail?.genre ?: cached.genre,
+                        releaseDate = detail?.releaseDate ?: cached.releaseDate,
+                        rating = detail?.rating?.toDoubleOrNull() ?: cached.rating,
+                        posterUrl = detail?.cover?.takeIf { it.isNotBlank() }
+                            ?: cached.posterUrl,
+                        trailerUrl = youtube(detail?.youtubeTrailer) ?: cached.trailerUrl,
+                        tmdbId = detail?.tmdbId ?: cached.tmdbId,
+                    ),
+                )
+            }
             val episodeEntities = mutableListOf<EpisodeEntity>()
             val seasons = (info.episodes ?: emptyMap()).map { (seasonKey, eps) ->
                 val seasonNum = seasonKey.toIntOrNull() ?: 0
@@ -877,9 +1125,11 @@ class IptvRepository(
                         seasonNumber = e.season ?: seasonNum,
                         episodeNumber = e.episodeNum ?: 0,
                         title = e.title ?: "Episode ${e.episodeNum ?: 0}",
-                        streamUrl = XtreamUrlBuilder.seriesEpisodeUrl(
-                            config.serverUrl, config.username, config.password, eid,
-                            e.containerExtension ?: "mp4"
+                        streamUrl = secureValues.encrypt(
+                            XtreamUrlBuilder.seriesEpisodeUrl(
+                                config.serverUrl, config.username, config.password, eid,
+                                e.containerExtension ?: "mp4",
+                            ),
                         ),
                         plot = e.info?.plot,
                         durationSecs = e.info?.durationSecs,
@@ -890,7 +1140,31 @@ class IptvRepository(
                 }.sortedBy { it.episodeNumber }
                 Season(seriesId, seasonNum, episodes)
             }.sortedBy { it.seasonNumber }
-            if (episodeEntities.isNotEmpty()) seriesDao.upsertEpisodes(episodeEntities)
+            db.withTransaction {
+                if (cachedEntity != null && enrichedSeries != null) {
+                    seriesDao.upsertSeries(
+                        listOf(
+                            cachedEntity.copy(
+                                name = enrichedSeries.name,
+                                posterUrl = enrichedSeries.posterUrl,
+                                backdropUrl = enrichedSeries.backdropUrl,
+                                rating = enrichedSeries.rating,
+                                plot = enrichedSeries.plot,
+                                cast = enrichedSeries.cast,
+                                director = enrichedSeries.director,
+                                genre = enrichedSeries.genre,
+                                releaseDate = enrichedSeries.releaseDate,
+                                trailerUrl = enrichedSeries.trailerUrl,
+                                tmdbId = enrichedSeries.tmdbId,
+                            ),
+                        ),
+                    )
+                }
+                // A successful response is authoritative: remove episodes deleted
+                // by the provider instead of leaving stale playable rows behind.
+                seriesDao.deleteEpisodesForSeries(seriesId)
+                if (episodeEntities.isNotEmpty()) seriesDao.upsertEpisodes(episodeEntities)
+            }
             seasons
         } catch (ce: CancellationException) {
             throw ce
@@ -1163,10 +1437,10 @@ class IptvRepository(
                 ProfileEntity(
                     name = name,
                     sourceType = config.type.name,
-                    serverUrl = config.serverUrl,
-                    username = config.username,
-                    password = config.password,
-                    m3uUrl = config.m3uUrl,
+                    serverUrl = secureValues.encrypt(config.serverUrl),
+                    username = secureValues.encrypt(config.username),
+                    password = secureValues.encrypt(config.password),
+                    m3uUrl = secureValues.encrypt(config.m3uUrl),
                     lockAdult = lockAdult,
                     createdAt = System.currentTimeMillis()
                 )
@@ -1198,9 +1472,10 @@ class IptvRepository(
 
     private fun ProfileEntity.matches(config: SourceConfig): Boolean =
         sourceType == config.type.name &&
-            serverUrl == config.serverUrl &&
-            username == config.username &&
-            m3uUrl == config.m3uUrl
+            secureValues.decrypt(serverUrl) == config.serverUrl &&
+            secureValues.decrypt(username) == config.username &&
+            secureValues.decrypt(password) == config.password &&
+            secureValues.decrypt(m3uUrl) == config.m3uUrl
 
     /** A friendly default profile name: the Xtream username, else the source host. */
     private fun defaultProfileName(config: SourceConfig): String = when (config.type) {
@@ -1241,7 +1516,7 @@ class IptvRepository(
                         type = meta.kind.raw,
                         title = meta.title,
                         posterUrl = meta.posterUrl,
-                        streamUrl = meta.streamUrl,
+                        streamUrl = secureValues.encrypt(meta.streamUrl),
                         vodId = meta.vodId,
                         seriesId = meta.seriesId,
                         seasonNumber = meta.seasonNumber,
@@ -1280,7 +1555,7 @@ class IptvRepository(
         kind = ResumeKind.fromRaw(type),
         title = title,
         posterUrl = posterUrl,
-        streamUrl = streamUrl,
+        streamUrl = secureValues.decrypt(streamUrl),
         positionMs = positionMs,
         durationMs = durationMs,
         vodId = vodId,
@@ -1363,15 +1638,43 @@ class IptvRepository(
 
     private suspend fun enrichWithTmdb(item: VodItem, isMovie: Boolean): VodItem {
         val key = settings.getTmdbKey()
-        if (key.isBlank() || !item.posterUrl.isNullOrBlank()) return item
+        if (key.isBlank()) return item
         return runCatching {
             val api = retrofitBuilder.baseUrl(TmdbApi.BASE_URL).build().create(TmdbApi::class.java)
-            val result = (if (isMovie) api.searchMovie(key, item.name)
+            val result = item.tmdbId?.takeIf { it.isNotBlank() }?.let { tmdbId ->
+                if (isMovie) api.movieDetail(tmdbId, key) else api.tvDetail(tmdbId, key)
+            } ?: (if (isMovie) api.searchMovie(key, item.name)
             else api.searchTv(key, item.name)).results?.firstOrNull() ?: return item
             item.copy(
                 posterUrl = TmdbApi.posterUrl(result.posterPath) ?: item.posterUrl,
-                plot = item.plot ?: result.overview,
-                rating = item.rating ?: result.voteAverage
+                backdropUrl = TmdbApi.backdropUrl(result.backdropPath) ?: item.backdropUrl,
+                plot = item.plot?.takeIf { it.isNotBlank() } ?: result.overview,
+                rating = item.rating ?: result.voteAverage,
+                releaseDate = item.releaseDate?.takeIf { it.isNotBlank() }
+                    ?: result.releaseDate
+                    ?: result.firstAirDate,
+                tmdbId = item.tmdbId ?: result.id?.toString(),
+            )
+        }.getOrDefault(item)
+    }
+
+    private suspend fun enrichWithTmdb(item: Series): Series {
+        val key = settings.getTmdbKey()
+        if (key.isBlank()) return item
+        return runCatching {
+            val api = retrofitBuilder.baseUrl(TmdbApi.BASE_URL).build().create(TmdbApi::class.java)
+            val result = item.tmdbId?.takeIf { it.isNotBlank() }?.let { tmdbId ->
+                api.tvDetail(tmdbId, key)
+            } ?: api.searchTv(key, item.name).results?.firstOrNull() ?: return item
+            item.copy(
+                posterUrl = TmdbApi.posterUrl(result.posterPath) ?: item.posterUrl,
+                backdropUrl = TmdbApi.backdropUrl(result.backdropPath) ?: item.backdropUrl,
+                plot = item.plot?.takeIf { it.isNotBlank() } ?: result.overview,
+                rating = item.rating ?: result.voteAverage,
+                releaseDate = item.releaseDate?.takeIf { it.isNotBlank() }
+                    ?: result.firstAirDate
+                    ?: result.releaseDate,
+                tmdbId = item.tmdbId ?: result.id?.toString(),
             )
         }.getOrDefault(item)
     }
@@ -1420,7 +1723,7 @@ class IptvRepository(
     // ---- Mapping helpers ------------------------------------------------
 
     private fun ChannelEntity.toModel(isFav: Boolean = false) = Channel(
-        id = id, name = name, streamUrl = streamUrl, logoUrl = logoUrl,
+        id = id, name = name, streamUrl = secureValues.decrypt(streamUrl), logoUrl = logoUrl,
         categoryId = categoryId, categoryName = categoryName,
         epgChannelId = epgChannelId, number = number,
         type = ContentType.valueOf(type), isFavorite = isFav, catchupDays = catchupDays,
@@ -1428,7 +1731,7 @@ class IptvRepository(
     )
 
     private fun Channel.toEntity() = ChannelEntity(
-        id = id, name = name, streamUrl = streamUrl, logoUrl = logoUrl,
+        id = id, name = name, streamUrl = secureValues.encrypt(streamUrl), logoUrl = logoUrl,
         categoryId = categoryId, categoryName = categoryName,
         epgChannelId = epgChannelId, number = number, type = type.name,
         catchupDays = catchupDays, position = position, categoryPosition = categoryPosition,
@@ -1447,7 +1750,8 @@ class IptvRepository(
     }
 
     private fun VodEntity.toModel() = VodItem(
-        id = id, name = name, streamUrl = streamUrl, posterUrl = posterUrl,
+        id = id, name = name, streamUrl = secureValues.decrypt(streamUrl), posterUrl = posterUrl,
+        backdropUrl = backdropUrl,
         categoryId = categoryId, categoryName = categoryName, rating = rating,
         plot = plot, cast = cast, director = director, genre = genre,
         releaseDate = releaseDate, durationSecs = durationSecs,
@@ -1455,7 +1759,7 @@ class IptvRepository(
     )
 
     private fun SeriesEntity.toModel() = Series(
-        id = id, name = name, posterUrl = posterUrl, categoryId = categoryId,
+        id = id, name = name, posterUrl = posterUrl, backdropUrl = backdropUrl, categoryId = categoryId,
         categoryName = categoryName, rating = rating, plot = plot, cast = cast,
         director = director, genre = genre, releaseDate = releaseDate,
         trailerUrl = trailerUrl, tmdbId = tmdbId
@@ -1463,7 +1767,8 @@ class IptvRepository(
 
     private fun EpisodeEntity.toModel() = Episode(
         id = id, seriesId = seriesId, seasonNumber = seasonNumber,
-        episodeNumber = episodeNumber, title = title, streamUrl = streamUrl,
+        episodeNumber = episodeNumber, title = title,
+        streamUrl = secureValues.decrypt(streamUrl),
         plot = plot, durationSecs = durationSecs, posterUrl = posterUrl
     )
 
@@ -1477,7 +1782,10 @@ class IptvRepository(
         name = name,
         config = SourceConfig(
             type = runCatching { SourceType.valueOf(sourceType) }.getOrDefault(SourceType.XTREAM),
-            serverUrl = serverUrl, username = username, password = password, m3uUrl = m3uUrl
+            serverUrl = secureValues.decrypt(serverUrl),
+            username = secureValues.decrypt(username),
+            password = secureValues.decrypt(password),
+            m3uUrl = secureValues.decrypt(m3uUrl),
         ),
         lockAdult = lockAdult
     )

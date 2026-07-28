@@ -20,7 +20,8 @@ import com.iptv.player.ui.common.LogoPlaceholder
 
 class CatchupChannelAdapter(
     private val onFocused: (Channel) -> Unit,
-    private val onClicked: (Channel) -> Unit
+    private val onClicked: (Channel) -> Unit,
+    private val lockedProvider: (Channel) -> Boolean = { false },
 ) : ListAdapter<Channel, CatchupChannelAdapter.VH>(DIFF) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -31,6 +32,9 @@ class CatchupChannelAdapter(
 
     override fun onBindViewHolder(holder: VH, position: Int) = holder.bind(getItem(position))
 
+    /** Rebind visible rows after a successful session PIN unlock. */
+    fun refreshVisible() = notifyItemRangeChanged(0, itemCount)
+
     inner class VH(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val logo: ImageView = itemView.findViewById(R.id.channelLogo)
         private val name: TextView = itemView.findViewById(R.id.channelName)
@@ -39,15 +43,27 @@ class CatchupChannelAdapter(
         private val favStar: ImageView = itemView.findViewById(R.id.favStar)
 
         fun bind(channel: Channel) {
-            name.text = channel.name
-            number.text = channel.number?.toString() ?: ""
+            val locked = lockedProvider(channel)
+            val displayName = if (locked) {
+                itemView.context.getString(R.string.adult_locked_title)
+            } else {
+                channel.name
+            }
+            name.text = displayName
+            number.text = if (locked) "" else channel.number?.toString() ?: ""
             favStar.visibility = View.GONE
             program.visibility = View.VISIBLE
-            program.text = itemView.context.getString(R.string.catchup_days, channel.catchupDays)
+            program.text = if (locked) {
+                itemView.context.getString(R.string.pin_locked_content)
+            } else {
+                itemView.context.getString(R.string.catchup_days, channel.catchupDays)
+            }
 
-            val placeholder = LogoPlaceholder.forName(itemView.context, channel.name)
-            if (channel.logoUrl.isNullOrBlank()) {
-                logo.setImageDrawable(placeholder)
+            val placeholder = LogoPlaceholder.forName(itemView.context, displayName)
+            if (locked || channel.logoUrl.isNullOrBlank()) {
+                // Coil replacement cancels a request belonging to a recycled,
+                // previously-unlocked row so late artwork cannot leak through.
+                logo.load(placeholder)
             } else {
                 logo.load(channel.logoUrl) {
                     crossfade(false); placeholder(placeholder); error(placeholder); size(120, 120)

@@ -93,7 +93,7 @@ class SeriesAdapter(
                 ratingRow.visibility = View.GONE
                 progressBar.visibility = View.GONE
                 poster.scaleType = ImageView.ScaleType.FIT_CENTER
-                poster.setImageResource(R.drawable.ic_lock)
+                poster.load(R.drawable.ic_lock) { crossfade(false) }
                 return
             }
             poster.scaleType = ImageView.ScaleType.CENTER_CROP
@@ -122,7 +122,7 @@ class SeriesAdapter(
 
             val placeholder = LogoPlaceholder.forName(itemView.context, item.name)
             if (item.posterUrl.isNullOrBlank()) {
-                poster.setImageDrawable(placeholder)
+                poster.load(placeholder) { crossfade(false) }
             } else {
                 poster.load(item.posterUrl) {
                     crossfade(false)

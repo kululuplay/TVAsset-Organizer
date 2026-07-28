@@ -44,6 +44,7 @@ object HeartbeatReporter {
 
     /** Begin (or keep) the heartbeat loop. Safe to call repeatedly. */
     fun start(context: Context) {
+        if (!Telemetry.isEnabled) return
         if (loopJob?.isActive == true) return
         val app = context.applicationContext
         loopJob = ServiceLocator.appScope.launch {

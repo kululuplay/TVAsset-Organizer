@@ -58,21 +58,23 @@ const geoInFlight = new Set();
 // row targeting its device, its account, or a global broadcast.
 let activeAnnouncements = []; // [{ id, message, target_device_id, target_username }]
 
-// Shared key the app stamps on every report. NOT a real secret (it ships inside
-// the APK and is extractable) — it only deters casual spam. Rotate by setting
-// CRASH_INGEST_KEY on the server AND in the app's Telemetry helper if abused.
-const INGEST_KEY =
-  process.env.CRASH_INGEST_KEY || "kululu-crash-ingest-v1-7f3ab9c2";
+const requiredSecret = (name) => {
+  const value = String(process.env[name] || "").trim();
+  if (!value) {
+    throw new Error(`[crash-receiver] Required secret ${name} is not configured.`);
+  }
+  return value;
+};
 
-// Panel login. ADMIN_PASSWORD must be set as a secret before publishing.
+// The app key is extractable from a distributed APK, so it is an abuse-control
+// credential rather than user authentication. It still must be injected and
+// rotated; a committed fallback would make every deployment share one known key.
+const INGEST_KEY = requiredSecret("CRASH_INGEST_KEY");
+
+// Panel login has no development fallback: starting with a known password is
+// worse than failing fast with an actionable configuration error.
 const ADMIN_USER = process.env.ADMIN_USER || "admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "kululu-dev";
-if (!process.env.ADMIN_PASSWORD) {
-  console.warn(
-    "[crash-receiver] ADMIN_PASSWORD is not set — using a weak dev password. " +
-      "Set the ADMIN_PASSWORD secret before publishing.",
-  );
-}
+const ADMIN_PASSWORD = requiredSecret("ADMIN_PASSWORD");
 // Pre-hash the expected credential to a fixed 32-byte digest so the auth compare
 // is constant-time (timingSafeEqual needs equal-length buffers).
 const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest();
@@ -340,6 +342,30 @@ function clip(v, max = 500) {
   return s.length > max ? s.slice(0, max) : s;
 }
 
+// Defense in depth: older clients and hand-crafted requests may not apply the
+// Android-side redactor. Never persist/forward Xtream credentials from crash text.
+function redactSensitive(v) {
+  if (v == null) return v;
+  return String(v)
+    .replace(
+      /(\/(?:live|movie|series)\/)[^/\s?#]+\/[^/\s?#]+\//gi,
+      "$1<redacted>/<redacted>/",
+    )
+    .replace(
+      /([?&](?:username|user|password|pass|token|access_token|refresh_token|api_key|apikey|key)=)[^&#\s]+/gi,
+      "$1<redacted>",
+    )
+    .replace(/(https?:\/\/)[^/@\s]+:[^/@\s]+@/gi, "$1<redacted>@")
+    .replace(
+      /^((?:authorization|proxy-authorization|x-kululu-key|cookie|set-cookie)\s*:\s*).+$/gim,
+      "$1<redacted>",
+    )
+    .replace(
+      /("(?:username|user|password|pass|token|access_token|refresh_token|api_key|apikey|key)"\s*:\s*")[^"]*(")/gi,
+      "$1<redacted>$2",
+    );
+}
+
 function toInt(v) {
   const n = parseInt(v, 10);
   return Number.isFinite(n) ? n : null;
@@ -426,6 +452,8 @@ app.post("/api/crash", async (req, res) => {
     return res.status(401).json({ error: "unauthorized" });
   }
   const b = req.body || {};
+  const safeMessage = clip(redactSensitive(b.message), 2000);
+  const safeLog = clip(redactSensitive(b.log), 200000);
   try {
     await pool.query(
       `INSERT INTO crash_reports
@@ -441,13 +469,13 @@ app.post("/api/crash", async (req, res) => {
         clip(b.device),
         clip(b.androidVersion),
         toInt(b.apiLevel),
-        clip(b.message, 2000),
-        clip(b.log, 200000),
+        safeMessage,
+        safeLog,
         clientIp(req),
         clip(b.deviceId, 128),
       ],
     );
-    forwardTelegram(b).catch(() => {});
+    forwardTelegram({ ...b, message: safeMessage }).catch(() => {});
     return res.status(204).end();
   } catch (e) {
     console.error("insert failed", e);

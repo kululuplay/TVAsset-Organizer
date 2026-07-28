@@ -26,12 +26,14 @@ import com.iptv.player.databinding.ActivitySeriesDetailBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.CastAdapter
 import com.iptv.player.ui.common.LogoPlaceholder
+import com.iptv.player.ui.common.PinLockHelper
 import com.iptv.player.ui.common.RatingStars
 import com.iptv.player.ui.common.SimilarAdapter
 import com.iptv.player.ui.common.SimilarCard
 import com.iptv.player.ui.player.VodPlayerActivity
 import com.iptv.player.ui.trailer.TrailerActivity
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class SeriesDetailActivity : BaseActivity() {
@@ -79,10 +81,14 @@ class SeriesDetailActivity : BaseActivity() {
         binding.trailerButton.setOnClickListener { openTrailer() }
         binding.favoriteButton.setOnClickListener { toggleFavorite(id) }
 
-        loadHeader(id)
-        loadFavorite(id)
-        loadSeasons(id)
-        loadResumeState(id)
+        lifecycleScope.launch {
+            similarAdapter.adultLocked =
+                settings.lockAdult.first() && settings.hasPin()
+            loadHeader(id)
+            loadFavorite(id)
+            loadSeasons(id)
+            loadResumeState(id)
+        }
 
         // Open at the top with Play focused; otherwise the ScrollView can auto-scroll
         // to whichever rail grabs focus first as the lists populate.
@@ -260,10 +266,20 @@ class SeriesDetailActivity : BaseActivity() {
                 emptyList()
             }
             val cards = similar.map {
-                SimilarCard(it.id, it.name, it.posterUrl, it.rating, it.releaseDate)
+                SimilarCard(
+                    it.id,
+                    it.name,
+                    it.posterUrl,
+                    it.rating,
+                    it.releaseDate,
+                    it.categoryName,
+                )
             }
             similarAdapter.submitList(cards)
             val show = cards.isNotEmpty()
+            binding.similarLabel.text = series.categoryName?.takeIf { it.isNotBlank() }?.let {
+                getString(R.string.detail_more_in_category, it)
+            } ?: getString(R.string.detail_more_to_watch)
             binding.similarLabel.visibility = if (show) View.VISIBLE else View.GONE
             binding.similarList.visibility = if (show) View.VISIBLE else View.GONE
 
@@ -279,9 +295,13 @@ class SeriesDetailActivity : BaseActivity() {
 
     /** Reopens the detail screen for a tapped "Similar" poster. */
     private fun openSimilar(card: SimilarCard) {
-        startActivity(Intent(this, SeriesDetailActivity::class.java).apply {
-            putExtra(EXTRA_SERIES_ID, card.id)
-        })
+        val adult = PinLockHelper.looksAdult(card.name) ||
+            PinLockHelper.looksAdult(card.categoryName)
+        PinLockHelper.guard(this, isAdult = adult) {
+            startActivity(Intent(this, SeriesDetailActivity::class.java).apply {
+                putExtra(EXTRA_SERIES_ID, card.id)
+            })
+        }
     }
 
     private fun bindHeader(series: Series) {
@@ -293,13 +313,17 @@ class SeriesDetailActivity : BaseActivity() {
         binding.detailTitle.text = series.name
 
         val placeholder = LogoPlaceholder.forName(this, series.name)
-        if (series.posterUrl.isNullOrBlank()) {
+        val backdrop = series.backdropUrl ?: series.posterUrl
+        if (backdrop.isNullOrBlank()) {
             binding.detailBackdrop.setImageDrawable(placeholder)
-            binding.detailPoster.setImageDrawable(placeholder)
         } else {
-            binding.detailBackdrop.load(series.posterUrl) {
+            binding.detailBackdrop.load(backdrop) {
                 placeholder(placeholder); error(placeholder)
             }
+        }
+        if (series.posterUrl.isNullOrBlank()) {
+            binding.detailPoster.setImageDrawable(placeholder)
+        } else {
             binding.detailPoster.load(series.posterUrl) {
                 placeholder(placeholder); error(placeholder)
             }
@@ -390,17 +414,28 @@ class SeriesDetailActivity : BaseActivity() {
             }
             binding.loading.visibility = View.GONE
 
-            // Cache was already on screen; the refresh just updated the DB so we
-            // leave the user's view undisturbed.
-            if (hasCache) return@launch
-
+            repo.getSeriesCached(id)?.let { refreshed ->
+                bindHeader(refreshed)
+                loadSimilar(refreshed)
+                loadCast(refreshed)
+            }
             if (seasons.isEmpty()) {
+                // getSeasons already falls back to cache on network failure. An
+                // empty result here is therefore authoritative (or no cache ever
+                // existed): clear stale cards that may have been rendered by the
+                // instant cached pass.
+                currentSeason = null
                 binding.emptyState.visibility = View.VISIBLE
                 seasonAdapter.submitList(emptyList())
                 episodeAdapter.submitList(emptyList())
                 return@launch
             }
-            seasonAdapter.submitList(seasons) { showSeason(seasons.first()) }
+            // Apply refreshed metadata and episodes while preserving the season
+            // the viewer was browsing.
+            val selectedSeason = currentSeason?.seasonNumber
+            val target = seasons.firstOrNull { it.seasonNumber == selectedSeason }
+                ?: seasons.first()
+            seasonAdapter.submitList(seasons) { showSeason(target) }
         }
     }
 

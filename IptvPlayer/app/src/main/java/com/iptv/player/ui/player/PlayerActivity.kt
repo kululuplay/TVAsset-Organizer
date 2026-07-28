@@ -35,7 +35,9 @@ import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NowPlaying
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
+import com.iptv.player.ui.common.PinLockHelper
 import com.iptv.player.ui.common.SleepTimer
+import com.iptv.player.ui.common.isAdult
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -45,9 +47,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     companion object {
         const val EXTRA_CHANNEL_ID = "extra_channel_id"
-        // Scopes up/down zapping. CAT_FAVORITES (from the Favorites screen / Home
-        // favorites rail) confines zapping to the favorite live channels; any other
-        // id (or null) zaps the full live list. Read into PlayerViewModel.categoryId.
+        // Scopes up/down zapping to a real category, Favorites or Recent. Null
+        // uses all visible live/radio channels.
         const val EXTRA_CATEGORY_ID = "extra_category_id"
         /** When true, up/down zapping stays within the radio list, not Live TV. */
         const val EXTRA_RADIO_MODE = "extra_radio_mode"
@@ -57,6 +58,10 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
          * fullscreen then continues the picture with no reconnect/re-buffer.
          */
         const val EXTRA_ADOPT_PREVIEW = "extra_adopt_preview"
+        /** Initial channel was already approved by the launching parental gate. */
+        const val EXTRA_PARENTAL_AUTHORIZED = "extra_parental_authorized"
+        /** Adult category approved on Home; avoids prompting again for each CH+/-. */
+        const val EXTRA_AUTHORIZED_CATEGORY_ID = "extra_authorized_category_id"
         private const val OVERLAY_TIMEOUT = 4000L
         private const val LONG_PRESS_MS = 600L
         /**
@@ -92,6 +97,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     private var autoRetryAttempt = 0
     private var okDownTime = 0L
     private var epgJob: Job? = null
+    private val unlockedAdultChannels = mutableSetOf<String>()
+    private var unlockedAdultCategoryId: String? = null
+    private var pinPromptInFlight = false
 
     /** True when this player adopted the live preview's controller (came from Home). */
     private var adoptedPreview = false
@@ -169,9 +177,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             return
         }
         viewModel.radioMode = intent.getBooleanExtra(EXTRA_RADIO_MODE, false)
-        // Scope up/down zapping to the favorites list when launched from the
-        // Favorites screen (CAT_FAVORITES); null/other ids keep the full live list.
         viewModel.categoryId = intent.getStringExtra(EXTRA_CATEGORY_ID)
+        unlockedAdultCategoryId = intent.getStringExtra(EXTRA_AUTHORIZED_CATEGORY_ID)
 
         // Take the handed-over preview controller (if any) immediately so it is
         // never left parked. Null when launched normally (Favorites/number-zap).
@@ -191,6 +198,47 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
                 pendingAdopted = null
                 Toast.makeText(this@PlayerActivity, R.string.error_unknown, Toast.LENGTH_SHORT).show()
                 finish()
+                return@launch
+            }
+            if (intent.getBooleanExtra(EXTRA_PARENTAL_AUTHORIZED, false)) {
+                unlockedAdultChannels.add(channel.id)
+            }
+            authorizeInitialChannel(channel, adopted)
+        }
+    }
+
+    /**
+     * Defense-in-depth for direct PlayerActivity launches. Normal entry points
+     * pass an authorization token after their PIN gate, while any unguarded or
+     * future entry point is stopped here before a surface or metadata is shown.
+     */
+    private fun authorizeInitialChannel(channel: Channel, adopted: PlayerController?) {
+        if (!requiresParentalAuthorization(channel)) {
+            initializeChannel(channel, adopted)
+            return
+        }
+        pinPromptInFlight = true
+        PinLockHelper.guard(
+            activity = this,
+            isAdult = true,
+            onDenied = {
+                pinPromptInFlight = false
+                adopted?.release()
+                pendingAdopted = null
+                finish()
+            },
+        ) {
+            pinPromptInFlight = false
+            unlockedAdultChannels.add(channel.id)
+            initializeChannel(channel, adopted)
+        }
+    }
+
+    private fun initializeChannel(channel: Channel, adopted: PlayerController?) {
+        lifecycleScope.launch {
+            if (isFinishing || isDestroyed) {
+                adopted?.release()
+                pendingAdopted = null
                 return@launch
             }
             if (adopted != null) {
@@ -213,6 +261,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
                 )
                 controller.rebind(binding.videoContainer)
                 currentChannel = channel
+                viewModel.markWatched(channel.id)
                 showOverlay(channel)
                 if (statsVisible) refreshStats()
             } else {
@@ -239,7 +288,31 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
      * froze the libVLC decoder on Amlogic boxes.
      */
     private fun requestZap(delta: Int) {
+        if (pinPromptInFlight) return
         val target = (if (delta > 0) viewModel.next() else viewModel.previous()) ?: return
+        if (requiresParentalAuthorization(target)) {
+            zapHandler.removeCallbacksAndMessages(null)
+            pendingZapChannel = null
+            pinPromptInFlight = true
+            PinLockHelper.guard(
+                activity = this,
+                isAdult = true,
+                onDenied = {
+                    pinPromptInFlight = false
+                    currentChannel?.let { viewModel.selectChannel(it.id) }
+                },
+            ) {
+                pinPromptInFlight = false
+                unlockedAdultChannels.add(target.id)
+                queueZap(target)
+            }
+            return
+        }
+        queueZap(target)
+    }
+
+    /** Preview a permitted zap target, then start it after the settle window. */
+    private fun queueZap(target: Channel) {
         pendingZapChannel = target
         previewZapOverlay(target)
         zapHandler.removeCallbacksAndMessages(null)
@@ -253,6 +326,11 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             if (ch.id != currentChannel?.id) startChannel(ch)
         }, ZAP_DEBOUNCE_MS)
     }
+
+    private fun requiresParentalAuthorization(channel: Channel): Boolean =
+        channel.isAdult() &&
+            channel.id !in unlockedAdultChannels &&
+            channel.categoryId != unlockedAdultCategoryId
 
     /**
      * Lightweight overlay update shown while the user is still scrolling channels:
@@ -273,6 +351,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     private fun startChannel(channel: Channel) {
         currentChannel = channel
+        viewModel.markWatched(channel.id)
         // A new channel cancels any reconnect-failed state from the previous one,
         // including a pending automatic retry aimed at the old channel.
         cancelAutoRetry(resetAttempts = true)

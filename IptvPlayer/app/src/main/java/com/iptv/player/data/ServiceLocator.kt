@@ -10,11 +10,15 @@ import com.iptv.player.data.local.AppDatabase
 import com.iptv.player.data.prefs.SettingsStore
 import com.iptv.player.data.repository.IptvRepository
 import com.iptv.player.player.PlayerController
+import com.iptv.player.security.SecureValueCodec
 import com.iptv.player.util.AppInfo
+import com.iptv.player.util.Logger
 import com.iptv.player.util.RetryInterceptor
+import com.iptv.player.util.SensitiveDataRedactor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -88,7 +92,9 @@ object ServiceLocator {
             if (initialized) return
             val app = context.applicationContext
 
-            val logging = HttpLoggingInterceptor().apply {
+            val logging = HttpLoggingInterceptor { line ->
+                Logger.d("HTTP", SensitiveDataRedactor.redact(line))
+            }.apply {
                 level = HttpLoggingInterceptor.Level.BASIC
             }
             httpClient = OkHttpClient.Builder()
@@ -121,9 +127,20 @@ object ServiceLocator {
                 .addConverterFactory(GsonConverterFactory.create())
 
             val db = AppDatabase.build(app)
-            settings = SettingsStore(app)
-            repository = IptvRepository(db, httpClient, retrofitBuilder, settings)
+            val secureValues = SecureValueCodec(app)
+            settings = SettingsStore(app, secureValues)
+            repository = IptvRepository(
+                db,
+                httpClient,
+                retrofitBuilder,
+                settings,
+                secureValues,
+            )
             initialized = true
+            appScope.launch {
+                runCatching { repository.migrateSensitiveStorage() }
+                    .onFailure { Logger.e("SecureStorage", "legacy migration failed", it) }
+            }
         }
     }
 }

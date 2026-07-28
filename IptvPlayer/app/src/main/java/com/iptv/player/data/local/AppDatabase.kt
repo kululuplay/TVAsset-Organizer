@@ -65,7 +65,7 @@ import com.iptv.player.data.local.dao.WatchedDao
         ChannelFtsEntity::class,
         WatchedEntity::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -158,13 +158,30 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v11 -> v12: stores landscape artwork separately from poster artwork.
+         * Existing rows keep a null backdrop and the detail screen falls back to
+         * the poster until source/TMDB enrichment fills the new field.
+         */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `vod` ADD COLUMN `backdropUrl` TEXT")
+                db.execSQL("ALTER TABLE `series` ADD COLUMN `backdropUrl` TEXT")
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(
                 context.applicationContext,
                 AppDatabase::class.java,
                 "iptv.db"
             )
-                .addMigrations(MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                .addMigrations(
+                    MIGRATION_8_9,
+                    MIGRATION_9_10,
+                    MIGRATION_10_11,
+                    MIGRATION_11_12,
+                )
                 // Safety net for upgrades from versions older than 8 (dev-only
                 // builds that predate real migrations); v8 -> v9 is non-destructive.
                 .fallbackToDestructiveMigration()
