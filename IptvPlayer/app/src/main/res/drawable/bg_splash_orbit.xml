@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Thin rotating frame around the splash monolith. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="42dp" />
+    <solid android:color="@android:color/transparent" />
+    <stroke android:width="2dp" android:color="#6622D3EE" />
+</shape>

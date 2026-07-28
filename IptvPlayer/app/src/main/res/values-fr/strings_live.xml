@@ -4,4 +4,9 @@
     <string name="channels_title">Chaînes</string>
     <string name="live_label">EN DIRECT</string>
     <string name="next_label">À suivre</string>
+    <string name="live_preview_title">Aperçu en direct</string>
+    <string name="radio_preview_title">Aperçu radio</string>
+    <string name="live_preview_hint">OK · Plein écran</string>
+    <string name="program_guide_title">Guide des programmes</string>
+    <string name="browse_count_format">%1$d</string>
 </resources>

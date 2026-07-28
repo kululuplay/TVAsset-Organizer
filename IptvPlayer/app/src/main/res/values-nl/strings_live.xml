@@ -4,4 +4,9 @@
     <string name="channels_title">Kanalen</string>
     <string name="live_label">LIVE</string>
     <string name="next_label">Volgende</string>
+    <string name="live_preview_title">Livevoorbeeld</string>
+    <string name="radio_preview_title">Radiovoorbeeld</string>
+    <string name="live_preview_hint">OK · Volledig scherm</string>
+    <string name="program_guide_title">Programmagids</string>
+    <string name="browse_count_format">%1$d</string>
 </resources>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Calm focus lift that remains smooth on inexpensive Android TV sticks. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <set>
+            <objectAnimator
+                android:propertyName="scaleX"
+                android:valueTo="1.035"
+                android:duration="130" />
+            <objectAnimator
+                android:propertyName="scaleY"
+                android:valueTo="1.035"
+                android:duration="130" />
+            <objectAnimator
+                android:propertyName="translationZ"
+                android:valueTo="10dp"
+                android:valueType="floatType"
+                android:duration="130" />
+        </set>
+    </item>
+    <item>
+        <set>
+            <objectAnimator
+                android:propertyName="scaleX"
+                android:valueTo="1.0"
+                android:duration="130" />
+            <objectAnimator
+                android:propertyName="scaleY"
+                android:valueTo="1.0"
+                android:duration="130" />
+            <objectAnimator
+                android:propertyName="translationZ"
+                android:valueTo="0dp"
+                android:valueType="floatType"
+                android:duration="130" />
+        </set>
+    </item>
+</selector>

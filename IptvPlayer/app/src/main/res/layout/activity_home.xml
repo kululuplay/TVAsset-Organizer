@@ -1,17 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Live TV browser, 2-pane design.
-       LEFT  = a single list that shows categories, and drills into that
-               category's channels on OK (Back returns to categories).
-       RIGHT = a large channel preview (top) with a caption overlay
-               (number + name + current program) and the EPG schedule list
-               (bottom). Fully D-pad driven. View IDs are preserved where
-               possible so HomeActivity binding stays compatible. -->
+<!-- Modern Android TV live browser. The left rail drills categories into channels;
+     the right side keeps the playing preview distinct from the focused EPG channel. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_login_aurora"
+    android:background="@drawable/bg_live_modern"
+    android:clipChildren="false"
     android:paddingHorizontal="@dimen/safe_area_h"
     android:paddingVertical="@dimen/safe_area_v">
 
@@ -20,50 +16,98 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        app:layout_constraintGuide_percent="0.4" />
+        app:layout_constraintGuide_percent="0.378" />
 
-    <!-- LEFT pane: categories OR channels (drill-down) -->
+    <!-- Categories / channels rail. -->
     <LinearLayout
         android:id="@+id/leftPane"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginEnd="@dimen/space_l"
+        android:layout_marginEnd="14dp"
+        android:background="@drawable/bg_live_panel"
+        android:clipChildren="false"
         android:orientation="vertical"
-        android:background="@drawable/bg_glass_card"
-        android:padding="@dimen/space_m"
-        app:layout_constraintStart_toStartOf="parent"
+        android:padding="13dp"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@id/splitGuide"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent">
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="48dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/browserTitle"
+            <ImageView
+                android:id="@+id/browserIcon"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:background="@drawable/bg_live_section_chip"
+                android:contentDescription="@null"
+                android:padding="8dp"
+                android:src="@drawable/ic_tv"
+                app:tint="@color/live_cyan" />
+
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
                 android:layout_weight="1"
-                android:text="@string/nav_live"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_title"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/browserTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="@string/nav_live"
+                    android:textColor="@color/text_primary"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/browseModeLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="@string/categories_title"
+                    android:textAllCaps="true"
+                    android:textColor="@color/live_cyan"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/browseCount"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:background="@drawable/bg_live_count_chip"
+                android:gravity="center"
+                android:minWidth="38dp"
+                android:paddingHorizontal="8dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
                 android:textStyle="bold" />
 
             <ImageButton
                 android:id="@+id/refreshButton"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:background="@drawable/bg_poster"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:layout_marginStart="7dp"
+                android:background="@drawable/bg_icon_button"
                 android:contentDescription="@string/action_refresh"
                 android:focusable="true"
                 android:focusableInTouchMode="false"
                 android:nextFocusDown="@id/searchInput"
-                android:padding="@dimen/space_s"
-                android:stateListAnimator="@animator/control_focus"
+                android:nextFocusLeft="@id/refreshButton"
+                android:nextFocusRight="@id/previewCard"
+                android:nextFocusUp="@id/refreshButton"
+                android:padding="10dp"
                 android:src="@drawable/ic_refresh"
+                android:stateListAnimator="@animator/control_focus"
                 app:tint="@color/text_primary" />
         </LinearLayout>
 
@@ -71,16 +115,22 @@
             android:id="@+id/searchInput"
             style="@style/Widget.Iptv.Input"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="@dimen/space_m"
-            android:layout_marginTop="@dimen/space_s"
+            android:layout_height="48dp"
+            android:layout_marginBottom="11dp"
+            android:layout_marginTop="9dp"
             android:background="@drawable/bg_input_modern"
             android:drawableStart="@drawable/ic_search"
-            android:drawablePadding="@dimen/space_s"
+            android:drawablePadding="9dp"
             android:hint="@string/search_channels_hint"
             android:imeOptions="actionSearch"
             android:inputType="text"
-            android:maxLines="1" />
+            android:maxLines="1"
+            android:nextFocusDown="@id/categoryList"
+            android:nextFocusRight="@id/previewCard"
+            android:nextFocusUp="@id/refreshButton"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="8dp"
+            android:textSize="15sp" />
 
         <FrameLayout
             android:layout_width="match_parent"
@@ -93,7 +143,8 @@
                 android:layout_height="match_parent"
                 android:clipChildren="false"
                 android:clipToPadding="false"
-                android:paddingBottom="@dimen/space_m" />
+                android:nextFocusRight="@id/previewCard"
+                android:paddingBottom="8dp" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/channelList"
@@ -101,7 +152,9 @@
                 android:layout_height="match_parent"
                 android:clipChildren="false"
                 android:clipToPadding="false"
-                android:paddingBottom="@dimen/space_m"
+                android:nextFocusLeft="@id/categoryList"
+                android:nextFocusRight="@id/previewCard"
+                android:paddingBottom="8dp"
                 android:visibility="gone" />
 
             <TextView
@@ -110,17 +163,18 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
                 android:gravity="center"
+                android:padding="18dp"
                 android:text="@string/empty_channels"
                 android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_body"
+                android:textSize="16sp"
                 android:visibility="gone" />
 
             <ProgressBar
                 android:id="@+id/loadingIndicator"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
                 android:layout_gravity="center"
-                android:indeterminateTint="@color/accent"
+                android:indeterminateTint="@color/live_cyan"
                 android:visibility="gone" />
 
             <LinearLayout
@@ -128,10 +182,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:background="@drawable/bg_glass_card"
+                android:background="@drawable/bg_live_panel"
                 android:gravity="center"
                 android:orientation="vertical"
-                android:padding="@dimen/space_l"
+                android:padding="18dp"
                 android:visibility="gone">
 
                 <TextView
@@ -140,57 +194,94 @@
                     android:layout_height="wrap_content"
                     android:gravity="center"
                     android:textColor="@color/text_primary"
-                    android:textSize="@dimen/text_body" />
+                    android:textSize="16sp" />
 
                 <Button
                     android:id="@+id/retryButton"
                     style="@style/Widget.Iptv.Button"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/space_m"
+                    android:layout_marginTop="12dp"
                     android:text="@string/action_retry" />
             </LinearLayout>
 
-            <!-- Number-key zap overlay (TV remote channel entry). -->
             <TextView
                 android:id="@+id/zapOverlay"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="top|end"
-                android:background="@drawable/bg_overlay"
-                android:paddingHorizontal="@dimen/space_l"
-                android:paddingVertical="@dimen/space_s"
+                android:background="@drawable/bg_zap_banner"
+                android:paddingHorizontal="18dp"
+                android:paddingVertical="7dp"
                 android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_big_title"
+                android:textSize="28sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
         </FrameLayout>
     </LinearLayout>
 
-    <!-- RIGHT pane: preview + EPG -->
+    <!-- Playing preview and guide for the channel currently under focus. -->
     <LinearLayout
         android:id="@+id/rightPane"
         android:layout_width="0dp"
         android:layout_height="0dp"
+        android:clipChildren="false"
         android:orientation="vertical"
-        app:layout_constraintStart_toStartOf="@id/splitGuide"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent">
+        app:layout_constraintStart_toStartOf="@id/splitGuide"
+        app:layout_constraintTop_toTopOf="parent">
 
-        <!-- Channel preview surface with caption overlay -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="34dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/previewHeaderTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:drawablePadding="8dp"
+                android:text="@string/live_preview_title"
+                android:textColor="@color/text_primary"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                app:drawableStartCompat="@drawable/ic_signal"
+                app:drawableTint="@color/live_cyan" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:background="@drawable/bg_preview_hint"
+                android:gravity="center"
+                android:paddingHorizontal="10dp"
+                android:text="@string/live_preview_hint"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
         <FrameLayout
             android:id="@+id/previewCard"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="3"
+            android:layout_marginTop="6dp"
+            android:layout_weight="58"
             android:background="@drawable/bg_preview"
-            android:foreground="@drawable/bg_tile_focus"
+            android:clickable="true"
+            android:clipToOutline="true"
+            android:contentDescription="@string/live_preview_title"
             android:focusable="true"
-            android:clickable="true">
+            android:focusableInTouchMode="false"
+            android:foreground="@drawable/bg_tile_focus"
+            android:nextFocusDown="@id/previewCard"
+            android:nextFocusLeft="@id/channelList"
+            android:nextFocusRight="@id/previewCard"
+            android:nextFocusUp="@id/refreshButton"
+            android:stateListAnimator="@animator/control_focus">
 
-            <!-- Live preview surface: the focused channel plays here while browsing.
-                 Sits behind the poster logo + caption. -->
             <FrameLayout
                 android:id="@+id/previewVideo"
                 android:layout_width="match_parent"
@@ -198,89 +289,129 @@
 
             <ImageView
                 android:id="@+id/infoLogo"
-                android:layout_width="140dp"
-                android:layout_height="140dp"
+                android:layout_width="132dp"
+                android:layout_height="116dp"
                 android:layout_gravity="center"
+                android:background="@drawable/bg_channel_logo_plate"
+                android:contentDescription="@string/now_playing"
+                android:padding="18dp"
                 android:scaleType="fitCenter"
-                android:contentDescription="@string/now_playing" />
+                android:translationY="-14dp"
+                android:visibility="invisible" />
 
-            <TextView
-                android:id="@+id/previewStatus"
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal|bottom"
-                android:layout_marginBottom="104dp"
-                android:background="@drawable/bg_overlay"
+                android:layout_gravity="center"
                 android:gravity="center"
-                android:maxWidth="420dp"
-                android:paddingHorizontal="@dimen/space_m"
-                android:paddingVertical="@dimen/space_s"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_caption"
-                android:visibility="gone" />
+                android:orientation="vertical">
 
-            <!-- Debug overlay: engine/stage/resolution + live PlaybackLog tail.
-                 Gated by the Debug setting (hidden by default). -->
+                <ProgressBar
+                    android:id="@+id/previewLoading"
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:indeterminateTint="@color/live_cyan"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/previewStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:background="@drawable/bg_overlay"
+                    android:gravity="center"
+                    android:maxWidth="420dp"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="7dp"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
             <TextView
                 android:id="@+id/debugOverlay"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="top|start"
-                android:layout_margin="@dimen/space_m"
-                android:padding="@dimen/space_s"
+                android:layout_margin="12dp"
                 android:background="@drawable/bg_zap_banner"
                 android:fontFamily="monospace"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_caption"
                 android:lineSpacingExtra="1dp"
+                android:padding="8dp"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp"
                 android:visibility="gone" />
 
-            <!-- Catch-up hint chip: shown when the focused channel has an archive. -->
             <TextView
                 android:id="@+id/catchupHint"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="top|end"
-                android:layout_margin="@dimen/space_m"
+                android:layout_margin="12dp"
                 android:background="@drawable/bg_badge_catchup"
-                android:drawablePadding="@dimen/space_s"
+                android:drawablePadding="7dp"
                 android:gravity="center_vertical"
-                android:paddingHorizontal="@dimen/space_m"
-                android:paddingVertical="@dimen/space_s"
+                android:paddingHorizontal="11dp"
+                android:paddingVertical="7dp"
                 android:text="@string/catchup_title"
                 android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_caption"
+                android:textSize="12sp"
                 android:textStyle="bold"
-                app:drawableStartCompat="@drawable/ic_catchup"
-                android:visibility="gone" />
+                android:visibility="gone"
+                app:drawableStartCompat="@drawable/ic_catchup" />
 
-            <!-- Bottom caption: number + name + current program -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
                 android:background="@drawable/bg_preview_caption"
-                android:paddingHorizontal="@dimen/space_l"
-                android:paddingVertical="@dimen/space_m">
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp"
+                android:paddingBottom="13dp"
+                android:paddingTop="24dp">
+
+                <TextView
+                    android:id="@+id/previewLiveBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="26dp"
+                    android:background="@drawable/bg_epg_live_badge"
+                    android:gravity="center"
+                    android:paddingHorizontal="9dp"
+                    android:text="@string/live_label"
+                    android:textColor="@android:color/white"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/previewNumber"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_width="42dp"
+                    android:layout_height="38dp"
+                    android:layout_marginStart="9dp"
+                    android:background="@drawable/bg_channel_number_chip"
+                    android:gravity="center"
                     android:textColor="@color/text_primary"
-                    android:textSize="@dimen/text_big_title"
+                    android:textSize="17sp"
                     android:textStyle="bold"
-                    android:layout_marginEnd="@dimen/space_l" />
+                    android:visibility="gone" />
 
-                <ImageView
-                    android:id="@+id/previewCaptionLogo"
-                    android:layout_width="64dp"
-                    android:layout_height="40dp"
-                    android:scaleType="fitCenter"
-                    android:layout_marginEnd="@dimen/space_m"
-                    android:contentDescription="@string/now_playing" />
+                <FrameLayout
+                    android:id="@+id/previewCaptionLogoPlate"
+                    android:layout_width="58dp"
+                    android:layout_height="42dp"
+                    android:layout_marginHorizontal="10dp"
+                    android:background="@drawable/bg_channel_logo_plate"
+                    android:padding="5dp"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:id="@+id/previewCaptionLogo"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:contentDescription="@string/now_playing"
+                        android:scaleType="fitCenter" />
+                </FrameLayout>
 
                 <LinearLayout
                     android:layout_width="0dp"
@@ -292,49 +423,100 @@
                         android:id="@+id/previewTitle"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:textColor="@color/text_primary"
-                        android:textSize="@dimen/text_title"
-                        android:textStyle="bold"
+                        android:ellipsize="end"
                         android:maxLines="1"
-                        android:ellipsize="end" />
+                        android:textColor="@color/text_primary"
+                        android:textSize="20sp"
+                        android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/previewProgram"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="@dimen/text_caption"
                         android:layout_marginTop="2dp"
+                        android:ellipsize="end"
                         android:maxLines="1"
-                        android:ellipsize="end" />
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp" />
                 </LinearLayout>
             </LinearLayout>
         </FrameLayout>
 
-        <!-- EPG schedule for the previewed channel -->
-        <FrameLayout
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="2"
-            android:layout_marginTop="@dimen/space_m">
+            android:layout_marginTop="11dp"
+            android:layout_weight="42"
+            android:background="@drawable/bg_live_panel"
+            android:orientation="vertical"
+            android:paddingHorizontal="12dp"
+            android:paddingBottom="10dp"
+            android:paddingTop="9dp">
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/epgList"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:clipChildren="false"
-                android:clipToPadding="false"
-                android:focusable="false" />
+                android:layout_height="32dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/epgEmpty"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:text="@string/no_guide"
-                android:textColor="@color/text_muted"
-                android:textSize="@dimen/text_caption"
-                android:visibility="gone" />
-        </FrameLayout>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/program_guide_title"
+                    android:textColor="@color/text_primary"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="16dp"
+                    android:layout_marginHorizontal="10dp"
+                    android:background="@color/live_stroke" />
+
+                <TextView
+                    android:id="@+id/guideChannelTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="@color/live_cyan"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/epgList"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:focusable="false"
+                    android:paddingTop="2dp" />
+
+                <ProgressBar
+                    android:id="@+id/epgLoading"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:layout_gravity="center"
+                    android:indeterminateTint="@color/live_cyan"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/epgEmpty"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="@string/no_guide"
+                    android:textColor="@color/text_muted"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+            </FrameLayout>
+        </LinearLayout>
     </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -4,4 +4,9 @@
     <string name="channels_title">Sender</string>
     <string name="live_label">LIVE</string>
     <string name="next_label">Als Nächstes</string>
+    <string name="live_preview_title">Live-Vorschau</string>
+    <string name="radio_preview_title">Radio-Vorschau</string>
+    <string name="live_preview_hint">OK · Vollbild</string>
+    <string name="program_guide_title">Programmübersicht</string>
+    <string name="browse_count_format">%1$d</string>
 </resources>

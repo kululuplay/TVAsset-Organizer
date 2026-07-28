@@ -1,15 +1,14 @@
 /*
  * DashboardActivity.kt
- * The post-login launcher home. A modern layout: a brand bar with a network-signal
- * chip, live clock/date and a real-weather pill; a centered "what to watch?" prompt;
- * and two rows of gradient destination cards (Live / Movies / Series / Settings /
- * Favorites, then Continue / Search) covering every section. Fully D-pad driven;
- * each card opens its section.
+ * The post-login launcher home. A modern layout: a brand bar with network state,
+ * a live clock/date and weather; an editorial Live hero beside a 2x2 content grid;
+ * and a compact Continue/Search/Settings/Request rail. Fully D-pad driven.
  */
 package com.iptv.player.ui.dashboard
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.TypedValue
 import android.view.View
 import android.widget.Toast
 import androidx.core.content.ContextCompat
@@ -18,6 +17,7 @@ import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.databinding.ActivityDashboardBinding
 import com.iptv.player.databinding.ItemDashboardCardBinding
+import com.iptv.player.databinding.ItemDashboardQuickActionBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.RequestDialog
 import com.iptv.player.ui.favorites.FavoritesActivity
@@ -181,7 +181,7 @@ class DashboardActivity : BaseActivity() {
 
     private fun wireCards() {
         configCard(binding.tileLive, R.drawable.ic_tv, R.drawable.bg_badge_live,
-            R.string.nav_live, R.string.dash_sub_live, R.drawable.bg_tile_hero) {
+            R.string.nav_live, R.string.dash_sub_live, R.drawable.bg_tile_hero, hero = true) {
             openScreen(HomeActivity::class.java)
         }
         configCard(binding.tileMovies, R.drawable.ic_movie, R.drawable.bg_badge_movies,
@@ -196,20 +196,20 @@ class DashboardActivity : BaseActivity() {
                     .putExtra(HomeActivity.EXTRA_RADIO_MODE, true)
             )
         }
-        configCard(binding.tileSettings, R.drawable.ic_settings, R.drawable.bg_badge_settings,
-            R.string.nav_settings, R.string.dash_sub_settings) { openScreen(SettingsActivity::class.java) }
         // Unified favorites across channels, movies and series (not just Live TV).
         configCard(binding.tileFavorites, R.drawable.ic_star, R.drawable.bg_badge_favorites,
             R.string.nav_favorites, R.string.dash_sub_favorites) { openScreen(FavoritesActivity::class.java) }
 
-        configCard(binding.tileContinue, R.drawable.ic_clock, R.drawable.bg_badge_catchup,
+        configQuickCard(binding.tileContinue, R.drawable.ic_clock, R.drawable.bg_badge_catchup,
             R.string.section_continue_watching, R.string.dash_sub_continue) {
             openScreen(ContinueWatchingActivity::class.java)
         }
-        configCard(binding.tileSearch, R.drawable.ic_search, R.drawable.bg_badge_search,
+        configQuickCard(binding.tileSearch, R.drawable.ic_search, R.drawable.bg_badge_search,
             R.string.action_search, R.string.dash_sub_search) { openScreen(SearchActivity::class.java) }
+        configQuickCard(binding.tileSettings, R.drawable.ic_settings, R.drawable.bg_badge_settings,
+            R.string.nav_settings, R.string.dash_sub_settings) { openScreen(SettingsActivity::class.java) }
         // İstek & Şikayet: opens a modal that posts to the crash-receiver ops panel.
-        configCard(binding.tileRequest, R.drawable.ic_feedback, R.drawable.bg_badge_request,
+        configQuickCard(binding.tileRequest, R.drawable.ic_feedback, R.drawable.bg_badge_request,
             R.string.dash_request, R.string.dash_sub_request) { RequestDialog.show(this) }
     }
 
@@ -226,14 +226,55 @@ class DashboardActivity : BaseActivity() {
         titleRes: Int,
         subtitleRes: Int,
         bgRes: Int? = null,
+        hero: Boolean = false,
         onClick: () -> Unit
     ) {
         card.cardIcon.setImageResource(iconRes)
         card.cardIcon.setBackgroundResource(badgeRes)
         card.cardIcon.contentDescription = getString(titleRes)
+        card.cardWatermark.setImageResource(iconRes)
         card.cardTitle.setText(titleRes)
         card.cardSubtitle.setText(subtitleRes)
+        card.cardEyebrow.visibility = if (hero) View.VISIBLE else View.GONE
         bgRes?.let { card.root.setBackgroundResource(it) }
+        card.root.contentDescription =
+            getString(titleRes) + ". " + getString(subtitleRes)
+
+        if (hero) {
+            val badge = resources.getDimensionPixelSize(R.dimen.badge_hero)
+            card.cardIcon.layoutParams = card.cardIcon.layoutParams.apply {
+                width = badge
+                height = badge
+            }
+            val watermark = (badge * 1.9f).toInt()
+            card.cardWatermark.layoutParams = card.cardWatermark.layoutParams.apply {
+                width = watermark
+                height = watermark
+            }
+            card.cardTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28f)
+            card.cardSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            val padding = resources.getDimensionPixelSize(R.dimen.space_l)
+            card.cardContent.setPadding(padding, padding, padding, padding)
+        }
+        card.root.setOnClickListener { onClick() }
+    }
+
+    /** Configures the compact lower rail without sacrificing a full-size TV target. */
+    private fun configQuickCard(
+        card: ItemDashboardQuickActionBinding,
+        iconRes: Int,
+        badgeRes: Int,
+        titleRes: Int,
+        subtitleRes: Int,
+        onClick: () -> Unit
+    ) {
+        card.quickIcon.setImageResource(iconRes)
+        card.quickIcon.setBackgroundResource(badgeRes)
+        card.quickIcon.contentDescription = getString(titleRes)
+        card.quickTitle.setText(titleRes)
+        card.quickSubtitle.setText(subtitleRes)
+        card.root.contentDescription =
+            getString(titleRes) + ". " + getString(subtitleRes)
         card.root.setOnClickListener { onClick() }
     }
 
@@ -251,35 +292,34 @@ class DashboardActivity : BaseActivity() {
             nextFocusLeftId = R.id.tileLive
             nextFocusRightId = R.id.tileMovies
             nextFocusUpId = R.id.tileLive
-            nextFocusDownId = R.id.tileFavorites
+            nextFocusDownId = R.id.tileContinue
         }
         binding.tileMovies.root.apply {
             nextFocusLeftId = R.id.tileLive
             nextFocusRightId = R.id.tileSeries
             nextFocusUpId = R.id.tileMovies
-            nextFocusDownId = R.id.tileSearch
+            nextFocusDownId = R.id.tileRadio
         }
         binding.tileSeries.root.apply {
             nextFocusLeftId = R.id.tileMovies
-            nextFocusRightId = R.id.tileRadio
-            nextFocusUpId = R.id.tileSeries
-            nextFocusDownId = R.id.tileSettings
-        }
-        binding.tileRadio.root.apply {
-            nextFocusLeftId = R.id.tileSeries
-            nextFocusRightId = R.id.tileRadio
+            nextFocusRightId = R.id.tileSeries
             nextFocusUpId = R.id.btnRefresh
-            nextFocusDownId = R.id.tileRequest
-        }
-
-        binding.tileFavorites.root.apply {
-            nextFocusLeftId = R.id.tileFavorites
-            nextFocusRightId = R.id.tileContinue
-            nextFocusUpId = R.id.tileLive
             nextFocusDownId = R.id.tileFavorites
         }
+        binding.tileRadio.root.apply {
+            nextFocusLeftId = R.id.tileLive
+            nextFocusRightId = R.id.tileFavorites
+            nextFocusUpId = R.id.tileMovies
+            nextFocusDownId = R.id.tileSettings
+        }
+        binding.tileFavorites.root.apply {
+            nextFocusLeftId = R.id.tileRadio
+            nextFocusRightId = R.id.tileFavorites
+            nextFocusUpId = R.id.tileSeries
+            nextFocusDownId = R.id.tileRequest
+        }
         binding.tileContinue.root.apply {
-            nextFocusLeftId = R.id.tileFavorites
+            nextFocusLeftId = R.id.tileContinue
             nextFocusRightId = R.id.tileSearch
             nextFocusUpId = R.id.tileLive
             nextFocusDownId = R.id.tileContinue
@@ -287,26 +327,26 @@ class DashboardActivity : BaseActivity() {
         binding.tileSearch.root.apply {
             nextFocusLeftId = R.id.tileContinue
             nextFocusRightId = R.id.tileSettings
-            nextFocusUpId = R.id.tileMovies
+            nextFocusUpId = R.id.tileLive
             nextFocusDownId = R.id.tileSearch
         }
         binding.tileSettings.root.apply {
             nextFocusLeftId = R.id.tileSearch
             nextFocusRightId = R.id.tileRequest
-            nextFocusUpId = R.id.tileSeries
+            nextFocusUpId = R.id.tileRadio
             nextFocusDownId = R.id.tileSettings
         }
         binding.tileRequest.root.apply {
             nextFocusLeftId = R.id.tileSettings
             nextFocusRightId = R.id.tileRequest
-            nextFocusUpId = R.id.tileRadio
+            nextFocusUpId = R.id.tileFavorites
             nextFocusDownId = R.id.tileRequest
         }
         binding.btnRefresh.apply {
-            nextFocusLeftId = R.id.tileRadio
+            nextFocusLeftId = R.id.btnRefresh
             nextFocusRightId = R.id.btnRefresh
             nextFocusUpId = R.id.btnRefresh
-            nextFocusDownId = R.id.tileRadio
+            nextFocusDownId = R.id.tileSeries
         }
     }
 

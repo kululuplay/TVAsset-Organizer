@@ -1,14 +1,14 @@
 /*
  * ProgramAdapter.kt
- * Right-pane EPG schedule list. Each row shows a status dot (emerald when the
- * program is airing now, muted gray otherwise), the program title, and its
- * start/stop time range. Display only — rows are not focusable.
+ * Right-pane EPG schedule list. The current programme gets an emerald surface,
+ * LIVE badge and elapsed-time rail. Display only — rows are not focusable.
  */
 package com.iptv.player.ui.home
 
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -47,11 +47,23 @@ class ProgramAdapter : ListAdapter<Program, ProgramAdapter.VH>(DIFF) {
         private val dot: View = itemView.findViewById(R.id.programDot)
         private val title: TextView = itemView.findViewById(R.id.programTitle)
         private val time: TextView = itemView.findViewById(R.id.programTime)
+        private val liveBadge: TextView = itemView.findViewById(R.id.programLive)
+        private val progress: ProgressBar = itemView.findViewById(R.id.programProgress)
 
         fun bind(program: Program) {
             title.text = program.title
-            time.text = "${timeFmt.format(Date(program.startMs))} : ${timeFmt.format(Date(program.stopMs))}"
-            val live = program.isLiveAt(System.currentTimeMillis())
+            time.text =
+                "${timeFmt.format(Date(program.startMs))} – ${timeFmt.format(Date(program.stopMs))}"
+            val now = System.currentTimeMillis()
+            val live = program.isLiveAt(now)
+            itemView.isActivated = live
+            liveBadge.visibility = if (live) View.VISIBLE else View.GONE
+            progress.visibility = if (live) View.VISIBLE else View.GONE
+            if (live) {
+                val duration = (program.stopMs - program.startMs).coerceAtLeast(1L)
+                val elapsed = (now - program.startMs).coerceIn(0L, duration)
+                progress.progress = ((elapsed * 100L) / duration).toInt()
+            }
             val tint = ContextCompat.getColor(
                 itemView.context,
                 if (live) R.color.accent_emerald else R.color.text_muted

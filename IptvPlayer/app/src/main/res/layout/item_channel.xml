@@ -1,40 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Live TV channel row: number + logo + name on a dark rounded card. Focused =
-     solid white card with dark text. Long-press OK toggles favorite.
-     Sizes are slightly smaller than the shared list dimens (explicit dp/sp here,
-     not @dimen) so only the live channel list is more compact — it looked a touch
-     zoomed-in at the shared sizes. -->
+<!-- Dense channel row sized for weak TV sticks and long D-pad lists. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:minHeight="48dp"
-    android:orientation="horizontal"
-    android:gravity="center_vertical"
-    android:background="@drawable/bg_list_row"
+    android:layout_marginBottom="7dp"
+    android:background="@drawable/bg_live_list_row"
     android:focusable="true"
     android:focusableInTouchMode="false"
-    android:stateListAnimator="@animator/control_focus"
-    android:paddingHorizontal="@dimen/space_m"
+    android:gravity="center_vertical"
+    android:minHeight="58dp"
+    android:orientation="horizontal"
+    android:paddingHorizontal="9dp"
     android:paddingVertical="6dp"
-    android:layout_marginBottom="6dp">
+    android:stateListAnimator="@animator/control_focus">
 
     <TextView
         android:id="@+id/channelNumber"
-        android:layout_width="44dp"
-        android:layout_height="wrap_content"
-        android:gravity="start|center_vertical"
+        android:layout_width="40dp"
+        android:layout_height="32dp"
+        android:background="@drawable/bg_channel_number_chip"
         android:duplicateParentState="true"
-        android:textColor="@color/list_row_text_dim"
-        android:textSize="17sp"
+        android:gravity="center"
+        android:textColor="@color/live_row_text"
+        android:textSize="14sp"
         android:textStyle="bold" />
 
-    <ImageView
-        android:id="@+id/channelLogo"
-        android:layout_width="44dp"
+    <FrameLayout
+        android:layout_width="50dp"
         android:layout_height="44dp"
-        android:scaleType="fitCenter"
-        android:layout_marginHorizontal="@dimen/space_s"
-        android:contentDescription="@string/now_playing" />
+        android:layout_marginHorizontal="8dp"
+        android:background="@drawable/bg_channel_logo_plate"
+        android:duplicateParentState="true"
+        android:padding="5dp">
+
+        <ImageView
+            android:id="@+id/channelLogo"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/now_playing"
+            android:scaleType="fitCenter" />
+    </FrameLayout>
 
     <TextView
         android:id="@+id/channelName"
@@ -42,32 +47,31 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:duplicateParentState="true"
-        android:textColor="@color/list_row_text"
-        android:textSize="17sp"
-        android:textStyle="bold"
-        android:maxLines="1"
         android:ellipsize="end"
-        android:layout_marginStart="@dimen/space_s" />
+        android:maxLines="1"
+        android:textColor="@color/live_row_text"
+        android:textSize="16sp"
+        android:textStyle="bold" />
 
     <ImageView
         android:id="@+id/catchupBadge"
-        android:layout_width="20dp"
-        android:layout_height="20dp"
+        android:layout_width="19dp"
+        android:layout_height="19dp"
+        android:layout_marginStart="7dp"
+        android:contentDescription="@string/catchup_title"
         android:src="@drawable/ic_catchup"
-        android:layout_marginStart="@dimen/space_s"
-        android:visibility="gone"
-        android:contentDescription="@string/catchup_title" />
+        android:visibility="gone" />
 
     <ImageView
         android:id="@+id/favStar"
-        android:layout_width="20dp"
-        android:layout_height="20dp"
+        android:layout_width="19dp"
+        android:layout_height="19dp"
+        android:layout_marginStart="7dp"
+        android:contentDescription="@string/section_favorites"
         android:src="@drawable/ic_star"
-        android:layout_marginStart="@dimen/space_s"
-        android:visibility="gone"
-        android:contentDescription="@string/section_favorites" />
+        android:visibility="gone" />
 
-    <!-- Kept for code compatibility; no longer shown in the redesigned row. -->
+    <!-- Preserved for adapter compatibility; program details live in the EPG pane. -->
     <TextView
         android:id="@+id/channelProgram"
         android:layout_width="wrap_content"

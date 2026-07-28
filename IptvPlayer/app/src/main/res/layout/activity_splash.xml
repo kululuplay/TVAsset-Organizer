@@ -1,25 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Branded splash shown after login (and when a logged-in user opens the app)
-     while content is prefetched in the background. Cinematic aurora backdrop, a
-     glowing logo badge, the app name + tagline, and a row of pulsing loading
-     dots with a live status line. Entrance + idle animations are driven in
-     SplashActivity (views start invisible / scaled down here). -->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Premium widescreen splash: a restrained brand monolith, large editorial
+     wordmark and a real stage-progress panel. Designed to look intentional on
+     both 720p sticks and 4K Android TV panels without expensive bitmap assets. -->
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_login_aurora">
+    android:background="@drawable/bg_splash_modern"
+    android:paddingHorizontal="@dimen/safe_area_h"
+    android:paddingVertical="@dimen/safe_area_v">
 
     <LinearLayout
-        android:layout_width="wrap_content"
+        android:id="@+id/splashHero"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:orientation="vertical"
-        android:gravity="center_horizontal">
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
-        <!-- Logo badge wrapped in a soft halo. -->
         <FrameLayout
-            android:layout_width="240dp"
-            android:layout_height="240dp">
+            android:layout_width="268dp"
+            android:layout_height="268dp">
 
             <View
                 android:id="@+id/logoGlow"
@@ -29,95 +35,125 @@
                 android:alpha="0"
                 android:background="@drawable/bg_splash_glow" />
 
-            <FrameLayout
-                android:id="@+id/logoBadge"
-                android:layout_width="124dp"
-                android:layout_height="124dp"
+            <View
+                android:id="@+id/logoOrbit"
+                android:layout_width="176dp"
+                android:layout_height="176dp"
                 android:layout_gravity="center"
                 android:alpha="0"
-                android:background="@drawable/bg_logo_badge">
+                android:background="@drawable/bg_splash_orbit"
+                android:rotation="45" />
+
+            <FrameLayout
+                android:id="@+id/logoBadge"
+                android:layout_width="132dp"
+                android:layout_height="132dp"
+                android:layout_gravity="center"
+                android:alpha="0"
+                android:background="@drawable/bg_splash_logo_panel"
+                android:elevation="12dp">
 
                 <ImageView
-                    android:layout_width="66dp"
-                    android:layout_height="66dp"
+                    android:layout_width="70dp"
+                    android:layout_height="70dp"
                     android:layout_gravity="center"
-                    android:src="@drawable/ic_kululu_logo"
-                    android:contentDescription="@string/app_name" />
+                    android:contentDescription="@string/app_name"
+                    android:src="@drawable/ic_kululu_logo" />
             </FrameLayout>
         </FrameLayout>
 
-        <TextView
-            android:id="@+id/appName"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_l"
-            android:alpha="0"
-            android:text="@string/app_name"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_big_title"
-            android:textStyle="bold"
-            android:letterSpacing="0.04" />
+            android:layout_marginStart="@dimen/space_xl"
+            android:layout_weight="1"
+            android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/tagline"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_xs"
-            android:alpha="0"
-            android:text="@string/app_tagline"
-            android:textColor="@color/text_secondary"
-            android:textSize="@dimen/text_caption"
-            android:letterSpacing="0.02" />
+            <TextView
+                android:id="@+id/appName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:alpha="0"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.045"
+                android:text="@string/app_name"
+                android:textColor="@color/text_primary"
+                android:textSize="44sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tagline"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_s"
+                android:alpha="0"
+                android:letterSpacing="0.02"
+                android:text="@string/app_tagline"
+                android:textColor="@color/text_secondary"
+                android:textSize="18sp" />
+
+            <LinearLayout
+                android:id="@+id/statusPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xl"
+                android:alpha="0"
+                android:background="@drawable/bg_splash_status_panel"
+                android:orientation="vertical"
+                android:paddingHorizontal="@dimen/space_m"
+                android:paddingVertical="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <View
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:background="@drawable/bg_splash_dot" />
+
+                    <TextView
+                        android:id="@+id/splashStatus"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:accessibilityLiveRegion="polite"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:text="@string/splash_status_starting"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_caption"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="4dp"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_splash_progress_track">
+
+                    <View
+                        android:id="@+id/splashProgressFill"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_splash_progress_fill"
+                        android:scaleX="0.08" />
+                </FrameLayout>
+            </LinearLayout>
+        </LinearLayout>
     </LinearLayout>
 
-    <LinearLayout
+    <TextView
+        android:id="@+id/splashVersion"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:orientation="vertical"
-        android:gravity="center_horizontal"
-        android:layout_marginBottom="@dimen/safe_area_v"
-        android:paddingBottom="@dimen/space_xl">
-
-        <!-- Three pulsing loading dots (animated in code). -->
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:layout_marginBottom="@dimen/space_l">
-
-            <View
-                android:id="@+id/dot1"
-                android:layout_width="10dp"
-                android:layout_height="10dp"
-                android:layout_marginHorizontal="5dp"
-                android:background="@drawable/bg_splash_dot" />
-
-            <View
-                android:id="@+id/dot2"
-                android:layout_width="10dp"
-                android:layout_height="10dp"
-                android:layout_marginHorizontal="5dp"
-                android:background="@drawable/bg_splash_dot" />
-
-            <View
-                android:id="@+id/dot3"
-                android:layout_width="10dp"
-                android:layout_height="10dp"
-                android:layout_marginHorizontal="5dp"
-                android:background="@drawable/bg_splash_dot" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/splashStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:alpha="0"
-            android:accessibilityLiveRegion="polite"
-            android:text="@string/splash_status_starting"
-            android:textColor="@color/text_secondary"
-            android:textSize="@dimen/text_caption"
-            android:letterSpacing="0.03" />
-    </LinearLayout>
-</FrameLayout>
+        android:alpha="0"
+        android:letterSpacing="0.05"
+        android:textColor="@color/text_muted"
+        android:textSize="@dimen/text_small"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+</androidx.constraintlayout.widget.ConstraintLayout>

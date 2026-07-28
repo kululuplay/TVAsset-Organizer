@@ -48,4 +48,18 @@
     <color name="glass_input">#14FFFFFF</color>
     <color name="glass_input_focused">#24FFFFFF</color>
     <color name="glass_track">#14FFFFFF</color>
+
+    <!-- Live browse: deep cinema surfaces with cyan/purple focus states. -->
+    <color name="live_surface">#080B12</color>
+    <color name="live_panel">#E6121722</color>
+    <color name="live_panel_raised">#F0192030</color>
+    <color name="live_row">#0DFFFFFF</color>
+    <color name="live_row_selected">#241E3A8A</color>
+    <color name="live_row_focused">#3022D3EE</color>
+    <color name="live_stroke">#1AFFFFFF</color>
+    <color name="live_stroke_selected">#806A72FF</color>
+    <color name="live_stroke_focused">#D922D3EE</color>
+    <color name="live_text_dim">#8290A3</color>
+    <color name="live_cyan">#22D3EE</color>
+    <color name="live_violet">#8B5CF6</color>
 </resources>

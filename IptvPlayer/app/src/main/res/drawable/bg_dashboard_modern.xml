@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Deep cinematic dashboard background. The restrained cyan and magenta edge
+     glows keep text readable while adding depth on large TV panels. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="135"
+                android:startColor="#05070C"
+                android:centerColor="#09101B"
+                android:endColor="#07121A" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.02"
+                android:centerY="0.05"
+                android:gradientRadius="680dp"
+                android:startColor="#3DFF2E9A"
+                android:endColor="#00FF2E9A" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.98"
+                android:centerY="0.18"
+                android:gradientRadius="760dp"
+                android:startColor="#3322D3EE"
+                android:endColor="#0022D3EE" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="90"
+                android:startColor="#00000000"
+                android:endColor="#66000000" />
+        </shape>
+    </item>
+</layer-list>
