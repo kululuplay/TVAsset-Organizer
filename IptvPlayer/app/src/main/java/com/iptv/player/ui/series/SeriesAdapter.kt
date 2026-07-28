@@ -20,6 +20,7 @@ import com.iptv.player.R
 import com.iptv.player.data.model.Series
 import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.isAdult
+import java.util.Locale
 
 class SeriesAdapter(
     private val onFocused: (Series) -> Unit,
@@ -57,14 +58,20 @@ class SeriesAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_poster, parent, false)
+            .inflate(R.layout.item_series_poster, parent, false)
         return VH(view)
     }
 
     override fun onBindViewHolder(holder: VH, position: Int) {
-        // Paging may hand back null for not-yet-loaded placeholders; skip those.
-        val item = getItem(position) ?: return
-        holder.bind(item)
+        // Never leave recycled artwork/text visible in a Paging placeholder.
+        getItem(position)?.let(holder::bind) ?: holder.clear()
+    }
+
+    override fun onViewRecycled(holder: VH) {
+        // Cancels the ImageView's in-flight Coil request as well as clearing state.
+        // Without this, a late image response can flash on a newly recycled card.
+        holder.clear()
+        super.onViewRecycled(holder)
     }
 
     inner class VH(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -81,19 +88,31 @@ class SeriesAdapter(
 
         fun bind(item: Series) {
             boundItem = item
-            itemView.setOnClickListener { onClicked(item) }
+            itemView.isFocusable = true
+            itemView.alpha = 1f
+            poster.contentDescription = null
+            itemView.setOnClickListener {
+                currentItem()?.let(onClicked)
+            }
             itemView.setOnFocusChangeListener { _, hasFocus ->
-                if (hasFocus) onFocused(item)
+                if (hasFocus) {
+                    val position = bindingAdapterPosition
+                    currentItem()?.let { focused ->
+                        if (position != RecyclerView.NO_POSITION) onFocused(focused)
+                    }
+                }
             }
 
             // Parental gate: mask adult metadata until the PIN is entered.
             if (adultLocked && item.isAdult()) {
                 name.text = itemView.context.getString(R.string.adult_locked_title)
-                meta.visibility = View.GONE
+                meta.text = ""
+                meta.visibility = View.INVISIBLE
                 ratingRow.visibility = View.GONE
                 progressBar.visibility = View.GONE
                 poster.scaleType = ImageView.ScaleType.FIT_CENTER
                 poster.load(R.drawable.ic_lock) { crossfade(false) }
+                itemView.contentDescription = name.text
                 return
             }
             poster.scaleType = ImageView.ScaleType.CENTER_CROP
@@ -110,9 +129,13 @@ class SeriesAdapter(
 
             val year = item.releaseDate?.take(4)?.takeIf { it.isNotBlank() }
             meta.text = year ?: ""
-            meta.visibility = if (year != null) View.VISIBLE else View.GONE
+            // Keep the fixed metadata slot even when no year is known so cards in
+            // the same grid row never end up with different heights.
+            meta.visibility = if (year != null) View.VISIBLE else View.INVISIBLE
 
-            val ratingText = item.rating?.takeIf { it > 0 }?.let { String.format("%.1f", it) }
+            val ratingText = item.rating?.takeIf { it > 0 }?.let {
+                String.format(Locale.getDefault(), "%.1f", it)
+            }
             if (ratingText != null) {
                 rating.text = ratingText
                 ratingRow.visibility = View.VISIBLE
@@ -130,6 +153,43 @@ class SeriesAdapter(
                     error(placeholder)
                 }
             }
+
+            itemView.contentDescription = buildList {
+                add(item.name)
+                year?.let(::add)
+                ratingText?.let { add(itemView.context.getString(R.string.detail_rating) + " " + it) }
+                if (pct in 1..99) {
+                    add(itemView.context.getString(R.string.resume_continue) + " " + pct + "%")
+                }
+            }.joinToString(", ")
+        }
+
+        /**
+         * Paging can temporarily expose a null placeholder while a new source is
+         * committing. Explicitly clear the recycled holder so stale series art can
+         * never be clicked or announced as the new row.
+         */
+        fun clear() {
+            boundItem = null
+            itemView.isFocusable = false
+            itemView.isClickable = false
+            itemView.alpha = 0f
+            itemView.setOnClickListener(null)
+            itemView.onFocusChangeListener = null
+            itemView.contentDescription = null
+            name.text = ""
+            meta.text = ""
+            meta.visibility = View.INVISIBLE
+            ratingRow.visibility = View.GONE
+            progressBar.visibility = View.GONE
+            poster.contentDescription = null
+            poster.load(null) { crossfade(false) }
+        }
+
+        private fun currentItem(): Series? {
+            val position = bindingAdapterPosition
+            if (position == RecyclerView.NO_POSITION || position >= itemCount) return null
+            return getItem(position)
         }
     }
 
