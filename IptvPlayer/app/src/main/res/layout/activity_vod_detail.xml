@@ -279,7 +279,6 @@
         android:clipToPadding="false"
         android:nextFocusLeft="@id/playButton"
         android:nextFocusUp="@id/playButton"
-        app:preserveFocusAfterLayout="true"
         android:visibility="gone"
         app:layout_constraintStart_toStartOf="@id/heroGuideline"
         app:layout_constraintEnd_toEndOf="parent"
