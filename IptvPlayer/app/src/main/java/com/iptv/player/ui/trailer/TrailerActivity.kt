@@ -27,6 +27,10 @@ import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.Abs
 
 class TrailerActivity : BaseActivity() {
 
+    /** A trailer is playback too, including the embedded YouTube player. */
+    protected override val idleScreensaverEnabledForScreen: Boolean
+        get() = false
+
     companion object {
         const val EXTRA_TRAILER_URL = "extra_trailer_url"
         const val EXTRA_TITLE = "extra_title"

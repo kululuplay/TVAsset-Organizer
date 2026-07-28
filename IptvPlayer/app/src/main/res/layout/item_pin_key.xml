@@ -1,13 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One on-screen keypad key (digit or backspace). Focusable; white on focus. -->
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Compact, semantic keypad button. Kotlin supplies the digit/backspace label. -->
+<androidx.appcompat.widget.AppCompatButton xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="@dimen/settings_pin_key"
     android:layout_height="@dimen/settings_pin_key"
-    android:layout_marginEnd="@dimen/space_s"
+    android:layout_marginStart="@dimen/space_xs"
+    android:layout_marginEnd="@dimen/space_xs"
     android:background="@drawable/bg_settings_row"
+    android:backgroundTint="@null"
+    android:focusable="true"
+    android:focusableInTouchMode="false"
     android:gravity="center"
+    android:minHeight="@dimen/settings_pin_key"
+    android:minWidth="@dimen/settings_pin_key"
+    android:paddingStart="0dp"
+    android:paddingTop="0dp"
+    android:paddingEnd="0dp"
+    android:paddingBottom="0dp"
+    android:stateListAnimator="@animator/control_focus"
     android:textColor="@color/settings_row_text"
     android:textSize="@dimen/text_title"
     android:textStyle="bold"
-    android:focusable="true"
-    android:focusableInTouchMode="false" />
+    android:textAllCaps="false" />

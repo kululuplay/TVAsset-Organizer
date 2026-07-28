@@ -143,6 +143,7 @@ object PinPromptDialog {
         keysCol.addView(row2)
 
         dialog.show()
+        (context as? BaseActivity)?.trackIdleInteractions(dialog)
         firstKey?.requestFocus()
         return dialog
     }

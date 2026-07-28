@@ -154,7 +154,7 @@
     <string name="settings_diagnostics">التشخيص</string>
     <string name="settings_about">حول</string>
     <string name="settings_logout">تسجيل الخروج</string>
-    <string name="settings_logout_confirm">تسجيل الخروج وإزالة هذا الملف الشخصي؟</string>
+    <string name="settings_logout_confirm">هل تريد تسجيل الخروج من مصدر IPTV هذا على هذا الجهاز؟</string>
 
     <string name="pin_enter">أدخل الرمز</string>
     <string name="pin_set">عيّن رمزاً من 4 أرقام</string>
@@ -235,6 +235,7 @@
     <string name="feature_live">قنوات مباشرة ورياضة بدقة عالية</string>
     <string name="feature_vod">آلاف الأفلام والمسلسلات</string>
     <string name="feature_multi">شاهد على كل الشاشات</string>
+    <string name="account_expiry_with_days">%1$s · %2$s</string>
     <!-- Master-detail redesign -->
     <string name="settings_general_info">معلومات عامة</string>
     <string name="settings_time_sync">الوقت والمزامنة</string>
@@ -245,7 +246,60 @@
     <string name="settings_default_pin">رمز PIN الافتراضي: %1$s</string>
     <string name="settings_enter_old_pin">أدخل رمز PIN الحالي</string>
     <string name="settings_enter_new_pin">أدخل رمز PIN جديد</string>
+    <string name="settings_confirm_new_pin">أكّد رمز PIN الجديد</string>
     <string name="settings_pin_changed">تم تحديث رمز PIN</string>
+    <string name="settings_pin_remote_hint">استخدم أزرار الاتجاهات أو الأرقام. اضغط رجوع للحذف.</string>
+    <string name="settings_saved">تم الحفظ</string>
+    <string name="settings_system_support">النظام والدعم</string>
+    <string name="settings_toggle_state">%1$s، %2$s</string>
+    <string name="settings_selected_option">%1$s، محدد</string>
+    <string name="settings_content_manager">إدارة المحتوى</string>
+    <string name="settings_share_playback_log">مشاركة سجل التشغيل</string>
+    <string name="settings_playback_log_empty">لا يوجد سجل تشغيل بعد</string>
+    <string name="settings_share_unavailable">لا يتوفر تطبيق لمشاركة سجل التشغيل.</string>
+
+    <!-- أوصاف لوحات التفاصيل -->
+    <string name="settings_panel_general_desc">معلومات الحساب والشبكة والجهاز</string>
+    <string name="settings_panel_language_desc">اختر اللغة المستخدمة في جميع أنحاء التطبيق</string>
+    <string name="settings_panel_parental_desc">إدارة الملفات الشخصية والوصول إلى محتوى البالغين ورمز PIN</string>
+    <string name="settings_panel_content_desc">اختر الفئات والقنوات التي تظهر</string>
+    <string name="settings_panel_player_desc">ضبط محركات التشغيل وفك الترميز والتخزين المؤقت والصوت</string>
+    <string name="settings_panel_time_desc">الساعة وشاشة التوقف والمزامنة في الخلفية</string>
+    <string name="settings_panel_tmdb_desc">أضف مفتاح TMDB اختياريًا للحصول على تفاصيل أفلام أكثر ثراءً</string>
+    <string name="settings_panel_speed_desc">قياس أداء التنزيل للاتصال الحالي</string>
+    <string name="settings_panel_system_desc">التشخيص ومعلومات التطبيق وإجراءات الحساب</string>
+    <string name="settings_tmdb_input_hint">أدخل مفتاح TMDB API</string>
+
+    <!-- الشبكة واختبار السرعة -->
+    <string name="settings_network_info">معلومات الشبكة</string>
+    <string name="settings_public_ip">عنوان IP العام (IPv4)</string>
+    <string name="settings_speedtest">اختبار السرعة</string>
+    <string name="speedtest_title">اختبار سرعة الإنترنت</string>
+    <string name="speedtest_desc">ابدأ الاختبار لقياس سرعة التنزيل الفعلية. يستغرق نحو 10 ثوانٍ.</string>
+    <string name="speedtest_start">بدء الاختبار</string>
+    <string name="speedtest_retry">إعادة الاختبار</string>
+    <string name="speedtest_running">جارٍ الاختبار…</string>
+    <string name="speedtest_unit">ميغابت/ث</string>
+    <string name="speedtest_idle">—</string>
+    <string name="speedtest_meta">التنزيل · عينة مدتها نحو 10 ثوانٍ</string>
+    <string name="speedtest_progress">تقدم اختبار السرعة</string>
+    <string name="speedtest_phase_connecting">جارٍ إعداد الاتصالات · %1$d/%2$d</string>
+    <string name="speedtest_phase_warming">جارٍ تهيئة الاتصالات · %1$d/%2$d نشطة</string>
+    <string name="speedtest_phase_measuring">جارٍ قياس السرعة المستمرة · %1$d/%2$d نشطة</string>
+    <string name="speedtest_method">يستخدم عدة شبكات CDN عامة و10 تدفقات تنزيل متوازية. يقيس هذا اتصالك بالإنترنت، وليس خادم IPTV.</string>
+    <string name="speedtest_data_notice">ينقل الاختبار كمية كبيرة من البيانات. قد تؤثر جودة شبكة Wi-Fi وشبكات VPN وحركة البيانات في الخلفية في النتيجة.</string>
+    <string name="speedtest_result_meta">%1$d تدفقات نشطة · %2$d ميغابايت · %3$.1f ث</string>
+    <string name="speedtest_result_summary">%1$s · %2$s</string>
+    <string name="speedtest_failed">فشل الاختبار. تحقق من اتصالك.</string>
+    <string name="speedtest_tier_poor">ضعيف</string>
+    <string name="speedtest_tier_normal">عادي</string>
+    <string name="speedtest_tier_good">جيد</string>
+    <string name="speedtest_tier_excellent">ممتاز</string>
+    <string name="speedtest_msg_poor">لا يمكن مشاهدة البث بثبات بهذه السرعة.</string>
+    <string name="speedtest_msg_normal">كافية لمشاهدة بث HD.</string>
+    <string name="speedtest_msg_good">سرعة جيدة لبث سلس.</string>
+    <string name="speedtest_msg_excellent">ممتازة لجميع أنواع المحتوى، بما في ذلك 4K.</string>
+
     <string name="settings_audio_passthrough">تمرير الصوت (لأجهزة استقبال AV)</string>
     <string name="settings_audio_passthrough_warning">فعّل هذا الخيار فقط إذا كان هناك جهاز استقبال AV أو مكبر صوت يدعم فك ترميز Dolby/DTS. على أجهزة التلفزيون وأجهزة العرض بدون فك ترميز، ستعمل الصورة لكن بدون صوت. إذا انقطع الصوت، أوقف هذا الخيار.</string>
 

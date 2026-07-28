@@ -173,7 +173,7 @@
     <string name="settings_diagnostics">Tanılama</string>
     <string name="settings_about">Hakkında</string>
     <string name="settings_logout">Çıkış yap</string>
-    <string name="settings_logout_confirm">Çıkış yapılsın ve bu profil kaldırılsın mı?</string>
+    <string name="settings_logout_confirm">Bu cihazdaki IPTV kaynağından çıkış yapılsın mı?</string>
 
     <string name="pin_enter">PIN girin</string>
     <string name="pin_set">4 haneli bir PIN belirleyin</string>
@@ -280,7 +280,29 @@
     <string name="settings_default_pin">Varsayılan PIN kodu: %1$s</string>
     <string name="settings_enter_old_pin">Mevcut PIN kodunuzu girin</string>
     <string name="settings_enter_new_pin">Yeni bir PIN kodu girin</string>
+    <string name="settings_confirm_new_pin">Yeni PIN kodunuzu doğrulayın</string>
     <string name="settings_pin_changed">PIN güncellendi</string>
+    <string name="settings_pin_remote_hint">Yön tuşlarını veya sayı tuşlarını kullanın. Silmek için Geri tuşuna basın.</string>
+    <string name="settings_saved">Kaydedildi</string>
+    <string name="settings_system_support">Sistem ve Destek</string>
+    <string name="settings_toggle_state">%1$s, %2$s</string>
+    <string name="settings_selected_option">%1$s, seçili</string>
+    <string name="settings_share_playback_log">Oynatma günlüğünü paylaş</string>
+    <string name="settings_playback_log_empty">Henüz oynatma günlüğü yok</string>
+    <string name="settings_share_unavailable">Oynatma günlüğünü paylaşabilecek bir uygulama bulunamadı.</string>
+    <string name="account_expiry_with_days">%1$s · %2$s</string>
+
+    <!-- Ortak ayrıntı başlığı açıklamaları -->
+    <string name="settings_panel_general_desc">Hesap, ağ ve cihaz bilgileri</string>
+    <string name="settings_panel_language_desc">Uygulamanın tamamında kullanılacak dili seçin</string>
+    <string name="settings_panel_parental_desc">Profilleri, yetişkin içerik erişimini ve PIN kodunu yönetin</string>
+    <string name="settings_panel_content_desc">Görünecek kategori ve kanalları seçin</string>
+    <string name="settings_panel_player_desc">Oynatıcı, kod çözme, tampon ve ses ayarlarını düzenleyin</string>
+    <string name="settings_panel_time_desc">Saat, ekran koruyucu ve arka plan eşitlemesi</string>
+    <string name="settings_panel_tmdb_desc">Daha zengin film bilgileri için isteğe bağlı TMDB anahtarı ekleyin</string>
+    <string name="settings_panel_speed_desc">Mevcut bağlantının indirme performansını ölçün</string>
+    <string name="settings_panel_system_desc">Tanılama, uygulama bilgileri ve hesap işlemleri</string>
+    <string name="settings_tmdb_input_hint">TMDB API anahtarını girin</string>
 
     <!-- Güncelleme uyarısı (açılışta otomatik gösterilir) -->
     <string name="update_available_title">Güncelleme mevcut</string>
@@ -324,6 +346,15 @@
     <string name="speedtest_running">Test ediliyor…</string>
     <string name="speedtest_unit">Mbps</string>
     <string name="speedtest_idle">—</string>
+    <string name="speedtest_meta">İNDİRME · YAKLAŞIK 10 SANİYELİK ÖRNEK</string>
+    <string name="speedtest_progress">Hız testi ilerlemesi</string>
+    <string name="speedtest_phase_connecting">Bağlantılar hazırlanıyor · %1$d/%2$d</string>
+    <string name="speedtest_phase_warming">Bağlantılar hazırlanıyor · %1$d/%2$d etkin</string>
+    <string name="speedtest_phase_measuring">Sürdürülebilir hız ölçülüyor · %1$d/%2$d etkin</string>
+    <string name="speedtest_method">Birden fazla genel CDN ve 10 paralel indirme akışı kullanır. Sonuç IPTV sunucusunun değil, internet bağlantınızın hızıdır.</string>
+    <string name="speedtest_data_notice">Test önemli miktarda veri aktarır. Wi‑Fi kalitesi, VPN ve arka plan trafiği sonucu etkileyebilir.</string>
+    <string name="speedtest_result_meta">%1$d etkin akış · %2$d MB · %3$.1f sn</string>
+    <string name="speedtest_result_summary">%1$s · %2$s</string>
     <string name="speedtest_failed">Test başarısız. Lütfen bağlantınızı kontrol edin.</string>
     <string name="speedtest_tier_poor">Zayıf</string>
     <string name="speedtest_tier_normal">Normal</string>

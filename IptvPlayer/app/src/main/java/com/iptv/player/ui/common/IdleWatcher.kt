@@ -1,14 +1,9 @@
 /*
  * IdleWatcher.kt
- * Handler-based idle detector. After [timeoutMs] of no user interaction it fires
- * [onIdle] (typically to launch the screensaver). Activities forward interaction
- * by overriding onUserInteraction()/dispatchKeyEvent and calling notifyInteraction().
- *
- * Usage in an Activity:
- *   private val idle by lazy { IdleWatcher(this) { startScreensaver() } }
- *   override fun onResume()  { super.onResume();  idle.start() }
- *   override fun onPause()   { super.onPause();   idle.stop() }
- *   override fun onUserInteraction() { super.onUserInteraction(); idle.notifyInteraction() }
+ * Main-thread, one-shot idle detector. After [timeoutMs] of no user interaction
+ * it fires [onIdle] (typically to launch the screensaver). The watcher deliberately
+ * stops before invoking the callback, preventing duplicate launches while Android
+ * is moving the owner Activity through onPause/onStop.
  */
 package com.iptv.player.ui.common
 
@@ -24,12 +19,14 @@ class IdleWatcher(
     private var running = false
 
     private val idleRunnable = Runnable {
-        if (running) onIdle()
+        if (!running) return@Runnable
+        running = false
+        onIdle()
     }
 
     /** Convenience: configure from minutes (0 disables the watcher). */
     fun setTimeoutMinutes(minutes: Int) {
-        timeoutMs = minutes.toLong() * 60_000L
+        timeoutMs = minutes.coerceAtLeast(0).toLong() * 60_000L
         if (running) restart()
     }
 

@@ -20,6 +20,10 @@ import kotlin.random.Random
 
 class ScreensaverActivity : BaseActivity() {
 
+    /** Do not recursively launch another saver over the saver itself. */
+    protected override val idleScreensaverEnabledForScreen: Boolean
+        get() = false
+
     private lateinit var binding: ActivityScreensaverBinding
     private val handler = Handler(Looper.getMainLooper())
     private val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())

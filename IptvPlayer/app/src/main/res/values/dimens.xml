@@ -60,11 +60,18 @@
     <dimen name="nav_item_height">52dp</dimen>
 
     <!-- Settings (master-detail layout). -->
-    <dimen name="settings_row_min_h">56dp</dimen>
+    <dimen name="settings_row_min_h">64dp</dimen>
     <dimen name="settings_flag_w">40dp</dimen>
     <dimen name="settings_flag_h">28dp</dimen>
-    <dimen name="settings_pin_box">68dp</dimen>
-    <dimen name="settings_pin_key">52dp</dimen>
+    <dimen name="settings_pin_box">56dp</dimen>
+    <dimen name="settings_pin_key">56dp</dimen>
+    <dimen name="settings_rail_padding">12dp</dimen>
+    <dimen name="settings_panel_padding">16dp</dimen>
+    <dimen name="settings_header_icon">44dp</dimen>
+    <dimen name="settings_value_max_w">220dp</dimen>
+    <dimen name="settings_info_value_max_w">300dp</dimen>
+    <dimen name="settings_progress_height">8dp</dimen>
+    <dimen name="settings_speed_result">58sp</dimen>
 
     <!-- EPG guide timeline. -->
     <dimen name="epg_row_height">64dp</dimen>

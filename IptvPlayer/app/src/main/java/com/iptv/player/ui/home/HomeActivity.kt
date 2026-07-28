@@ -66,6 +66,16 @@ import java.util.Locale
 
 class HomeActivity : BaseActivity() {
 
+    /**
+     * Home normally participates in idle protection, but it also owns the live
+     * preview/fullscreen player. Protect only a starting or playing stream: a
+     * controller can remain allocated after retries are exhausted, and that
+     * static error screen must still be eligible for burn-in protection.
+     */
+    protected override fun isIdleScreensaverTemporarilyBlocked(): Boolean =
+        previewState == LivePreviewPressPolicy.Phase.STARTING ||
+            previewState == LivePreviewPressPolicy.Phase.READY
+
     private lateinit var binding: ActivityHomeBinding
 
     /** When true, this screen shows radio stations only (launched as the Radio folder). */

@@ -3,10 +3,12 @@
 <TextView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="@dimen/settings_pin_box"
     android:layout_height="@dimen/settings_pin_box"
-    android:layout_marginEnd="@dimen/space_m"
+    android:layout_marginStart="@dimen/space_s"
+    android:layout_marginEnd="@dimen/space_s"
     android:background="@drawable/bg_pin_box"
+    android:focusable="false"
     android:gravity="center"
+    android:importantForAccessibility="no"
     android:textColor="@color/text_primary"
     android:textSize="@dimen/text_title"
-    android:textStyle="bold"
-    android:focusable="false" />
+    android:textStyle="bold" />

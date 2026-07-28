@@ -153,7 +153,7 @@
     <string name="settings_diagnostics">Diagnostiek</string>
     <string name="settings_about">Over</string>
     <string name="settings_logout">Uitloggen</string>
-    <string name="settings_logout_confirm">Uitloggen en dit profiel verwijderen?</string>
+    <string name="settings_logout_confirm">Uitloggen bij deze IPTV-bron op dit apparaat?</string>
 
     <string name="pin_enter">Pincode invoeren</string>
     <string name="pin_set">Stel een 4-cijferige pincode in</string>
@@ -234,6 +234,7 @@
     <string name="feature_live">Live-tv &amp; sport in scherp HD</string>
     <string name="feature_vod">Duizenden films &amp; series</string>
     <string name="feature_multi">Kijk op elk scherm</string>
+    <string name="account_expiry_with_days">%1$s · %2$s</string>
     <!-- Master-detail redesign -->
     <string name="settings_general_info">Algemene info</string>
     <string name="settings_time_sync">Tijd &amp; synchronisatie</string>
@@ -244,7 +245,60 @@
     <string name="settings_default_pin">Standaard pincode: %1$s</string>
     <string name="settings_enter_old_pin">Voer je huidige pincode in</string>
     <string name="settings_enter_new_pin">Voer een nieuwe pincode in</string>
+    <string name="settings_confirm_new_pin">Bevestig je nieuwe pincode</string>
     <string name="settings_pin_changed">Pincode bijgewerkt</string>
+    <string name="settings_pin_remote_hint">Gebruik de navigatietoetsen of cijfertoetsen. Druk op Terug om te wissen.</string>
+    <string name="settings_saved">Opgeslagen</string>
+    <string name="settings_system_support">Systeem &amp; ondersteuning</string>
+    <string name="settings_toggle_state">%1$s, %2$s</string>
+    <string name="settings_selected_option">%1$s, geselecteerd</string>
+    <string name="settings_content_manager">Inhoudsbeheer</string>
+    <string name="settings_share_playback_log">Afspeellogboek delen</string>
+    <string name="settings_playback_log_empty">Nog geen afspeellogboek</string>
+    <string name="settings_share_unavailable">Er is geen app beschikbaar om het afspeellogboek te delen.</string>
+
+    <!-- Beschrijvingen van detailpanelen -->
+    <string name="settings_panel_general_desc">Account-, netwerk- en apparaatinformatie</string>
+    <string name="settings_panel_language_desc">Kies de taal die in de hele app wordt gebruikt</string>
+    <string name="settings_panel_parental_desc">Beheer profielen, toegang tot inhoud voor volwassenen en je pincode</string>
+    <string name="settings_panel_content_desc">Kies welke categorieën en zenders worden weergegeven</string>
+    <string name="settings_panel_player_desc">Stel afspeel-engines, decodering, buffering en audio af</string>
+    <string name="settings_panel_time_desc">Klok, schermbeveiliging en synchronisatie op de achtergrond</string>
+    <string name="settings_panel_tmdb_desc">Voeg optioneel een TMDB-sleutel toe voor uitgebreidere filminformatie</string>
+    <string name="settings_panel_speed_desc">Meet de downloadprestaties van de huidige verbinding</string>
+    <string name="settings_panel_system_desc">Diagnostiek, app-informatie en accountacties</string>
+    <string name="settings_tmdb_input_hint">Voer de TMDB API-sleutel in</string>
+
+    <!-- Netwerk en snelheidstest -->
+    <string name="settings_network_info">Netwerkinformatie</string>
+    <string name="settings_public_ip">Openbaar IP-adres (IPv4)</string>
+    <string name="settings_speedtest">Snelheidstest</string>
+    <string name="speedtest_title">Internetsnelheidstest</string>
+    <string name="speedtest_desc">Start de test om je werkelijke downloadsnelheid te meten. Dit duurt ongeveer 10 seconden.</string>
+    <string name="speedtest_start">Test starten</string>
+    <string name="speedtest_retry">Opnieuw testen</string>
+    <string name="speedtest_running">Bezig met testen…</string>
+    <string name="speedtest_unit">Mbit/s</string>
+    <string name="speedtest_idle">—</string>
+    <string name="speedtest_meta">DOWNLOAD · METING VAN ONGEVEER 10 SECONDEN</string>
+    <string name="speedtest_progress">Voortgang van snelheidstest</string>
+    <string name="speedtest_phase_connecting">Verbindingen voorbereiden · %1$d/%2$d</string>
+    <string name="speedtest_phase_warming">Verbindingen opwarmen · %1$d/%2$d actief</string>
+    <string name="speedtest_phase_measuring">Aanhoudende snelheid meten · %1$d/%2$d actief</string>
+    <string name="speedtest_method">Gebruikt meerdere openbare CDN\'s en 10 parallelle downloadstreams. Hiermee wordt je internetverbinding gemeten, niet de IPTV-server.</string>
+    <string name="speedtest_data_notice">De test verbruikt een aanzienlijke hoeveelheid data. Wifikwaliteit, VPN\'s en achtergrondverkeer kunnen het resultaat beïnvloeden.</string>
+    <string name="speedtest_result_meta">%1$d actieve streams · %2$d MB · %3$.1f s</string>
+    <string name="speedtest_result_summary">%1$s · %2$s</string>
+    <string name="speedtest_failed">Test mislukt. Controleer je verbinding.</string>
+    <string name="speedtest_tier_poor">Matig</string>
+    <string name="speedtest_tier_normal">Normaal</string>
+    <string name="speedtest_tier_good">Goed</string>
+    <string name="speedtest_tier_excellent">Uitstekend</string>
+    <string name="speedtest_msg_poor">Op deze snelheid kun je streams niet stabiel bekijken.</string>
+    <string name="speedtest_msg_normal">Voldoende voor HD-streams.</string>
+    <string name="speedtest_msg_good">Een goede snelheid voor vloeiend streamen.</string>
+    <string name="speedtest_msg_excellent">Uitstekend voor alle inhoud, inclusief 4K.</string>
+
     <string name="settings_audio_passthrough">Audio-passthrough (voor AV-receivers)</string>
     <string name="settings_audio_passthrough_warning">Schakel dit alleen in als er een AV-receiver of soundbar met Dolby/DTS-decodering is aangesloten. Op tv\'s en beamers zonder decoder speelt het beeld af, maar is er GEEN geluid. Ontbreekt het geluid, zet deze optie dan uit.</string>
     <string name="settings_debug_overlay">Debug-overlay (speler en voorbeeld)</string>

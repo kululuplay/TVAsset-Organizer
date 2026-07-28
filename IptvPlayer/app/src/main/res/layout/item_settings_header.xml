@@ -8,6 +8,7 @@
     android:textSize="@dimen/text_caption"
     android:textStyle="bold"
     android:textAllCaps="true"
-    android:paddingHorizontal="@dimen/space_s"
+    android:paddingStart="@dimen/space_s"
+    android:paddingEnd="@dimen/space_s"
     android:layout_marginTop="@dimen/space_l"
     android:layout_marginBottom="@dimen/space_s" />

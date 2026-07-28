@@ -1,20 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A read-only label/value row used inside the General Info panel. -->
+<!-- Read-only information row with bounded values for long model/account strings. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
+    android:layout_marginBottom="@dimen/space_s"
+    android:background="@drawable/bg_settings_info_row"
     android:gravity="center_vertical"
-    android:background="#10FFFFFF"
-    android:paddingHorizontal="@dimen/space_m"
-    android:paddingVertical="@dimen/space_m"
-    android:layout_marginBottom="2dp">
+    android:orientation="horizontal"
+    android:paddingStart="@dimen/space_m"
+    android:paddingTop="@dimen/space_m"
+    android:paddingEnd="@dimen/space_m"
+    android:paddingBottom="@dimen/space_m">
 
     <TextView
         android:id="@+id/iLabel"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="2"
         android:textColor="@color/text_secondary"
         android:textSize="@dimen/text_body" />
 
@@ -23,8 +27,11 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="@dimen/space_m"
+        android:ellipsize="end"
+        android:gravity="end|center_vertical"
+        android:maxLines="2"
+        android:maxWidth="@dimen/settings_info_value_max_w"
         android:textColor="@color/text_primary"
         android:textSize="@dimen/text_body"
-        android:textStyle="bold"
-        android:gravity="end" />
+        android:textStyle="bold" />
 </LinearLayout>

@@ -153,7 +153,7 @@
     <string name="settings_diagnostics">Diagnostics</string>
     <string name="settings_about">À propos</string>
     <string name="settings_logout">Déconnexion</string>
-    <string name="settings_logout_confirm">Se déconnecter et supprimer ce profil ?</string>
+    <string name="settings_logout_confirm">Se déconnecter de cette source IPTV sur cet appareil ?</string>
 
     <string name="pin_enter">Saisir le code PIN</string>
     <string name="pin_set">Définir un code PIN à 4 chiffres</string>
@@ -234,6 +234,7 @@
     <string name="feature_live">TV en direct et sport en HD nette</string>
     <string name="feature_vod">Des milliers de films et séries</string>
     <string name="feature_multi">Regardez sur tous vos écrans</string>
+    <string name="account_expiry_with_days">%1$s · %2$s</string>
     <!-- Master-detail redesign -->
     <string name="settings_general_info">Informations générales</string>
     <string name="settings_time_sync">Heure et synchronisation</string>
@@ -244,7 +245,60 @@
     <string name="settings_default_pin">Code PIN par défaut : %1$s</string>
     <string name="settings_enter_old_pin">Saisissez votre code PIN actuel</string>
     <string name="settings_enter_new_pin">Saisissez un nouveau code PIN</string>
+    <string name="settings_confirm_new_pin">Confirmez votre nouveau code PIN</string>
     <string name="settings_pin_changed">Code PIN mis à jour</string>
+    <string name="settings_pin_remote_hint">Utilisez la croix directionnelle ou les touches numériques. Appuyez sur Retour pour effacer.</string>
+    <string name="settings_saved">Enregistré</string>
+    <string name="settings_system_support">Système et assistance</string>
+    <string name="settings_toggle_state">%1$s, %2$s</string>
+    <string name="settings_selected_option">%1$s, sélectionné</string>
+    <string name="settings_content_manager">Gestion du contenu</string>
+    <string name="settings_share_playback_log">Partager le journal de lecture</string>
+    <string name="settings_playback_log_empty">Aucun journal de lecture pour le moment</string>
+    <string name="settings_share_unavailable">Aucune application ne permet de partager le journal de lecture.</string>
+
+    <!-- Descriptions des panneaux de détail -->
+    <string name="settings_panel_general_desc">Informations sur le compte, le réseau et l\'appareil</string>
+    <string name="settings_panel_language_desc">Choisissez la langue utilisée dans toute l\'application</string>
+    <string name="settings_panel_parental_desc">Gérez les profils, l\'accès au contenu adulte et votre code PIN</string>
+    <string name="settings_panel_content_desc">Choisissez les catégories et les chaînes affichées</string>
+    <string name="settings_panel_player_desc">Réglez les moteurs de lecture, le décodage, le tampon et l\'audio</string>
+    <string name="settings_panel_time_desc">Horloge, économiseur d\'écran et synchronisation en arrière-plan</string>
+    <string name="settings_panel_tmdb_desc">Ajoutez une clé TMDB facultative pour enrichir les détails des films</string>
+    <string name="settings_panel_speed_desc">Mesurez les performances de téléchargement de la connexion actuelle</string>
+    <string name="settings_panel_system_desc">Diagnostics, informations sur l\'application et actions du compte</string>
+    <string name="settings_tmdb_input_hint">Saisissez la clé API TMDB</string>
+
+    <!-- Réseau et test de débit -->
+    <string name="settings_network_info">Informations réseau</string>
+    <string name="settings_public_ip">Adresse IP publique (IPv4)</string>
+    <string name="settings_speedtest">Test de débit</string>
+    <string name="speedtest_title">Test de débit Internet</string>
+    <string name="speedtest_desc">Lancez le test pour mesurer votre débit de téléchargement réel. Il dure environ 10 secondes.</string>
+    <string name="speedtest_start">Démarrer le test</string>
+    <string name="speedtest_retry">Relancer le test</string>
+    <string name="speedtest_running">Test en cours…</string>
+    <string name="speedtest_unit">Mbit/s</string>
+    <string name="speedtest_idle">—</string>
+    <string name="speedtest_meta">DÉBIT DESCENDANT · MESURE D\'ENVIRON 10 SECONDES</string>
+    <string name="speedtest_progress">Progression du test de débit</string>
+    <string name="speedtest_phase_connecting">Préparation des connexions · %1$d/%2$d</string>
+    <string name="speedtest_phase_warming">Stabilisation des connexions · %1$d/%2$d actives</string>
+    <string name="speedtest_phase_measuring">Mesure du débit soutenu · %1$d/%2$d connexions actives</string>
+    <string name="speedtest_method">Utilise plusieurs CDN publics et 10 flux de téléchargement parallèles. Ce test mesure votre connexion Internet, pas le serveur IPTV.</string>
+    <string name="speedtest_data_notice">Le test transfère une quantité importante de données. La qualité du Wi-Fi, les VPN et le trafic en arrière-plan peuvent influencer le résultat.</string>
+    <string name="speedtest_result_meta">%1$d flux actifs · %2$d Mo · %3$.1f s</string>
+    <string name="speedtest_result_summary">%1$s · %2$s</string>
+    <string name="speedtest_failed">Échec du test. Vérifiez votre connexion.</string>
+    <string name="speedtest_tier_poor">Faible</string>
+    <string name="speedtest_tier_normal">Normal</string>
+    <string name="speedtest_tier_good">Bon</string>
+    <string name="speedtest_tier_excellent">Excellent</string>
+    <string name="speedtest_msg_poor">Ce débit ne permet pas de regarder les flux de façon stable.</string>
+    <string name="speedtest_msg_normal">Suffisant pour les flux HD.</string>
+    <string name="speedtest_msg_good">Un bon débit pour un streaming fluide.</string>
+    <string name="speedtest_msg_excellent">Excellent pour tous les contenus, y compris en 4K.</string>
+
     <string name="settings_audio_passthrough">Passthrough audio (pour amplis AV)</string>
     <string name="settings_audio_passthrough_warning">N\'activez cette option que si un ampli AV ou une barre de son avec décodage Dolby/DTS est connecté. Sur les téléviseurs et vidéoprojecteurs sans décodeur, l\'image fonctionne mais il n\'y a AUCUN son. Si le son manque, désactivez cette option.</string>
     <string name="settings_debug_overlay">Superposition de débogage (lecteur et aperçu)</string>

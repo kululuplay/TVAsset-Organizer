@@ -1,36 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Settings: a master-detail screen. A big title sits above a two-column body:
-     the left rail lists every settings entry (nav rows, toggles and actions); the
-     right panel swaps its content to match the focused/selected left row. Styled
-     to read as a modern, professional 10-foot UI over the aurora background. -->
+<!-- TV-first master/detail settings. Every panel root is a non-focusable scroll
+     viewport below one shared, Activity-driven detail header. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:background="@drawable/bg_login_aurora"
-    android:paddingHorizontal="@dimen/safe_area_h"
-    android:paddingVertical="@dimen/safe_area_v">
+    android:orientation="vertical"
+    android:paddingStart="@dimen/safe_area_h"
+    android:paddingTop="@dimen/safe_area_v"
+    android:paddingEnd="@dimen/safe_area_h"
+    android:paddingBottom="@dimen/safe_area_v">
 
-    <!-- Title bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:layout_marginBottom="@dimen/space_m"
         android:gravity="center_vertical"
-        android:layout_marginBottom="@dimen/space_l">
+        android:orientation="horizontal">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:letterSpacing="0.02"
             android:text="@string/settings_title"
             android:textColor="@color/text_primary"
             android:textSize="@dimen/text_big_title"
-            android:textStyle="bold"
-            android:letterSpacing="0.02" />
+            android:textStyle="bold" />
 
         <Space
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="1dp"
             android:layout_weight="1" />
 
         <com.iptv.player.ui.common.ClockView
@@ -45,319 +45,530 @@
             android:id="@+id/dateText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_m"
+            android:maxLines="1"
             android:textColor="@color/text_secondary"
-            android:textSize="@dimen/text_body"
-            android:layout_marginStart="@dimen/space_m" />
+            android:textSize="@dimen/text_body" />
     </LinearLayout>
 
-    <!-- Body: master rail + detail panel -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:clipChildren="false"
         android:orientation="horizontal">
 
-        <!-- Master rail -->
-        <androidx.core.widget.NestedScrollView
+        <!-- Category rail. The viewport cannot steal D-pad focus from its rows. -->
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="5"
-            android:clipToPadding="false"
-            android:paddingBottom="@dimen/space_m"
-            android:fillViewport="true">
+            android:background="@drawable/bg_settings_rail"
+            android:clipChildren="false"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/settings_rail_padding"
+            android:paddingTop="@dimen/settings_rail_padding"
+            android:paddingEnd="@dimen/settings_rail_padding"
+            android:paddingBottom="@dimen/settings_rail_padding">
 
-            <LinearLayout
-                android:id="@+id/settingsContainer"
+            <androidx.core.widget.NestedScrollView
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
-        </androidx.core.widget.NestedScrollView>
+                android:layout_height="match_parent"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:descendantFocusability="afterDescendants"
+                android:fillViewport="true"
+                android:focusable="false"
+                android:focusableInTouchMode="false">
+
+                <LinearLayout
+                    android:id="@+id/settingsContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:clipChildren="false"
+                    android:orientation="vertical" />
+            </androidx.core.widget.NestedScrollView>
+        </LinearLayout>
 
         <Space
-            android:layout_width="@dimen/space_l"
+            android:layout_width="@dimen/space_m"
             android:layout_height="match_parent" />
 
-        <!-- Detail panel -->
-        <FrameLayout
-            android:id="@+id/detailContainer"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="7">
+            android:layout_weight="7"
+            android:clipChildren="false"
+            android:orientation="vertical">
 
-            <!-- General Info -->
-            <androidx.core.widget.NestedScrollView
-                android:id="@+id/detailGeneral"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:clipToPadding="false"
-                android:fillViewport="true">
-
-                <LinearLayout
-                    android:id="@+id/generalContainer"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical" />
-            </androidx.core.widget.NestedScrollView>
-
-            <!-- Change Language -->
-            <androidx.core.widget.NestedScrollView
-                android:id="@+id/detailLanguage"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:clipToPadding="false"
-                android:visibility="gone"
-                android:fillViewport="true">
-
-                <LinearLayout
-                    android:id="@+id/languageContainer"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical" />
-            </androidx.core.widget.NestedScrollView>
-
-            <!-- Change PIN -->
+            <!-- Shared header updated whenever the selected rail panel changes. -->
             <LinearLayout
-                android:id="@+id/detailPin"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical"
-                android:gravity="center_horizontal"
-                android:visibility="gone">
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/space_s"
+                android:background="@drawable/bg_settings_detail_header"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="@dimen/settings_panel_padding"
+                android:paddingTop="@dimen/space_m"
+                android:paddingEnd="@dimen/settings_panel_padding"
+                android:paddingBottom="@dimen/space_m">
 
-                <TextView
-                    android:id="@+id/pinPrompt"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/space_xl"
-                    android:textColor="@color/text_primary"
-                    android:textSize="@dimen/text_title"
-                    android:textStyle="bold" />
+                <ImageView
+                    android:id="@+id/detailHeaderIcon"
+                    android:layout_width="@dimen/settings_header_icon"
+                    android:layout_height="@dimen/settings_header_icon"
+                    android:contentDescription="@null"
+                    android:importantForAccessibility="no"
+                    android:paddingStart="@dimen/space_s"
+                    android:paddingTop="@dimen/space_s"
+                    android:paddingEnd="@dimen/space_s"
+                    android:paddingBottom="@dimen/space_s"
+                    android:src="@drawable/ic_settings"
+                    app:tint="@color/accent" />
 
                 <LinearLayout
-                    android:id="@+id/pinBoxes"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/space_xl"
-                    android:orientation="horizontal" />
-
-                <LinearLayout
-                    android:id="@+id/pinKeys"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/space_xl"
-                    android:orientation="horizontal" />
-
-                <TextView
-                    android:id="@+id/pinHint"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/space_xl"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="@dimen/text_caption" />
-            </LinearLayout>
-
-            <!-- Manage Categories -->
-            <androidx.core.widget.NestedScrollView
-                android:id="@+id/detailCategories"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:clipToPadding="false"
-                android:visibility="gone"
-                android:fillViewport="true">
-
-                <LinearLayout
-                    android:id="@+id/categoriesContainer"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical" />
-            </androidx.core.widget.NestedScrollView>
-
-            <!-- Player engine -->
-            <androidx.core.widget.NestedScrollView
-                android:id="@+id/detailPlayer"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:clipToPadding="false"
-                android:visibility="gone"
-                android:fillViewport="true">
-
-                <LinearLayout
-                    android:id="@+id/playerContainer"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical" />
-            </androidx.core.widget.NestedScrollView>
-
-            <!-- Time & sync -->
-            <androidx.core.widget.NestedScrollView
-                android:id="@+id/detailTime"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:clipToPadding="false"
-                android:visibility="gone"
-                android:fillViewport="true">
-
-                <LinearLayout
-                    android:id="@+id/timeContainer"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical" />
-            </androidx.core.widget.NestedScrollView>
-
-            <!-- TMDB API key -->
-            <LinearLayout
-                android:id="@+id/detailTmdb"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/settings_tmdb"
-                    android:textColor="@color/text_primary"
-                    android:textSize="@dimen/text_title"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/settings_tmdb_hint"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="@dimen/text_caption"
-                    android:layout_marginTop="@dimen/space_s" />
-
-                <EditText
-                    android:id="@+id/tmdbInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/space_l"
-                    android:background="@drawable/bg_input_modern"
-                    android:padding="@dimen/space_m"
-                    android:singleLine="true"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_muted"
-                    android:textSize="@dimen/text_body"
-                    android:inputType="text"
-                    android:importantForAutofill="no" />
-
-                <TextView
-                    android:id="@+id/tmdbSave"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/space_l"
-                    android:background="@drawable/bg_settings_row"
-                    android:focusable="true"
-                    android:focusableInTouchMode="false"
-                    android:paddingHorizontal="@dimen/space_xl"
-                    android:paddingVertical="@dimen/space_m"
-                    android:text="@string/action_save"
-                    android:textColor="@color/settings_row_text"
-                    android:textSize="@dimen/text_body"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
-            <!-- Speed test -->
-            <LinearLayout
-                android:id="@+id/detailSpeedtest"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/speedtest_title"
-                    android:textColor="@color/text_primary"
-                    android:textSize="@dimen/text_title"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/space_s"
-                    android:text="@string/speedtest_desc"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="@dimen/text_caption" />
-
-                <!-- Result card -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:gravity="center_horizontal"
-                    android:layout_marginTop="@dimen/space_l"
-                    android:background="@drawable/bg_glass_card"
-                    android:paddingHorizontal="@dimen/space_l"
-                    android:paddingVertical="@dimen/space_xl">
-
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="bottom">
-
-                        <TextView
-                            android:id="@+id/speedResult"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/speedtest_idle"
-                            android:textColor="@color/text_primary"
-                            android:textSize="72sp"
-                            android:textStyle="bold"
-                            android:includeFontPadding="false" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="@dimen/space_s"
-                            android:layout_marginBottom="12dp"
-                            android:text="@string/speedtest_unit"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="@dimen/text_title"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-
-                    <ProgressBar
-                        android:id="@+id/speedProgress"
-                        style="?android:attr/progressBarStyleHorizontal"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/space_m"
-                        android:indeterminate="true"
-                        android:indeterminateTint="@color/accent"
-                        android:visibility="gone" />
+                    android:layout_marginStart="@dimen/space_m"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
                     <TextView
-                        android:id="@+id/speedStatus"
+                        android:id="@+id/detailTitle"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/space_m"
-                        android:gravity="center"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="@dimen/text_body"
-                        android:textStyle="bold"
-                        android:visibility="gone" />
-                </LinearLayout>
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:text="@string/settings_general_info"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_title"
+                        android:textStyle="bold" />
 
-                <!-- Start / retry -->
-                <TextView
-                    android:id="@+id/speedStart"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/space_l"
-                    android:background="@drawable/bg_settings_row"
-                    android:focusable="true"
-                    android:focusableInTouchMode="false"
-                    android:paddingHorizontal="@dimen/space_xl"
-                    android:paddingVertical="@dimen/space_m"
-                    android:text="@string/speedtest_start"
-                    android:textColor="@color/settings_row_text"
-                    android:textSize="@dimen/text_body"
-                    android:textStyle="bold" />
+                    <TextView
+                        android:id="@+id/detailSubtitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_xs"
+                        android:ellipsize="end"
+                        android:maxLines="2"
+                        android:text="@string/settings_panel_general_desc"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="@dimen/text_caption" />
+                </LinearLayout>
             </LinearLayout>
-        </FrameLayout>
+
+            <!-- Every ID here is a unique visible panel root controlled by Activity. -->
+            <FrameLayout
+                android:id="@+id/detailContainer"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_settings_panel"
+                android:clipChildren="false"
+                android:paddingStart="@dimen/settings_panel_padding"
+                android:paddingTop="@dimen/settings_panel_padding"
+                android:paddingEnd="@dimen/settings_panel_padding"
+                android:paddingBottom="@dimen/settings_panel_padding">
+
+                <androidx.core.widget.NestedScrollView
+                    android:id="@+id/detailGeneral"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:descendantFocusability="afterDescendants"
+                    android:fillViewport="true"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false">
+
+                    <LinearLayout
+                        android:id="@+id/generalContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingBottom="@dimen/space_m" />
+                </androidx.core.widget.NestedScrollView>
+
+                <androidx.core.widget.NestedScrollView
+                    android:id="@+id/detailLanguage"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:descendantFocusability="afterDescendants"
+                    android:fillViewport="true"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:id="@+id/languageContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingBottom="@dimen/space_m" />
+                </androidx.core.widget.NestedScrollView>
+
+                <androidx.core.widget.NestedScrollView
+                    android:id="@+id/detailPin"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:descendantFocusability="afterDescendants"
+                    android:fillViewport="true"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical"
+                        android:paddingBottom="@dimen/space_m">
+
+                        <!-- Activity adds Lock Adult and Profiles rows here. -->
+                        <LinearLayout
+                            android:id="@+id/pinSettingsContainer"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical" />
+
+                        <TextView
+                            android:id="@+id/pinPrompt"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_m"
+                            android:gravity="center"
+                            android:maxLines="2"
+                            android:textColor="@color/text_primary"
+                            android:textSize="@dimen/text_title"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:id="@+id/pinBoxes"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layoutDirection="ltr"
+                            android:layout_marginTop="@dimen/space_m"
+                            android:orientation="horizontal" />
+
+                        <LinearLayout
+                            android:id="@+id/pinKeys"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layoutDirection="ltr"
+                            android:layout_marginTop="@dimen/space_m"
+                            android:orientation="vertical" />
+
+                        <TextView
+                            android:id="@+id/pinHint"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_m"
+                            android:gravity="center"
+                            android:maxLines="2"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="@dimen/text_caption" />
+                    </LinearLayout>
+                </androidx.core.widget.NestedScrollView>
+
+                <androidx.core.widget.NestedScrollView
+                    android:id="@+id/detailCategories"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:descendantFocusability="afterDescendants"
+                    android:fillViewport="true"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:id="@+id/categoriesContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingBottom="@dimen/space_m" />
+                </androidx.core.widget.NestedScrollView>
+
+                <androidx.core.widget.NestedScrollView
+                    android:id="@+id/detailPlayer"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:descendantFocusability="afterDescendants"
+                    android:fillViewport="true"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:id="@+id/playerContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingBottom="@dimen/space_m" />
+                </androidx.core.widget.NestedScrollView>
+
+                <androidx.core.widget.NestedScrollView
+                    android:id="@+id/detailTime"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:descendantFocusability="afterDescendants"
+                    android:fillViewport="true"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:id="@+id/timeContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingBottom="@dimen/space_m" />
+                </androidx.core.widget.NestedScrollView>
+
+                <androidx.core.widget.NestedScrollView
+                    android:id="@+id/detailTmdb"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:descendantFocusability="afterDescendants"
+                    android:fillViewport="true"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingBottom="@dimen/space_m">
+
+                        <TextView
+                            android:id="@+id/tmdbLabel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:labelFor="@id/tmdbInput"
+                            android:text="@string/settings_tmdb"
+                            android:textColor="@color/text_primary"
+                            android:textSize="@dimen/text_title"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_s"
+                            android:text="@string/settings_tmdb_hint"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="@dimen/text_caption" />
+
+                        <EditText
+                            android:id="@+id/tmdbInput"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_l"
+                            android:background="@drawable/bg_input_modern"
+                            android:gravity="start|center_vertical"
+                            android:hint="@string/settings_tmdb_input_hint"
+                            android:imeOptions="actionDone"
+                            android:importantForAutofill="no"
+                            android:inputType="textPassword"
+                            android:layoutDirection="ltr"
+                            android:minHeight="@dimen/settings_row_min_h"
+                            android:paddingStart="@dimen/space_m"
+                            android:paddingTop="@dimen/space_m"
+                            android:paddingEnd="@dimen/space_m"
+                            android:paddingBottom="@dimen/space_m"
+                            android:singleLine="true"
+                            android:textColor="@color/text_primary"
+                            android:textColorHint="@color/text_secondary"
+                            android:textDirection="ltr"
+                            android:textSize="@dimen/text_body" />
+
+                        <androidx.appcompat.widget.AppCompatButton
+                            android:id="@+id/tmdbSave"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_l"
+                            android:background="@drawable/bg_settings_action"
+                            android:backgroundTint="@null"
+                            android:focusable="true"
+                            android:focusableInTouchMode="false"
+                            android:minHeight="@dimen/settings_row_min_h"
+                            android:paddingStart="@dimen/space_xl"
+                            android:paddingTop="@dimen/space_m"
+                            android:paddingEnd="@dimen/space_xl"
+                            android:paddingBottom="@dimen/space_m"
+                            android:stateListAnimator="@animator/control_focus"
+                            android:text="@string/action_save"
+                            android:textAllCaps="false"
+                            android:textColor="@android:color/white"
+                            android:textSize="@dimen/text_body"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </androidx.core.widget.NestedScrollView>
+
+                <androidx.core.widget.NestedScrollView
+                    android:id="@+id/detailSpeedtest"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:descendantFocusability="afterDescendants"
+                    android:fillViewport="true"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingBottom="@dimen/space_m">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/speedtest_title"
+                            android:textColor="@color/text_primary"
+                            android:textSize="@dimen/text_title"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_s"
+                            android:text="@string/speedtest_desc"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="@dimen/text_caption" />
+
+                        <TextView
+                            android:id="@+id/speedMeta"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_s"
+                            android:text="@string/speedtest_method"
+                            android:textColor="@color/accent"
+                            android:textSize="@dimen/text_small"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_xs"
+                            android:text="@string/speedtest_data_notice"
+                            android:textColor="@color/text_muted"
+                            android:textSize="@dimen/text_small" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_m"
+                            android:background="@drawable/bg_settings_info_row"
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical"
+                            android:paddingStart="@dimen/space_l"
+                            android:paddingTop="@dimen/space_l"
+                            android:paddingEnd="@dimen/space_l"
+                            android:paddingBottom="@dimen/space_l">
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:gravity="bottom"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    android:id="@+id/speedResult"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:accessibilityLiveRegion="polite"
+                                    android:includeFontPadding="false"
+                                    android:text="@string/speedtest_idle"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="@dimen/settings_speed_result"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="@dimen/space_s"
+                                    android:layout_marginBottom="@dimen/space_s"
+                                    android:text="@string/speedtest_unit"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="@dimen/text_title"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
+
+                            <ProgressBar
+                                android:id="@+id/speedProgress"
+                                style="?android:attr/progressBarStyleHorizontal"
+                                android:layout_width="match_parent"
+                                android:layout_height="@dimen/settings_progress_height"
+                                android:layout_marginTop="@dimen/space_m"
+                                android:contentDescription="@string/speedtest_progress"
+                                android:indeterminate="false"
+                                android:max="100"
+                                android:progress="0"
+                                android:progressDrawable="@drawable/progress_settings_speed"
+                                android:visibility="gone" />
+
+                            <TextView
+                                android:id="@+id/speedStatus"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="@dimen/space_m"
+                                android:accessibilityLiveRegion="polite"
+                                android:gravity="center"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="@dimen/text_body"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
+                        </LinearLayout>
+
+                        <androidx.appcompat.widget.AppCompatButton
+                            android:id="@+id/speedStart"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_m"
+                            android:background="@drawable/bg_settings_action"
+                            android:backgroundTint="@null"
+                            android:focusable="true"
+                            android:focusableInTouchMode="false"
+                            android:minHeight="@dimen/settings_row_min_h"
+                            android:paddingStart="@dimen/space_xl"
+                            android:paddingTop="@dimen/space_m"
+                            android:paddingEnd="@dimen/space_xl"
+                            android:paddingBottom="@dimen/space_m"
+                            android:stateListAnimator="@animator/control_focus"
+                            android:text="@string/speedtest_start"
+                            android:textAllCaps="false"
+                            android:textColor="@android:color/white"
+                            android:textSize="@dimen/text_body"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </androidx.core.widget.NestedScrollView>
+
+                <androidx.core.widget.NestedScrollView
+                    android:id="@+id/detailSystem"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:descendantFocusability="afterDescendants"
+                    android:fillViewport="true"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:id="@+id/systemContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingBottom="@dimen/space_m" />
+                </androidx.core.widget.NestedScrollView>
+            </FrameLayout>
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

@@ -62,4 +62,22 @@
     <color name="live_text_dim">#8290A3</color>
     <color name="live_cyan">#22D3EE</color>
     <color name="live_violet">#8B5CF6</color>
+
+    <!-- Settings: layered glass surfaces with separate persistent-selection and
+         transient D-pad focus treatments. -->
+    <color name="settings_rail_surface">#E6111722</color>
+    <color name="settings_panel_surface">#D9161D29</color>
+    <color name="settings_header_surface">#CC20283A</color>
+    <color name="settings_surface_stroke">#30FFFFFF</color>
+    <color name="settings_row_surface">#B81B2432</color>
+    <color name="settings_row_selected">#5C263F7A</color>
+    <color name="settings_row_selected_stroke">#B06A72FF</color>
+    <color name="settings_row_focus_start">#E63A6BFF</color>
+    <color name="settings_row_focus_end">#E6A23BF0</color>
+    <color name="settings_row_focus_stroke">#F2FFFFFF</color>
+    <color name="settings_switch_track_off">#66708090</color>
+    <color name="settings_switch_track_on">#FF3DA9FC</color>
+    <color name="settings_switch_thumb_off">#FFD7DEE8</color>
+    <color name="settings_switch_thumb_on">#FFFFFFFF</color>
+    <color name="settings_progress_track">#24FFFFFF</color>
 </resources>
