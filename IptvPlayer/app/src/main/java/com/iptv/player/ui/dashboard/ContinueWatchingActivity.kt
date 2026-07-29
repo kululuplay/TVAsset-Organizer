@@ -239,8 +239,8 @@ class ContinueWatchingActivity : BaseActivity() {
         if (adapter.itemCount == 0) return
         val safePosition = position.coerceIn(0, adapter.itemCount - 1)
         gridLayoutManager.scrollToPositionWithOffset(safePosition, 0)
-        binding.continueGrid.doOnNextLayout { grid ->
-            grid
+        binding.continueGrid.doOnNextLayout {
+            binding.continueGrid
                 .findViewHolderForAdapterPosition(safePosition)
                 ?.itemView
                 ?.requestFocus()

@@ -83,7 +83,7 @@ class SearchViewModel(
 
     val effectiveQuery: StateFlow<String> =
         effectiveRequest
-            .map(QueryRequest::query)
+            .map { request -> request.query }
             .stateIn(
                 viewModelScope,
                 SharingStarted.Eagerly,
@@ -114,7 +114,7 @@ class SearchViewModel(
      * [effectiveQuery] later in the Activity is racy: it may already contain the
      * next query while the previous PagingData emission is queued.
      */
-    data class PagingSearchResult<T>(
+    data class PagingSearchResult<T : Any>(
         val generation: SearchGeneration,
         val data: PagingData<T>,
     ) {

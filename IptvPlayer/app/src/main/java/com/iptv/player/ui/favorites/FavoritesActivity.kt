@@ -190,8 +190,8 @@ class FavoritesActivity : BaseActivity() {
         if (adapter.itemCount == 0) return
         val safePosition = position.coerceIn(0, adapter.itemCount - 1)
         gridLayoutManager.scrollToPositionWithOffset(safePosition, 0)
-        binding.favoritesGrid.doOnNextLayout { grid ->
-            grid
+        binding.favoritesGrid.doOnNextLayout {
+            binding.favoritesGrid
                 .findViewHolderForAdapterPosition(safePosition)
                 ?.itemView
                 ?.requestFocus()
