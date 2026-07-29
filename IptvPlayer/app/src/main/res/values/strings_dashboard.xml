@@ -38,8 +38,14 @@
     <string name="request_type_movie">Movie</string>
     <string name="request_type_series">Series</string>
     <string name="request_type_complaint">Complaint</string>
+    <string name="request_type_label">What is this about?</string>
+    <string name="request_message_label">Details</string>
+    <string name="request_message_counter">%1$d / %2$d</string>
     <string name="request_message_hint">Write your request or complaint…</string>
+    <string name="request_privacy_hint">For your security, do not include passwords or account credentials.</string>
     <string name="request_send">Send</string>
+    <string name="request_sending">Sending…</string>
+    <string name="request_retry">Try again</string>
     <string name="request_empty">Please write a message first.</string>
     <string name="request_sent">Thanks! Your message has been sent.</string>
     <string name="request_failed">Couldn\'t send. Check your connection and try again.</string>
@@ -62,7 +68,10 @@
 
     <!-- Request history (sent-request list inside the İstek & Şikayet dialog) -->
     <string name="request_history_title">Your requests</string>
+    <string name="request_history_loading">Loading your requests…</string>
     <string name="request_history_empty">You haven\'t sent any requests yet.</string>
+    <string name="request_history_failed">Your request history couldn\'t be loaded.</string>
+    <string name="request_history_retry">Reload history</string>
     <string name="request_status_new">Pending</string>
     <string name="request_status_done">Resolved</string>
     <string name="request_type_other">Other</string>

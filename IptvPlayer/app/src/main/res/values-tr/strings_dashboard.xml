@@ -35,8 +35,14 @@
     <string name="request_type_movie">Film</string>
     <string name="request_type_series">Dizi</string>
     <string name="request_type_complaint">Şikayet</string>
+    <string name="request_type_label">Bu mesaj ne hakkında?</string>
+    <string name="request_message_label">Ayrıntılar</string>
+    <string name="request_message_counter">%1$d / %2$d</string>
     <string name="request_message_hint">İstek veya şikayetinizi yazın…</string>
+    <string name="request_privacy_hint">Güvenliğiniz için şifre veya hesap giriş bilgilerinizi yazmayın.</string>
     <string name="request_send">Gönder</string>
+    <string name="request_sending">Gönderiliyor…</string>
+    <string name="request_retry">Tekrar dene</string>
     <string name="request_empty">Lütfen önce bir mesaj yazın.</string>
     <string name="request_sent">Teşekkürler! Mesajınız gönderildi.</string>
     <string name="request_failed">Gönderilemedi. Bağlantınızı kontrol edip tekrar deneyin.</string>
@@ -59,7 +65,10 @@
 
     <!-- İstek geçmişi (İstek & Şikayet penceresindeki gönderilen istek listesi) -->
     <string name="request_history_title">Gönderdiğiniz istekler</string>
+    <string name="request_history_loading">İstekleriniz yükleniyor…</string>
     <string name="request_history_empty">Henüz bir istek göndermediniz.</string>
+    <string name="request_history_failed">İstek geçmişiniz yüklenemedi.</string>
+    <string name="request_history_retry">Geçmişi yeniden yükle</string>
     <string name="request_status_new">Beklemede</string>
     <string name="request_status_done">Çözüldü</string>
     <string name="request_type_other">Diğer</string>

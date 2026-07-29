@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="collections_favorites_hint">اضغط OK للفتح · اضغط مطولاً على OK للإزالة</string>
+    <string name="collections_continue_hint">اضغط OK للمتابعة · اضغط مطولاً على OK للإزالة من القائمة</string>
+    <string name="collections_error_title">تعذّر تحميل هذه المجموعة</string>
+    <string name="collections_error_message">حدثت مشكلة أثناء قراءة مكتبتك. حاول مرة أخرى.</string>
+    <string name="collections_remove_favorite_confirm">هل تريد إزالة «%1$s» من المفضلة؟</string>
+    <string name="collections_remove_continue_confirm">هل تريد إزالة «%1$s» من متابعة المشاهدة؟</string>
+    <string name="collections_removed_continue">تمت الإزالة من متابعة المشاهدة</string>
+    <string name="collections_progress_percent">تمت مشاهدة %1$d%%</string>
+    <plurals name="collections_item_count">
+        <item quantity="zero">لا توجد عناصر</item>
+        <item quantity="one">عنصر واحد</item>
+        <item quantity="two">عنصران</item>
+        <item quantity="few">%d عناصر</item>
+        <item quantity="many">%d عنصرًا</item>
+        <item quantity="other">%d عنصر</item>
+    </plurals>
+</resources>

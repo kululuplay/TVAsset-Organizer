@@ -12,6 +12,41 @@
     <string name="dash_expires">Expire le : %1$s</string>
     <string name="dash_user">Utilisateur : %1$s</string>
     <string name="dash_version">Version %1$s</string>
+
+    <!-- Demandes et signalements -->
+    <string name="dash_request">Demande et signalement</string>
+    <string name="dash_sub_request">Chaînes, films et problèmes</string>
+    <string name="request_title">Demande et signalement</string>
+    <string name="request_subtitle">Demandez un contenu ou signalez un problème. Nous lisons chaque message.</string>
+    <string name="request_type_channel">Chaîne en direct</string>
+    <string name="request_type_movie">Film</string>
+    <string name="request_type_series">Série</string>
+    <string name="request_type_complaint">Signalement</string>
+    <string name="request_type_label">Quel est le sujet ?</string>
+    <string name="request_message_label">Détails</string>
+    <string name="request_message_counter">%1$d / %2$d</string>
+    <string name="request_message_hint">Écrivez votre demande ou votre signalement…</string>
+    <string name="request_privacy_hint">Pour votre sécurité, n\'indiquez aucun mot de passe ni identifiant de compte.</string>
+    <string name="request_send">Envoyer</string>
+    <string name="request_sending">Envoi en cours…</string>
+    <string name="request_retry">Réessayer</string>
+    <string name="request_empty">Veuillez d\'abord écrire un message.</string>
+    <string name="request_sent">Merci ! Votre message a été envoyé.</string>
+    <string name="request_failed">Envoi impossible. Vérifiez votre connexion et réessayez.</string>
+    <string name="request_history_title">Vos demandes</string>
+    <string name="request_history_loading">Chargement de vos demandes…</string>
+    <string name="request_history_empty">Vous n\'avez encore envoyé aucune demande.</string>
+    <string name="request_history_failed">Impossible de charger l\'historique de vos demandes.</string>
+    <string name="request_history_retry">Recharger l\'historique</string>
+    <string name="request_status_new">En attente</string>
+    <string name="request_status_done">Résolue</string>
+    <string name="request_type_other">Autre</string>
+    <string name="resolved_title_added">Votre demande a été ajoutée</string>
+    <string name="resolved_body_added">Nous avons examiné votre demande et ajouté le contenu. Bon visionnage !</string>
+    <string name="resolved_title_complaint">Votre problème est résolu</string>
+    <string name="resolved_body_complaint">Nous avons examiné et résolu votre signalement. Merci !</string>
+    <string name="resolved_request_label">Votre demande</string>
+
     <string name="dash_offline_banner">Pas de connexion Internet — contenu enregistré affiché</string>
     <string name="dash_portal_unreachable">Serveur injoignable — nouvel essai automatique…</string>
     <string name="dash_reconnected_refreshing">Connexion rétablie — mise à jour du contenu…</string>

@@ -11,18 +11,25 @@
  */
 package com.iptv.player.util
 
-import java.util.Collections
+import java.util.Locale
 
 object ResolvedRequestCenter {
 
     data class ResolvedRequest(val id: Long, val type: String, val message: String)
+
+    private const val MAX_PENDING = 10
+    private const val MAX_SHOWN_IDS = 256
+    private const val MAX_RESOLVED_MESSAGE_LENGTH = 200
+    private val TYPES = setOf("channel", "movie", "series", "complaint")
+
+    private val lock = Any()
 
     @Volatile
     var pending: List<ResolvedRequest> = emptyList()
         private set
 
     /** Ids already popped this process, so a re-delivery (failed ack) won't re-show. */
-    private val shownIds: MutableSet<Long> = Collections.synchronizedSet(mutableSetOf())
+    private val shownIds = linkedSetOf<Long>()
 
     @Volatile private var listener: (() -> Unit)? = null
 
@@ -33,22 +40,78 @@ object ResolvedRequestCenter {
 
     /** Called from the heartbeat loop with the server's current un-acked list. */
     fun update(list: List<ResolvedRequest>) {
-        pending = list
-        if (list.any { it.id !in shownIds }) runCatching { listener?.invoke() }
+        val safeList = list.asSequence()
+            .filter { it.id > 0L }
+            .distinctBy { it.id }
+            .map {
+                ResolvedRequest(
+                    id = it.id,
+                    type = it.type.lowercase(Locale.ROOT)
+                        .takeIf { type -> type in TYPES }
+                        ?: "other",
+                    message = sanitizeMessage(it.message),
+                )
+            }
+            .take(MAX_PENDING)
+            .toList()
+        val hasUnshown = synchronized(lock) {
+            pending = safeList
+            safeList.any { it.id !in shownIds }
+        }
+        // Listener code can call back into this object, so invoke outside the lock.
+        if (hasUnshown) runCatching { listener?.invoke() }
     }
 
     fun clear() {
-        pending = emptyList()
+        synchronized(lock) {
+            pending = emptyList()
+        }
     }
 
     /** The newest pending resolution not yet shown this process, or null. */
     fun nextUnshown(): ResolvedRequest? =
-        pending.filter { it.id !in shownIds }.maxByOrNull { it.id }
+        synchronized(lock) {
+            pending.asSequence()
+                .filter { it.id !in shownIds }
+                .maxByOrNull { it.id }
+        }
 
     fun markShown(id: Long) {
-        shownIds.add(id)
+        if (id <= 0L) return
+        synchronized(lock) {
+            shownIds.add(id)
+            while (shownIds.size > MAX_SHOWN_IDS) {
+                val oldest = shownIds.firstOrNull() ?: break
+                shownIds.remove(oldest)
+            }
+        }
     }
 
     /** Ids the server still reports as un-acked but we've already shown — retry ack. */
-    fun shownButPending(): List<Long> = pending.map { it.id }.filter { it in shownIds }
+    fun shownButPending(): List<Long> =
+        synchronized(lock) {
+            pending.asSequence()
+                .map { it.id }
+                .filter { it in shownIds }
+                .distinct()
+                .toList()
+        }
+
+    private fun sanitizeMessage(value: String): String =
+        value
+            .replace("\r\n", "\n")
+            .replace('\r', '\n')
+            .filter {
+                (it == '\n' || it == '\t' || !it.isISOControl()) &&
+                    !isBidiControl(it)
+            }
+            .trim()
+            .take(MAX_RESOLVED_MESSAGE_LENGTH)
+
+    private fun isBidiControl(value: Char): Boolean =
+        value == '\u061C' ||
+            value == '\u200E' ||
+            value == '\u200F' ||
+            value in '\u202A'..'\u202E' ||
+            value in '\u2066'..'\u2069'
 }

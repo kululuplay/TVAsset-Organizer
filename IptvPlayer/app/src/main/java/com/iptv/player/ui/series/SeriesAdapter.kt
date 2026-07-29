@@ -89,6 +89,7 @@ class SeriesAdapter(
         fun bind(item: Series) {
             boundItem = item
             itemView.isFocusable = true
+            itemView.isClickable = true
             itemView.alpha = 1f
             poster.contentDescription = null
             itemView.setOnClickListener {

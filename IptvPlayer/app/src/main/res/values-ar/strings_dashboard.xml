@@ -12,6 +12,41 @@
     <string name="dash_expires">تنتهي في: %1$s</string>
     <string name="dash_user">المستخدم: %1$s</string>
     <string name="dash_version">الإصدار %1$s</string>
+
+    <!-- الطلبات والملاحظات -->
+    <string name="dash_request">طلب وملاحظات</string>
+    <string name="dash_sub_request">قنوات وأفلام ومشكلات</string>
+    <string name="request_title">طلب وملاحظات</string>
+    <string name="request_subtitle">اطلب إضافة محتوى أو أبلغ عن مشكلة. نقرأ كل رسالة.</string>
+    <string name="request_type_channel">قناة مباشرة</string>
+    <string name="request_type_movie">فيلم</string>
+    <string name="request_type_series">مسلسل</string>
+    <string name="request_type_complaint">شكوى</string>
+    <string name="request_type_label">ما موضوع الرسالة؟</string>
+    <string name="request_message_label">التفاصيل</string>
+    <string name="request_message_counter">%1$d / %2$d</string>
+    <string name="request_message_hint">اكتب طلبك أو شكواك…</string>
+    <string name="request_privacy_hint">لحمايتك، لا تكتب كلمات المرور أو بيانات تسجيل الدخول.</string>
+    <string name="request_send">إرسال</string>
+    <string name="request_sending">جارٍ الإرسال…</string>
+    <string name="request_retry">إعادة المحاولة</string>
+    <string name="request_empty">يرجى كتابة رسالة أولاً.</string>
+    <string name="request_sent">شكرًا! تم إرسال رسالتك.</string>
+    <string name="request_failed">تعذر الإرسال. تحقق من الاتصال وحاول مجددًا.</string>
+    <string name="request_history_title">طلباتك</string>
+    <string name="request_history_loading">جارٍ تحميل طلباتك…</string>
+    <string name="request_history_empty">لم ترسل أي طلب بعد.</string>
+    <string name="request_history_failed">تعذر تحميل سجل طلباتك.</string>
+    <string name="request_history_retry">إعادة تحميل السجل</string>
+    <string name="request_status_new">قيد الانتظار</string>
+    <string name="request_status_done">تم الحل</string>
+    <string name="request_type_other">أخرى</string>
+    <string name="resolved_title_added">تمت إضافة طلبك</string>
+    <string name="resolved_body_added">راجعنا طلبك وأضفنا المحتوى. مشاهدة ممتعة!</string>
+    <string name="resolved_title_complaint">تم حل مشكلتك</string>
+    <string name="resolved_body_complaint">راجعنا بلاغك وتم حل المشكلة. شكرًا لك!</string>
+    <string name="resolved_request_label">طلبك</string>
+
     <string name="dash_offline_banner">لا يوجد اتصال بالإنترنت — يتم عرض المحتوى المحفوظ</string>
     <string name="dash_portal_unreachable">يتعذر الوصول إلى الخادم — تتم إعادة المحاولة تلقائيًا…</string>
     <string name="dash_reconnected_refreshing">عاد الاتصال — يتم تحديث المحتوى…</string>

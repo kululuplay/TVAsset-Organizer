@@ -11,9 +11,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.core.view.ViewCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import coil.dispose
 import coil.load
 import com.iptv.player.R
 import com.iptv.player.data.model.FavoriteItem
@@ -22,7 +24,9 @@ import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.isAdult
 
 class FavoritesAdapter(
-    private val onClicked: (FavoriteItem) -> Unit
+    private val onClicked: (FavoriteItem) -> Unit,
+    private val onLongClicked: (FavoriteItem) -> Unit,
+    private val onFocused: (String, Int) -> Unit,
 ) : ListAdapter<FavoriteItem, FavoritesAdapter.VH>(DIFF) {
 
     /**
@@ -31,7 +35,12 @@ class FavoritesAdapter(
      * metadata never leaks before gating, mirroring VodAdapter/SeriesAdapter.
      * Set from the parental-lock setting.
      */
-    var adultLocked: Boolean = false
+    var adultLocked: Boolean = true
+        set(value) {
+            if (field == value) return
+            field = value
+            if (itemCount > 0) notifyItemRangeChanged(0, itemCount, PRIVACY_PAYLOAD)
+        }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val view = LayoutInflater.from(parent.context)
@@ -43,36 +52,63 @@ class FavoritesAdapter(
         holder.bind(getItem(position))
     }
 
+    override fun onBindViewHolder(holder: VH, position: Int, payloads: MutableList<Any>) {
+        holder.bind(getItem(position))
+    }
+
+    override fun onViewRecycled(holder: VH) {
+        holder.recycle()
+        super.onViewRecycled(holder)
+    }
+
     inner class VH(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val poster: ImageView = itemView.findViewById(R.id.favPoster)
         private val title: TextView = itemView.findViewById(R.id.favTitle)
         private val type: TextView = itemView.findViewById(R.id.favType)
 
         fun bind(item: FavoriteItem) {
-            // Keep the card clickable even when masked: open() prompts for the PIN.
             itemView.setOnClickListener { onClicked(item) }
+            itemView.setOnLongClickListener {
+                onLongClicked(item)
+                true
+            }
+            itemView.setOnFocusChangeListener { _, hasFocus ->
+                val position = bindingAdapterPosition
+                if (hasFocus && position != RecyclerView.NO_POSITION) {
+                    onFocused(item.favoriteId, position)
+                }
+            }
+
+            // Cancel the previous holder request before changing scale/type. This
+            // prevents a late Coil result from leaking recycled artwork.
+            poster.dispose()
 
             // Parental gate: mask adult metadata in the grid until the PIN is
-            // entered on click. The holder is recycled, so reset the unmasked
-            // poster scaleType on the non-locked path below.
+            // entered on click. Keep the card actionable so OK still opens PIN.
             if (adultLocked && item.isAdult()) {
                 title.text = itemView.context.getString(R.string.adult_locked_title)
                 type.visibility = View.GONE
                 poster.scaleType = ImageView.ScaleType.FIT_CENTER
                 poster.load(R.drawable.ic_lock) { crossfade(false) }
+                itemView.contentDescription =
+                    itemView.context.getString(R.string.adult_locked_title)
+                ViewCompat.setStateDescription(itemView, null)
                 return
             }
             type.visibility = View.VISIBLE
             poster.scaleType = ImageView.ScaleType.CENTER_CROP
 
             title.text = item.title
-            type.setText(
+            val typeLabel = itemView.context.getString(
                 when (item.kind) {
                     FavoriteKind.CHANNEL -> R.string.nav_live
                     FavoriteKind.MOVIE -> R.string.nav_movies
                     FavoriteKind.SERIES -> R.string.nav_series
                 }
             )
+            type.text = typeLabel
+            itemView.contentDescription = listOf(item.title, typeLabel).joinToString(". ")
+            ViewCompat.setStateDescription(itemView, null)
 
             val placeholder = LogoPlaceholder.forName(itemView.context, item.title)
             if (item.posterUrl.isNullOrBlank()) {
@@ -83,9 +119,21 @@ class FavoritesAdapter(
                 }
             }
         }
+
+        fun recycle() {
+            poster.dispose()
+            poster.setImageDrawable(null)
+            itemView.setOnClickListener(null)
+            itemView.setOnLongClickListener(null)
+            itemView.setOnFocusChangeListener(null)
+            itemView.contentDescription = null
+            ViewCompat.setStateDescription(itemView, null)
+        }
     }
 
     companion object {
+        private const val PRIVACY_PAYLOAD = "privacy"
+
         private val DIFF = object : DiffUtil.ItemCallback<FavoriteItem>() {
             override fun areItemsTheSame(a: FavoriteItem, b: FavoriteItem) =
                 a.favoriteId == b.favoriteId

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_global_subtitle">Canlı TV, film ve dizileri tek yerden arayın.</string>
+    <string name="search_filters">İçerik filtreleri</string>
+    <string name="search_filter_all">Tümü</string>
+    <string name="search_clear">Aramayı temizle</string>
+    <string name="search_idle_title">Ne izlemek istersiniz?</string>
+    <string name="search_idle_message">Arşivinizde aramak için bir içerik veya kanal adı girin.</string>
+    <string name="search_loading">Arşiviniz aranıyor…</string>
+    <string name="search_results_error">Bazı sonuçlar yüklenemedi.</string>
+    <string name="search_catalog_preparing">Tüm katalog hazırlanıyor…</string>
+</resources>

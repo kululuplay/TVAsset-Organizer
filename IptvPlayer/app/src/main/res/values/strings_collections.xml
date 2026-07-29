@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="collections_favorites_hint">OK to open · hold OK to remove</string>
+    <string name="collections_continue_hint">OK to resume · hold OK to remove from this list</string>
+    <string name="collections_error_title">Couldn’t load this collection</string>
+    <string name="collections_error_message">Something went wrong while reading your library. Please try again.</string>
+    <string name="collections_remove_favorite_confirm">Remove “%1$s” from Favorites?</string>
+    <string name="collections_remove_continue_confirm">Remove “%1$s” from Continue Watching?</string>
+    <string name="collections_removed_continue">Removed from Continue Watching</string>
+    <string name="collections_progress_percent">%1$d%% watched</string>
+    <plurals name="collections_item_count">
+        <item quantity="one">%d item</item>
+        <item quantity="other">%d items</item>
+    </plurals>
+</resources>

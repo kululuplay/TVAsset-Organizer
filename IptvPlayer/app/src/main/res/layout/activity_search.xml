@@ -1,30 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Global search: a single query field that searches Live, Movies and Series
-     at once, each shown in its own column. Fully D-pad driven for TV. -->
+<!-- Global TV search with a deterministic input → filters → results focus graph. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@drawable/bg_search_root"
+    android:clipChildren="false"
+    android:clipToPadding="false"
     android:orientation="vertical"
-    android:background="@drawable/bg_login_aurora"
-    android:paddingHorizontal="@dimen/safe_area_h"
-    android:paddingVertical="@dimen/safe_area_v">
+    android:paddingStart="@dimen/safe_area_h"
+    android:paddingTop="@dimen/safe_area_v"
+    android:paddingEnd="@dimen/safe_area_h"
+    android:paddingBottom="@dimen/safe_area_v">
 
-    <!-- Top bar -->
     <LinearLayout
+        android:id="@+id/searchHeader"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:layout_marginBottom="@dimen/space_m">
+        android:orientation="horizontal"
+        android:paddingStart="3dp"
+        android:paddingEnd="3dp"
+        android:paddingBottom="9dp">
 
-        <TextView
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="@string/action_search"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_title"
-            android:textStyle="bold" />
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/searchTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/action_search"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_title"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:text="@string/search_global_subtitle"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_small" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/dateText"
@@ -34,144 +56,537 @@
             android:textSize="@dimen/text_caption" />
     </LinearLayout>
 
-    <EditText
-        android:id="@+id/searchInput"
-        style="@style/Widget.Iptv.Input"
+    <LinearLayout
+        android:id="@+id/searchCommandPanel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="@string/search_hint"
-        android:imeOptions="actionSearch"
-        android:inputType="text"
-        android:maxLines="1"
-        android:layout_marginBottom="@dimen/space_m" />
+        android:background="@drawable/bg_search_command_panel"
+        android:orientation="vertical"
+        android:paddingStart="10dp"
+        android:paddingTop="9dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="9dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <FrameLayout
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:background="@drawable/bg_search_icon_badge"
+                android:importantForAccessibility="noHideDescendants"
+                android:padding="10dp">
+
+                <ImageView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_search"
+                    app:tint="@color/text_primary" />
+            </FrameLayout>
+
+            <EditText
+                android:id="@+id/searchInput"
+                style="@style/Widget.Iptv.Input"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="9dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_input_modern"
+                android:hint="@string/search_hint"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:maxLines="1"
+                android:nextFocusDown="@id/filterAll" />
+
+            <ImageButton
+                android:id="@+id/searchClearButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_search_clear_button"
+                android:contentDescription="@string/search_clear"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:nextFocusDown="@id/filterAll"
+                android:padding="14dp"
+                android:src="@drawable/ic_search_clear"
+                android:stateListAnimator="@animator/control_focus"
+                android:visibility="invisible"
+                app:tint="@color/text_primary" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/searchFilters"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="7dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/filterAll"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:background="@drawable/bg_search_filter"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:gravity="center"
+                android:minWidth="100dp"
+                android:nextFocusUp="@id/searchInput"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:stateListAnimator="@animator/control_focus"
+                android:text="@string/search_filter_all"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/filterLive"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:layout_marginStart="7dp"
+                android:background="@drawable/bg_search_filter"
+                android:drawableStart="@drawable/ic_tv"
+                android:drawablePadding="7dp"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:gravity="center"
+                android:minWidth="116dp"
+                android:nextFocusUp="@id/searchInput"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:stateListAnimator="@animator/control_focus"
+                android:text="@string/nav_live"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/filterMovies"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:layout_marginStart="7dp"
+                android:background="@drawable/bg_search_filter"
+                android:drawableStart="@drawable/ic_movie"
+                android:drawablePadding="7dp"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:gravity="center"
+                android:minWidth="116dp"
+                android:nextFocusUp="@id/searchInput"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:stateListAnimator="@animator/control_focus"
+                android:text="@string/nav_movies"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/filterSeries"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:layout_marginStart="7dp"
+                android:background="@drawable/bg_search_filter"
+                android:drawableStart="@drawable/ic_series"
+                android:drawablePadding="7dp"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:gravity="center"
+                android:minWidth="116dp"
+                android:nextFocusUp="@id/searchInput"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:stateListAnimator="@animator/control_focus"
+                android:text="@string/nav_series"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/catalogStatusRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="@dimen/space_m"
-        android:background="@drawable/bg_glass_card"
+        android:layout_marginTop="7dp"
+        android:accessibilityLiveRegion="polite"
+        android:background="@drawable/bg_search_status_strip"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="@dimen/space_m"
-        android:paddingVertical="@dimen/space_s"
+        android:paddingStart="13dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="13dp"
+        android:paddingBottom="8dp"
         android:visibility="gone">
 
         <ProgressBar
             android:id="@+id/catalogProgress"
             style="?android:attr/progressBarStyleSmall"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:indeterminateTint="@color/accent" />
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:indeterminateTint="@color/accent_cyan" />
 
         <TextView
             android:id="@+id/catalogStatusText"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/space_m"
+            android:layout_marginStart="10dp"
             android:layout_weight="1"
             android:textColor="@color/text_secondary"
-            android:textSize="@dimen/text_caption" />
+            android:textSize="@dimen/text_small" />
 
         <Button
             android:id="@+id/catalogRetryButton"
             style="@style/Widget.Iptv.Button"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="40dp"
+            android:minHeight="40dp"
             android:text="@string/action_retry"
             android:visibility="gone" />
     </LinearLayout>
 
-    <!-- Results: three equal columns (Live / Movies / Series) -->
     <FrameLayout
+        android:id="@+id/searchBody"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_marginTop="8dp"
+        android:layout_weight="1"
+        android:clipChildren="false"
+        android:clipToPadding="false">
 
         <LinearLayout
             android:id="@+id/resultsRow"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:baselineAligned="false"
+            android:clipChildren="false"
+            android:clipToPadding="false"
             android:orientation="horizontal"
-            android:baselineAligned="false">
+            android:visibility="gone">
 
             <LinearLayout
+                android:id="@+id/livePanel"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
+                android:layout_marginEnd="5dp"
                 android:layout_weight="1"
+                android:background="@drawable/bg_search_result_panel"
+                android:clipChildren="false"
+                android:clipToPadding="false"
                 android:orientation="vertical"
-                android:layout_marginEnd="@dimen/space_m">
+                android:paddingStart="9dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="9dp"
+                android:paddingBottom="7dp">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/nav_live"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="@dimen/text_caption"
-                    android:textAllCaps="true"
-                    android:layout_marginBottom="@dimen/space_s" />
+                    android:layout_height="34dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/liveHeading"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/nav_live"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_caption"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/liveCount"
+                        android:layout_width="wrap_content"
+                        android:layout_height="26dp"
+                        android:background="@drawable/bg_search_count_chip"
+                        android:gravity="center"
+                        android:importantForAccessibility="no"
+                        android:minWidth="34dp"
+                        android:paddingStart="7dp"
+                        android:paddingEnd="7dp"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_small"
+                        android:textStyle="bold"
+                        tools:text="0" />
+                </LinearLayout>
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/liveList"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:clipToPadding="false" />
+                    android:layout_height="0dp"
+                    android:layout_marginTop="4dp"
+                    android:layout_weight="1"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:overScrollMode="never"
+                    android:paddingBottom="5dp" />
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/moviePanel"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
+                android:layout_marginStart="5dp"
+                android:layout_marginEnd="5dp"
                 android:layout_weight="1"
+                android:background="@drawable/bg_search_result_panel"
+                android:clipChildren="false"
+                android:clipToPadding="false"
                 android:orientation="vertical"
-                android:layout_marginEnd="@dimen/space_m">
+                android:paddingStart="7dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="7dp"
+                android:paddingBottom="7dp">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/nav_movies"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="@dimen/text_caption"
-                    android:textAllCaps="true"
-                    android:layout_marginBottom="@dimen/space_s" />
+                    android:layout_height="34dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/movieHeading"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/nav_movies"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_caption"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/movieCount"
+                        android:layout_width="wrap_content"
+                        android:layout_height="26dp"
+                        android:background="@drawable/bg_search_count_chip"
+                        android:gravity="center"
+                        android:importantForAccessibility="no"
+                        android:minWidth="34dp"
+                        android:paddingStart="7dp"
+                        android:paddingEnd="7dp"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_small"
+                        android:textStyle="bold"
+                        tools:text="0" />
+                </LinearLayout>
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/movieGrid"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:clipToPadding="false" />
+                    android:layout_height="0dp"
+                    android:layout_marginTop="4dp"
+                    android:layout_weight="1"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:overScrollMode="never"
+                    android:paddingBottom="5dp" />
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/seriesPanel"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
+                android:layout_marginStart="5dp"
                 android:layout_weight="1"
-                android:orientation="vertical">
+                android:background="@drawable/bg_search_result_panel"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:orientation="vertical"
+                android:paddingStart="7dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="7dp"
+                android:paddingBottom="7dp">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/nav_series"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="@dimen/text_caption"
-                    android:textAllCaps="true"
-                    android:layout_marginBottom="@dimen/space_s" />
+                    android:layout_height="34dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/seriesHeading"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/nav_series"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_caption"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/seriesCount"
+                        android:layout_width="wrap_content"
+                        android:layout_height="26dp"
+                        android:background="@drawable/bg_search_count_chip"
+                        android:gravity="center"
+                        android:importantForAccessibility="no"
+                        android:minWidth="34dp"
+                        android:paddingStart="7dp"
+                        android:paddingEnd="7dp"
+                        android:textColor="@color/text_primary"
+                        android:textSize="@dimen/text_small"
+                        android:textStyle="bold"
+                        tools:text="0" />
+                </LinearLayout>
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/seriesGrid"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:clipToPadding="false" />
+                    android:layout_height="0dp"
+                    android:layout_marginTop="4dp"
+                    android:layout_weight="1"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:overScrollMode="never"
+                    android:paddingBottom="5dp" />
             </LinearLayout>
         </LinearLayout>
 
-        <TextView
+        <LinearLayout
+            android:id="@+id/searchIdleState"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_search_state_card"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingStart="34dp"
+            android:paddingTop="25dp"
+            android:paddingEnd="34dp"
+            android:paddingBottom="25dp">
+
+            <ImageView
+                android:layout_width="46dp"
+                android:layout_height="46dp"
+                android:background="@drawable/bg_search_icon_badge"
+                android:contentDescription="@null"
+                android:importantForAccessibility="no"
+                android:padding="12dp"
+                android:src="@drawable/ic_search"
+                app:tint="@color/text_primary" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/search_idle_title"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:gravity="center"
+                android:maxWidth="440dp"
+                android:text="@string/search_idle_message"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_caption" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/searchLoadingState"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:accessibilityLiveRegion="polite"
+            android:background="@drawable/bg_search_state_card"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingStart="28dp"
+            android:paddingTop="20dp"
+            android:paddingEnd="28dp"
+            android:paddingBottom="20dp"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:indeterminateTint="@color/accent_cyan" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="13dp"
+                android:text="@string/search_loading"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_caption"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/searchErrorState"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:accessibilityLiveRegion="assertive"
+            android:background="@drawable/bg_search_state_card"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingStart="30dp"
+            android:paddingTop="22dp"
+            android:paddingEnd="30dp"
+            android:paddingBottom="22dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:maxWidth="420dp"
+                android:text="@string/search_results_error"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_body"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/resultRetryButton"
+                style="@style/Widget.Iptv.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/action_retry" />
+        </LinearLayout>
+
+        <LinearLayout
             android:id="@+id/emptyState"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
-            android:text="@string/empty_search"
-            android:textColor="@color/text_secondary"
-            android:textSize="@dimen/text_body"
-            android:visibility="gone" />
+            android:accessibilityLiveRegion="polite"
+            android:background="@drawable/bg_search_state_card"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingStart="34dp"
+            android:paddingTop="24dp"
+            android:paddingEnd="34dp"
+            android:paddingBottom="24dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:contentDescription="@null"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_search"
+                app:tint="@color/text_muted" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/empty_search"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_body"
+                android:textStyle="bold" />
+        </LinearLayout>
     </FrameLayout>
 </LinearLayout>

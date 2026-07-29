@@ -34,9 +34,27 @@ class MaxHeightScrollView @JvmOverloads constructor(
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val heightSpec = if (maxHeightPx > 0) {
-            // AT_MOST so short content still wraps; tall content stops at the cap
-            // and scrolls, instead of expanding and starving the pinned siblings.
-            MeasureSpec.makeMeasureSpec(maxHeightPx, MeasureSpec.AT_MOST)
+            // Respect a tighter parent/window constraint too. This matters while
+            // the IME is visible: replacing a smaller AT_MOST spec with maxHeight
+            // would make the dialog overflow the resized window.
+            val parentMode = MeasureSpec.getMode(heightMeasureSpec)
+            val parentSize = MeasureSpec.getSize(heightMeasureSpec)
+            when (parentMode) {
+                MeasureSpec.EXACTLY -> {
+                    if (parentSize <= maxHeightPx) {
+                        heightMeasureSpec
+                    } else {
+                        MeasureSpec.makeMeasureSpec(maxHeightPx, MeasureSpec.AT_MOST)
+                    }
+                }
+                MeasureSpec.AT_MOST -> {
+                    MeasureSpec.makeMeasureSpec(
+                        minOf(parentSize, maxHeightPx),
+                        MeasureSpec.AT_MOST,
+                    )
+                }
+                else -> MeasureSpec.makeMeasureSpec(maxHeightPx, MeasureSpec.AT_MOST)
+            }
         } else {
             heightMeasureSpec
         }

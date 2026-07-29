@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_global_subtitle">Doorzoek live-tv, films en series vanaf één plek.</string>
+    <string name="search_filters">Inhoudsfilters</string>
+    <string name="search_filter_all">Alles</string>
+    <string name="search_clear">Zoekopdracht wissen</string>
+    <string name="search_idle_title">Wat wil je kijken?</string>
+    <string name="search_idle_message">Voer een titel of zendernaam in om je bibliotheek te doorzoeken.</string>
+    <string name="search_loading">Je bibliotheek wordt doorzocht…</string>
+    <string name="search_results_error">Sommige resultaten konden niet worden geladen.</string>
+    <string name="search_catalog_preparing">De volledige catalogus wordt voorbereid…</string>
+</resources>

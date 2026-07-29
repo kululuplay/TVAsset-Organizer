@@ -1,49 +1,71 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One row of the user's request history in the İstek & Şikayet dialog: a status
-     badge (Pending / Resolved, colour set in code) plus the type and the message.
-     Non-focusable — it's read-only reference, D-pad skips straight to the CTAs. -->
+<!-- Focusable read-only history card. Focus is intentional: it lets a remote
+     scroll the capped dialog and lets accessibility services read each request
+     as one coherent item. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:gravity="center_vertical"
-    android:paddingVertical="@dimen/space_s">
-
-    <TextView
-        android:id="@+id/histStatus"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:background="@drawable/bg_time_chip"
-        android:paddingHorizontal="@dimen/space_s"
-        android:paddingVertical="2dp"
-        android:textSize="@dimen/text_caption"
-        android:textStyle="bold"
-        android:maxLines="1" />
+    android:layout_marginBottom="@dimen/space_s"
+    android:background="@drawable/bg_request_history_row"
+    android:clickable="false"
+    android:focusable="true"
+    android:importantForAccessibility="yes"
+    android:minHeight="76dp"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:stateListAnimator="@animator/control_focus">
 
     <LinearLayout
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:layout_marginStart="@dimen/space_m"
-        android:orientation="vertical">
+        android:gravity="center_vertical"
+        android:importantForAccessibility="noHideDescendants"
+        android:orientation="horizontal">
 
         <TextView
             android:id="@+id/histType"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:textColor="@color/text_muted"
-            android:textSize="@dimen/text_caption"
+            android:layout_weight="1"
+            android:ellipsize="end"
             android:maxLines="1"
-            android:ellipsize="end" />
-
-        <TextView
-            android:id="@+id/histMessage"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
             android:textColor="@color/text_primary"
             android:textSize="@dimen/text_caption"
-            android:maxLines="2"
-            android:ellipsize="end" />
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/histDate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_s"
+            android:maxLines="1"
+            android:textColor="@color/text_muted"
+            android:textSize="@dimen/text_small"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/histStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_s"
+            android:maxLines="1"
+            android:paddingStart="@dimen/space_s"
+            android:paddingTop="3dp"
+            android:paddingEnd="@dimen/space_s"
+            android:paddingBottom="3dp"
+            android:textSize="@dimen/text_small"
+            android:textStyle="bold" />
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/histMessage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_xs"
+        android:ellipsize="end"
+        android:importantForAccessibility="no"
+        android:maxLines="3"
+        android:textColor="@color/text_secondary"
+        android:textDirection="locale"
+        android:textSize="@dimen/text_caption" />
 </LinearLayout>

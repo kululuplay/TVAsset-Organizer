@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="collections_favorites_hint">OK pour ouvrir · maintenir OK pour retirer</string>
+    <string name="collections_continue_hint">OK pour reprendre · maintenir OK pour retirer de la liste</string>
+    <string name="collections_error_title">Impossible de charger cette collection</string>
+    <string name="collections_error_message">Un problème est survenu pendant la lecture de votre bibliothèque. Réessayez.</string>
+    <string name="collections_remove_favorite_confirm">Retirer « %1$s » des favoris ?</string>
+    <string name="collections_remove_continue_confirm">Retirer « %1$s » de Reprendre ?</string>
+    <string name="collections_removed_continue">Retiré de Reprendre</string>
+    <string name="collections_progress_percent">%1$d%% regardé</string>
+    <plurals name="collections_item_count">
+        <item quantity="one">%d élément</item>
+        <item quantity="other">%d éléments</item>
+    </plurals>
+</resources>
