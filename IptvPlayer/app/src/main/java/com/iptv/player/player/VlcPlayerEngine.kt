@@ -61,6 +61,8 @@ class VlcPlayerEngine(
     private var videoLayout: VLCVideoLayout? = null
     private var listener: PlayerListener? = null
     private var videoOutputReported = false
+    private var nativeVideoOutputObserved = false
+    private var surfaceHealthyObserved = false
 
     private val playbackFailureReported = AtomicBoolean(false)
     private val statsObserved = AtomicBoolean(false)
@@ -70,8 +72,31 @@ class VlcPlayerEngine(
     private val voutObserved = AtomicBoolean(false)
     private val playbackHealth = VlcPlaybackHealth(softwareDecode = forceSoftware)
     private val healthHandler = Handler(Looper.getMainLooper())
-    private val surfaceFrameHealth = SurfaceFrameHealthMonitor(healthHandler) {
-        reportVideoInvalid("persistent solid-green SurfaceView output")
+    private val surfaceFrameHealth = SurfaceFrameHealthMonitor(
+        handler = healthHandler,
+        onSolidGreen = {
+            reportVideoInvalid("persistent solid-green SurfaceView output")
+        },
+        onHealthyFrame = {
+            surfaceHealthyObserved = true
+            maybeReportVideoOutput()
+        },
+    )
+    private val surfaceValidationFallbackRunnable = Runnable {
+        if (
+            nativeVideoOutputObserved &&
+            !videoOutputReported &&
+            !playbackFailureReported.get() &&
+            !surfaceFrameHealth.hasClassifiedFrame()
+        ) {
+            surfaceHealthyObserved = true
+            PlaybackLog.log(
+                context,
+                engineName,
+                "PixelCopy unavailable -> accept libVLC displayed-picture signal",
+            )
+            maybeReportVideoOutput()
+        }
     }
 
     // Stored so they can be re-applied once playback (re)starts.
@@ -115,13 +140,10 @@ class VlcPlayerEngine(
                         videoActivelyPlaying =
                             playingObserved.get() && !bufferingActive.get(),
                     )
-                    if (decision.firstDisplayedFrame && !videoOutputReported) {
-                        videoOutputReported = true
-                        healthHandler.removeCallbacks(voutCompatibilityRunnable)
-                        healthHandler.removeCallbacks(noDisplayedFrameRunnable)
-                        healthHandler.removeCallbacks(noVideoPipelineRunnable)
-                        PlaybackLog.log(context, engineName, "displayedPictures advanced -> real video output")
-                        listener?.onVideoOutput()
+                    if (decision.firstDisplayedFrame && !nativeVideoOutputObserved) {
+                        observeNativeVideoOutput(
+                            "displayedPictures advanced -> validate SurfaceView",
+                        )
                     }
                     when {
                         decision.videoFrozen && forceSoftware ->
@@ -142,7 +164,7 @@ class VlcPlayerEngine(
     // head start, then Vout is accepted only as a last-resort compatibility signal.
     private val voutCompatibilityRunnable = Runnable {
         if (
-            !videoOutputReported &&
+            !nativeVideoOutputObserved &&
             !playbackFailureReported.get() &&
             mediaPlayer?.currentVideoTrack != null &&
             voutObserved.get() &&
@@ -150,9 +172,9 @@ class VlcPlayerEngine(
             !bufferingActive.get() &&
             !statsObserved.get()
         ) {
-            videoOutputReported = true
-            PlaybackLog.log(context, engineName, "stats unavailable after Vout grace -> accept output")
-            listener?.onVideoOutput()
+            observeNativeVideoOutput(
+                "stats unavailable after Vout grace -> validate SurfaceView",
+            )
         }
     }
 
@@ -161,7 +183,7 @@ class VlcPlayerEngine(
     // audio/time but never produces even one video frame.
     private val noDisplayedFrameRunnable = Runnable {
         if (
-            !videoOutputReported &&
+            !nativeVideoOutputObserved &&
             !playbackFailureReported.get() &&
             statsObserved.get() &&
             decodedVideoObserved.get() &&
@@ -179,7 +201,7 @@ class VlcPlayerEngine(
     // video so the controller can try one bounded compatibility route.
     private val noVideoPipelineRunnable = Runnable {
         if (
-            !videoOutputReported &&
+            !nativeVideoOutputObserved &&
             !playbackFailureReported.get() &&
             playingObserved.get() &&
             !bufferingActive.get() &&
@@ -332,7 +354,6 @@ class VlcPlayerEngine(
                     voutObserved.set(true)
                     maybeRouteByProfile()
                     scheduleProfileRechecks()
-                    surfaceFrameHealth.start { findVideoSurface(videoLayout) }
                     scheduleHealthChecks(immediate = true)
                     scheduleVoutCompatibility()
                     scheduleOutputTimeouts()
@@ -468,6 +489,41 @@ class VlcPlayerEngine(
         }
     }
 
+    private fun observeNativeVideoOutput(detail: String) {
+        if (nativeVideoOutputObserved || playbackFailureReported.get()) return
+        nativeVideoOutputObserved = true
+        healthHandler.removeCallbacks(voutCompatibilityRunnable)
+        healthHandler.removeCallbacks(noDisplayedFrameRunnable)
+        healthHandler.removeCallbacks(noVideoPipelineRunnable)
+        PlaybackLog.log(context, engineName, detail)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            surfaceFrameHealth.start { findVideoSurface(videoLayout) }
+            healthHandler.removeCallbacks(surfaceValidationFallbackRunnable)
+            healthHandler.postDelayed(
+                surfaceValidationFallbackRunnable,
+                PIXEL_VALIDATION_FALLBACK_MS,
+            )
+        } else {
+            surfaceHealthyObserved = true
+            maybeReportVideoOutput()
+        }
+    }
+
+    private fun maybeReportVideoOutput() {
+        if (
+            videoOutputReported ||
+            !nativeVideoOutputObserved ||
+            !surfaceHealthyObserved ||
+            playbackFailureReported.get()
+        ) {
+            return
+        }
+        videoOutputReported = true
+        healthHandler.removeCallbacks(surfaceValidationFallbackRunnable)
+        PlaybackLog.log(context, engineName, "healthy SurfaceView frame confirmed")
+        listener?.onVideoOutput()
+    }
+
     private fun reportVideoInvalid(detail: String) {
         if (!playbackFailureReported.compareAndSet(false, true)) return
         healthHandler.removeCallbacksAndMessages(null)
@@ -535,6 +591,8 @@ class VlcPlayerEngine(
         healthHandler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()
         videoOutputReported = false
+        nativeVideoOutputObserved = false
+        surfaceHealthyObserved = false
         val mediaGeneration = eventGenerationGate.beginPlay()
         // Reset the silent-audio guard on the main thread, then hand the blocking
         // stop -> setMedia -> play sequence to the VLC ops thread as ONE runnable
@@ -774,6 +832,7 @@ class VlcPlayerEngine(
         // caching must stay at or below this or the audio decoder drops frames
         // for the first several seconds of every channel.
         private const val MAX_VLC_LIVE_CACHING_MS = 3000
+        private const val PIXEL_VALIDATION_FALLBACK_MS = 1_800L
 
         private const val HEALTH_POLL_MS = 1500L
         private const val VOUT_STATS_GRACE_MS = 4500L

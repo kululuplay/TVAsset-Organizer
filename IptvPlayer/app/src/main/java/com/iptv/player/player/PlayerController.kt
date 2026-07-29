@@ -308,6 +308,11 @@ class PlayerController(
         // new channel still gets the full hardware-first fallback ladder.
         val reusable = engine
         if (reusable != null && stage == initial) {
+            // A fast zap keeps the same SurfaceView, but the frame currently on it
+            // belongs to the previous channel and the next decoder may briefly
+            // output green while its format settles. Re-arm the UI cover exactly
+            // like a full stage restart; the verified frame callback removes it.
+            callback.onPlaybackRestarting()
             triedStages.clear()
             triedStages.add(initial)
             // reset=true: a zap to a DIFFERENT-resolution stream must reconfigure

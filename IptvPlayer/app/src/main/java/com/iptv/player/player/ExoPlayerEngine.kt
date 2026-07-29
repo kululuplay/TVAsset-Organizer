@@ -77,12 +77,38 @@ class ExoPlayerEngine(
     private val handler = Handler(Looper.getMainLooper())
     // Per-stream health flags so each detection fires at most once.
     private var firstFrameRendered = false
-    private var videoReported = false
+    private var videoFailureReported = false
+    private var videoOutputReported = false
     private var audioReported = false
     private val lastVideoFrameAtMs = AtomicLong(0L)
 
-    private val surfaceFrameHealth = SurfaceFrameHealthMonitor(handler) {
-        reportVideoInvalid("two persistent solid-green SurfaceView samples")
+    private val surfaceFrameHealth = SurfaceFrameHealthMonitor(
+        handler = handler,
+        onSolidGreen = {
+            reportVideoInvalid("persistent solid-green SurfaceView output")
+        },
+        onHealthyFrame = {
+            reportVerifiedVideoOutput()
+        },
+    )
+
+    // PixelCopy can be unavailable on protected/quirky surfaces. In that case
+    // preserve the legacy first-frame behaviour after a short grace period. A
+    // successfully classified green sample disables this escape hatch.
+    private val surfaceValidationFallbackRunnable = Runnable {
+        if (
+            firstFrameRendered &&
+            !videoFailureReported &&
+            !videoOutputReported &&
+            !surfaceFrameHealth.hasClassifiedFrame()
+        ) {
+            PlaybackLog.log(
+                context,
+                engineName,
+                "PixelCopy unavailable -> accept Media3 rendered-frame signal",
+            )
+            reportVerifiedVideoOutput()
+        }
     }
 
     // Track selection can momentarily report no selected audio while the
@@ -97,7 +123,7 @@ class ExoPlayerEngine(
         override fun run() {
             val p = player ?: return
             if (
-                !videoReported &&
+                !videoFailureReported &&
                 firstFrameRendered &&
                 p.playWhenReady &&
                 p.playbackState == Player.STATE_READY &&
@@ -175,10 +201,18 @@ class ExoPlayerEngine(
             override fun onRenderedFirstFrame() {
                 firstFrameRendered = true
                 lastVideoFrameAtMs.compareAndSet(0L, SystemClock.elapsedRealtime())
-                listener?.onVideoOutput()
                 PlaybackLog.log(context, engineName, "onRenderedFirstFrame")
-                surfaceFrameHealth.start {
-                    findVideoSurface(playerView?.videoSurfaceView ?: playerView)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    surfaceFrameHealth.start {
+                        findVideoSurface(playerView?.videoSurfaceView ?: playerView)
+                    }
+                    handler.removeCallbacks(surfaceValidationFallbackRunnable)
+                    handler.postDelayed(
+                        surfaceValidationFallbackRunnable,
+                        PIXEL_VALIDATION_FALLBACK_MS,
+                    )
+                } else {
+                    reportVerifiedVideoOutput()
                 }
             }
 
@@ -372,7 +406,7 @@ class ExoPlayerEngine(
         // of a codec/profile guess. This guard is only for old TVs where
         // PixelCopy does not exist; otherwise a perfectly healthy 1080p50 stream
         // could be needlessly pushed onto a slower software decoder.
-        if (videoReported || Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) return
+        if (videoFailureReported || Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) return
         val h264 = format.sampleMimeType == MimeTypes.VIDEO_H264
         val isUhd = format.height >= UHD_MIN_HEIGHT || format.width >= UHD_MIN_WIDTH
         val is1080Class = !isUhd &&
@@ -402,7 +436,7 @@ class ExoPlayerEngine(
         handler.postDelayed({
             // Reached READY with a video track but never rendered a frame =>
             // decoder is stuck (often the green/blank failure with no error).
-            if (!videoReported && !firstFrameRendered && player?.videoFormat != null) {
+            if (!videoFailureReported && !firstFrameRendered && player?.videoFormat != null) {
                 reportVideoInvalid("no first frame for video track")
             }
         }, NO_FRAME_TIMEOUT_MS)
@@ -414,12 +448,21 @@ class ExoPlayerEngine(
     }
 
     private fun reportVideoInvalid(detail: String) {
-        if (videoReported) return
-        videoReported = true
+        if (videoFailureReported) return
+        videoFailureReported = true
         surfaceFrameHealth.reset()
+        handler.removeCallbacks(surfaceValidationFallbackRunnable)
         handler.removeCallbacks(videoProgressRunnable)
         PlaybackLog.log(context, engineName, "$detail -> compatibility fallback")
         listener?.onVideoInvalid()
+    }
+
+    private fun reportVerifiedVideoOutput() {
+        if (videoFailureReported || videoOutputReported) return
+        videoOutputReported = true
+        handler.removeCallbacks(surfaceValidationFallbackRunnable)
+        PlaybackLog.log(context, engineName, "healthy SurfaceView frame confirmed")
+        listener?.onVideoOutput()
     }
 
     /**
@@ -470,7 +513,8 @@ class ExoPlayerEngine(
         handler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()
         firstFrameRendered = false
-        videoReported = false
+        videoFailureReported = false
+        videoOutputReported = false
         audioReported = false
         lastVideoFrameAtMs.set(0L)
     }
@@ -536,6 +580,7 @@ class ExoPlayerEngine(
         private const val NO_FRAME_TIMEOUT_MS = 6000L
         private const val VIDEO_HEALTH_POLL_MS = 2000L
         private const val VIDEO_FRAME_STALL_MS = 7000L
+        private const val PIXEL_VALIDATION_FALLBACK_MS = 1_800L
         private const val GREEN_PRONE_MIN_HEIGHT = 1080
         private const val GREEN_PRONE_MIN_WIDTH = 1920
         private const val GREEN_PRONE_MIN_FPS = 49f

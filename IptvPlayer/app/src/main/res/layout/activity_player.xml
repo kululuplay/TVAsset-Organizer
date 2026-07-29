@@ -13,6 +13,16 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- Never expose an unverified decoder surface. Some Android TV hardware
+         renders green buffers while its format settles; the controller keeps
+         this opaque cover visible until PixelCopy confirms a healthy frame. -->
+    <View
+        android:id="@+id/playbackCover"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/black"
+        android:visibility="visible" />
+
     <!-- Branded buffering indicator -->
     <LinearLayout
         android:id="@+id/bufferingIndicator"

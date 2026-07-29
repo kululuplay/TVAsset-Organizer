@@ -288,6 +288,14 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
+            <!-- Opaque until the active engine confirms a non-green frame. -->
+            <View
+                android:id="@+id/previewPlaybackCover"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@android:color/black"
+                android:visibility="visible" />
+
             <ImageView
                 android:id="@+id/infoLogo"
                 android:layout_width="132dp"
