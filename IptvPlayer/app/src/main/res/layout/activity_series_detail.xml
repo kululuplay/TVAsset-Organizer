@@ -68,7 +68,7 @@
             <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="326dp"
+                android:minHeight="270dp"
                 android:background="@drawable/bg_series_detail_panel">
 
                 <LinearLayout
@@ -77,13 +77,13 @@
                     android:layout_height="wrap_content"
                     android:baselineAligned="false"
                     android:orientation="horizontal"
-                    android:padding="22dp"
+                    android:padding="16dp"
                     android:visibility="invisible">
 
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginEnd="26dp"
+                        android:layout_marginEnd="20dp"
                         android:layout_weight="1"
                         android:orientation="vertical">
 
@@ -203,7 +203,7 @@
                             android:id="@+id/detailPlot"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="14dp"
+                            android:layout_marginTop="10dp"
                             android:ellipsize="end"
                             android:lineSpacingExtra="2dp"
                             android:maxLines="3"
@@ -233,22 +233,22 @@
                             android:id="@+id/actionRow"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="18dp"
+                            android:layout_marginTop="13dp"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
 
                             <LinearLayout
                                 android:id="@+id/playButton"
                                 android:layout_width="wrap_content"
-                                android:layout_height="52dp"
+                                android:layout_height="44dp"
                                 android:background="@drawable/bg_pill_light"
                                 android:enabled="false"
                                 android:focusable="false"
                                 android:focusableInTouchMode="false"
                                 android:gravity="center_vertical"
                                 android:orientation="horizontal"
-                                android:paddingStart="22dp"
-                                android:paddingEnd="22dp"
+                                android:paddingStart="18dp"
+                                android:paddingEnd="18dp"
                                 android:stateListAnimator="@animator/control_focus">
 
                                 <ImageView
@@ -272,7 +272,7 @@
                             <TextView
                                 android:id="@+id/trailerButton"
                                 android:layout_width="wrap_content"
-                                android:layout_height="52dp"
+                                android:layout_height="44dp"
                                 android:layout_marginStart="10dp"
                                 android:background="@drawable/bg_pill_dark"
                                 android:focusable="true"
@@ -289,22 +289,22 @@
 
                             <ImageView
                                 android:id="@+id/favoriteButton"
-                                android:layout_width="52dp"
-                                android:layout_height="52dp"
+                                android:layout_width="44dp"
+                                android:layout_height="44dp"
                                 android:layout_marginStart="10dp"
                                 android:background="@drawable/bg_pill_dark"
                                 android:contentDescription="@string/section_favorites"
                                 android:focusable="true"
                                 android:focusableInTouchMode="false"
-                                android:padding="15dp"
+                                android:padding="12dp"
                                 android:src="@drawable/ic_heart"
                                 android:stateListAnimator="@animator/control_focus" />
                         </LinearLayout>
                     </LinearLayout>
 
                     <FrameLayout
-                        android:layout_width="190dp"
-                        android:layout_height="285dp"
+                        android:layout_width="156dp"
+                        android:layout_height="234dp"
                         android:background="@drawable/bg_series_detail_poster"
                         android:padding="3dp">
 
@@ -379,7 +379,7 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="14dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
@@ -403,7 +403,7 @@
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/seasonList"
                 android:layout_width="match_parent"
-                android:layout_height="66dp"
+                android:layout_height="56dp"
                 android:clipChildren="false"
                 android:clipToPadding="false"
                 android:overScrollMode="never"
@@ -415,7 +415,7 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="8dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
@@ -439,12 +439,12 @@
             <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="226dp">
+                android:minHeight="194dp">
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/episodeList"
                     android:layout_width="match_parent"
-                    android:layout_height="222dp"
+                    android:layout_height="190dp"
                     android:clipChildren="false"
                     android:clipToPadding="false"
                     android:overScrollMode="never"
