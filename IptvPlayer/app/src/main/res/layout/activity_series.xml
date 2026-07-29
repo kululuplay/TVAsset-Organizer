@@ -14,11 +14,11 @@
 
     <LinearLayout
         android:id="@+id/categoryPanel"
-        android:layout_width="270dp"
+        android:layout_width="@dimen/catalog_category_width"
         android:layout_height="0dp"
         android:background="@drawable/bg_series_catalog_rail"
         android:orientation="vertical"
-        android:padding="14dp"
+        android:padding="11dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
@@ -87,7 +87,7 @@
         android:id="@+id/contentPanel"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginStart="18dp"
+        android:layout_marginStart="14dp"
         android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -141,18 +141,18 @@
             android:id="@+id/searchToolbar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:layout_marginBottom="12dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="9dp"
             android:background="@drawable/bg_series_toolbar"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:padding="8dp">
+            android:padding="6dp">
 
             <EditText
                 android:id="@+id/searchInput"
                 style="@style/Widget.Iptv.Input"
                 android:layout_width="0dp"
-                android:layout_height="48dp"
+                android:layout_height="44dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_input_modern"
                 android:drawableStart="@drawable/ic_search"
@@ -168,8 +168,8 @@
 
             <ImageButton
                 android:id="@+id/refreshButton"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:layout_marginStart="10dp"
                 android:background="@drawable/bg_pill_dark"
                 android:contentDescription="@string/action_refresh"
@@ -183,7 +183,7 @@
             <TextView
                 android:id="@+id/sortButton"
                 android:layout_width="wrap_content"
-                android:layout_height="48dp"
+                android:layout_height="44dp"
                 android:layout_marginStart="8dp"
                 android:background="@drawable/bg_pill_dark"
                 android:drawableStart="@drawable/ic_sort"

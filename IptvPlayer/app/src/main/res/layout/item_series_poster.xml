@@ -6,11 +6,11 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="5dp"
+    android:layout_margin="3dp"
     android:background="@drawable/bg_series_poster_card"
     android:focusable="true"
     android:focusableInTouchMode="false"
-    android:padding="7dp"
+    android:padding="5dp"
     android:stateListAnimator="@animator/control_focus">
 
     <FrameLayout
@@ -87,14 +87,14 @@
     <TextView
         android:id="@+id/posterName"
         android:layout_width="0dp"
-        android:layout_height="42dp"
-        android:layout_marginTop="8dp"
+        android:layout_height="36dp"
+        android:layout_marginTop="6dp"
         android:ellipsize="end"
         android:gravity="center_vertical"
         android:importantForAccessibility="no"
         android:maxLines="2"
         android:textColor="@color/text_primary"
-        android:textSize="15sp"
+        android:textSize="@dimen/text_caption"
         android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -103,7 +103,7 @@
     <TextView
         android:id="@+id/posterMeta"
         android:layout_width="0dp"
-        android:layout_height="20dp"
+        android:layout_height="18dp"
         android:ellipsize="end"
         android:gravity="center_vertical"
         android:importantForAccessibility="no"

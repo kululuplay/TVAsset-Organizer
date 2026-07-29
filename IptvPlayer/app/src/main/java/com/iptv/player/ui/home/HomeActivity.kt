@@ -287,9 +287,9 @@ class HomeActivity : BaseActivity() {
                 if (typed.isNotEmpty()) lastZapDigits = typed
                 binding.zapOverlay.text = typed
                 binding.zapOverlay.visibility = if (typed.isEmpty()) View.GONE else View.VISIBLE
-                binding.fullscreenZapOverlay.text = typed
-                binding.fullscreenZapOverlay.visibility =
-                    if (inlineFullscreen && typed.isNotEmpty()) View.VISIBLE else View.GONE
+                // The fullscreen EPG confirms the resolved channel. Avoid a
+                // duplicate numeric chip flashing in the top-right meanwhile.
+                binding.fullscreenZapOverlay.visibility = View.GONE
             }
         )
     }
@@ -1166,7 +1166,7 @@ class HomeActivity : BaseActivity() {
         binding.previewCaptionLogoPlate.visibility = View.VISIBLE
         val cleanName = ChannelText.clean(channel.name)
         binding.previewTitle.text = cleanName
-        if (previewingChannel == null) binding.infoLogo.visibility = View.VISIBLE
+        if (previewingChannel == null) showPreviewIdentityPlaceholder()
         val placeholder = LogoPlaceholder.forName(this, channel.name)
         if (channel.logoUrl.isNullOrBlank()) {
             binding.infoLogo.load(placeholder) { crossfade(false) }
@@ -1180,6 +1180,16 @@ class HomeActivity : BaseActivity() {
             }
         }
         bindFullscreenEpgMeta(channel)
+    }
+
+    /**
+     * Artwork helps identify a channel in the browse preview, but looks like a
+     * large splash screen when the same surface is fullscreen. Channel changes
+     * in fullscreen therefore keep the centre clear and rely on the EPG card.
+     */
+    private fun showPreviewIdentityPlaceholder(show: Boolean = true) {
+        binding.infoLogo.visibility =
+            if (show && !inlineFullscreen) View.VISIBLE else View.INVISIBLE
     }
 
     /** Binds only the fullscreen card so guide focus cannot corrupt preview metadata. */
@@ -1782,7 +1792,7 @@ class HomeActivity : BaseActivity() {
         lockCaptionToPreview(channel)
         if (inlineFullscreen) revealFullscreenEpgForChannelChange()
         previewJob?.cancel()
-        binding.infoLogo.visibility = View.VISIBLE
+        showPreviewIdentityPlaceholder()
         previewJob = lifecycleScope.launch { startPreview(channel) }
     }
 
@@ -1851,7 +1861,7 @@ class HomeActivity : BaseActivity() {
             // Audio-only radio has no video-frame callback. For TV, retain the logo
             // and buffering cover until a real decoded frame reaches the SurfaceView.
             if (radioMode) {
-                binding.infoLogo.visibility = View.VISIBLE
+                showPreviewIdentityPlaceholder()
                 markPreviewReady()
             } else if (previewHasRenderedFrame) {
                 markPreviewReady()
@@ -1863,7 +1873,7 @@ class HomeActivity : BaseActivity() {
             previewHasRenderedFrame = false
             previewEngineName = null
             binding.previewPlaybackCover.visibility = View.VISIBLE
-            if (!radioMode) binding.infoLogo.visibility = View.VISIBLE
+            if (!radioMode) showPreviewIdentityPlaceholder()
             binding.previewLoading.visibility = View.VISIBLE
             binding.previewStatus.setText(R.string.buffering)
             binding.previewStatus.visibility = View.VISIBLE
@@ -1875,7 +1885,7 @@ class HomeActivity : BaseActivity() {
         }
         override fun onFatalError() {
             binding.previewPlaybackCover.visibility = View.VISIBLE
-            binding.infoLogo.visibility = View.VISIBLE
+            showPreviewIdentityPlaceholder()
             binding.previewVideo.keepScreenOn = false
             previewState = LivePreviewPressPolicy.Phase.FAILED
             pendingFullscreenChannelId = null
@@ -1890,7 +1900,7 @@ class HomeActivity : BaseActivity() {
             previewHasRenderedFrame = false
             previewEngineName = null
             binding.previewPlaybackCover.visibility = View.VISIBLE
-            if (!radioMode) binding.infoLogo.visibility = View.VISIBLE
+            if (!radioMode) showPreviewIdentityPlaceholder()
             binding.previewLoading.visibility = View.VISIBLE
             binding.previewStatus.text = getString(R.string.reconnecting, attempt)
             binding.previewStatus.visibility = View.VISIBLE
@@ -1961,6 +1971,7 @@ class HomeActivity : BaseActivity() {
         binding.guidePanel.visibility = View.GONE
         binding.catchupHint.visibility = View.GONE
         binding.previewCaption.visibility = View.GONE
+        showPreviewIdentityPlaceholder(show = false)
         binding.fullscreenGuideOverlay.visibility = View.GONE
         updateFullscreenEpgGuideLayout(guideVisible = false)
         previewingChannel?.let(::bindFullscreenEpgMeta)
@@ -2505,10 +2516,9 @@ class HomeActivity : BaseActivity() {
         }
 
         pendingFullscreenZapChannel = target
-        binding.fullscreenZapOverlay.text = buildString {
-            target.number?.let { append(it).append("  ") }
-            append(ChannelText.clean(target.name))
-        }
+        // CH+/CH- keeps a subtle name confirmation without flashing the channel
+        // number in the top-right corner.
+        binding.fullscreenZapOverlay.text = ChannelText.clean(target.name)
         binding.fullscreenZapOverlay.visibility = View.VISIBLE
         fullscreenZapHandler.removeCallbacksAndMessages(null)
         fullscreenZapHandler.postDelayed({

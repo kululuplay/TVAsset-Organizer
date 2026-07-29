@@ -16,18 +16,18 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        app:layout_constraintGuide_percent="0.378" />
+        app:layout_constraintGuide_percent="0.33" />
 
     <!-- Categories / channels rail. -->
     <LinearLayout
         android:id="@+id/leftPane"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginEnd="14dp"
+        android:layout_marginEnd="12dp"
         android:background="@drawable/bg_live_panel"
         android:clipChildren="false"
         android:orientation="vertical"
-        android:padding="13dp"
+        android:padding="10dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@id/splitGuide"
         app:layout_constraintStart_toStartOf="parent"
@@ -35,14 +35,14 @@
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="42dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
             <ImageView
                 android:id="@+id/browserIcon"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_live_section_chip"
                 android:contentDescription="@null"
                 android:padding="8dp"
@@ -64,7 +64,7 @@
                     android:maxLines="1"
                     android:text="@string/nav_live"
                     android:textColor="@color/text_primary"
-                    android:textSize="20sp"
+                    android:textSize="18sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -94,8 +94,8 @@
 
             <ImageButton
                 android:id="@+id/refreshButton"
-                android:layout_width="42dp"
-                android:layout_height="42dp"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
                 android:layout_marginStart="7dp"
                 android:background="@drawable/bg_icon_button"
                 android:contentDescription="@string/action_refresh"
@@ -115,9 +115,9 @@
             android:id="@+id/searchInput"
             style="@style/Widget.Iptv.Input"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginBottom="11dp"
-            android:layout_marginTop="9dp"
+            android:layout_height="42dp"
+            android:layout_marginBottom="8dp"
+            android:layout_marginTop="7dp"
             android:background="@drawable/bg_input_modern"
             android:drawableStart="@drawable/ic_search"
             android:drawablePadding="9dp"
@@ -298,12 +298,12 @@
 
             <ImageView
                 android:id="@+id/infoLogo"
-                android:layout_width="132dp"
-                android:layout_height="116dp"
+                android:layout_width="104dp"
+                android:layout_height="88dp"
                 android:layout_gravity="center"
                 android:background="@drawable/bg_channel_logo_plate"
                 android:contentDescription="@string/now_playing"
-                android:padding="18dp"
+                android:padding="14dp"
                 android:scaleType="fitCenter"
                 android:translationY="-14dp"
                 android:visibility="invisible" />
@@ -377,9 +377,9 @@
                 android:background="@drawable/bg_preview_caption"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingHorizontal="16dp"
-                android:paddingBottom="13dp"
-                android:paddingTop="24dp">
+                android:paddingHorizontal="13dp"
+                android:paddingBottom="10dp"
+                android:paddingTop="18dp">
 
                 <TextView
                     android:id="@+id/previewLiveBadge"
@@ -396,20 +396,20 @@
 
                 <TextView
                     android:id="@+id/previewNumber"
-                    android:layout_width="42dp"
-                    android:layout_height="38dp"
+                    android:layout_width="36dp"
+                    android:layout_height="32dp"
                     android:layout_marginStart="9dp"
                     android:background="@drawable/bg_channel_number_chip"
                     android:gravity="center"
                     android:textColor="@color/text_primary"
-                    android:textSize="17sp"
+                    android:textSize="15sp"
                     android:textStyle="bold"
                     android:visibility="gone" />
 
                 <FrameLayout
                     android:id="@+id/previewCaptionLogoPlate"
-                    android:layout_width="58dp"
-                    android:layout_height="42dp"
+                    android:layout_width="50dp"
+                    android:layout_height="36dp"
                     android:layout_marginHorizontal="10dp"
                     android:background="@drawable/bg_channel_logo_plate"
                     android:padding="5dp"
@@ -436,7 +436,7 @@
                         android:ellipsize="end"
                         android:maxLines="1"
                         android:textColor="@color/text_primary"
-                        android:textSize="20sp"
+                        android:textSize="17sp"
                         android:textStyle="bold" />
 
                     <TextView
@@ -465,10 +465,10 @@
                 android:background="@drawable/bg_fullscreen_epg_card"
                 android:elevation="18dp"
                 android:orientation="vertical"
-                android:paddingStart="18dp"
-                android:paddingTop="14dp"
-                android:paddingEnd="18dp"
-                android:paddingBottom="14dp"
+                android:paddingStart="14dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="10dp"
                 android:visibility="gone">
 
                 <!-- Channel identity row. -->
@@ -476,12 +476,12 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:gravity="center_vertical"
-                    android:minHeight="54dp"
+                    android:minHeight="44dp"
                     android:orientation="horizontal">
 
                     <FrameLayout
-                        android:layout_width="68dp"
-                        android:layout_height="54dp"
+                        android:layout_width="56dp"
+                        android:layout_height="44dp"
                         android:background="@drawable/bg_channel_logo_plate"
                         android:padding="6dp">
 
@@ -495,20 +495,20 @@
 
                     <TextView
                         android:id="@+id/fullscreenEpgNumber"
-                        android:layout_width="48dp"
-                        android:layout_height="38dp"
-                        android:layout_marginStart="11dp"
+                        android:layout_width="40dp"
+                        android:layout_height="32dp"
+                        android:layout_marginStart="9dp"
                         android:background="@drawable/bg_channel_number_chip"
                         android:gravity="center"
                         android:textColor="@color/text_primary"
-                        android:textSize="18sp"
+                        android:textSize="15sp"
                         android:textStyle="bold"
                         android:visibility="gone" />
 
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="13dp"
+                        android:layout_marginStart="10dp"
                         android:layout_weight="1"
                         android:orientation="vertical">
 
@@ -519,7 +519,7 @@
                             android:ellipsize="end"
                             android:maxLines="1"
                             android:textColor="@color/text_primary"
-                            android:textSize="24sp"
+                            android:textSize="20sp"
                             android:textStyle="bold" />
 
                         <TextView
@@ -554,7 +554,7 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
+                    android:layout_marginTop="7dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
@@ -576,7 +576,7 @@
                         android:ellipsize="end"
                         android:maxLines="1"
                         android:textColor="@color/text_primary"
-                        android:textSize="20sp"
+                        android:textSize="17sp"
                         android:textStyle="bold" />
 
                     <TextView
@@ -603,7 +603,7 @@
                     style="?android:attr/progressBarStyleHorizontal"
                     android:layout_width="match_parent"
                     android:layout_height="5dp"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="6dp"
                     android:max="100"
                     android:progressDrawable="@drawable/progress_fullscreen_epg"
                     android:visibility="gone" />
@@ -641,7 +641,7 @@
                     android:id="@+id/fullscreenEpgNextRow"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="6dp"
                     android:gravity="center_vertical"
                     android:minHeight="34dp"
                     android:orientation="horizontal"
