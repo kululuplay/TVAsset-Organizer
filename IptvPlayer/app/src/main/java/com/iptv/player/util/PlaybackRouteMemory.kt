@@ -32,13 +32,15 @@ object PlaybackRouteMemory {
     private const val FILE = "route-memory.jsonl"
 
     /** Bump to invalidate all stored entries if the record shape ever changes. */
-    private const val SCHEMA = 1
+    // v2 invalidates routes learned before real-frame/loss/green health checks.
+    // Only this tiny cache is affected; login and Settings live in DataStore.
+    private const val SCHEMA = 2
 
     /** Hard cap on remembered channels; the least-recently-used is evicted past this. */
     private const val MAX_ENTRIES = 500
 
     /** A route not confirmed for this long is forgotten (channel/codec may have changed). */
-    private const val TTL_MS = 45L * 24 * 60 * 60 * 1000
+    private const val TTL_MS = 14L * 24 * 60 * 60 * 1000
 
     /**
      * Consecutive pre-stable failures of a remembered route before it is dropped

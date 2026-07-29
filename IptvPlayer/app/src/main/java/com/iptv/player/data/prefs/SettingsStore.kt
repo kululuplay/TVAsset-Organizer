@@ -23,6 +23,7 @@ import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.ContentSort
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.DecoderMode
+import com.iptv.player.data.model.PlaybackSelection
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.data.model.SourceConfig
@@ -124,16 +125,18 @@ class SettingsStore(
 
     // ---- Playback -------------------------------------------------------
 
-    val playerMode: Flow<PlayerMode> = context.dataStore.data.map { prefs ->
-        resolvedPlaybackSelection(prefs).first
+    val playbackSelection: Flow<PlaybackSelection> = context.dataStore.data.map { prefs ->
+        resolvedPlaybackSelection(prefs)
     }
+
+    val playerMode: Flow<PlayerMode> = playbackSelection.map { it.player }
 
     suspend fun setPlayerMode(mode: PlayerMode) =
         context.dataStore.edit { prefs ->
             // Read the normalized value, not the raw legacy pair. Otherwise an
             // old EXOPLAYER+SOFTWARE record is displayed as Hardware but silently
             // turns back into Software when the user later selects AUTO/VLC.
-            val decoder = resolvedPlaybackSelection(prefs).second
+            val decoder = resolvedPlaybackSelection(prefs).decoder
             prefs[Keys.PLAYER_MODE] = mode.name
             // ExoPlayer is a MediaCodec engine and cannot honour "software only".
             prefs[Keys.DECODER_MODE] =
@@ -145,14 +148,15 @@ class SettingsStore(
         }
 
     /** Decoder strategy: AUTO (hw + software fallback), HARDWARE, SOFTWARE. */
-    val decoderMode: Flow<DecoderMode> = context.dataStore.data.map { prefs ->
-        resolvedPlaybackSelection(prefs).second
-    }
+    val decoderMode: Flow<DecoderMode> = playbackSelection.map { it.decoder }
 
     suspend fun getDecoderMode(): DecoderMode {
-        val prefs = context.dataStore.data.first()
-        return resolvedPlaybackSelection(prefs).second
+        return getPlaybackSelection().decoder
     }
+
+    /** Read player + decoder from the same DataStore revision. */
+    suspend fun getPlaybackSelection(): PlaybackSelection =
+        resolvedPlaybackSelection(context.dataStore.data.first())
 
     suspend fun setDecoderMode(mode: DecoderMode) =
         context.dataStore.edit { prefs ->
@@ -183,7 +187,7 @@ class SettingsStore(
      */
     private fun resolvedPlaybackSelection(
         prefs: Preferences,
-    ): Pair<PlayerMode, DecoderMode> {
+    ): PlaybackSelection {
         val player = PlayerMode.fromName(prefs[Keys.PLAYER_MODE])
         val storedDecoder = DecoderMode.fromName(prefs[Keys.DECODER_MODE])
         val decoder =
@@ -192,7 +196,7 @@ class SettingsStore(
             } else {
                 storedDecoder
             }
-        return player to decoder
+        return PlaybackSelection(player = player, decoder = decoder)
     }
 
     val streamFormat: Flow<StreamFormat> = context.dataStore.data.map {

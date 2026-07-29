@@ -27,8 +27,10 @@
 package com.iptv.player.player
 
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.ViewGroup
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -58,6 +60,19 @@ class VlcPlayerEngine(
     private var mediaPlayer: MediaPlayer? = null
     private var videoLayout: VLCVideoLayout? = null
     private var listener: PlayerListener? = null
+    private var videoOutputReported = false
+
+    private val playbackFailureReported = AtomicBoolean(false)
+    private val statsObserved = AtomicBoolean(false)
+    private val decodedVideoObserved = AtomicBoolean(false)
+    private val playingObserved = AtomicBoolean(false)
+    private val bufferingActive = AtomicBoolean(true)
+    private val voutObserved = AtomicBoolean(false)
+    private val playbackHealth = VlcPlaybackHealth(softwareDecode = forceSoftware)
+    private val healthHandler = Handler(Looper.getMainLooper())
+    private val surfaceFrameHealth = SurfaceFrameHealthMonitor(healthHandler) {
+        reportVideoInvalid("persistent solid-green SurfaceView output")
+    }
 
     // Stored so they can be re-applied once playback (re)starts.
     private var audioDelayMs = 0L
@@ -83,6 +98,98 @@ class VlcPlayerEngine(
     private val audioHandler = Handler(Looper.getMainLooper())
     private var audioHealAttempted = false
 
+    private val healthRunnable = object : Runnable {
+        override fun run() {
+            if (pendingOps.get() > 0) {
+                healthHandler.postDelayed(this, HEALTH_POLL_MS)
+                return
+            }
+            val mp = mediaPlayer ?: return
+            if (mp.currentVideoTrack != null) {
+                readHealthSample(mp)?.let { sample ->
+                    statsObserved.set(true)
+                    if (sample.decodedVideo > 0L) decodedVideoObserved.set(true)
+                    val decision = playbackHealth.evaluate(
+                        sample = sample,
+                        nowMs = SystemClock.elapsedRealtime(),
+                        videoActivelyPlaying =
+                            playingObserved.get() && !bufferingActive.get(),
+                    )
+                    if (decision.firstDisplayedFrame && !videoOutputReported) {
+                        videoOutputReported = true
+                        healthHandler.removeCallbacks(voutCompatibilityRunnable)
+                        healthHandler.removeCallbacks(noDisplayedFrameRunnable)
+                        healthHandler.removeCallbacks(noVideoPipelineRunnable)
+                        PlaybackLog.log(context, engineName, "displayedPictures advanced -> real video output")
+                        listener?.onVideoOutput()
+                    }
+                    when {
+                        decision.videoFrozen && forceSoftware ->
+                            reportSoftwareTooSlow("software video output froze while input/time advanced")
+                        decision.videoFrozen ->
+                            reportVideoInvalid("video output froze while input/time advanced")
+                        decision.softwareTooSlow ->
+                            reportSoftwareTooSlow("sustained lost-picture ratio above 25%")
+                    }
+                }
+            }
+            healthHandler.postDelayed(this, HEALTH_POLL_MS)
+        }
+    }
+
+    // Very old/quirky libVLC builds may not expose media stats even with --stats.
+    // Avoid leaving a healthy picture covered forever: green/profile checks get a
+    // head start, then Vout is accepted only as a last-resort compatibility signal.
+    private val voutCompatibilityRunnable = Runnable {
+        if (
+            !videoOutputReported &&
+            !playbackFailureReported.get() &&
+            mediaPlayer?.currentVideoTrack != null &&
+            voutObserved.get() &&
+            playingObserved.get() &&
+            !bufferingActive.get() &&
+            !statsObserved.get()
+        ) {
+            videoOutputReported = true
+            PlaybackLog.log(context, engineName, "stats unavailable after Vout grace -> accept output")
+            listener?.onVideoOutput()
+        }
+    }
+
+    // When stats are available, Vout is not enough: require displayedPictures to
+    // advance. This catches a decoder that creates an output surface and advances
+    // audio/time but never produces even one video frame.
+    private val noDisplayedFrameRunnable = Runnable {
+        if (
+            !videoOutputReported &&
+            !playbackFailureReported.get() &&
+            statsObserved.get() &&
+            decodedVideoObserved.get() &&
+            playingObserved.get() &&
+            !bufferingActive.get() &&
+            mediaPlayer?.currentVideoTrack != null
+        ) {
+            reportVideoInvalid("decoded video never reached the output surface")
+        }
+    }
+
+    // A stream may emit Playing/Vout before any video data is actually decoded.
+    // Give slow IPTV sources the full extended deadline; if a declared video
+    // track still has no pipeline, classify this as STARTUP rather than green
+    // video so the controller can try one bounded compatibility route.
+    private val noVideoPipelineRunnable = Runnable {
+        if (
+            !videoOutputReported &&
+            !playbackFailureReported.get() &&
+            playingObserved.get() &&
+            !bufferingActive.get() &&
+            mediaPlayer?.currentVideoTrack != null &&
+            !decodedVideoObserved.get()
+        ) {
+            reportStartupFailure("video pipeline produced no decoded pictures")
+        }
+    }
+
     // libVLC's audio timestamp conversion has a fixed ~3s bound. A network/live
     // caching above that makes the audio decoder request frames further ahead
     // than the bound, so it drops EVERY audio frame for the first several seconds
@@ -105,44 +212,26 @@ class VlcPlayerEngine(
     //    for the channel the user already left).
     private val opsSeq = AtomicLong(0)
     private val pendingOps = AtomicInteger(0)
+    // libVLC callbacks belong to the MediaPlayer, not to a specific Media. Bind
+    // them to the current MediaChanged boundary so a late error from the channel
+    // being stopped cannot fail the newly-zapped channel.
+    private val eventGenerationGate = VlcEventGenerationGate()
 
     override fun bind(container: ViewGroup) {
-        // Tuned for smooth IPTV on Android TV: a generous network buffer to
-        // absorb jitter, plus options that keep playback real-time on weak
-        // hardware instead of accumulating delay (the main cause of stutter).
+        // Keep VLC close to its proven defaults. The old global clock overrides,
+        // unsafe avcodec-fast mode, skipped loop filter and forced bob
+        // deinterlacing caused timestamp stalls, macroblocking and CPU overload
+        // on real live MPEG-TS channels.
         val options = arrayListOf(
-            // Bigger live buffer soaks up network hiccups before they freeze.
             "--network-caching=$vlcCachingMs",
             "--live-caching=$vlcCachingMs",
-            // Many IPTV TS streams carry irregular PCR/timestamps; disabling the
-            // jitter/synchro guards stops VLC from stalling to "catch up".
-            "--clock-jitter=0",
-            "--clock-synchro=0",
-            // Hardware decode unless we've been told to force software.
-            if (forceSoftware) "--avcodec-hw=none" else "--avcodec-hw=any",
-            // MediaCodec/OMX direct rendering is LEFT ON (libVLC default) on the
-            // hardware path: the Amlogic decoder then renders frames straight onto
-            // the SurfaceView underlay plane, which is how the box natively shows
-            // hardware video. The previous DR-off + android_display vout path could
-            // not colour-convert NV12 on this compositor and stayed GREEN (RV16/RV32
-            // chroma overrides had ZERO effect -- the log still showed "output: 21
-            // Biplanar", never converted). forceSoftware uses avcodec-hw=none so DR
-            // is irrelevant there.
-            // Cut decode load so cheap TV boxes keep up, WITHOUT wrecking image
-            // quality. "skiploopfilter=all" dropped the H.264/H.265 deblocking
-            // filter on EVERY frame, so block errors on reference frames piled up
-            // and propagated -> visible macroblocking/"rain" breakup on some live
-            // channels (audio stayed fine). "nonref" keeps deblocking on the
-            // reference frames that matter (no error build-up) and only skips it
-            // on disposable non-reference frames, so we still save CPU. This only
-            // affects the software avcodec path; the HW decoder deblocks itself.
-            "--avcodec-skiploopfilter=nonref",
-            "--avcodec-fast",
+            "--stats",
             // Auto-reconnect when an HTTP segment/stream connection drops.
             "--http-reconnect",
             // Report KULULUPLAY instead of the default "VLC/3.0.x LibVLC/3.0.x".
             "--http-user-agent=${AppInfo.USER_AGENT}"
         )
+        if (forceSoftware) options.add("--avcodec-hw=none")
         // Default = decode audio to PCM (no passthrough). Disable SPDIF so AC-3/
         // E-AC-3/DTS are software-decoded to PCM that any HDMI sink plays, and
         // force a STEREO downmix so the output is 2.0.
@@ -159,17 +248,6 @@ class VlcPlayerEngine(
             options.add("--no-spdif")
             options.add("--stereo-mode=1")
         }
-        // Deinterlace ONLY on the software path. On the hardware path the Amlogic
-        // decoder outputs OPAQUE MediaCodec buffers (VLC logs "output: 17 unknown")
-        // and deinterlaces interlaced (1080i) content natively on its underlay
-        // plane; a software deinterlace filter cannot touch opaque buffers, so it
-        // stalls the pipeline ("dequeue_in timeout: no input available") = frozen
-        // video. Forced-software decode produces raw I420 that bob CAN deinterlace.
-        if (forceSoftware) {
-            options.add("--deinterlace=1")
-            options.add("--deinterlace-mode=bob")
-        }
-
         val vlc = LibVLC(context, options)
         // Belt-and-braces: also set it on the instance (name + http UA).
         vlc.setUserAgent(AppInfo.USER_AGENT, AppInfo.USER_AGENT)
@@ -190,39 +268,74 @@ class VlcPlayerEngine(
         mp.attachViews(layout, null, false, false)
 
         mp.setEventListener { event ->
+            // MediaChanged is the only reliable native boundary between two
+            // streams on a reused MediaPlayer. Process it even while the queued
+            // setMedia/play operation is still marked pending.
+            if (event.type == MediaPlayer.Event.MediaChanged) {
+                eventGenerationGate.onMediaChanged()
+                return@setEventListener
+            }
             // A queued stop/play is pending on the VLC ops thread: these events
             // are from the PREVIOUS media — drop them (see pendingOps note).
             if (pendingOps.get() > 0) return@setEventListener
+            if (!eventGenerationGate.acceptsCurrentMediaEvent()) {
+                return@setEventListener
+            }
             when (event.type) {
                 MediaPlayer.Event.Buffering -> {
                     // VLC keeps firing Buffering during normal playback (cache
                     // top-ups), ending each cycle at 100%. Only treat <100% as
                     // actual buffering; 100% means the stream is running, so hide
                     // the spinner — otherwise it stays on screen forever.
-                    if (event.buffering < 100f) listener?.onBuffering()
-                    else {
+                    if (event.buffering < 100f) {
+                        bufferingActive.set(true)
+                        healthHandler.removeCallbacks(voutCompatibilityRunnable)
+                        healthHandler.removeCallbacks(noDisplayedFrameRunnable)
+                        healthHandler.removeCallbacks(noVideoPipelineRunnable)
+                        listener?.onBuffering()
+                    } else {
+                        val firstPlaying = playingObserved.compareAndSet(false, true)
+                        val resumedFromBuffering = bufferingActive.getAndSet(false)
                         listener?.onPlaying()
                         // Long-tail safety net: each cache top-up gives another
                         // chance to read a now-populated frame rate, in case the
                         // delayed re-checks all fired before fps was known.
                         maybeRouteByProfile()
+                        if (firstPlaying || resumedFromBuffering) {
+                            scheduleHealthChecks()
+                            scheduleOutputTimeouts()
+                            scheduleVoutCompatibility()
+                        }
                     }
                 }
                 MediaPlayer.Event.Playing -> {
+                    val firstPlaying = playingObserved.compareAndSet(false, true)
+                    val resumedFromBuffering = bufferingActive.getAndSet(false)
                     // VLC only accepts delays once the track is running.
                     applyDelays()
                     listener?.onPlaying()
                     maybeRouteByProfile()
                     scheduleProfileRechecks()
                     scheduleAudioCheck()
+                    scheduleHealthChecks()
+                    if (firstPlaying || resumedFromBuffering) {
+                        scheduleOutputTimeouts()
+                        scheduleVoutCompatibility()
+                    }
                 }
-                // Video output created => track dimensions/frame rate are populated;
-                // the most reliable point to read the profile and route the bad one
-                // to software before the green frame is all the user ever sees.
+                // Vout means the surface/output was created, NOT that a healthy
+                // picture was displayed. Stats confirms displayedPictures before
+                // onVideoOutput is emitted; PixelCopy separately rejects green.
                 MediaPlayer.Event.Vout -> {
-                    listener?.onVideoOutput()
+                    // Vout(0) means the video surface was removed, not created.
+                    if (event.voutCount <= 0) return@setEventListener
+                    voutObserved.set(true)
                     maybeRouteByProfile()
                     scheduleProfileRechecks()
+                    surfaceFrameHealth.start { findVideoSurface(videoLayout) }
+                    scheduleHealthChecks(immediate = true)
+                    scheduleVoutCompatibility()
+                    scheduleOutputTimeouts()
                 }
                 MediaPlayer.Event.EndReached -> listener?.onEnded()
                 MediaPlayer.Event.EncounteredError -> {
@@ -238,10 +351,10 @@ class VlcPlayerEngine(
     }
 
     /**
-     * Resolution-aware decode routing, evaluated once the video track is known.
-     * Software-decoded UHD/4K is reported to the controller because TV-box CPUs
-     * cannot sustain it. Hardware playback is left alone: fallback is driven by
-     * real decoder/output failures, never a broad device/profile guess.
+     * Narrow profile routing retained for API 21-23 where PixelCopy cannot inspect
+     * the actual frame. On newer devices, hardware video is judged from its real
+     * pixels so a healthy 1080p50 stream is never needlessly moved to software.
+     * Software UHD overload is still handled on every Android version.
      */
     private fun maybeRouteByProfile() {
         if (profileCheckDone.get()) return
@@ -252,14 +365,37 @@ class VlcPlayerEngine(
         if (track.width <= 0 || track.height <= 0) return
         val isUhd = track.height >= UHD_MIN_HEIGHT || track.width >= UHD_MIN_WIDTH
 
-        if (forceSoftware && isUhd && claimRouting()) {
-            PlaybackLog.log(
-                context, engineName,
-                "UHD ${track.width}x${track.height} on software -> hardware escalation"
+        if (forceSoftware) {
+            if (isUhd && claimRouting()) {
+                reportSoftwareTooSlow(
+                    "UHD ${track.width}x${track.height} cannot sustain software decode",
+                )
+            } else if (!isUhd) {
+                claimRouting()
+            }
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            claimRouting()
+            return
+        }
+
+        val den = track.frameRateDen
+        val fps = if (den > 0) track.frameRateNum.toFloat() / den else 0f
+        if (fps <= 0f) return // live TS metadata may populate on a later re-check
+        val codec = codecLabel(track.codec)?.lowercase()
+        // Some older libVLC builds expose no fourcc here. Keep the narrow
+        // resolution/fps guard in that case rather than silently missing the
+        // known API21-23 green profile.
+        val isAvc = codec == null || codec == "h264" || codec == "avc1" || codec == "avc"
+        val is1080Class = !isUhd &&
+            (track.height >= GREEN_PRONE_MIN_HEIGHT || track.width >= GREEN_PRONE_MIN_WIDTH)
+        if (isAvc && is1080Class && fps >= GREEN_PRONE_MIN_FPS && claimRouting()) {
+            reportVideoInvalid(
+                "green-prone AVC ${track.width}x${track.height}@${fps}fps hardware profile",
             )
-            listener?.onSoftwareTooSlow()
         } else {
-            // Track is populated and no proactive route is needed.
             claimRouting()
         }
     }
@@ -286,6 +422,74 @@ class VlcPlayerEngine(
         for (delay in PROFILE_RECHECK_DELAYS_MS) {
             profileHandler.postDelayed({ maybeRouteByProfile() }, delay)
         }
+    }
+
+    private fun scheduleHealthChecks(immediate: Boolean = false) {
+        healthHandler.removeCallbacks(healthRunnable)
+        healthHandler.postDelayed(healthRunnable, if (immediate) 0L else HEALTH_POLL_MS)
+    }
+
+    private fun scheduleOutputTimeouts() {
+        healthHandler.removeCallbacks(noDisplayedFrameRunnable)
+        healthHandler.postDelayed(
+            noDisplayedFrameRunnable,
+            NO_DISPLAYED_FRAME_TIMEOUT_MS,
+        )
+        healthHandler.removeCallbacks(noVideoPipelineRunnable)
+        healthHandler.postDelayed(
+            noVideoPipelineRunnable,
+            NO_VIDEO_PIPELINE_TIMEOUT_MS,
+        )
+    }
+
+    private fun scheduleVoutCompatibility() {
+        if (!voutObserved.get()) return
+        healthHandler.removeCallbacks(voutCompatibilityRunnable)
+        healthHandler.postDelayed(voutCompatibilityRunnable, VOUT_STATS_GRACE_MS)
+    }
+
+    /**
+     * Get a retained snapshot of the currently-playing Media, read its counters,
+     * then release that retained reference as required by libVLC.
+     */
+    private fun readHealthSample(mp: MediaPlayer): VlcPlaybackHealth.Sample? {
+        val media = runCatching { mp.media }.getOrNull() ?: return null
+        return try {
+            val stats = runCatching { media.stats }.getOrNull() ?: return null
+            VlcPlaybackHealth.Sample(
+                readBytes = maxOf(stats.readBytes, stats.demuxReadBytes).toLong().coerceAtLeast(0L),
+                decodedVideo = stats.decodedVideo.toLong().coerceAtLeast(0L),
+                displayedPictures = stats.displayedPictures.toLong().coerceAtLeast(0L),
+                lostPictures = stats.lostPictures.toLong().coerceAtLeast(0L),
+                playbackTimeMs = mp.time.coerceAtLeast(0L),
+            )
+        } finally {
+            media.release()
+        }
+    }
+
+    private fun reportVideoInvalid(detail: String) {
+        if (!playbackFailureReported.compareAndSet(false, true)) return
+        healthHandler.removeCallbacksAndMessages(null)
+        surfaceFrameHealth.reset()
+        PlaybackLog.log(context, engineName, "$detail -> software compatibility fallback")
+        listener?.onVideoInvalid()
+    }
+
+    private fun reportSoftwareTooSlow(detail: String) {
+        if (!playbackFailureReported.compareAndSet(false, true)) return
+        healthHandler.removeCallbacksAndMessages(null)
+        surfaceFrameHealth.reset()
+        PlaybackLog.log(context, engineName, "$detail -> hardware recovery")
+        listener?.onSoftwareTooSlow()
+    }
+
+    private fun reportStartupFailure(detail: String) {
+        if (!playbackFailureReported.compareAndSet(false, true)) return
+        healthHandler.removeCallbacksAndMessages(null)
+        surfaceFrameHealth.reset()
+        PlaybackLog.log(context, engineName, "$detail -> startup compatibility route")
+        listener?.onStartupFailure(detail)
     }
 
     /**
@@ -321,6 +525,17 @@ class VlcPlayerEngine(
         val mp = mediaPlayer ?: return
         profileCheckDone.set(false)
         profileHandler.removeCallbacksAndMessages(null)
+        playbackFailureReported.set(false)
+        statsObserved.set(false)
+        decodedVideoObserved.set(false)
+        playingObserved.set(false)
+        bufferingActive.set(true)
+        voutObserved.set(false)
+        playbackHealth.reset()
+        healthHandler.removeCallbacksAndMessages(null)
+        surfaceFrameHealth.reset()
+        videoOutputReported = false
+        val mediaGeneration = eventGenerationGate.beginPlay()
         // Reset the silent-audio guard on the main thread, then hand the blocking
         // stop -> setMedia -> play sequence to the VLC ops thread as ONE runnable
         // (FIFO keeps stop-before-start; the main thread never blocks on a stalled
@@ -343,13 +558,13 @@ class VlcPlayerEngine(
                 // the user has already zapped away from.
                 if (opsSeq.get() != mySeq) return@post
                 val media = Media(vlc, android.net.Uri.parse(url)).apply {
-                    // Hardware decoding unless software was forced (then both off).
-                    setHWDecoderEnabled(!forceSoftware, !forceSoftware)
-                    // Mirror the instance buffer/jitter tuning at the stream level.
+                    // Hardware is preferred but never forced past libVLC's
+                    // per-device safety list. The old force=true made AUTO and
+                    // Hardware identical and enabled broken MediaCodec paths.
+                    setHWDecoderEnabled(!forceSoftware, false)
+                    // Mirror the instance buffer tuning at the stream level.
                     addOption(":network-caching=$vlcCachingMs")
                     addOption(":live-caching=$vlcCachingMs")
-                    addOption(":clock-jitter=0")
-                    addOption(":clock-synchro=0")
                     if (forceSoftware) addOption(":avcodec-hw=none")
                     if (!allowPassthrough) {
                         addOption(":no-spdif")
@@ -358,19 +573,31 @@ class VlcPlayerEngine(
                         // AudioTrack still get sound.
                         addOption(":stereo-mode=1")
                     }
-                    // Software-path deinterlace only (opaque HW buffers can't be
-                    // filtered; the Amlogic HW decoder deinterlaces 1080i natively).
-                    if (forceSoftware) {
-                        addOption(":deinterlace=1")
-                        addOption(":deinterlace-mode=bob")
-                    }
                     // Auto-reconnect dropped HTTP connections instead of erroring out.
                     addOption(":http-reconnect")
                     // Per-stream User-Agent override (covers playlist + segments).
                     addOption(":http-user-agent=${AppInfo.USER_AGENT}")
                 }
-                mp.media = media
-                media.release()
+                try {
+                    if (!eventGenerationGate.prepareMediaChange(mediaGeneration)) {
+                        return@post
+                    }
+                    try {
+                        mp.media = media
+                    } catch (error: Throwable) {
+                        eventGenerationGate.cancelPreparedMediaChange(mediaGeneration)
+                        throw error
+                    }
+                } finally {
+                    media.release()
+                }
+                // The user may have zapped again while native setMedia was
+                // running. Never start the superseded channel; its callbacks are
+                // already rejected by the generation gate.
+                if (
+                    opsSeq.get() != mySeq ||
+                    !eventGenerationGate.isActive(mediaGeneration)
+                ) return@post
                 mp.play()
             } finally {
                 pendingOps.decrementAndGet()
@@ -422,6 +649,9 @@ class VlcPlayerEngine(
     override fun stop() {
         profileHandler.removeCallbacksAndMessages(null)
         audioHandler.removeCallbacksAndMessages(null)
+        healthHandler.removeCallbacksAndMessages(null)
+        surfaceFrameHealth.reset()
+        eventGenerationGate.invalidate()
         val mp = mediaPlayer ?: return
         val mySeq = opsSeq.incrementAndGet()
         pendingOps.incrementAndGet()
@@ -439,6 +669,9 @@ class VlcPlayerEngine(
     override fun release() {
         profileHandler.removeCallbacksAndMessages(null)
         audioHandler.removeCallbacksAndMessages(null)
+        healthHandler.removeCallbacksAndMessages(null)
+        surfaceFrameHealth.reset()
+        eventGenerationGate.invalidate()
         // Main thread: cut events + detach the view surface, then hand the
         // blocking native teardown to the VLC ops thread. Capturing locals and
         // nulling the fields first means nothing else can touch this player, and
@@ -541,5 +774,14 @@ class VlcPlayerEngine(
         // caching must stay at or below this or the audio decoder drops frames
         // for the first several seconds of every channel.
         private const val MAX_VLC_LIVE_CACHING_MS = 3000
+
+        private const val HEALTH_POLL_MS = 1500L
+        private const val VOUT_STATS_GRACE_MS = 4500L
+        private const val NO_DISPLAYED_FRAME_TIMEOUT_MS = 12_000L
+        private const val NO_VIDEO_PIPELINE_TIMEOUT_MS = 20_000L
+
+        private const val GREEN_PRONE_MIN_HEIGHT = 1080
+        private const val GREEN_PRONE_MIN_WIDTH = 1920
+        private const val GREEN_PRONE_MIN_FPS = 49f
     }
 }

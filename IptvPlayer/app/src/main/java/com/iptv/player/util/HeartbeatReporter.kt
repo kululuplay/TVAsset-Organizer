@@ -95,8 +95,9 @@ object HeartbeatReporter {
             runCatching {
                 val s = ServiceLocator.settings
                 put("audioPassthrough", s.getAudioPassthrough())
-                val summary = "engine=" + s.playerMode.first().name +
-                    " decoder=" + s.getDecoderMode().name +
+                val playback = s.getPlaybackSelection()
+                val summary = "engine=" + playback.player.name +
+                    " decoder=" + playback.decoder.name +
                     " buffer=" + s.getBufferMode().name +
                     " format=" + s.getStreamFormat().name
                 put("playerSettings", summary)

@@ -68,8 +68,7 @@ class CrashRecoveryActivity : AppCompatActivity() {
         lifecycleScope.launch {
             runCatching {
                 val settings = ServiceLocator.settings
-                settings.setPlayerMode(PlayerMode.AUTO)
-                settings.setDecoderMode(DecoderMode.AUTO)
+                settings.setPlaybackSelection(PlayerMode.AUTO, DecoderMode.AUTO)
                 settings.setBufferMode(BufferMode.NORMAL)
                 settings.setStreamFormat(StreamFormat.TS)
                 settings.setAudioPassthrough(false)

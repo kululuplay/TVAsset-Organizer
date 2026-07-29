@@ -43,6 +43,7 @@ import com.iptv.player.ui.diagnostics.DiagnosticsActivity
 import com.iptv.player.ui.login.LoginActivity
 import com.iptv.player.ui.profiles.ProfilesActivity
 import com.iptv.player.util.LocaleManager
+import com.iptv.player.util.Logger
 import com.iptv.player.util.PlaybackLog
 import com.iptv.player.util.PublicIpProvider
 import com.iptv.player.util.SpeedTester
@@ -1037,15 +1038,29 @@ class SettingsActivity : BaseActivity() {
                         )
                     }
                     is SpeedTester.Result.Failure -> {
+                        logSpeedTestFailure(result)
+                        val failureMessage = when (result.reason) {
+                            SpeedTester.FailureReason.INSUFFICIENT_ACTIVE_STREAMS ->
+                                R.string.speedtest_failed_service
+                            SpeedTester.FailureReason.INSUFFICIENT_SAMPLES,
+                            SpeedTester.FailureReason.INSUFFICIENT_DATA ->
+                                R.string.speedtest_failed_unstable
+                            SpeedTester.FailureReason.BUSY ->
+                                R.string.speedtest_failed_busy
+                            SpeedTester.FailureReason.TIMEOUT ->
+                                R.string.speedtest_failed_timeout
+                            SpeedTester.FailureReason.INTERNAL_ERROR ->
+                                R.string.speedtest_failed
+                        }
                         binding.speedResult.text = getString(R.string.speedtest_idle)
                         binding.speedStatus.visibility = View.VISIBLE
-                        binding.speedStatus.setText(R.string.speedtest_failed)
+                        binding.speedStatus.setText(failureMessage)
                         binding.speedStatus.setTextColor(
                             ContextCompat.getColor(this@SettingsActivity, R.color.danger)
                         )
                         binding.speedMeta.setText(R.string.speedtest_method)
                         binding.speedStatus.announceForAccessibility(
-                            getString(R.string.speedtest_failed),
+                            getString(failureMessage),
                         )
                     }
                 }
@@ -1076,6 +1091,24 @@ class SettingsActivity : BaseActivity() {
             }
         }
         job.start()
+    }
+
+    private fun logSpeedTestFailure(result: SpeedTester.Result.Failure) {
+        val endpoints = result.endpointStats.joinToString(separator = ";") { stats ->
+            "${stats.cdn}(${stats.host})=" +
+                "attempted:${stats.attemptedStreams}," +
+                "started:${stats.startedStreams}," +
+                "active:${stats.activeStreams}," +
+                "failed:${stats.failedStreams}," +
+                "bytes:${stats.transferredBytes}," +
+                "errors:${stats.failureCodes}"
+        }
+        Logger.w(
+            "SpeedTest",
+            "failed reason=${result.reason} diagnostic=${result.diagnostic} " +
+                "elapsedMs=${result.elapsedMs} samples=${result.validSampleCount} " +
+                "highWater=${result.activeStreamHighWaterMark} endpoints=[$endpoints]",
+        )
     }
 
     private fun showSpeedResult(mbps: Double) {
@@ -1503,6 +1536,6 @@ class SettingsActivity : BaseActivity() {
     private companion object {
         const val STATE_PANEL = "settings.panel"
         const val STATE_DETAIL_FOCUS = "settings.detail_focus"
-        const val SPEED_TEST_EXPECTED_MS = 11_500L
+        const val SPEED_TEST_EXPECTED_MS = 15_500L
     }
 }

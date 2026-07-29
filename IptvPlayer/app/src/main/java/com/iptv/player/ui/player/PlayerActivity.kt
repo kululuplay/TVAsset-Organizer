@@ -26,7 +26,6 @@ import com.iptv.player.cast.CastController
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.NowNext
-import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.databinding.ActivityPlayerBinding
 import com.iptv.player.player.LiveStreamUrl
@@ -282,8 +281,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
                     if (statsVisible) refreshStats()
                 }
             } else {
-                val mode: PlayerMode = viewModel.playerMode()
-                val decoderMode = viewModel.decoderMode()
+                val playback = viewModel.playbackSelection()
                 val allowPassthrough = viewModel.audioPassthrough()
                 val bufferMode = viewModel.bufferMode()
                 // Each settings read can suspend. Gate the actual player creation
@@ -293,8 +291,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
                     controller = PlayerController(
                         context = this@PlayerActivity,
                         container = binding.videoContainer,
-                        mode = mode,
-                        decoderMode = decoderMode,
+                        mode = playback.player,
+                        decoderMode = playback.decoder,
                         allowPassthrough = allowPassthrough,
                         bufferMode = bufferMode,
                         callback = this@PlayerActivity
@@ -386,7 +384,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         // decoder sees. No URL/token so it survives credential rotation.
         controller.play(
             LiveStreamUrl.applyFormat(channel.streamUrl, streamFormat),
-            routeKey = LiveStreamUrl.routeKey(channel.id, streamFormat),
+            routeKey = LiveStreamUrl.routeKey(channel.id, streamFormat, channel.streamUrl),
         )
         showOverlay(channel)
         if (statsVisible) refreshStats()

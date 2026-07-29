@@ -1791,8 +1791,7 @@ class HomeActivity : BaseActivity() {
         // Read settings first (these suspend); then bail if we were cancelled
         // meanwhile (for example by onStop) so a stale resume cannot reopen the
         // preview socket while Home is no longer visible.
-        val mode = settings.playerMode.first()
-        val decoder = settings.decoderMode.first()
+        val playback = settings.getPlaybackSelection()
         val passthrough = settings.audioPassthrough.first()
         val buffer = settings.bufferMode.first()
         val streamFormat = settings.streamFormat.first()
@@ -1805,8 +1804,8 @@ class HomeActivity : BaseActivity() {
             previewController = PlayerController(
                 context = this,
                 container = binding.previewVideo,
-                mode = mode,
-                decoderMode = decoder,
+                mode = playback.player,
+                decoderMode = playback.decoder,
                 allowPassthrough = passthrough,
                 bufferMode = buffer,
                 callback = buildPreviewCallback()
@@ -1814,7 +1813,7 @@ class HomeActivity : BaseActivity() {
         }
         previewController?.play(
             LiveStreamUrl.applyFormat(channel.streamUrl, streamFormat),
-            routeKey = LiveStreamUrl.routeKey(channel.id, streamFormat),
+            routeKey = LiveStreamUrl.routeKey(channel.id, streamFormat, channel.streamUrl),
         )
     }
 

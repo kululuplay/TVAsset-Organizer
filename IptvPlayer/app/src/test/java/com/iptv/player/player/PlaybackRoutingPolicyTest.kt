@@ -31,7 +31,7 @@ class PlaybackRoutingPolicyTest {
     }
 
     @Test
-    fun `explicit engine choices stay on their selected engine`() {
+    fun `explicit engines stay selected for ordinary source errors`() {
         assertEquals(
             Stage.EXO,
             PlaybackRoutingPolicy.initialStage(PlayerMode.EXOPLAYER, DecoderMode.AUTO),
@@ -45,7 +45,7 @@ class PlaybackRoutingPolicyTest {
                 PlayerMode.EXOPLAYER,
                 DecoderMode.AUTO,
                 Stage.EXO,
-                Failure.DECODE,
+                Failure.ERROR,
             ),
         )
         assertNull(
@@ -53,13 +53,13 @@ class PlaybackRoutingPolicyTest {
                 PlayerMode.VLC,
                 DecoderMode.HARDWARE,
                 Stage.VLC_HW,
-                Failure.VIDEO,
+                Failure.ERROR,
             ),
         )
     }
 
     @Test
-    fun `automatic decoder walks Exo then VLC hardware then VLC software`() {
+    fun `automatic audio failure keeps hardware video and uses VLC audio support`() {
         assertEquals(
             Stage.VLC_HW,
             PlaybackRoutingPolicy.nextStage(
@@ -67,6 +67,19 @@ class PlaybackRoutingPolicyTest {
                 DecoderMode.AUTO,
                 Stage.EXO,
                 Failure.AUDIO,
+            ),
+        )
+    }
+
+    @Test
+    fun `automatic invalid hardware video goes directly to VLC software`() {
+        assertEquals(
+            Stage.VLC_SW,
+            PlaybackRoutingPolicy.nextStage(
+                PlayerMode.AUTO,
+                DecoderMode.AUTO,
+                Stage.EXO,
+                Failure.VIDEO,
             ),
         )
         assertEquals(
@@ -89,7 +102,7 @@ class PlaybackRoutingPolicyTest {
     }
 
     @Test
-    fun `hardware decoder mode never falls back to software`() {
+    fun `hardware preference uses safe VLC hardware for decoder init failure`() {
         assertEquals(
             Stage.VLC_HW,
             PlaybackRoutingPolicy.nextStage(
@@ -99,9 +112,19 @@ class PlaybackRoutingPolicyTest {
                 Failure.DECODE,
             ),
         )
-        assertNull(
+        assertEquals(
+            Stage.VLC_SW,
             PlaybackRoutingPolicy.nextStage(
                 PlayerMode.AUTO,
+                DecoderMode.HARDWARE,
+                Stage.VLC_HW,
+                Failure.VIDEO,
+            ),
+        )
+        assertEquals(
+            Stage.VLC_SW,
+            PlaybackRoutingPolicy.nextStage(
+                PlayerMode.EXOPLAYER,
                 DecoderMode.HARDWARE,
                 Stage.VLC_HW,
                 Failure.VIDEO,
@@ -110,12 +133,12 @@ class PlaybackRoutingPolicyTest {
     }
 
     @Test
-    fun `VLC automatic decoder can fall back without changing engine`() {
+    fun `VLC confirmed decode failure can recover even with hardware preference`() {
         assertEquals(
             Stage.VLC_SW,
             PlaybackRoutingPolicy.nextStage(
                 PlayerMode.VLC,
-                DecoderMode.AUTO,
+                DecoderMode.HARDWARE,
                 Stage.VLC_HW,
                 Failure.DECODE,
             ),
@@ -123,22 +146,138 @@ class PlaybackRoutingPolicyTest {
     }
 
     @Test
-    fun `UHD software escalation respects explicit software mode`() {
-        assertNull(
+    fun `explicit Exo uses bounded compatibility fallback for media failures`() {
+        assertEquals(
+            Stage.VLC_HW,
+            PlaybackRoutingPolicy.nextStage(
+                PlayerMode.EXOPLAYER,
+                DecoderMode.HARDWARE,
+                Stage.EXO,
+                Failure.AUDIO,
+            ),
+        )
+        assertEquals(
+            Stage.VLC_SW,
+            PlaybackRoutingPolicy.nextStage(
+                PlayerMode.EXOPLAYER,
+                DecoderMode.HARDWARE,
+                Stage.EXO,
+                Failure.VIDEO,
+            ),
+        )
+    }
+
+    @Test
+    fun `confirmed software overload can use bounded hardware recovery`() {
+        assertEquals(
+            Stage.VLC_HW,
             PlaybackRoutingPolicy.nextStage(
                 PlayerMode.AUTO,
                 DecoderMode.SOFTWARE,
                 Stage.VLC_SW,
                 Failure.SOFTWARE_SLOW,
+                triedStages = setOf(Stage.VLC_SW),
             ),
         )
         assertEquals(
-            Stage.EXO,
+            Stage.VLC_HW,
             PlaybackRoutingPolicy.nextStage(
                 PlayerMode.AUTO,
                 DecoderMode.AUTO,
                 Stage.VLC_SW,
                 Failure.SOFTWARE_SLOW,
+                triedStages = setOf(Stage.EXO, Stage.VLC_SW),
+            ),
+        )
+        assertEquals(
+            Stage.VLC_HW,
+            PlaybackRoutingPolicy.nextStage(
+                PlayerMode.VLC,
+                DecoderMode.SOFTWARE,
+                Stage.VLC_SW,
+                Failure.SOFTWARE_SLOW,
+                triedStages = setOf(Stage.VLC_SW),
+            ),
+        )
+    }
+
+    @Test
+    fun `explicit VLC keeps its decoder for an ordinary source error`() {
+        assertNull(
+            PlaybackRoutingPolicy.nextStage(
+                PlayerMode.VLC,
+                DecoderMode.AUTO,
+                Stage.VLC_HW,
+                Failure.ERROR,
+                triedStages = setOf(Stage.VLC_HW),
+            ),
+        )
+    }
+
+    @Test
+    fun `startup timeout escapes explicit Exo hardware`() {
+        assertEquals(
+            Stage.VLC_HW,
+            PlaybackRoutingPolicy.nextStage(
+                PlayerMode.EXOPLAYER,
+                DecoderMode.HARDWARE,
+                Stage.EXO,
+                Failure.STARTUP,
+                triedStages = setOf(Stage.EXO),
+            ),
+        )
+    }
+
+    @Test
+    fun `compound green then software slow recovery tries every stage once`() {
+        val afterGreen = PlaybackRoutingPolicy.nextStage(
+            PlayerMode.AUTO,
+            DecoderMode.AUTO,
+            Stage.EXO,
+            Failure.VIDEO,
+            triedStages = setOf(Stage.EXO),
+        )
+        assertEquals(Stage.VLC_SW, afterGreen)
+
+        val afterSoftwareSlow = PlaybackRoutingPolicy.nextStage(
+            PlayerMode.AUTO,
+            DecoderMode.AUTO,
+            Stage.VLC_SW,
+            Failure.SOFTWARE_SLOW,
+            triedStages = setOf(Stage.EXO, Stage.VLC_SW),
+        )
+        assertEquals(Stage.VLC_HW, afterSoftwareSlow)
+
+        assertNull(
+            PlaybackRoutingPolicy.nextStage(
+                PlayerMode.AUTO,
+                DecoderMode.AUTO,
+                Stage.VLC_HW,
+                Failure.VIDEO,
+                triedStages = setOf(Stage.EXO, Stage.VLC_SW, Stage.VLC_HW),
+            ),
+        )
+    }
+
+    @Test
+    fun `explicit VLC software recovery cannot bounce back to a tried stage`() {
+        assertEquals(
+            Stage.VLC_HW,
+            PlaybackRoutingPolicy.nextStage(
+                PlayerMode.VLC,
+                DecoderMode.SOFTWARE,
+                Stage.VLC_SW,
+                Failure.SOFTWARE_SLOW,
+                triedStages = setOf(Stage.VLC_SW),
+            ),
+        )
+        assertNull(
+            PlaybackRoutingPolicy.nextStage(
+                PlayerMode.VLC,
+                DecoderMode.SOFTWARE,
+                Stage.VLC_HW,
+                Failure.VIDEO,
+                triedStages = setOf(Stage.VLC_SW, Stage.VLC_HW),
             ),
         )
     }

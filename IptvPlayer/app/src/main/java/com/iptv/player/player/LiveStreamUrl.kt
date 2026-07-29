@@ -6,6 +6,8 @@
 package com.iptv.player.player
 
 import com.iptv.player.data.model.StreamFormat
+import java.net.URI
+import java.security.MessageDigest
 import java.util.Locale
 
 object LiveStreamUrl {
@@ -31,11 +33,28 @@ object LiveStreamUrl {
     }
 
     /**
-     * Stable route-memory key for a live channel/container pair.
+     * Stable route-memory key for a live channel/container/source combination.
      *
-     * Deliberately excludes the stream URL because credentials and CDN tokens can
-     * rotate without changing the channel's proven-good playback route.
+     * Only a short SHA-256 fingerprint of the URL host is retained. Credentials,
+     * paths and rotating CDN query tokens never enter the key, while equal channel
+     * ids from two different providers can no longer reuse each other's decoder
+     * decision. The policy prefix also makes future routing changes explicit.
      */
-    fun routeKey(channelId: String, format: StreamFormat): String =
-        "$channelId|${format.name}"
+    fun routeKey(channelId: String, format: StreamFormat, streamUrl: String): String =
+        "$ROUTE_POLICY|${sourceFingerprint(streamUrl)}|$channelId|${format.name}"
+
+    private fun sourceFingerprint(streamUrl: String): String {
+        val host = runCatching { URI(streamUrl).host }
+            .getOrNull()
+            ?.lowercase(Locale.US)
+            ?.takeIf { it.isNotBlank() }
+            ?: "unknown-source"
+        val bytes = MessageDigest.getInstance("SHA-256")
+            .digest(host.toByteArray(Charsets.UTF_8))
+        return bytes.take(SOURCE_FINGERPRINT_BYTES)
+            .joinToString(separator = "") { "%02x".format(Locale.US, it.toInt() and 0xff) }
+    }
+
+    private const val ROUTE_POLICY = "p2"
+    private const val SOURCE_FINGERPRINT_BYTES = 6
 }
