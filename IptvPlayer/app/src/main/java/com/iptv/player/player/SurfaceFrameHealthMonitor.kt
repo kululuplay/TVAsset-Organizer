@@ -47,6 +47,7 @@ internal class SurfaceFrameHealthMonitor(
         schedulePeriodicSample(sampleGeneration, PERIODIC_START_DELAY_MS)
     }
 
+    @RequiresApi(Build.VERSION_CODES.N)
     private fun schedulePeriodicSample(sampleGeneration: Int, delayMs: Long) {
         handler.postDelayed({
             val active = synchronized(lock) {
