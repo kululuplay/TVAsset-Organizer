@@ -1823,6 +1823,7 @@ class HomeActivity : BaseActivity() {
     private fun markPreviewReady() {
         cancelAutoRetry(resetAttempts = true)
         previewState = LivePreviewPressPolicy.Phase.READY
+        binding.previewPlaybackCover.visibility = View.GONE
         binding.previewLoading.visibility = View.GONE
         binding.previewStatus.visibility = View.GONE
         binding.previewVideo.keepScreenOn = true
@@ -1861,6 +1862,7 @@ class HomeActivity : BaseActivity() {
             previewState = LivePreviewPressPolicy.Phase.STARTING
             previewHasRenderedFrame = false
             previewEngineName = null
+            binding.previewPlaybackCover.visibility = View.VISIBLE
             if (!radioMode) binding.infoLogo.visibility = View.VISIBLE
             binding.previewLoading.visibility = View.VISIBLE
             binding.previewStatus.setText(R.string.buffering)
@@ -1872,6 +1874,7 @@ class HomeActivity : BaseActivity() {
             markPreviewReady()
         }
         override fun onFatalError() {
+            binding.previewPlaybackCover.visibility = View.VISIBLE
             binding.infoLogo.visibility = View.VISIBLE
             binding.previewVideo.keepScreenOn = false
             previewState = LivePreviewPressPolicy.Phase.FAILED
@@ -1886,6 +1889,7 @@ class HomeActivity : BaseActivity() {
             previewState = LivePreviewPressPolicy.Phase.STARTING
             previewHasRenderedFrame = false
             previewEngineName = null
+            binding.previewPlaybackCover.visibility = View.VISIBLE
             if (!radioMode) binding.infoLogo.visibility = View.VISIBLE
             binding.previewLoading.visibility = View.VISIBLE
             binding.previewStatus.text = getString(R.string.reconnecting, attempt)

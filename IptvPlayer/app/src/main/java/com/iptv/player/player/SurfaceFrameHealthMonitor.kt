@@ -3,6 +3,7 @@ package com.iptv.player.player
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.Handler
+import android.os.SystemClock
 import android.view.PixelCopy
 import android.view.SurfaceView
 import android.view.View
@@ -17,18 +18,25 @@ import androidx.annotation.RequiresApi
 internal class SurfaceFrameHealthMonitor(
     private val handler: Handler,
     private val onSolidGreen: () -> Unit,
+    private val onHealthyFrame: () -> Unit = {},
 ) {
     private val lock = Any()
+    private val recoveryGate = GreenFrameRecoveryGate()
     private var generation = 0
     private var started = false
-    private var consecutiveGreenSamples = 0
+    private var sampleInFlight = false
+    private var classifiedFrame = false
     private var surfaceProvider: (() -> SurfaceView?)? = null
+
+    fun hasClassifiedFrame(): Boolean = synchronized(lock) { classifiedFrame }
 
     fun reset() {
         synchronized(lock) {
             generation++
             started = false
-            consecutiveGreenSamples = 0
+            sampleInFlight = false
+            classifiedFrame = false
+            recoveryGate.reset()
             surfaceProvider = null
         }
     }
@@ -38,34 +46,43 @@ internal class SurfaceFrameHealthMonitor(
         val sampleGeneration = synchronized(lock) {
             if (started) return
             started = true
+            sampleInFlight = false
+            classifiedFrame = false
             surfaceProvider = provider
+            recoveryGate.reset()
             generation
         }
-        for (delayMs in SAMPLE_DELAYS_MS) {
-            handler.postDelayed({ sample(sampleGeneration) }, delayMs)
-        }
-        schedulePeriodicSample(sampleGeneration, PERIODIC_START_DELAY_MS)
+        scheduleSample(sampleGeneration, INITIAL_SAMPLE_DELAY_MS)
     }
 
     @RequiresApi(Build.VERSION_CODES.N)
-    private fun schedulePeriodicSample(sampleGeneration: Int, delayMs: Long) {
-        handler.postDelayed({
-            val active = synchronized(lock) {
-                sampleGeneration == generation && started
-            }
-            if (!active) return@postDelayed
-            sample(sampleGeneration)
-            schedulePeriodicSample(sampleGeneration, PERIODIC_SAMPLE_INTERVAL_MS)
-        }, delayMs)
+    private fun scheduleSample(sampleGeneration: Int, delayMs: Long) {
+        handler.postDelayed({ sample(sampleGeneration) }, delayMs)
     }
 
     @RequiresApi(Build.VERSION_CODES.N)
     private fun sample(sampleGeneration: Int) {
         val provider = synchronized(lock) {
-            if (sampleGeneration != generation || !started) null else surfaceProvider
+            if (
+                sampleGeneration != generation ||
+                !started ||
+                sampleInFlight
+            ) {
+                null
+            } else {
+                sampleInFlight = true
+                surfaceProvider
+            }
         } ?: return
-        val surface = provider.invoke() ?: return
-        if (!surface.holder.surface.isValid || surface.width <= 0 || surface.height <= 0) return
+        val surface = runCatching { provider.invoke() }.getOrNull()
+        if (surface == null) {
+            retryAfterUnavailableSurface(sampleGeneration)
+            return
+        }
+        if (!surface.holder.surface.isValid || surface.width <= 0 || surface.height <= 0) {
+            retryAfterUnavailableSurface(sampleGeneration)
+            return
+        }
 
         val bitmap = Bitmap.createBitmap(SAMPLE_WIDTH, SAMPLE_HEIGHT, Bitmap.Config.ARGB_8888)
         runCatching {
@@ -73,7 +90,8 @@ internal class SurfaceFrameHealthMonitor(
                 surface,
                 bitmap,
                 { result ->
-                    var notifySolidGreen = false
+                    var decision = GreenFrameRecoveryGate.Decision.WAIT
+                    var nextDelayMs: Long? = null
                     if (result == PixelCopy.SUCCESS) {
                         val pixels = IntArray(SAMPLE_WIDTH * SAMPLE_HEIGHT)
                         bitmap.getPixels(
@@ -87,40 +105,77 @@ internal class SurfaceFrameHealthMonitor(
                         )
                         synchronized(lock) {
                             if (sampleGeneration == generation && started) {
-                                if (FrameColorClassifier.isSolidGreen(pixels)) {
-                                    consecutiveGreenSamples++
-                                    if (
-                                        consecutiveGreenSamples >=
-                                        REQUIRED_GREEN_SAMPLES
-                                    ) {
-                                        started = false
-                                        generation++
-                                        notifySolidGreen = true
-                                    }
+                                sampleInFlight = false
+                                classifiedFrame = true
+                                decision = recoveryGate.onSample(
+                                    solidGreen = FrameColorClassifier.isSolidGreen(pixels),
+                                    nowMs = SystemClock.elapsedRealtime(),
+                                )
+                                if (
+                                    decision ==
+                                    GreenFrameRecoveryGate.Decision.SOLID_GREEN_FAILURE
+                                ) {
+                                    started = false
+                                    generation++
                                 } else {
-                                    consecutiveGreenSamples = 0
+                                    nextDelayMs =
+                                        if (recoveryGate.hasHealthyFrame) {
+                                            STEADY_SAMPLE_INTERVAL_MS
+                                        } else {
+                                            STARTUP_SAMPLE_INTERVAL_MS
+                                        }
                                 }
+                            }
+                        }
+                    } else {
+                        synchronized(lock) {
+                            if (sampleGeneration == generation && started) {
+                                sampleInFlight = false
+                                nextDelayMs = SAMPLE_RETRY_DELAY_MS
                             }
                         }
                     }
                     bitmap.recycle()
-                    if (notifySolidGreen) onSolidGreen()
+                    when (decision) {
+                        GreenFrameRecoveryGate.Decision.FIRST_HEALTHY_FRAME ->
+                            onHealthyFrame()
+                        GreenFrameRecoveryGate.Decision.SOLID_GREEN_FAILURE ->
+                            onSolidGreen()
+                        GreenFrameRecoveryGate.Decision.WAIT -> Unit
+                    }
+                    nextDelayMs?.let { scheduleSample(sampleGeneration, it) }
                 },
                 handler,
             )
-        }.onFailure { bitmap.recycle() }
+        }.onFailure {
+            bitmap.recycle()
+            retryAfterUnavailableSurface(sampleGeneration)
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.N)
+    private fun retryAfterUnavailableSurface(sampleGeneration: Int) {
+        val retry = synchronized(lock) {
+            if (sampleGeneration != generation || !started) {
+                false
+            } else {
+                sampleInFlight = false
+                true
+            }
+        }
+        if (retry) scheduleSample(sampleGeneration, SAMPLE_RETRY_DELAY_MS)
     }
 
     private companion object {
         private const val SAMPLE_WIDTH = 32
         private const val SAMPLE_HEIGHT = 18
-        private const val REQUIRED_GREEN_SAMPLES = 2
-        private val SAMPLE_DELAYS_MS = longArrayOf(1200L, 3000L, 5500L, 9000L)
-        // A decoder/compositor may fail minutes after a healthy start. Continue
-        // with a tiny, low-frequency sample so that late solid-green output also
-        // recovers without keeping full-size frames in memory.
-        private const val PERIODIC_START_DELAY_MS = 24_000L
-        private const val PERIODIC_SAMPLE_INTERVAL_MS = 15_000L
+        private const val INITIAL_SAMPLE_DELAY_MS = 120L
+        private const val STARTUP_SAMPLE_INTERVAL_MS = 220L
+        private const val SAMPLE_RETRY_DELAY_MS = 350L
+        // PixelCopy is serialized: the next capture is scheduled only after the
+        // previous callback completes. This prevents a delayed old green capture
+        // from racing a newer healthy one and restarting an already-correct image.
+        private const val STEADY_SAMPLE_INTERVAL_MS = 1_500L
     }
 }
 

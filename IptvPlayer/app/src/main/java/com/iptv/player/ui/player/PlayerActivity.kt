@@ -269,6 +269,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
                     // picture goes black for a beat (audio keeps playing) until the new
                     // surface gets its first frame. Cover that gap with the buffering
                     // indicator; onVideoResumed() clears it, with a safety timeout.
+                    binding.playbackCover.visibility = View.VISIBLE
                     binding.bufferingIndicator.visibility = View.VISIBLE
                     handoffCoverHandler.postDelayed(
                         { binding.bufferingIndicator.visibility = View.GONE },
@@ -694,7 +695,21 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     override fun onPlaying(engineName: String) {
         cancelAutoRetry(resetAttempts = true)
         binding.errorOverlay.visibility = View.GONE
-        binding.bufferingIndicator.visibility = View.GONE
+        // Audio/cache readiness can arrive while the decoder surface is still
+        // green. TV remains covered until onVideoResumed() confirms fresh pixels;
+        // radio has no video frame and may become ready here.
+        if (viewModel.radioMode) {
+            binding.playbackCover.visibility = View.GONE
+            binding.bufferingIndicator.visibility = View.GONE
+        }
+    }
+
+    override fun onPlaybackRestarting() {
+        cancelAutoRetry(resetAttempts = false)
+        binding.errorOverlay.visibility = View.GONE
+        binding.playbackCover.visibility = View.VISIBLE
+        binding.bufferingLabel.setText(R.string.buffering)
+        binding.bufferingIndicator.visibility = View.VISIBLE
     }
 
     override fun onVideoResumed() {
@@ -703,6 +718,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         cancelAutoRetry(resetAttempts = true)
         handoffCoverHandler.removeCallbacksAndMessages(null)
         binding.errorOverlay.visibility = View.GONE
+        binding.playbackCover.visibility = View.GONE
         binding.bufferingIndicator.visibility = View.GONE
     }
 
@@ -712,6 +728,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         // automatically by onPlaying / onVideoResumed once playback resumes.
         cancelAutoRetry(resetAttempts = false)
         binding.errorOverlay.visibility = View.GONE
+        binding.playbackCover.visibility = View.VISIBLE
         binding.bufferingLabel.setText(R.string.error_stream_not_responding)
         binding.bufferingIndicator.visibility = View.VISIBLE
     }
@@ -721,6 +738,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         // clear message and a focusable manual-retry button, then keep retrying
         // on our own growing schedule so an unattended TV heals by itself once
         // the provider/network comes back.
+        binding.playbackCover.visibility = View.VISIBLE
         binding.bufferingIndicator.visibility = View.GONE
         binding.errorMessage.setText(R.string.error_cannot_connect)
         binding.errorOverlay.visibility = View.VISIBLE
