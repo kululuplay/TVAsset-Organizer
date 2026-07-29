@@ -69,16 +69,29 @@ enum class PlayerMode {
 }
 
 /**
+ * One atomic snapshot of the two settings that define live playback routing.
+ *
+ * Keeping the pair together prevents a controller from being built with values
+ * read from two different DataStore revisions while the user changes Settings.
+ */
+data class PlaybackSelection(
+    val player: PlayerMode,
+    val decoder: DecoderMode,
+)
+
+/**
  * Hardware/software decode policy shared by live TV and on-demand playback. In
  * AUTO, live TV follows the tested engine ladder and VOD may rebuild VLC on
- * software after a confirmed hardware failure. Explicit choices are strict.
+ * software after a confirmed hardware failure. Manual choices are preferences,
+ * not traps: a confirmed green/frozen/unsupported path may use one bounded
+ * compatibility fallback for the affected stream.
  */
 enum class DecoderMode {
     /** Hardware first, with a bounded fallback after confirmed playback failure. */
     AUTO,
-    /** Always use the hardware decoder (no software fallback). */
+    /** Prefer the hardware decoder; allow emergency recovery if output is invalid. */
     HARDWARE,
-    /** Always decode in software (libVLC) — most compatible, heaviest on weak sticks. */
+    /** Prefer VLC software decode — most compatible, heaviest on weak sticks. */
     SOFTWARE;
 
     companion object {

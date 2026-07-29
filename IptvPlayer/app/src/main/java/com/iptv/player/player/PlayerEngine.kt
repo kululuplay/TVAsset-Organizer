@@ -99,14 +99,21 @@ interface PlayerListener {
     fun onPlaying() {}
     /**
      * The engine has produced a real video frame on the current surface (libVLC
-     * Vout / ExoPlayer first rendered frame). Distinct from [onPlaying], which can
-     * fire on audio/cache state before any picture is visible — used to clear the
-     * black gap while a preview->fullscreen surface hand-off warms up.
+     * displayed-picture counter / ExoPlayer first rendered frame). Distinct from
+     * [onPlaying], which can fire on audio/cache state before any picture is visible
+     * — used to clear the black gap while a surface hand-off warms up.
      */
     fun onVideoOutput() {}
     fun onEnded() {}
     /** A fatal playback error. The controller may trigger fallback/retry. */
     fun onError(message: String?) {}
+
+    /**
+     * The source announced playback but never produced a usable video pipeline
+     * before the extended live-start deadline. Kept separate from a mid-stream
+     * source drop so the controller may try one untried compatibility route.
+     */
+    fun onStartupFailure(message: String?) {}
 
     /**
      * A hardware-decoder failure specifically (ExoPlayer ERROR_CODE_DECODING_FAILED

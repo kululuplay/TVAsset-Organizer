@@ -12,8 +12,10 @@ import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.model.StreamFormat
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SettingsViewModel : ViewModel() {
 
@@ -32,12 +34,19 @@ class SettingsViewModel : ViewModel() {
     val autoSyncEnabled: Flow<Boolean> = settings.autoSyncEnabled
     val autoSyncHours: Flow<Int> = settings.autoSyncHours
 
-    fun setPlayerMode(mode: PlayerMode) = viewModelScope.launch { settings.setPlayerMode(mode) }
+    fun setPlayerMode(mode: PlayerMode) = persistPlayback { settings.setPlayerMode(mode) }
 
-    fun setDecoderMode(mode: DecoderMode) = viewModelScope.launch { settings.setDecoderMode(mode) }
+    fun setDecoderMode(mode: DecoderMode) = persistPlayback { settings.setDecoderMode(mode) }
 
     fun setPlaybackSelection(player: PlayerMode, decoder: DecoderMode) =
-        viewModelScope.launch { settings.setPlaybackSelection(player, decoder) }
+        persistPlayback { settings.setPlaybackSelection(player, decoder) }
+
+    /**
+     * A DPAD selection must reach DataStore even if the user immediately presses
+     * BACK and this ViewModel is cleared while the edit is in flight.
+     */
+    private fun persistPlayback(block: suspend () -> Unit) =
+        viewModelScope.launch { withContext(NonCancellable) { block() } }
 
     fun setStreamFormat(format: StreamFormat) =
         viewModelScope.launch { settings.setStreamFormat(format) }

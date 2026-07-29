@@ -10,15 +10,24 @@ import com.iptv.player.data.model.PlayerMode
  *  - [PlayerMode] chooses the engine (automatic, ExoPlayer, or VLC).
  *  - [DecoderMode] chooses the decode preference (automatic, hardware, software).
  *
- * Explicit engine choices stay on that engine. Cross-engine fallback is reserved
- * for AUTO, while VLC + AUTO decoder may still move from VLC hardware to VLC
- * software because the selected engine has not changed.
+ * User choices are preferences, not failure traps. Explicit engines are kept for
+ * ordinary source/network failures, but a confirmed invalid video/decode path or
+ * unsupported Exo audio may use one bounded compatibility fallback.
  */
 internal object PlaybackRoutingPolicy {
 
     enum class Stage { EXO, VLC_HW, VLC_SW }
 
-    enum class Failure { ERROR, AUDIO, VIDEO, SOFTWARE_SLOW, DECODE }
+    enum class Failure {
+        /** Network/source error; explicit engines normally reconnect in place. */
+        ERROR,
+        /** Stream opened but no playable output was confirmed within the deadline. */
+        STARTUP,
+        AUDIO,
+        VIDEO,
+        SOFTWARE_SLOW,
+        DECODE,
+    }
 
     /**
      * AUTO is deliberately ExoPlayer hardware-first on every device. This matches
@@ -40,47 +49,113 @@ internal object PlaybackRoutingPolicy {
     }
 
     /**
-     * Returns the next compatible stage after a confirmed engine/decode problem.
-     * General source/network errors use the same ladder only in AUTO; explicit
-     * engine selections reconnect that engine instead of silently changing it.
+     * Returns the first compatible stage that has not already been attempted in
+     * this channel session. Supplying [triedStages] is what makes compound recovery
+     * bounded: EXO green -> VLC software too slow can still try safe VLC hardware,
+     * but can never bounce forever between hardware and software.
      */
     fun nextStage(
         mode: PlayerMode,
         decoderMode: DecoderMode,
         current: Stage,
         failure: Failure,
-    ): Stage? {
-        if (failure == Failure.SOFTWARE_SLOW) {
-            if (current != Stage.VLC_SW || decoderMode == DecoderMode.SOFTWARE) return null
-            return when (mode) {
-                PlayerMode.AUTO -> Stage.EXO
-                PlayerMode.VLC -> Stage.VLC_HW
-                PlayerMode.EXOPLAYER -> null
+        triedStages: Set<Stage> = emptySet(),
+    ): Stage? = candidates(mode, decoderMode, current, failure)
+        .firstOrNull { it != current && it !in triedStages }
+
+    private fun candidates(
+        mode: PlayerMode,
+        decoderMode: DecoderMode,
+        current: Stage,
+        failure: Failure,
+    ): List<Stage> = when (mode) {
+        PlayerMode.EXOPLAYER -> when (failure) {
+            Failure.ERROR -> emptyList()
+            Failure.STARTUP -> when (current) {
+                Stage.EXO -> listOf(Stage.VLC_HW, Stage.VLC_SW)
+                Stage.VLC_HW -> listOf(Stage.VLC_SW)
+                Stage.VLC_SW -> listOf(Stage.VLC_HW)
             }
+            Failure.AUDIO -> when (current) {
+                Stage.EXO -> listOf(Stage.VLC_HW, Stage.VLC_SW)
+                Stage.VLC_HW -> listOf(Stage.VLC_SW)
+                Stage.VLC_SW -> listOf(Stage.VLC_HW)
+            }
+            Failure.VIDEO,
+            Failure.DECODE -> when (current) {
+                Stage.EXO -> listOf(Stage.VLC_SW, Stage.VLC_HW)
+                Stage.VLC_HW -> listOf(Stage.VLC_SW)
+                Stage.VLC_SW -> listOf(Stage.VLC_HW)
+            }
+            Failure.SOFTWARE_SLOW ->
+                if (current == Stage.VLC_SW) listOf(Stage.VLC_HW) else emptyList()
         }
 
-        return when (mode) {
-            PlayerMode.EXOPLAYER -> null
-
-            PlayerMode.VLC -> when {
-                current == Stage.VLC_HW && decoderMode == DecoderMode.AUTO ->
-                    Stage.VLC_SW
-                else -> null
+        PlayerMode.VLC -> when (failure) {
+            // An ordinary server/network drop must not change decoder mode.
+            Failure.ERROR -> emptyList()
+            Failure.STARTUP,
+            Failure.AUDIO,
+            Failure.VIDEO,
+            Failure.DECODE -> when (current) {
+                Stage.VLC_HW -> listOf(Stage.VLC_SW)
+                Stage.VLC_SW -> listOf(Stage.VLC_HW)
+                Stage.EXO -> emptyList()
             }
+            Failure.SOFTWARE_SLOW ->
+                if (current == Stage.VLC_SW) listOf(Stage.VLC_HW) else emptyList()
+        }
 
-            PlayerMode.AUTO -> when (decoderMode) {
-                DecoderMode.SOFTWARE -> null
-                DecoderMode.HARDWARE -> when (current) {
-                    Stage.EXO -> Stage.VLC_HW
-                    Stage.VLC_HW,
-                    Stage.VLC_SW -> null
-                }
+        PlayerMode.AUTO -> when (failure) {
+            Failure.ERROR -> when (decoderMode) {
                 DecoderMode.AUTO -> when (current) {
-                    Stage.EXO -> Stage.VLC_HW
-                    Stage.VLC_HW -> Stage.VLC_SW
-                    Stage.VLC_SW -> null
+                    Stage.EXO -> listOf(Stage.VLC_HW, Stage.VLC_SW)
+                    Stage.VLC_HW -> listOf(Stage.VLC_SW)
+                    Stage.VLC_SW -> emptyList()
                 }
+                DecoderMode.HARDWARE -> when (current) {
+                    Stage.EXO -> listOf(Stage.VLC_HW)
+                    Stage.VLC_HW,
+                    Stage.VLC_SW -> emptyList()
+                }
+                DecoderMode.SOFTWARE -> emptyList()
             }
+            Failure.STARTUP -> when (current) {
+                Stage.EXO -> if (decoderMode == DecoderMode.HARDWARE) {
+                    listOf(Stage.VLC_HW, Stage.VLC_SW)
+                } else {
+                    listOf(Stage.VLC_SW, Stage.VLC_HW)
+                }
+                Stage.VLC_HW -> listOf(Stage.VLC_SW, Stage.EXO)
+                Stage.VLC_SW -> listOf(Stage.VLC_HW, Stage.EXO)
+            }
+            Failure.AUDIO -> when (current) {
+                Stage.EXO -> listOf(Stage.VLC_HW, Stage.VLC_SW)
+                Stage.VLC_HW -> listOf(Stage.VLC_SW, Stage.EXO)
+                Stage.VLC_SW -> listOf(Stage.VLC_HW, Stage.EXO)
+            }
+            Failure.VIDEO -> when (current) {
+                Stage.EXO -> listOf(Stage.VLC_SW, Stage.VLC_HW)
+                Stage.VLC_HW -> listOf(Stage.VLC_SW, Stage.EXO)
+                Stage.VLC_SW -> listOf(Stage.VLC_HW, Stage.EXO)
+            }
+            Failure.DECODE -> when (current) {
+                Stage.EXO -> if (decoderMode == DecoderMode.HARDWARE) {
+                    listOf(Stage.VLC_HW, Stage.VLC_SW)
+                } else {
+                    listOf(Stage.VLC_SW, Stage.VLC_HW)
+                }
+                Stage.VLC_HW -> listOf(Stage.VLC_SW, Stage.EXO)
+                Stage.VLC_SW -> listOf(Stage.VLC_HW, Stage.EXO)
+            }
+            Failure.SOFTWARE_SLOW ->
+                if (current == Stage.VLC_SW) {
+                    // Stay with VLC first for a user who explicitly preferred
+                    // software; EXO remains a last untried hardware implementation.
+                    listOf(Stage.VLC_HW, Stage.EXO)
+                } else {
+                    emptyList()
+                }
         }
     }
 }

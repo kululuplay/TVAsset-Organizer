@@ -15,7 +15,10 @@ fun buildConfigString(value: String): String =
 
 android {
     namespace = "com.iptv.player"
-    compileSdk = 34
+    // Media3 1.8.x is compiled against Android 15 APIs. compileSdk only affects
+    // build-time symbols; targetSdk deliberately remains 34 in this reliability
+    // patch so playback behavior does not change for unrelated platform reasons.
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.iptv.player"
@@ -159,13 +162,18 @@ dependencies {
 
     // --- Players ---
     // Media3 ExoPlayer = primary engine.
-    implementation("androidx.media3:media3-exoplayer:1.4.1")
-    implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
-    implementation("androidx.media3:media3-exoplayer-dash:1.4.1")
-    implementation("androidx.media3:media3-ui:1.4.1")
-    implementation("androidx.media3:media3-common:1.4.1")
+    // 1.8.1 is the newest Media3 line that keeps minSdk 21. It also fixes TV
+    // multichannel audio being incorrectly marked unsupported by track selection.
+    implementation("androidx.media3:media3-exoplayer:1.8.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.8.1")
+    implementation("androidx.media3:media3-exoplayer-dash:1.8.1")
+    implementation("androidx.media3:media3-ui:1.8.1")
+    implementation("androidx.media3:media3-common:1.8.1")
     // libVLC = fallback engine (broadest codec coverage: DTS/AC3/EAC3/etc.).
-    implementation("org.videolan.android:libvlc-all:3.5.1")
+    // 3.6.5 keeps Android 5+/compileSdk 35 compatibility while carrying the
+    // current stable 3.x decoder/surface fixes. 3.7.5 declares minCompileSdk 36
+    // and would fail AAR metadata validation with this app's conservative toolchain.
+    implementation("org.videolan.android:libvlc-all:3.6.5")
     // In-app YouTube trailer playback (WebView IFrame player; no Play-services /
     // YouTube app required, works on plain Android TV boxes).
     implementation("com.pierfrancescosoffritti.androidyoutubeplayer:core:12.1.0")

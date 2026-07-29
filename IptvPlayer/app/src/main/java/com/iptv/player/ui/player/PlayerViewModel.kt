@@ -11,8 +11,6 @@ import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.ContentType
-import com.iptv.player.data.model.DecoderMode
-import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.ui.home.HomeViewModel
 import kotlinx.coroutines.flow.first
@@ -59,9 +57,7 @@ class PlayerViewModel : ViewModel() {
         }
     }
 
-    suspend fun playerMode(): PlayerMode = settings.playerMode.first()
-
-    suspend fun decoderMode(): DecoderMode = settings.getDecoderMode()
+    suspend fun playbackSelection() = settings.getPlaybackSelection()
 
     suspend fun streamFormat(): StreamFormat = settings.getStreamFormat()
 

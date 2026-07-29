@@ -2,6 +2,8 @@ package com.iptv.player.player
 
 import com.iptv.player.data.model.StreamFormat
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class LiveStreamUrlTest {
@@ -85,7 +87,43 @@ class LiveStreamUrlTest {
 
     @Test
     fun `route key is stable and excludes URL credentials`() {
-        assertEquals("channel-42|TS", LiveStreamUrl.routeKey("channel-42", StreamFormat.TS))
-        assertEquals("channel-42|HLS", LiveStreamUrl.routeKey("channel-42", StreamFormat.HLS))
+        val first = LiveStreamUrl.routeKey(
+            "channel-42",
+            StreamFormat.TS,
+            "https://example.test/live/user/pass/42.ts?token=secret",
+        )
+        val rotatedCredentials = LiveStreamUrl.routeKey(
+            "channel-42",
+            StreamFormat.TS,
+            "https://example.test/live/example/sample/42.ts?token=new-secret",
+        )
+
+        assertEquals(first, rotatedCredentials)
+        assertFalse(first.contains("user"))
+        assertFalse(first.contains("sample"))
+        assertFalse(first.contains("secret"))
+    }
+
+    @Test
+    fun `route key separates providers formats and policy generation`() {
+        val ts = LiveStreamUrl.routeKey(
+            "channel-42",
+            StreamFormat.TS,
+            "https://one.example/live/42.ts",
+        )
+        val hls = LiveStreamUrl.routeKey(
+            "channel-42",
+            StreamFormat.HLS,
+            "https://one.example/live/42.m3u8",
+        )
+        val otherProvider = LiveStreamUrl.routeKey(
+            "channel-42",
+            StreamFormat.TS,
+            "https://two.example/live/42.ts",
+        )
+
+        assertNotEquals(ts, hls)
+        assertNotEquals(ts, otherProvider)
+        assertEquals(true, ts.startsWith("p2|"))
     }
 }

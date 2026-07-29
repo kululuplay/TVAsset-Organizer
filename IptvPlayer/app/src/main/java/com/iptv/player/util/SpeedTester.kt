@@ -48,8 +48,8 @@ import kotlin.math.max
  *
  * The test deliberately has no IPTV/portal fallback. Downloading a subscriber's
  * stream URL would measure that provider's throttle and could put credentials in
- * an unrelated request path. Ten independent HTTP/1.1 transfers use Cloudflare's
- * purpose-built speed endpoint instead.
+ * an unrelated request path. Ten independent HTTP/1.1 transfers are split across
+ * two public, purpose-built speed-test services instead.
  *
  * HTTP body reads happen on this object's private OkHttp dispatcher. The
  * orchestration coroutine only samples atomic counters, and cancellation calls
@@ -98,7 +98,8 @@ object SpeedTester {
         val completedStreams: Int,
         val failedStreams: Int,
         val transferredBytes: Long,
-        val protocols: List<String>
+        val protocols: List<String>,
+        val failureCodes: Map<String, Int>
     )
 
     sealed interface Result {
@@ -236,20 +237,24 @@ object SpeedTester {
     }
 
     /*
-     * Keep every transfer on the one endpoint that is explicitly designed for
-     * this job. The previous implementation round-robined ten streams over four
-     * unrelated public mirrors. In production only the three Cloudflare legs
-     * transferred data while OVH timed out, Tele2 returned 502 and Hetzner timed
-     * out. The state machine then rejected the perfectly usable 3/10 result
-     * because it required five streams across two CDN hosts.
+     * Keep the transfer size bounded. Cloudflare rejects the previous 500 MB
+     * request with HTTP 403 on some edges, which made all ten streams fail even
+     * while the device was online. A verified 50 MB request is large enough for
+     * the eight-second measurement window when five legs are active.
      *
-     * HTTP/1.1 plus maxRequestsPerHost=10 below still creates ten independent TCP
-     * flows; using one anycast edge does not collapse them into one connection.
+     * Split the ten legs between Cloudflare and Hetzner so DNS, IPv6 routing,
+     * regional blocking or a temporary provider error cannot take down the whole
+     * test. Both endpoints are explicitly published for internet speed testing;
+     * there is still no IPTV/subscriber URL fallback.
      */
     private val endpoints = listOf(
         Endpoint(
             name = "Cloudflare",
-            url = "https://speed.cloudflare.com/__down?bytes=500000000"
+            url = "https://speed.cloudflare.com/__down?bytes=50000000"
+        ),
+        Endpoint(
+            name = "Hetzner",
+            url = "https://fsn1-speed.hetzner.com/100MB.bin"
         )
     )
 
@@ -258,14 +263,13 @@ object SpeedTester {
     private const val MIN_MEASURED_BYTES = 64L * 1024L
     private const val MIN_EXPECTED_BODY_BYTES = 32L * 1024L * 1024L
 
-    private const val TOTAL_TIMEOUT_MS = 12_000L
-    private const val STARTUP_TIMEOUT_MS = 5_000L
+    private const val TOTAL_TIMEOUT_MS = 16_000L
+    private const val STARTUP_TIMEOUT_MS = 7_000L
     private const val WARMUP_MS = 1_250L
     private const val TARGET_MEASUREMENT_MS = 8_000L
-    // Call.cancel() is immediate, but the ten callback threads still need time
-    // to unwind and join. A 250 ms reserve allowed successful measurements to be
-    // reclassified as TIMEOUT on slower TV sticks during cleanup.
-    private const val CLEANUP_RESERVE_MS = 1_000L
+    // Call.cancel() is immediate, but low-end TV sticks can need more than one
+    // second for ten callback threads to unwind and join after a saturated test.
+    private const val CLEANUP_RESERVE_MS = 2_000L
     private const val SAMPLE_INTERVAL_MS = 500L
     private const val PROGRESS_INTERVAL_MS = 250L
     private const val STARTUP_POLL_MS = 50L
@@ -314,10 +318,12 @@ object SpeedTester {
             .dispatcher(dispatcher)
             .connectionPool(ConnectionPool(0, 1L, TimeUnit.SECONDS))
             .protocols(listOf(Protocol.HTTP_1_1))
-            .connectTimeout(3L, TimeUnit.SECONDS)
-            .readTimeout(4L, TimeUnit.SECONDS)
+            .connectTimeout(5L, TimeUnit.SECONDS)
+            .readTimeout(8L, TimeUnit.SECONDS)
             .callTimeout(TOTAL_TIMEOUT_MS + 1_000L, TimeUnit.MILLISECONDS)
-            .retryOnConnectionFailure(false)
+            // Allows OkHttp to try the next resolved route when an Android TV has
+            // a broken IPv6 path or one edge address cannot complete TCP/TLS.
+            .retryOnConnectionFailure(true)
             .followRedirects(true)
             .followSslRedirects(true)
             .build()
@@ -521,7 +527,7 @@ object SpeedTester {
             val measurementStartedBytes = state.totalBytes.get()
             // Fast connections receive the full eight-second sample window. Slow
             // DNS/TLS startup receives the remaining budget rather than pushing
-            // the complete operation beyond its twelve-second hard deadline.
+            // the complete operation beyond its bounded hard deadline.
             val measurementDeadlineNs = minOf(
                 measurementStartedAtNs +
                     TimeUnit.MILLISECONDS.toNanos(TARGET_MEASUREMENT_MS),
@@ -819,7 +825,11 @@ object SpeedTester {
                 failedStreams =
                     group.count { it.status.get() == StreamStatus.FAILED },
                 transferredBytes = group.sumOf { it.bytes.get() },
-                protocols = group.mapNotNull { it.protocol.get() }.distinct().sorted()
+                protocols = group.mapNotNull { it.protocol.get() }.distinct().sorted(),
+                failureCodes = group.mapNotNull { it.failure.get() }
+                    .groupingBy { it }
+                    .eachCount()
+                    .toSortedMap()
             )
         }
     }

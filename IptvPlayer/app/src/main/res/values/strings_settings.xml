@@ -89,7 +89,7 @@
     <!-- Speed test -->
     <string name="settings_speedtest">Speed Test</string>
     <string name="speedtest_title">Internet Speed Test</string>
-    <string name="speedtest_desc">Start the test to measure your real download speed. It takes about 10 seconds.</string>
+    <string name="speedtest_desc">Start the test to measure your real download speed. It usually takes 10–15 seconds.</string>
     <string name="speedtest_start">Start Test</string>
     <string name="speedtest_retry">Test Again</string>
     <string name="speedtest_running">Testing…</string>
@@ -100,11 +100,15 @@
     <string name="speedtest_phase_connecting">Preparing connections · %1$d/%2$d</string>
     <string name="speedtest_phase_warming">Warming up connections · %1$d/%2$d active</string>
     <string name="speedtest_phase_measuring">Measuring sustained speed · %1$d/%2$d active</string>
-    <string name="speedtest_method">Uses a dedicated internet speed-test service with 10 parallel download streams. This measures your internet connection, not the IPTV server.</string>
+    <string name="speedtest_method">Uses two independent public internet speed-test services with 10 parallel download streams. This measures your internet connection, not the IPTV server.</string>
     <string name="speedtest_data_notice">The test transfers a significant amount of data. Wi-Fi quality, VPNs and background traffic can affect the result.</string>
     <string name="speedtest_result_meta">%1$d active streams · %2$d MB · %3$.1f s</string>
     <string name="speedtest_result_summary">%1$s · %2$s</string>
-    <string name="speedtest_failed">Test failed. Please check your connection.</string>
+    <string name="speedtest_failed">The speed test could not be completed. Please try again.</string>
+    <string name="speedtest_failed_service">The speed-test services could not be reached. Your internet may still be working. Please try again.</string>
+    <string name="speedtest_failed_unstable">Not enough stable data was received. Pause VPNs or background downloads and try again.</string>
+    <string name="speedtest_failed_busy">A speed test is already running.</string>
+    <string name="speedtest_failed_timeout">The speed test timed out. Please try again.</string>
     <string name="speedtest_tier_poor">Poor</string>
     <string name="speedtest_tier_normal">Normal</string>
     <string name="speedtest_tier_good">Good</string>
