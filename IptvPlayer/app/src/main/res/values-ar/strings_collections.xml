@@ -9,7 +9,11 @@
     <string name="collections_removed_continue">تمت الإزالة من متابعة المشاهدة</string>
     <string name="collections_progress_percent">تمت مشاهدة %1$d%%</string>
     <plurals name="collections_item_count">
+        <item quantity="zero">لا توجد عناصر</item>
         <item quantity="one">عنصر واحد</item>
-        <item quantity="other">%d عناصر</item>
+        <item quantity="two">عنصران</item>
+        <item quantity="few">%d عناصر</item>
+        <item quantity="many">%d عنصرًا</item>
+        <item quantity="other">%d عنصر</item>
     </plurals>
 </resources>
