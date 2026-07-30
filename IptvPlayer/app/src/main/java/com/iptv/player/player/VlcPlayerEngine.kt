@@ -32,6 +32,8 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.ViewGroup
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -841,7 +843,7 @@ class VlcPlayerEngine(
         }
         deferredPlay = null
         val vlc = libVlc ?: return
-        val retiredLayout = videoLayout ?: return
+        videoLayout ?: return
         videoHost ?: return
         val boundPlayer = mediaPlayer ?: return
         val previousPlayer = boundPlayer.takeIf { playerHasMedia }
@@ -866,10 +868,6 @@ class VlcPlayerEngine(
             invalidateEventSession()
             try {
                 previousPlayer.setEventListener(null)
-                if (viewsAttached) {
-                    previousPlayer.detachViews()
-                    viewsAttached = false
-                }
             } catch (error: Throwable) {
                 val restoredSession = eventSession.incrementAndGet()
                 installEventListener(previousPlayer, restoredSession)
@@ -883,7 +881,7 @@ class VlcPlayerEngine(
                         PlaybackLog.log(
                             context,
                             engineName,
-                            "replacement release timed out after detach failure",
+                            "replacement release timed out after listener failure",
                         )
                         finishReplacementRelease()
                     },
@@ -907,14 +905,15 @@ class VlcPlayerEngine(
                 PlaybackLog.log(
                     context,
                     engineName,
-                    "retired surface detach failed: ${error.javaClass.simpleName}",
+                    "retired listener detach failed: ${error.javaClass.simpleName}",
                 )
-                listener?.onError("VLC surface detach error")
+                listener?.onError("VLC listener detach error")
                 return
             }
-            // Removing now starts SurfaceView destruction before native teardown.
-            // The fresh view is added only after teardown plus a compositor gap.
-            (retiredLayout.parent as? ViewGroup)?.removeView(retiredLayout)
+            // Keep the old SurfaceView alive until stop()+release() completes.
+            // Destroying it while the Amlogic decoder still owns output buffers
+            // produces EGL_BAD_NATIVE_WINDOW / unknown-buffer errors and can
+            // contaminate the replacement surface.
             viewsAttached = false
             mediaPlayer = replacement
             replacement
@@ -1386,7 +1385,7 @@ class VlcPlayerEngine(
         // Reserve this exact owner generation before inspecting pending native
         // work. Public engine commands are main-thread serialized; the seq bump
         // also invalidates delayed cleanup->attach continuations.
-        val releaseSequence = opsSeq.incrementAndGet()
+        opsSeq.incrementAndGet()
         val retiredLayout = videoLayout
         fun removeRetiredLayout() {
             retiredLayout?.let { layout ->
@@ -1409,33 +1408,12 @@ class VlcPlayerEngine(
             listener = null
             return
         }
-        // Capture the complete native owner. IVLCVout.detachViews is @MainThread:
-        // call it only when this reserved generation is provably idle. A pending
-        // owner stays untouched here; its exact worker/release sequence owns all
-        // native cleanup after the Android layout is removed.
+        // Capture the complete native owner. The SurfaceView deliberately stays
+        // attached until stop()+release() below has returned. Removing/detaching
+        // it first is the exact race visible in the device log:
+        // EGL_BAD_NATIVE_WINDOW, unknown buffer and dequeueBuffer(-19).
         val mp = mediaPlayer
         val vlc = libVlc
-        val canDetachIdleOwnerOnMain =
-            mp != null &&
-                viewsAttached &&
-                pendingOps.get() == 0 &&
-                mediaPlayer === mp &&
-                opsSeq.get() == releaseSequence
-        if (canDetachIdleOwnerOnMain) {
-            runCatching { mp?.detachViews() }
-                .onSuccess { viewsAttached = false }
-                .onFailure {
-                    PlaybackLog.log(
-                        context,
-                        engineName,
-                        "release main-thread detach failed: ${it.javaClass.simpleName}",
-                    )
-                }
-        }
-        // View hierarchy work is always main-thread and does not access native
-        // handles. For a pending owner, MediaPlayer.release() later performs the
-        // native vout cleanup on its exact serialized owner worker.
-        removeRetiredLayout()
         mediaPlayer = null
         libVlc = null
         videoLayout = null
@@ -1467,7 +1445,10 @@ class VlcPlayerEngine(
                 if (
                     nativeHandlesAbandoned.get() &&
                     !releaseOperationTimedOut.get()
-                ) return@releaseOwner
+                ) {
+                    commandHandler.post { removeRetiredLayout() }
+                    return@releaseOwner
+                }
                 val failures = VlcOps.runAllBestEffort(
                     { mp?.setEventListener(null) },
                     { mp?.stop() },
@@ -1480,6 +1461,35 @@ class VlcPlayerEngine(
                         engineName,
                         "release cleanup failed: ${failure.javaClass.simpleName}",
                     )
+                }
+                if (!releaseOperationTimedOut.get()) {
+                    // Keep the shared VlcOps FIFO occupied until main has removed
+                    // the now-retired SurfaceView. The next engine's play cannot
+                    // race a still-visible old native window.
+                    val uiCleanupFinished = CountDownLatch(1)
+                    commandHandler.post {
+                        try {
+                            removeRetiredLayout()
+                        } finally {
+                            uiCleanupFinished.countDown()
+                        }
+                    }
+                    try {
+                        if (
+                            !uiCleanupFinished.await(
+                                UI_SURFACE_RETIRE_TIMEOUT_MS,
+                                TimeUnit.MILLISECONDS,
+                            )
+                        ) {
+                            PlaybackLog.log(
+                                context,
+                                engineName,
+                                "retired surface removal exceeded UI deadline",
+                            )
+                        }
+                    } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                    }
                 }
             }
         }
@@ -1585,6 +1595,7 @@ class VlcPlayerEngine(
         private const val NATIVE_RELEASE_TIMEOUT_MS = 12_000L
         private const val NATIVE_STATE_RETRY_MS = 100L
         private const val SURFACE_REPLACEMENT_DELAY_MS = 250L
+        private const val UI_SURFACE_RETIRE_TIMEOUT_MS = 1_500L
 
         private const val GREEN_PRONE_MIN_HEIGHT = 1080
         private const val GREEN_PRONE_MIN_WIDTH = 1920

@@ -15,6 +15,7 @@
 package com.iptv.player.player
 
 import android.content.Context
+import android.media.MediaCodecList
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -136,6 +137,30 @@ class PlayerController(
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * The supplied Xiaomi/Amlogic logs prove that libVLC's direct-rendering
+     * MediaCodec surface is corrupt on this decoder family while Media3's
+     * hardware SurfaceView path is healthy. Probe decoder names once per
+     * controller and treat only VLC hardware as unavailable on those devices.
+     */
+    private val bypassVlcHardware: Boolean = runCatching {
+        val videoDecoderNames = MediaCodecList(MediaCodecList.ALL_CODECS)
+            .codecInfos
+            .asSequence()
+            .filterNot { it.isEncoder }
+            .mapNotNull { codec ->
+                runCatching {
+                    codec.name.takeIf {
+                        codec.supportedTypes.any { type ->
+                            type.startsWith("video/", ignoreCase = true)
+                        }
+                    }
+                }.getOrNull()
+            }
+            .toList()
+        VlcHardwareDevicePolicy.shouldBypassVlcHardware(videoDecoderNames)
+    }.getOrDefault(false)
 
     private var engine: PlayerEngine? = null
     private var currentUrl: String? = null
@@ -307,7 +332,15 @@ class PlayerController(
         // Tier 2 self-healing: prefer the stage this channel last proved STABLE on
         // (route memory) over the cold base ladder, so a channel that always needs,
         // say, software decode starts there instead of greening on hardware first.
+        val preferredBase = PlaybackRoutingPolicy.initialStage(mode, decoderMode)
         val base = baseInitialStage()
+        if (base != preferredBase) {
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "VLC hardware bypassed for Amlogic surface compatibility -> $base",
+            )
+        }
         val remembered = rememberedStage()
         val initial = remembered ?: base
         // Only treat it as a "remembered route" (eligible for the distrust-on-fail
@@ -366,7 +399,10 @@ class PlayerController(
      * strategy (no route memory). [play] prefers [rememberedStage] over this.
      */
     private fun baseInitialStage(): Stage =
-        PlaybackRoutingPolicy.initialStage(mode, decoderMode)
+        VlcHardwareDevicePolicy.compatibleInitialStage(
+            preferred = PlaybackRoutingPolicy.initialStage(mode, decoderMode),
+            bypassVlcHardware = bypassVlcHardware,
+        )
 
     /**
      * The stage this channel last proved STABLE on, or null when route memory does
@@ -377,6 +413,7 @@ class PlayerController(
         if (memoryIgnoredThisPlay || !routeMemoryEligible) return null
         val name = PlaybackRouteMemory.bestStage(currentRouteKey) ?: return null
         val remembered = runCatching { Stage.valueOf(name) }.getOrNull() ?: return null
+        if (bypassVlcHardware && remembered == Stage.VLC_HW) return null
         // A last-resort Exo rescue may save the current VLC-preferred session,
         // but the next channel visit must still begin on the engine the user
         // explicitly selected.
@@ -474,16 +511,13 @@ class PlayerController(
         }
 
         if (swapping) {
-            // SurfaceView handoff fix. releaseEngine() removed the previous
-            // engine's SurfaceView, but a SurfaceView's underlying surface is torn
-            // down ASYNCHRONOUSLY on the render thread. Adding the next engine's
-            // SurfaceView and starting playback in the SAME synchronous pass races
-            // that teardown: the Amlogic compositor then shows a GREEN frame on the
-            // freshly-added surface even though the new engine decodes perfectly
-            // (libVLC logs a healthy "output: 21 Biplanar"). This is exactly why
-            // green only hit channels that fell back EXO -> VLC (e.g. MP2 audio),
-            // never channels that started directly on VLC (empty container). Deferring
-            // the new engine until the old surface has been destroyed clears it.
+            // SurfaceView handoff fix. releaseEngine() delegates view retirement
+            // to the backend so native decoder shutdown happens before its
+            // SurfaceView is removed. A SurfaceView's underlying surface is then
+            // torn down ASYNCHRONOUSLY on the render thread; adding the next
+            // SurfaceView in the same synchronous pass can still race that final
+            // compositor teardown and produce a green first frame on Amlogic.
+            // Deferring the new engine gives that teardown a bounded gap.
             //
             // Trampoline through the shared VLC ops thread: the old engine's
             // blocking stop/release now runs there asynchronously (ANR fix), so
@@ -978,14 +1012,23 @@ class PlayerController(
     }
 
     /** The stage to advance to, or null when no more paths are available. */
-    private fun nextStage(current: Stage, reason: Reason): Stage? =
-        PlaybackRoutingPolicy.nextStage(
+    private fun nextStage(current: Stage, reason: Reason): Stage? {
+        val unavailableAwareTriedStages =
+            if (bypassVlcHardware) triedStages + Stage.VLC_HW else triedStages
+        return PlaybackRoutingPolicy.nextStage(
             mode = mode,
             decoderMode = decoderMode,
             current = current,
             failure = reason,
-            triedStages = triedStages,
+            triedStages = unavailableAwareTriedStages,
+        ) ?: VlcHardwareDevicePolicy.fallbackAfterHardwareSubstitution(
+            mode = mode,
+            current = current,
+            failure = reason,
+            triedStages = unavailableAwareTriedStages,
+            bypassVlcHardware = bypassVlcHardware,
         )
+    }
 
     /** Current video stream info for the diagnostics overlay, or null. */
     fun streamInfo(): StreamInfo? = engine?.getStreamInfo()
@@ -1050,7 +1093,6 @@ class PlayerController(
         videoRebindPending = false
         engine?.release()
         engine = null
-        container.removeAllViews()
     }
 
     private fun post(action: () -> Unit) {
@@ -1060,10 +1102,10 @@ class PlayerController(
 
     private companion object {
         /**
-         * Gap between releasing one engine's SurfaceView and creating the next
-         * one's, so the old surface can be destroyed first. Without it, the
-         * Amlogic compositor shows a green frame on the freshly-added surface
-         * during a fallback (e.g. EXO -> VLC). Short enough to stay snappy.
+         * Gap between asking an engine to retire and creating the next one. Each
+         * backend removes its SurfaceView only after native decoder shutdown;
+         * this extra compositor gap prevents the freshly-added surface from
+         * inheriting a green frame on Amlogic. Short enough to stay snappy.
          */
         private const val ENGINE_SWAP_DELAY_MS = 250L
 
