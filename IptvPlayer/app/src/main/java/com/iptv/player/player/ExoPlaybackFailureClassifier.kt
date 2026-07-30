@@ -40,6 +40,12 @@ internal object ExoPlaybackFailureClassifier {
 
         val hasSelectedSupportedTrack: Boolean
             get() = selected.indices.any { selected[it] && supported[it] }
+
+        val hasSelectedTrack: Boolean
+            get() = selected.any { it }
+
+        val hasSupportedTrack: Boolean
+            get() = supported.any { it }
     }
 
     /**
@@ -68,6 +74,7 @@ internal object ExoPlaybackFailureClassifier {
     fun classifyTracks(
         groups: List<TrackGroupState>,
         expectsVideo: Boolean,
+        selectionSettled: Boolean = true,
     ): Failure? {
         if (groups.isEmpty()) return null
 
@@ -75,17 +82,51 @@ internal object ExoPlaybackFailureClassifier {
         if (
             expectsVideo &&
             videoGroups.isNotEmpty() &&
-            videoGroups.none { it.hasSelectedSupportedTrack }
+            isUnplayable(videoGroups, selectionSettled)
         ) {
             return Failure.DECODE
         }
 
         val audioGroups = groups.filter { it.type == C.TRACK_TYPE_AUDIO }
-        if (audioGroups.isNotEmpty() && audioGroups.none { it.hasSelectedSupportedTrack }) {
+        if (audioGroups.isNotEmpty() && isUnplayable(audioGroups, selectionSettled)) {
             return Failure.AUDIO
         }
 
         return null
+    }
+
+    /**
+     * True while Media3 knows about at least one supported format but has not
+     * selected any format in that renderer yet. Live MPEG-TS extractors can
+     * briefly expose this state while PMT/audio information is still settling.
+     */
+    fun hasPendingSupportedSelection(
+        groups: List<TrackGroupState>,
+        expectsVideo: Boolean,
+    ): Boolean {
+        val relevantTypes =
+            if (expectsVideo) {
+                setOf(C.TRACK_TYPE_VIDEO, C.TRACK_TYPE_AUDIO)
+            } else {
+                setOf(C.TRACK_TYPE_AUDIO)
+            }
+        return relevantTypes.any { type ->
+            val typedGroups = groups.filter { it.type == type }
+            typedGroups.isNotEmpty() &&
+                typedGroups.none { it.hasSelectedSupportedTrack } &&
+                typedGroups.none { it.hasSelectedTrack } &&
+                typedGroups.any { it.hasSupportedTrack }
+        }
+    }
+
+    private fun isUnplayable(
+        groups: List<TrackGroupState>,
+        selectionSettled: Boolean,
+    ): Boolean {
+        if (groups.any { it.hasSelectedSupportedTrack }) return false
+        val hasSelectedTrack = groups.any { it.hasSelectedTrack }
+        val hasSupportedTrack = groups.any { it.hasSupportedTrack }
+        return hasSelectedTrack || !hasSupportedTrack || selectionSettled
     }
 
     private val DECODER_ERROR_CODES = setOf(

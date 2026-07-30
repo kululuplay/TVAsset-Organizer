@@ -16,6 +16,23 @@ import com.iptv.player.player.PlaybackRoutingPolicy.Stage
  */
 internal object VlcHardwareDevicePolicy {
 
+    /**
+     * QHD/4K streams are not viable through libVLC's pure software decoder on
+     * Android TV sticks. They must remain on a MediaCodec-backed stage.
+     */
+    fun requiresHardwareDecode(width: Int, height: Int): Boolean =
+        width >= HARDWARE_REQUIRED_MIN_WIDTH ||
+            height >= HARDWARE_REQUIRED_MIN_HEIGHT
+
+    fun unavailableStages(
+        bypassVlcHardware: Boolean,
+        width: Int,
+        height: Int,
+    ): Set<Stage> = buildSet {
+        if (bypassVlcHardware) add(Stage.VLC_HW)
+        if (requiresHardwareDecode(width, height)) add(Stage.VLC_SW)
+    }
+
     fun shouldBypassVlcHardware(videoDecoderNames: Iterable<String>): Boolean =
         videoDecoderNames.any { rawName ->
             val name = rawName.trim().lowercase()
@@ -65,4 +82,29 @@ internal object VlcHardwareDevicePolicy {
         }
         return Stage.VLC_SW
     }
+
+    /**
+     * A SOFTWARE_SLOW result is terminal for that VLC_SW instance. If every
+     * normal route was already marked tried, permit one controlled return to the
+     * viable hardware implementation instead of reconnecting the known-slow
+     * software stage forever.
+     */
+    fun lastChanceAfterSoftwareOverload(
+        current: Stage,
+        failure: Failure,
+        alreadyUsed: Boolean,
+        bypassVlcHardware: Boolean,
+    ): Stage? {
+        if (
+            current != Stage.VLC_SW ||
+            failure != Failure.SOFTWARE_SLOW ||
+            alreadyUsed
+        ) {
+            return null
+        }
+        return if (bypassVlcHardware) Stage.EXO else Stage.VLC_HW
+    }
+
+    private const val HARDWARE_REQUIRED_MIN_HEIGHT = 1440
+    private const val HARDWARE_REQUIRED_MIN_WIDTH = 2560
 }

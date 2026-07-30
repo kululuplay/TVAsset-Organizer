@@ -9,4 +9,15 @@ internal fun isVlcBuffering(bufferingPercent: Float): Boolean =
     !bufferingPercent.isFinite() ||
         bufferingPercent < VLC_BUFFERING_COMPLETE_PERCENT
 
+/**
+ * In software mode libVLC's displayedPictures counter is direct proof that its
+ * CPU-decoded frame reached the vout. PixelCopy on some Fire TV SurfaceViews can
+ * still return one stale/blank sample and must not override that native evidence.
+ * Hardware mode retains strict pixel validation for green-frame detection.
+ */
+internal fun shouldTrustVlcNativeFrame(
+    forceSoftware: Boolean,
+    hasDisplayedPictureEvidence: Boolean,
+): Boolean = forceSoftware && hasDisplayedPictureEvidence
+
 private const val VLC_BUFFERING_COMPLETE_PERCENT = 99.5f

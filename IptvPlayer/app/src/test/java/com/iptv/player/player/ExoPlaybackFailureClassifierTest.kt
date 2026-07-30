@@ -136,6 +136,54 @@ class ExoPlaybackFailureClassifierTest {
     }
 
     @Test
+    fun `supported but temporarily unselected audio stays pending`() {
+        val groups = listOf(
+            supportedVideo(),
+            track(C.TRACK_TYPE_AUDIO, selected = false, supported = true),
+        )
+
+        assertNull(
+            ExoPlaybackFailureClassifier.classifyTracks(
+                groups = groups,
+                expectsVideo = true,
+                selectionSettled = false,
+            ),
+        )
+        assertEquals(
+            true,
+            ExoPlaybackFailureClassifier.hasPendingSupportedSelection(
+                groups = groups,
+                expectsVideo = true,
+            ),
+        )
+        assertEquals(
+            ExoPlaybackFailureClassifier.Failure.AUDIO,
+            ExoPlaybackFailureClassifier.classifyTracks(
+                groups = groups,
+                expectsVideo = true,
+                selectionSettled = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `unsupported selected audio fails without waiting for settle timeout`() {
+        val groups = listOf(
+            supportedVideo(),
+            track(C.TRACK_TYPE_AUDIO, selected = true, supported = false),
+        )
+
+        assertEquals(
+            ExoPlaybackFailureClassifier.Failure.AUDIO,
+            ExoPlaybackFailureClassifier.classifyTracks(
+                groups = groups,
+                expectsVideo = true,
+                selectionSettled = false,
+            ),
+        )
+    }
+
+    @Test
     fun `selected supported audio and video are healthy`() {
         assertNull(
             ExoPlaybackFailureClassifier.classifyTracks(

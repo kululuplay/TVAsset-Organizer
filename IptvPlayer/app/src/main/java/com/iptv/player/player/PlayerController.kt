@@ -250,6 +250,10 @@ class PlayerController(
     // restart every loop). Cleared on a new channel, a genuine stage change, and a
     // stretch of stable playback.
     private var quickDecodeFailures = 0
+    // A SOFTWARE_SLOW VLC stage must never reconnect to itself indefinitely.
+    // One controlled hardware revisit is allowed even when that stage was tried
+    // before software; the corrected hardware health gate then owns recovery.
+    private var softwareSlowHardwareRetryUsed = false
     // Generic errors before any playback may be transport noise once, but repeated
     // unconfirmed failures mean the preferred engine cannot start this stream.
     // Preserve this across same-stage reconnects and route after the second one.
@@ -342,6 +346,7 @@ class PlayerController(
         // count from the previous stream so they can't bleed into this one.
         stableHandler.removeCallbacksAndMessages(null)
         quickDecodeFailures = 0
+        softwareSlowHardwareRetryUsed = false
         unconfirmedStartFailures = 0
         // Tear down the previous channel's stall/startup watchdog; the (re)start
         // path below re-arms it for this channel.
@@ -942,6 +947,12 @@ class PlayerController(
             val next = nextStage(stage, effectiveReason)
             if (next != null) {
                 if (
+                    effectiveReason == Reason.SOFTWARE_SLOW &&
+                    stage == Stage.VLC_SW
+                ) {
+                    softwareSlowHardwareRetryUsed = true
+                }
+                if (
                     effectiveReason == Reason.ERROR ||
                     effectiveReason == Reason.STARTUP
                 ) {
@@ -960,6 +971,49 @@ class PlayerController(
                 startStage(next)
                 return
             }
+        }
+
+        val lastChanceHardware =
+            VlcHardwareDevicePolicy.lastChanceAfterSoftwareOverload(
+                current = stage,
+                failure = effectiveReason,
+                alreadyUsed = softwareSlowHardwareRetryUsed,
+                bypassVlcHardware = bypassVlcHardware,
+            )
+        if (lastChanceHardware != null) {
+            softwareSlowHardwareRetryUsed = true
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "software overload -> one bounded hardware revisit $lastChanceHardware",
+            )
+            recordStability(
+                "fallback",
+                "warn",
+                "VLC_SW --SOFTWARE_SLOW--> $lastChanceHardware (bounded revisit)",
+            )
+            startStage(lastChanceHardware)
+            return
+        }
+
+        // Reopening the exact VLC_SW instance after it proved too slow recreates
+        // the 4K CPU-overload loop from the device log. All viable hardware paths
+        // have now been exhausted, so surface a bounded failure instead.
+        if (effectiveReason == Reason.SOFTWARE_SLOW && stage == Stage.VLC_SW) {
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "software decode remains too slow after hardware recovery -> fatal",
+            )
+            recordStability(
+                "fatal",
+                "fatal",
+                "software decode too slow and no viable hardware route",
+            )
+            resetReconnect()
+            cancelWatchdog()
+            callback.onFatalError()
+            return
         }
 
         // No further engine/decode path (or a confirmed-playback drop): hand off
@@ -1054,8 +1108,13 @@ class PlayerController(
 
     /** The stage to advance to, or null when no more paths are available. */
     private fun nextStage(current: Stage, reason: Reason): Stage? {
+        val streamInfo = engine?.getStreamInfo()
         val unavailableAwareTriedStages =
-            if (bypassVlcHardware) triedStages + Stage.VLC_HW else triedStages
+            triedStages + VlcHardwareDevicePolicy.unavailableStages(
+                bypassVlcHardware = bypassVlcHardware,
+                width = streamInfo?.width ?: 0,
+                height = streamInfo?.height ?: 0,
+            )
         return PlaybackRoutingPolicy.nextStage(
             mode = mode,
             decoderMode = decoderMode,
