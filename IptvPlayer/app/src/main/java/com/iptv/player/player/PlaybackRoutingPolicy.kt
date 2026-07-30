@@ -51,7 +51,7 @@ internal object PlaybackRoutingPolicy {
     /**
      * Returns the first compatible stage that has not already been attempted in
      * this channel session. Supplying [triedStages] is what makes compound recovery
-     * bounded: EXO green -> VLC software too slow can still try safe VLC hardware,
+     * bounded: EXO green -> VLC hardware green -> VLC software can try each path,
      * but can never bounce forever between hardware and software.
      */
     fun nextStage(
@@ -83,7 +83,7 @@ internal object PlaybackRoutingPolicy {
             }
             Failure.VIDEO,
             Failure.DECODE -> when (current) {
-                Stage.EXO -> listOf(Stage.VLC_SW, Stage.VLC_HW)
+                Stage.EXO -> listOf(Stage.VLC_HW, Stage.VLC_SW)
                 Stage.VLC_HW -> listOf(Stage.VLC_SW)
                 Stage.VLC_SW -> listOf(Stage.VLC_HW)
             }
@@ -98,12 +98,18 @@ internal object PlaybackRoutingPolicy {
             Failure.AUDIO,
             Failure.VIDEO,
             Failure.DECODE -> when (current) {
-                Stage.VLC_HW -> listOf(Stage.VLC_SW)
-                Stage.VLC_SW -> listOf(Stage.VLC_HW)
+                // VLC remains the user's preferred engine. Exo is a final,
+                // one-shot rescue when both VLC decode paths are proven unusable.
+                Stage.VLC_HW -> listOf(Stage.VLC_SW, Stage.EXO)
+                Stage.VLC_SW -> listOf(Stage.VLC_HW, Stage.EXO)
                 Stage.EXO -> emptyList()
             }
             Failure.SOFTWARE_SLOW ->
-                if (current == Stage.VLC_SW) listOf(Stage.VLC_HW) else emptyList()
+                if (current == Stage.VLC_SW) {
+                    listOf(Stage.VLC_HW, Stage.EXO)
+                } else {
+                    emptyList()
+                }
         }
 
         PlayerMode.AUTO -> when (failure) {
@@ -121,11 +127,7 @@ internal object PlaybackRoutingPolicy {
                 DecoderMode.SOFTWARE -> emptyList()
             }
             Failure.STARTUP -> when (current) {
-                Stage.EXO -> if (decoderMode == DecoderMode.HARDWARE) {
-                    listOf(Stage.VLC_HW, Stage.VLC_SW)
-                } else {
-                    listOf(Stage.VLC_SW, Stage.VLC_HW)
-                }
+                Stage.EXO -> listOf(Stage.VLC_HW, Stage.VLC_SW)
                 Stage.VLC_HW -> listOf(Stage.VLC_SW, Stage.EXO)
                 Stage.VLC_SW -> listOf(Stage.VLC_HW, Stage.EXO)
             }
@@ -135,16 +137,15 @@ internal object PlaybackRoutingPolicy {
                 Stage.VLC_SW -> listOf(Stage.VLC_HW, Stage.EXO)
             }
             Failure.VIDEO -> when (current) {
-                Stage.EXO -> listOf(Stage.VLC_SW, Stage.VLC_HW)
+                // Try libVLC's safe hardware implementation before software.
+                // 1080p50 software decode overload is a common source of frozen
+                // or macro-blocked output on Android TV sticks.
+                Stage.EXO -> listOf(Stage.VLC_HW, Stage.VLC_SW)
                 Stage.VLC_HW -> listOf(Stage.VLC_SW, Stage.EXO)
                 Stage.VLC_SW -> listOf(Stage.VLC_HW, Stage.EXO)
             }
             Failure.DECODE -> when (current) {
-                Stage.EXO -> if (decoderMode == DecoderMode.HARDWARE) {
-                    listOf(Stage.VLC_HW, Stage.VLC_SW)
-                } else {
-                    listOf(Stage.VLC_SW, Stage.VLC_HW)
-                }
+                Stage.EXO -> listOf(Stage.VLC_HW, Stage.VLC_SW)
                 Stage.VLC_HW -> listOf(Stage.VLC_SW, Stage.EXO)
                 Stage.VLC_SW -> listOf(Stage.VLC_HW, Stage.EXO)
             }

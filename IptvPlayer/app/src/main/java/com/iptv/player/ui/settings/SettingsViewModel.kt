@@ -10,19 +10,23 @@ import androidx.lifecycle.viewModelScope
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.DecoderMode
+import com.iptv.player.data.model.PlaybackSelection
+import com.iptv.player.data.model.PlaybackSelectionPolicy
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.model.StreamFormat
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 
 class SettingsViewModel : ViewModel() {
 
     private val settings = ServiceLocator.settings
+    private val playbackWriteMutex = Mutex()
 
-    val playerMode: Flow<PlayerMode> = settings.playerMode
-    val decoderMode: Flow<DecoderMode> = settings.decoderMode
+    /** One atomic UI snapshot; player and decoder can never render different revisions. */
+    val playbackSelection: Flow<PlaybackSelection> = settings.playbackSelection
     val streamFormat: Flow<StreamFormat> = settings.streamFormat
     val bufferMode: Flow<BufferMode> = settings.bufferMode
     val audioPassthrough: Flow<Boolean> = settings.audioPassthrough
@@ -34,12 +38,31 @@ class SettingsViewModel : ViewModel() {
     val autoSyncEnabled: Flow<Boolean> = settings.autoSyncEnabled
     val autoSyncHours: Flow<Int> = settings.autoSyncHours
 
-    fun setPlayerMode(mode: PlayerMode) = persistPlayback { settings.setPlayerMode(mode) }
+    /**
+     * Queue an engine-axis change. The mutex preserves DPAD click order and each
+     * intent re-reads the pair written by the previous intent, so a fast decoder
+     * click cannot accidentally restore an older player value.
+     */
+    fun selectPlayerMode(mode: PlayerMode) = persistPlayback {
+        updatePlaybackSelection { PlaybackSelectionPolicy.withPlayer(it, mode) }
+    }
 
-    fun setDecoderMode(mode: DecoderMode) = persistPlayback { settings.setDecoderMode(mode) }
+    /** Decoder-axis counterpart to [selectPlayerMode]. */
+    fun selectDecoderMode(mode: DecoderMode) = persistPlayback {
+        updatePlaybackSelection { PlaybackSelectionPolicy.withDecoder(it, mode) }
+    }
 
-    fun setPlaybackSelection(player: PlayerMode, decoder: DecoderMode) =
-        persistPlayback { settings.setPlaybackSelection(player, decoder) }
+    private suspend fun updatePlaybackSelection(
+        transform: (PlaybackSelection) -> PlaybackSelection,
+    ) {
+        playbackWriteMutex.lock()
+        try {
+            val next = transform(settings.getPlaybackSelection())
+            settings.setPlaybackSelection(next.player, next.decoder)
+        } finally {
+            playbackWriteMutex.unlock()
+        }
+    }
 
     /**
      * A DPAD selection must reach DataStore even if the user immediately presses

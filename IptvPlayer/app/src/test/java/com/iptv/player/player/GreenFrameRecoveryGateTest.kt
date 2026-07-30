@@ -103,4 +103,101 @@ class GreenFrameRecoveryGateTest {
         )
         assertFalse(gate.hasHealthyFrame)
     }
+
+    @Test
+    fun `blank surface never confirms healthy playback`() {
+        val gate = GreenFrameRecoveryGate()
+
+        assertEquals(
+            GreenFrameRecoveryGate.Decision.WAIT,
+            gate.onSample(
+                solidGreen = false,
+                visuallyBlank = true,
+                nowMs = 0L,
+            ),
+        )
+        assertEquals(
+            GreenFrameRecoveryGate.Decision.WAIT,
+            gate.onSample(
+                solidGreen = false,
+                visuallyBlank = true,
+                nowMs = 500L,
+            ),
+        )
+        assertFalse(gate.hasHealthyFrame)
+    }
+
+    @Test
+    fun `persistent startup blank fails only after its long grace window`() {
+        val gate = GreenFrameRecoveryGate()
+
+        assertEquals(
+            GreenFrameRecoveryGate.Decision.WAIT,
+            gate.onSample(
+                solidGreen = false,
+                visuallyBlank = true,
+                nowMs = 0L,
+            ),
+        )
+        assertEquals(
+            GreenFrameRecoveryGate.Decision.WAIT,
+            gate.onSample(
+                solidGreen = false,
+                visuallyBlank = true,
+                nowMs = 8_900L,
+            ),
+        )
+        assertEquals(
+            GreenFrameRecoveryGate.Decision.SOLID_BLANK_FAILURE,
+            gate.onSample(
+                solidGreen = false,
+                visuallyBlank = true,
+                nowMs = 9_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun `persistent blank after healthy playback triggers recovery`() {
+        val gate = GreenFrameRecoveryGate()
+        gate.onSample(solidGreen = false, nowMs = 0L)
+        gate.onSample(solidGreen = false, nowMs = 200L)
+
+        assertEquals(
+            GreenFrameRecoveryGate.Decision.WAIT,
+            gate.onSample(
+                solidGreen = false,
+                visuallyBlank = true,
+                nowMs = 1_000L,
+            ),
+        )
+        assertEquals(
+            GreenFrameRecoveryGate.Decision.SOLID_BLANK_FAILURE,
+            gate.onSample(
+                solidGreen = false,
+                visuallyBlank = true,
+                nowMs = 8_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun `blank sample resets a partial healthy confirmation`() {
+        val gate = GreenFrameRecoveryGate()
+        gate.onSample(solidGreen = false, nowMs = 0L)
+        gate.onSample(
+            solidGreen = false,
+            visuallyBlank = true,
+            nowMs = 200L,
+        )
+
+        assertEquals(
+            GreenFrameRecoveryGate.Decision.WAIT,
+            gate.onSample(solidGreen = false, nowMs = 400L),
+        )
+        assertEquals(
+            GreenFrameRecoveryGate.Decision.FIRST_HEALTHY_FRAME,
+            gate.onSample(solidGreen = false, nowMs = 600L),
+        )
+    }
 }

@@ -1291,24 +1291,20 @@ class SettingsActivity : BaseActivity() {
             }
         }
         lifecycleScope.launch {
-            viewModel.playerMode.collectLatest { mode ->
-                selectedPlayerMode = mode
+            viewModel.playbackSelection.collectLatest { selection ->
+                selectedPlayerMode = selection.player
+                selectedDecoderMode = selection.decoder
                 playerRows.forEach { (m, row) ->
-                    row.isSelected = m == mode
+                    row.isSelected = m == selection.player
                     row.findViewById<ImageView>(R.id.cIcon).visibility =
-                        if (m == mode) View.VISIBLE else View.INVISIBLE
-                    row.contentDescription = if (m == mode) {
+                        if (m == selection.player) View.VISIBLE else View.INVISIBLE
+                    row.contentDescription = if (m == selection.player) {
                         getString(R.string.settings_selected_option, playerModeLabel(m))
                     } else {
                         playerModeLabel(m)
                     }
                 }
-            }
-        }
-        lifecycleScope.launch {
-            viewModel.decoderMode.collectLatest {
-                selectedDecoderMode = it
-                decoderModeValue?.text = decoderModeLabel(it)
+                decoderModeValue?.text = decoderModeLabel(selection.decoder)
             }
         }
         lifecycleScope.launch {
@@ -1422,13 +1418,13 @@ class SettingsActivity : BaseActivity() {
                 .setTitle(R.string.settings_player_exo)
                 .setMessage(R.string.settings_exo_requires_hardware)
                 .setPositiveButton(android.R.string.ok) { _, _ ->
-                    viewModel.setPlaybackSelection(PlayerMode.EXOPLAYER, DecoderMode.HARDWARE)
+                    viewModel.selectPlayerMode(PlayerMode.EXOPLAYER)
                 }
                 .setNegativeButton(android.R.string.cancel, null)
                 .showTracked()
             return
         }
-        viewModel.setPlayerMode(mode)
+        viewModel.selectPlayerMode(mode)
     }
 
     private fun decoderModeLabel(mode: DecoderMode): String = getString(
@@ -1458,12 +1454,12 @@ class SettingsActivity : BaseActivity() {
                         .setTitle(R.string.settings_decoder_software)
                         .setMessage(R.string.settings_software_requires_vlc)
                         .setPositiveButton(android.R.string.ok) { _, _ ->
-                            viewModel.setPlaybackSelection(PlayerMode.VLC, DecoderMode.SOFTWARE)
+                            viewModel.selectDecoderMode(DecoderMode.SOFTWARE)
                         }
                         .setNegativeButton(android.R.string.cancel, null)
                         .showTracked()
                 } else {
-                    viewModel.setDecoderMode(selected)
+                    viewModel.selectDecoderMode(selected)
                 }
             }
             .showTracked()

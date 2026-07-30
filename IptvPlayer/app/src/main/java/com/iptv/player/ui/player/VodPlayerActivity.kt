@@ -36,17 +36,22 @@ import com.iptv.player.data.model.Episode
 import com.iptv.player.data.model.ResumeKind
 import com.iptv.player.data.model.ResumeMeta
 import com.iptv.player.databinding.ActivityVodPlayerBinding
+import com.iptv.player.player.StreamInfo
+import com.iptv.player.player.SurfaceFrameHealthMonitor
+import com.iptv.player.player.VlcOps
+import com.iptv.player.player.findVideoSurface
+import com.iptv.player.player.isVlcBuffering
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.SleepTimer
-import com.iptv.player.player.StreamInfo
-import com.iptv.player.player.VlcOps
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NowPlaying
 import com.iptv.player.util.PlaybackLog
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
@@ -58,6 +63,37 @@ import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.util.VLCVideoLayout
 
 class VodPlayerActivity : BaseActivity() {
+
+    private enum class RecoveryEvidence {
+        GENERIC,
+        CONFIRMED_VIDEO_FAILURE,
+    }
+
+    private class NativePlayerOwner(
+        val generation: Long,
+        val libVlc: LibVLC,
+        val mediaPlayer: MediaPlayer,
+        val videoLayout: VLCVideoLayout,
+    ) {
+        val abandoned = AtomicBoolean(false)
+        val cleanupScheduled = AtomicBoolean(false)
+        val cleanupClaimed = AtomicBoolean(false)
+        val activeOperation = AtomicReference<OwnerOperation?>(null)
+    }
+
+    private class OwnerOperation(
+        val owner: NativePlayerOwner,
+    ) {
+        val state = AtomicInteger(STATE_ACTIVE)
+        val onAbandoned = AtomicReference<(() -> Unit)?>(null)
+
+        companion object {
+            const val STATE_ACTIVE = 0
+            const val STATE_ABANDONED = 1
+            const val STATE_BODY_FINISHED = 2
+            const val STATE_CLEANED = 3
+        }
+    }
 
     /** Never cover movie, episode or catch-up playback with the idle saver. */
     protected override val idleScreensaverEnabledForScreen: Boolean
@@ -80,10 +116,17 @@ class VodPlayerActivity : BaseActivity() {
         const val EXTRA_AUTO_RESUME = "extra_auto_resume"
         private const val SKIP_MS = 10_000L
         private const val SAVE_INTERVAL_MS = 10_000L
-        // UHD/4K threshold (QHD 1440p+). Software decode can't keep up with 4K at
-        // 80–100 Mbps, so above this we rebuild on the hardware decoder.
+        // UHD/4K threshold (QHD 1440p+). AUTO's software fallback cannot keep up
+        // with 4K at 80–100 Mbps, so above this it returns to hardware.
         private const val UHD_MIN_HEIGHT = 1440
         private const val UHD_MIN_WIDTH = 2560
+        // VLC frequently exposes video dimensions only after Playing/ESAdded.
+        // Re-check across that discovery window rather than trusting the first
+        // Playing callback (where currentVideoTrack is commonly still null).
+        private const val UHD_RECHECK_1_MS = 700L
+        private const val UHD_RECHECK_2_MS = 1_500L
+        private const val UHD_RECHECK_3_MS = 3_000L
+        private const val UHD_RECHECK_4_MS = 5_000L
         // How long the "languages / subtitles available" banner stays visible.
         private const val TRACK_HINT_MS = 4500L
         // Debounce after track-detection events before evaluating the hint, so we
@@ -98,6 +141,11 @@ class VodPlayerActivity : BaseActivity() {
         // emitting EncounteredError. Bound every startup/retry so the viewer
         // always reaches recovery or a visible Retry action.
         private const val STARTUP_TIMEOUT_MS = 25_000L
+        // Native libVLC calls can deadlock inside vendor JNI. Keep playback
+        // recovery moving on a fresh shared worker instead of queuing forever.
+        private const val NATIVE_OPERATION_TIMEOUT_MS = 8_000L
+        private const val NATIVE_RELEASE_TIMEOUT_MS = 12_000L
+        private const val NATIVE_EVENT_RETRY_MS = 16L
         // After playback has started, a half-open HTTP connection can freeze
         // without EOF/error. Position must advance inside this window.
         private const val STALL_TIMEOUT_MS = 30_000L
@@ -109,8 +157,10 @@ class VodPlayerActivity : BaseActivity() {
     private val settings = ServiceLocator.settings
 
     private var libVlc: LibVLC? = null
-    private var mediaPlayer: MediaPlayer? = null
+    @Volatile private var mediaPlayer: MediaPlayer? = null
     private var videoLayout: VLCVideoLayout? = null
+    @Volatile private var nativeOwner: NativePlayerOwner? = null
+    private val nativeOwnerGeneration = AtomicLong(0L)
     private var debugBinder: DebugOverlayBinder? = null
 
     private var streamUrl: String? = null
@@ -131,13 +181,18 @@ class VodPlayerActivity : BaseActivity() {
 
     // Mirrors live TV: when Decoder is SOFTWARE, MediaCodec is disabled.
     private var forceSoftware = false
-    // Set once we rebuild on hardware for a UHD/4K stream, so it happens at most once.
+    // Set once AUTO rebuilds on hardware for a UHD/4K stream, limiting it to one pass.
     private var uhdEscalated = false
 
     // VOD error recovery: retry the current decode path once, then (AUTO decoder
     // only) rebuild once on VLC software before showing the terminal Retry UI.
     private var playbackErrorAttempts = 0
     private var softwareFallbackAttempted = false
+    // Decoder selection is a preference, not a trap. A confirmed green/blank/
+    // frozen output may try the opposite VLC decoder once per playback item.
+    // Keeping this independent from the stable-playback retry reset prevents a
+    // hardware <-> software loop on a stream that fails repeatedly.
+    private var crossDecoderRescueAttempted = false
     private var recoveryInProgress = false
     private var resumeAfterBackground = false
     private var pauseAfterBackgroundRestore = false
@@ -149,6 +204,7 @@ class VodPlayerActivity : BaseActivity() {
     private var completionGeneration = 0L
     private var resumeChoicePending = false
     @Volatile private var foreground = false
+    private val eventSession = AtomicLong(0L)
     private val playbackOpsSeq = AtomicLong(0L)
     private val nativeCommandsInFlight = AtomicInteger(0)
     private val stablePlaybackRunnable = Runnable {
@@ -176,6 +232,9 @@ class VodPlayerActivity : BaseActivity() {
     // Position to jump to once playback actually starts (resume support). VLC only
     // accepts a seek after the first Playing event, so we defer it until then.
     private var pendingSeekMs = 0L
+    // Retained across a decoder rebuild, where mediaPlayer is intentionally null
+    // during onStop but the pending position still needs a durable Room snapshot.
+    private var lastKnownDurationMs = 0L
 
     // Show the multi-language / subtitle hint at most once per playback session.
     private var trackHintShown = false
@@ -207,6 +266,38 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     private val handler = Handler(Looper.getMainLooper())
+    private var surfaceValidationStarted = false
+    private var surfaceOutputConfirmed = false
+    private val surfaceFrameHealth = SurfaceFrameHealthMonitor(
+        handler = handler,
+        onSolidGreen = {
+            onSurfaceOutputFailure("persistent solid-green video output")
+        },
+        onPersistentBlank = {
+            onSurfaceOutputFailure("persistent blank video output")
+        },
+        onHealthyFrame = {
+            if (!surfaceOutputConfirmed) {
+                surfaceOutputConfirmed = true
+                PlaybackLog.log(this, "VOD", "video surface output verified")
+            }
+        },
+        // Keep checking after startup. Vendor decoders can turn green/black after
+        // an initially healthy picture while VLC time and audio continue.
+        continueAfterHealthy = true,
+    )
+    private val uhdCheckRunnable = object : Runnable {
+        override fun run() {
+            if (
+                foreground &&
+                playbackStarted &&
+                !recoveryInProgress &&
+                maybeEscalateForUhd()
+            ) {
+                handler.removeCallbacks(this)
+            }
+        }
+    }
     private val progressRunnable = object : Runnable {
         override fun run() {
             updateProgress()
@@ -218,6 +309,264 @@ class VodPlayerActivity : BaseActivity() {
             persistResume()
             handler.postDelayed(this, SAVE_INTERVAL_MS)
         }
+    }
+
+    /**
+     * Return the current player only while no bounded owner operation can be
+     * touching it. libVLC getters/setters are JNI too; progress, controls and
+     * debug UI must not race prepare/stop/release on the owner worker.
+     */
+    private fun currentIdlePlayer(): MediaPlayer? {
+        val owner = nativeOwner ?: return null
+        if (
+            owner.abandoned.get() ||
+            owner.activeOperation.get() != null ||
+            mediaPlayer !== owner.mediaPlayer
+        ) {
+            return null
+        }
+        return owner.mediaPlayer
+    }
+
+    /**
+     * Native VLC reports time=0 while a deferred seek is still waiting for
+     * Playing, and can do the same after an error. Never let that transient
+     * native value overwrite the user's resume/recovery target.
+     */
+    private fun bestResumePosition(playerPositionMs: Long? = currentIdlePlayer()?.time): Long =
+        maxOf(
+            playerPositionMs ?: 0L,
+            pendingSeekMs,
+            backgroundResumePosition,
+        ).coerceAtLeast(0L)
+
+    private fun startSurfaceValidation() {
+        if (surfaceValidationStarted || !foreground || !playbackStarted) return
+        surfaceValidationStarted = true
+        surfaceFrameHealth.start { findVideoSurface(videoLayout) }
+    }
+
+    private fun resetSurfaceValidation() {
+        surfaceFrameHealth.reset()
+        surfaceValidationStarted = false
+        surfaceOutputConfirmed = false
+    }
+
+    private fun onSurfaceOutputFailure(detail: String) {
+        if (
+            !foreground ||
+            !playbackStarted ||
+            recoveryInProgress ||
+            isFinishing ||
+            isDestroyed
+        ) {
+            return
+        }
+        PlaybackLog.log(this, "VOD", "$detail -> bounded decoder recovery")
+        resetSurfaceValidation()
+        handler.removeCallbacks(uhdCheckRunnable)
+        // A sampled solid colour/blank surface is decoder evidence rather than an
+        // ordinary CDN error. Treat the configured decoder as the preferred first
+        // path, then allow one bounded opposite-decoder rescue.
+        handlePlaybackError(RecoveryEvidence.CONFIRMED_VIDEO_FAILURE)
+    }
+
+    private fun scheduleUhdRechecks() {
+        handler.removeCallbacks(uhdCheckRunnable)
+        if (
+            !foreground ||
+            !playbackStarted ||
+            recoveryInProgress ||
+            decoderMode != DecoderMode.AUTO ||
+            !forceSoftware ||
+            uhdEscalated
+        ) {
+            return
+        }
+        handler.postDelayed(uhdCheckRunnable, UHD_RECHECK_1_MS)
+        handler.postDelayed(uhdCheckRunnable, UHD_RECHECK_2_MS)
+        handler.postDelayed(uhdCheckRunnable, UHD_RECHECK_3_MS)
+        handler.postDelayed(uhdCheckRunnable, UHD_RECHECK_4_MS)
+    }
+
+    private fun beginOwnerOperation(owner: NativePlayerOwner): OwnerOperation? {
+        if (owner.abandoned.get()) return null
+        val operation = OwnerOperation(owner)
+        if (!owner.activeOperation.compareAndSet(null, operation)) return null
+        if (owner.abandoned.get()) {
+            owner.activeOperation.compareAndSet(operation, null)
+            return null
+        }
+        return operation
+    }
+
+    /**
+     * Final handshake for the worker that owns a native operation. If main
+     * quarantined the owner while JNI was blocked, this same retired worker—not
+     * the replacement worker—performs the one-and-only native cleanup.
+     */
+    private fun finishOwnerOperationOnWorker(operation: OwnerOperation) {
+        var cleanOnThisWorker = false
+        while (true) {
+            when (operation.state.get()) {
+                OwnerOperation.STATE_ACTIVE -> {
+                    if (
+                        operation.state.compareAndSet(
+                            OwnerOperation.STATE_ACTIVE,
+                            OwnerOperation.STATE_BODY_FINISHED,
+                        )
+                    ) {
+                        break
+                    }
+                }
+                OwnerOperation.STATE_ABANDONED -> {
+                    cleanOnThisWorker = true
+                    break
+                }
+                OwnerOperation.STATE_BODY_FINISHED,
+                OwnerOperation.STATE_CLEANED -> break
+                else -> break
+            }
+        }
+        if (cleanOnThisWorker) {
+            cleanupOwnerOnCurrentWorker(operation.owner)
+            operation.state.set(OwnerOperation.STATE_CLEANED)
+        }
+        operation.owner.activeOperation.compareAndSet(operation, null)
+    }
+
+    /** Release a reservation that failed before any VlcOps action was dispatched. */
+    private fun cancelOwnerOperationBeforeDispatch(operation: OwnerOperation) {
+        operation.onAbandoned.set(null)
+        operation.state.compareAndSet(
+            OwnerOperation.STATE_ACTIVE,
+            OwnerOperation.STATE_BODY_FINISHED,
+        )
+        operation.owner.activeOperation.compareAndSet(operation, null)
+    }
+
+    /** Native cleanup after ownership has been exclusively claimed by VlcOps. */
+    private fun cleanupOwnerOnCurrentWorker(owner: NativePlayerOwner) {
+        if (!owner.cleanupClaimed.compareAndSet(false, true)) return
+        val failures = VlcOps.runAllBestEffort(
+            { owner.mediaPlayer.setEventListener(null) },
+            { owner.mediaPlayer.stop() },
+            { owner.mediaPlayer.release() },
+            { owner.libVlc.release() },
+        )
+        failures.forEach { failure ->
+            PlaybackLog.log(
+                this,
+                "VOD",
+                "owner=${owner.generation} cleanup failed: " +
+                    failure.javaClass.simpleName,
+            )
+        }
+        removeOwnerLayoutOnMain(owner)
+    }
+
+    /**
+     * Removing an Android View is main-thread-only. Native listener/stop/release
+     * teardown remains exclusively on the owner worker.
+     */
+    private fun removeOwnerLayoutOnMain(owner: NativePlayerOwner) {
+        val remove = {
+            (owner.videoLayout.parent as? ViewGroup)?.removeView(owner.videoLayout)
+            Unit
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            remove()
+        } else {
+            handler.post { remove() }
+        }
+    }
+
+    private fun clearCurrentOwner(owner: NativePlayerOwner) {
+        if (nativeOwner !== owner) return
+        nativeOwner = null
+        if (mediaPlayer === owner.mediaPlayer) mediaPlayer = null
+        if (libVlc === owner.libVlc) libVlc = null
+        if (videoLayout === owner.videoLayout) videoLayout = null
+    }
+
+    /**
+     * Quarantine never calls a native method. It only invalidates callbacks,
+     * removes the owner from all current fields, and hands cleanup ownership to
+     * the already-running retired worker. A replacement can then be built without
+     * ever touching the timed-out MediaPlayer/LibVLC handles.
+     */
+    private fun quarantineOwner(owner: NativePlayerOwner, reason: String) {
+        val wasCurrent = nativeOwner === owner
+        if (wasCurrent) invalidateEventSession()
+        owner.abandoned.set(true)
+        clearCurrentOwner(owner)
+        // Do not let an abandoned SurfaceView cover the replacement owner. This
+        // is the only teardown performed here; every native call remains with the
+        // old owner worker.
+        removeOwnerLayoutOnMain(owner)
+        PlaybackLog.log(this, "VOD", "owner=${owner.generation} quarantined: $reason")
+
+        val active = owner.activeOperation.get()
+        active?.onAbandoned?.getAndSet(null)?.invoke()
+        val needsSafeCleanup = when {
+            active == null -> true
+            active.state.compareAndSet(
+                OwnerOperation.STATE_ACTIVE,
+                OwnerOperation.STATE_ABANDONED,
+            ) -> false
+            active.state.get() == OwnerOperation.STATE_BODY_FINISHED -> true
+            else -> false
+        }
+        if (needsSafeCleanup) scheduleQuarantinedOwnerCleanup(owner)
+    }
+
+    /**
+     * Used only when the previous operation has already finished its native body;
+     * therefore the cleanup worker cannot overlap native access to this owner.
+     */
+    private fun scheduleQuarantinedOwnerCleanup(owner: NativePlayerOwner) {
+        if (
+            owner.cleanupClaimed.get() ||
+            !owner.cleanupScheduled.compareAndSet(false, true)
+        ) {
+            return
+        }
+        VlcOps.postBounded(
+            timeoutMs = NATIVE_RELEASE_TIMEOUT_MS,
+            onTimeout = {
+                PlaybackLog.log(
+                    this,
+                    "VOD",
+                    "owner=${owner.generation} quarantined cleanup timed out",
+                )
+            },
+        ) {
+            cleanupOwnerOnCurrentWorker(owner)
+        }
+    }
+
+    /**
+     * Reserve an idle owner for planned rebuild/destroy cleanup. IVLCVout requires
+     * detachViews() on main, but the reservation proves no owner-worker operation
+     * can touch this handle concurrently. Active/timed-out owners never enter this
+     * path: removing their layout destroys the Surface (IVLCVout performs its
+     * automatic detach) and their retired worker performs listener/stop/release.
+     */
+    private fun retireIdleOwnerOnMain(owner: NativePlayerOwner): OwnerOperation? {
+        val operation = beginOwnerOperation(owner) ?: return null
+        invalidateEventSession()
+        owner.abandoned.set(true)
+        runCatching { owner.mediaPlayer.detachViews() }.onFailure { failure ->
+            PlaybackLog.log(
+                this,
+                "VOD",
+                "owner=${owner.generation} main-thread detach failed: " +
+                    failure.javaClass.simpleName,
+            )
+        }
+        removeOwnerLayoutOnMain(owner)
+        clearCurrentOwner(owner)
+        return operation
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -286,7 +635,7 @@ class VodPlayerActivity : BaseActivity() {
 
     /** Build StreamInfo from the raw libVLC track (mirrors VlcPlayerEngine). */
     private fun vodStreamInfo(): StreamInfo? {
-        val track = mediaPlayer?.currentVideoTrack ?: return null
+        val track = currentIdlePlayer()?.currentVideoTrack ?: return null
         val den = track.frameRateDen
         val fps = if (den > 0) track.frameRateNum.toFloat() / den else 0f
         return StreamInfo(
@@ -353,12 +702,12 @@ class VodPlayerActivity : BaseActivity() {
                 }
                 KeyEvent.KEYCODE_MEDIA_PLAY -> {
                     showControls()
-                    if (mediaPlayer?.isPlaying != true) togglePlayPause()
+                    if (currentIdlePlayer()?.isPlaying != true) togglePlayPause()
                     return true
                 }
                 KeyEvent.KEYCODE_MEDIA_PAUSE -> {
                     showControls()
-                    if (mediaPlayer?.isPlaying == true) togglePlayPause()
+                    if (currentIdlePlayer()?.isPlaying == true) togglePlayPause()
                     return true
                 }
                 KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
@@ -410,8 +759,9 @@ class VodPlayerActivity : BaseActivity() {
                     // apply those key-driven positions immediately.
                     if (!userSeeking) {
                         val position = progress.toLong()
-                        mediaPlayer?.setTime(position)
+                        currentIdlePlayer()?.setTime(position)
                         pendingSeekMs = position
+                        backgroundResumePosition = position
                         resetStallWatch(position)
                         playbackEnded = false
                         completionHandled = false
@@ -428,8 +778,9 @@ class VodPlayerActivity : BaseActivity() {
             override fun onStopTrackingTouch(sb: SeekBar?) {
                 userSeeking = false
                 val position = sb?.progress?.toLong() ?: 0L
-                mediaPlayer?.setTime(position)
+                currentIdlePlayer()?.setTime(position)
                 pendingSeekMs = position
+                backgroundResumePosition = position
                 resetStallWatch(position)
                 playbackEnded = false
                 completionHandled = false
@@ -453,7 +804,7 @@ class VodPlayerActivity : BaseActivity() {
         }
     }
 
-    private fun resetStallWatch(positionMs: Long = mediaPlayer?.time ?: -1L) {
+    private fun resetStallWatch(positionMs: Long = currentIdlePlayer()?.time ?: -1L) {
         lastObservedPositionMs = positionMs
         lastPositionAdvanceAtMs = SystemClock.uptimeMillis()
         bufferingSinceMs = 0L
@@ -477,7 +828,7 @@ class VodPlayerActivity : BaseActivity() {
             now - lastPositionAdvanceAtMs >= STALL_TIMEOUT_MS
         ) {
             PlaybackLog.log(this, "VOD", "playback position stalled")
-            handlePlaybackError()
+            handlePlaybackError(RecoveryEvidence.CONFIRMED_VIDEO_FAILURE)
         }
     }
 
@@ -486,6 +837,8 @@ class VodPlayerActivity : BaseActivity() {
         handler.removeCallbacks(hideControlsRunnable)
         handler.removeCallbacks(progressRunnable)
         handler.removeCallbacks(saveRunnable)
+        handler.removeCallbacks(uhdCheckRunnable)
+        resetSurfaceValidation()
         setBuffering(false)
         binding.errorMessage.setText(R.string.error_cannot_play_content)
         binding.errorOverlay.visibility = View.VISIBLE
@@ -521,18 +874,19 @@ class VodPlayerActivity : BaseActivity() {
 
     /** Retry is an explicit fresh attempt, so return to the configured decoder. */
     private fun retryFromConfiguredDecoder() {
-        val resumeAt = (mediaPlayer?.time ?: pendingSeekMs).coerceAtLeast(0L)
+        val resumeAt = bestResumePosition()
         binding.errorOverlay.visibility = View.GONE
         setPlayerChromeFocusable(true)
         binding.playPauseButton.requestFocus()
         setBuffering(true)
         playbackErrorAttempts = 0
         softwareFallbackAttempted = false
+        crossDecoderRescueAttempted = false
         recoveryInProgress = false
         uhdEscalated = false
         val useSoftware = decoderMode == DecoderMode.SOFTWARE
         forceSoftware = useSoftware
-        if (mediaPlayer == null || libVlc == null) {
+        if (nativeOwner == null) {
             try {
                 buildPlayer()
                 preparePlayback(resumeAt)
@@ -548,7 +902,7 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     private fun updateTrackButtons() {
-        val mp = mediaPlayer
+        val mp = currentIdlePlayer()
         val hasAudio = mp?.audioTracks?.any { it.id != -1 } == true
         val hasSubtitles = mp?.spuTracks?.any { it.id != -1 } == true
         binding.audioButton.isEnabled = hasAudio
@@ -590,7 +944,7 @@ class VodPlayerActivity : BaseActivity() {
     private fun scheduleHideControls() {
         handler.removeCallbacks(hideControlsRunnable)
         if (
-            mediaPlayer?.isPlaying == true &&
+            currentIdlePlayer()?.isPlaying == true &&
             !userSeeking &&
             activeDialog?.isShowing != true &&
             binding.errorOverlay.visibility != View.VISIBLE
@@ -602,7 +956,7 @@ class VodPlayerActivity : BaseActivity() {
     private fun setControlsVisible(visible: Boolean) {
         if (
             !visible &&
-            (mediaPlayer?.isPlaying != true ||
+            (currentIdlePlayer()?.isPlaying != true ||
                 userSeeking ||
                 activeDialog?.isShowing == true ||
                 binding.errorOverlay.visibility == View.VISIBLE)
@@ -661,36 +1015,24 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     private fun buildPlayer() {
-        // Mirror live TV (VlcPlayerEngine): the same anti-stutter decode tuning so
-        // movies/series play as smoothly as channels. clock-jitter/synchro off stops
-        // VLC stalling to "catch up" on irregular timestamps; skiploopfilter + fast
-        // cut decode load on weak boxes; HW unless the Decoder setting forces SW.
+        check(nativeOwner == null) { "Cannot build over an active VLC owner" }
+        // Mirror live TV (VlcPlayerEngine): keep VLC's proven decode defaults.
+        // avcodec-fast and skipped loop filtering caused macroblocking/pixel rain
+        // on real H.264/H.265 content, so neither is enabled here.
         val cachingMs = bufferMode.networkCachingMs
         val options = arrayListOf(
             "--network-caching=$cachingMs",
             "--file-caching=$cachingMs",
-            // Irregular PCR/timestamps make VLC stall to resync; disabling the
-            // jitter/synchro guards is the main fix for stutter.
-            "--clock-jitter=0",
-            "--clock-synchro=0",
-            // Hardware decode unless the user's Decoder setting forces software.
-            if (forceSoftware) "--avcodec-hw=none" else "--avcodec-hw=any",
             // MediaCodec/OMX direct rendering LEFT ON (libVLC default) on the
             // hardware path so the Amlogic decoder renders straight onto the
             // SurfaceView underlay (its native hardware-video path). The DR-off +
             // android_display vout path could not colour-convert NV12 on the Xiaomi
             // compositor and stayed GREEN (RV16/RV32 chroma overrides had zero
             // effect). forceSoftware uses avcodec-hw=none so DR is irrelevant there.
-            // Cut decode load on weak boxes WITHOUT wrecking quality: "all" dropped
-            // the H.264/H.265 deblocking filter on every frame, so block errors
-            // propagated -> macroblocking/"rain" breakup with audio still fine.
-            // "nonref" keeps deblocking on reference frames (no error build-up) and
-            // only skips disposable non-reference frames. Mirrors VlcPlayerEngine.
-            "--avcodec-skiploopfilter=nonref",
-            "--avcodec-fast",
             "--http-reconnect",
             "--http-user-agent=${AppInfo.USER_AGENT}"
         )
+        if (forceSoftware) options.add("--avcodec-hw=none")
         // Match the global passthrough setting. Default OFF decodes Dolby/DTS to
         // stereo PCM; explicit opt-in leaves the encoded bitstream available to an
         // AV receiver/soundbar.
@@ -698,13 +1040,9 @@ class VodPlayerActivity : BaseActivity() {
             options.add("--no-spdif")
             options.add("--stereo-mode=1")
         }
-        // Software-path deinterlace only: opaque HW buffers can't be filtered and
-        // the Amlogic HW decoder deinterlaces natively; software decode emits raw
-        // frames that bob CAN deinterlace.
-        if (forceSoftware) {
-            options.add("--deinterlace=1")
-            options.add("--deinterlace-mode=bob")
-        }
+        // Do not force bob deinterlacing globally. It doubles output work on
+        // interlaced sources and overloads weaker sticks; VLC may select a
+        // suitable deinterlacer from stream/device capabilities when needed.
         val vlc = LibVLC(this, options)
         vlc.setUserAgent(AppInfo.USER_AGENT, AppInfo.USER_AGENT)
         val mp = MediaPlayer(vlc)
@@ -721,122 +1059,208 @@ class VodPlayerActivity : BaseActivity() {
         // always greens out on real sticks).
         mp.attachViews(layout, null, true, false)
 
-        mp.setEventListener { event ->
-            // A queued native callback from a player that has already been
-            // replaced must never mutate the new session's UI/state.
-            if (mediaPlayer !== mp) return@setEventListener
-            // stop -> setMedia -> play executes off-main. Native events produced
-            // while that command is in flight belong to the media being replaced
-            // and must not advance the retry ladder for the new media.
-            if (
-                nativeCommandsInFlight.get() > 0 &&
-                (event.type == MediaPlayer.Event.Stopped ||
-                    event.type == MediaPlayer.Event.EndReached ||
-                    event.type == MediaPlayer.Event.EncounteredError)
-            ) {
-                return@setEventListener
-            }
-            when (event.type) {
-                MediaPlayer.Event.Buffering -> {
-                    setBuffering(event.buffering < 100f)
-                }
-                MediaPlayer.Event.Playing -> {
-                    // 4K on software stutters; rebuild on hardware before doing
-                    // anything else with this (about-to-be-released) player.
-                    if (maybeEscalateForUhd()) return@setEventListener
-                    playbackStarted = true
-                    playbackEnded = false
-                    handler.removeCallbacks(startupTimeoutRunnable)
-                    setBuffering(false)
-                    if (binding.errorOverlay.visibility == View.VISIBLE) {
-                        binding.errorOverlay.visibility = View.GONE
-                        setPlayerChromeFocusable(true)
-                        setControlsVisible(true)
-                    }
-                    binding.playPauseButton.setImageResource(R.drawable.ic_pause)
-                    binding.playPauseButton.contentDescription = getString(R.string.player_pause)
-                    // Restart the idle timer once real playback begins.
-                    scheduleHideControls()
-                    // Apply the deferred resume seek once, now that VLC is ready.
-                    if (pendingSeekMs > 0L) {
-                        mp.setTime(pendingSeekMs)
-                        pendingSeekMs = 0L
-                    }
-                    resetStallWatch(mp.time)
-                    val restoreAsPaused = pauseAfterBackgroundRestore
-                    if (restoreAsPaused) {
-                        pauseAfterBackgroundRestore = false
-                        mp.pause()
-                    }
-                    applyAspect()
-                    updateDuration()
-                    updateTrackButtons()
-                    // VLC parses audio/subtitle tracks shortly after playback
-                    // begins; schedule a debounced check to surface the hint.
-                    if (!trackHintShown) {
-                        handler.removeCallbacks(trackHintRunnable)
-                        handler.postDelayed(trackHintRunnable, TRACK_HINT_DEBOUNCE_MS)
-                    }
-                    handler.removeCallbacks(preferredTrackRunnable)
-                    handler.postDelayed(preferredTrackRunnable, TRACK_HINT_DEBOUNCE_MS)
-                    // A single frame is not enough to forgive a decode loop. Only
-                    // sustained playback resets the retry/fallback counters.
-                    handler.removeCallbacks(stablePlaybackRunnable)
-                    if (!restoreAsPaused) {
-                        handler.postDelayed(stablePlaybackRunnable, STABLE_PLAYBACK_MS)
-                    }
-                }
-                MediaPlayer.Event.ESAdded -> {
-                    // Each elementary stream (audio/subtitle) detected resets the
-                    // debounce so we evaluate once the full set is known.
-                    if (!trackHintShown) {
-                        handler.removeCallbacks(trackHintRunnable)
-                        handler.postDelayed(trackHintRunnable, TRACK_HINT_DEBOUNCE_MS)
-                    }
-                    handler.removeCallbacks(preferredTrackRunnable)
-                    handler.postDelayed(preferredTrackRunnable, TRACK_HINT_DEBOUNCE_MS)
-                    updateTrackButtons()
-                }
-                MediaPlayer.Event.Paused -> {
-                    binding.playPauseButton.setImageResource(R.drawable.ic_play)
-                    binding.playPauseButton.contentDescription = getString(R.string.detail_play)
-                    handler.removeCallbacks(hideControlsRunnable)
-                    setBuffering(false)
-                    resetStallWatch()
-                    setControlsVisible(true)
-                }
-                MediaPlayer.Event.Stopped -> {
-                    binding.playPauseButton.setImageResource(R.drawable.ic_play)
-                    binding.playPauseButton.contentDescription = getString(R.string.detail_play)
-                    setBuffering(false)
-                }
-                MediaPlayer.Event.EndReached -> {
-                    if (completionHandled) return@setEventListener
-                    completionHandled = true
-                    val completionToken = ++completionGeneration
-                    playbackStarted = false
-                    playbackEnded = true
-                    handler.removeCallbacks(startupTimeoutRunnable)
-                    handler.removeCallbacks(progressRunnable)
-                    handler.removeCallbacks(saveRunnable)
-                    binding.playPauseButton.setImageResource(R.drawable.ic_restart)
-                    binding.playPauseButton.contentDescription = getString(R.string.resume_from_start)
-                    setBuffering(false)
-                    setControlsVisible(true)
-                    binding.playPauseButton.requestFocus()
-                    onPlaybackFinished(completionToken)
-                }
-                MediaPlayer.Event.EncounteredError -> {
-                    handler.post { handlePlaybackError() }
-                }
-                MediaPlayer.Event.LengthChanged -> updateDuration()
-            }
-        }
-
         libVlc = vlc
         mediaPlayer = mp
         videoLayout = layout
+        nativeOwner = NativePlayerOwner(
+            generation = nativeOwnerGeneration.incrementAndGet(),
+            libVlc = vlc,
+            mediaPlayer = mp,
+            videoLayout = layout,
+        )
         updateTrackButtons()
+    }
+
+    /** Invalidate every callback captured by the previous native media session. */
+    private fun invalidateEventSession() {
+        eventSession.incrementAndGet()
+    }
+
+    /**
+     * libVLC may invoke listeners on a native thread and may deliver queued
+     * callbacks after stop()/setMedia(). Snapshot the event payload, marshal it
+     * to main, then re-check both player identity and the monotonically increasing
+     * media session before touching any Activity state or View.
+     */
+    private fun installEventListener(mp: MediaPlayer, session: Long) {
+        mp.setEventListener { event ->
+            val eventType = event.type
+            val bufferingPercent =
+                if (eventType == MediaPlayer.Event.Buffering) event.buffering else 0f
+
+            // These are read-only fast-path checks. The authoritative checks run
+            // again on main after any queued stop/setMedia callback can overtake us.
+            if (mediaPlayer !== mp || eventSession.get() != session) {
+                return@setEventListener
+            }
+            if (suppressDuringNativeCommand(eventType)) {
+                return@setEventListener
+            }
+
+            handler.post {
+                dispatchPlayerEventOnMain(
+                    mp = mp,
+                    session = session,
+                    eventType = eventType,
+                    bufferingPercent = bufferingPercent,
+                )
+            }
+        }
+    }
+
+    private fun dispatchPlayerEventOnMain(
+        mp: MediaPlayer,
+        session: Long,
+        eventType: Int,
+        bufferingPercent: Float,
+    ) {
+        if (mediaPlayer !== mp || eventSession.get() != session) return
+        if (suppressDuringNativeCommand(eventType)) return
+        val owner = nativeOwner ?: return
+        if (owner.mediaPlayer !== mp || owner.abandoned.get()) return
+        if (owner.activeOperation.get() != null) {
+            // Playing/Vout can be emitted synchronously from mp.play(). Defer the
+            // event rather than reading/seeking the same handle while its bounded
+            // owner command is still unwinding.
+            handler.postDelayed(
+                {
+                    dispatchPlayerEventOnMain(
+                        mp = mp,
+                        session = session,
+                        eventType = eventType,
+                        bufferingPercent = bufferingPercent,
+                    )
+                },
+                NATIVE_EVENT_RETRY_MS,
+            )
+            return
+        }
+        handlePlayerEventOnMain(
+            mp = mp,
+            eventType = eventType,
+            bufferingPercent = bufferingPercent,
+        )
+    }
+
+    private fun suppressDuringNativeCommand(eventType: Int): Boolean =
+        nativeCommandsInFlight.get() > 0 &&
+            (
+                eventType == MediaPlayer.Event.Stopped ||
+                    eventType == MediaPlayer.Event.EndReached ||
+                    eventType == MediaPlayer.Event.EncounteredError
+                )
+
+    /** Called only by [installEventListener]'s validated main-thread dispatch. */
+    private fun handlePlayerEventOnMain(
+        mp: MediaPlayer,
+        eventType: Int,
+        bufferingPercent: Float,
+    ) {
+        when (eventType) {
+            MediaPlayer.Event.Buffering -> {
+                setBuffering(isVlcBuffering(bufferingPercent))
+            }
+            MediaPlayer.Event.Playing -> {
+                // AUTO's 4K software fallback stutters; return to hardware
+                // before touching this about-to-be-released player again.
+                if (maybeEscalateForUhd()) return
+                playbackStarted = true
+                playbackEnded = false
+                startTimers()
+                handler.removeCallbacks(startupTimeoutRunnable)
+                setBuffering(false)
+                if (binding.errorOverlay.visibility == View.VISIBLE) {
+                    binding.errorOverlay.visibility = View.GONE
+                    setPlayerChromeFocusable(true)
+                    setControlsVisible(true)
+                }
+                binding.playPauseButton.setImageResource(R.drawable.ic_pause)
+                binding.playPauseButton.contentDescription = getString(R.string.player_pause)
+                // Restart the idle timer once real playback begins.
+                scheduleHideControls()
+                // Apply the deferred resume seek once, now that VLC is ready.
+                if (pendingSeekMs > 0L) {
+                    val deferredPosition = pendingSeekMs
+                    mp.setTime(deferredPosition)
+                    backgroundResumePosition = deferredPosition
+                    pendingSeekMs = 0L
+                }
+                resetStallWatch(mp.time)
+                val restoreAsPaused = pauseAfterBackgroundRestore
+                if (restoreAsPaused) {
+                    pauseAfterBackgroundRestore = false
+                    mp.pause()
+                }
+                applyAspect()
+                updateDuration()
+                updateTrackButtons()
+                startSurfaceValidation()
+                scheduleUhdRechecks()
+                // VLC parses audio/subtitle tracks shortly after playback begins;
+                // schedule a debounced check to surface the hint.
+                if (!trackHintShown) {
+                    handler.removeCallbacks(trackHintRunnable)
+                    handler.postDelayed(trackHintRunnable, TRACK_HINT_DEBOUNCE_MS)
+                }
+                handler.removeCallbacks(preferredTrackRunnable)
+                handler.postDelayed(preferredTrackRunnable, TRACK_HINT_DEBOUNCE_MS)
+                // A single frame is not enough to forgive a decode loop. Only
+                // sustained playback resets the retry/fallback counters.
+                handler.removeCallbacks(stablePlaybackRunnable)
+                if (!restoreAsPaused) {
+                    handler.postDelayed(stablePlaybackRunnable, STABLE_PLAYBACK_MS)
+                }
+            }
+            MediaPlayer.Event.ESAdded -> {
+                // Each elementary stream (audio/subtitle) detected resets the
+                // debounce so we evaluate once the full set is known.
+                if (!trackHintShown) {
+                    handler.removeCallbacks(trackHintRunnable)
+                    handler.postDelayed(trackHintRunnable, TRACK_HINT_DEBOUNCE_MS)
+                }
+                handler.removeCallbacks(preferredTrackRunnable)
+                handler.postDelayed(preferredTrackRunnable, TRACK_HINT_DEBOUNCE_MS)
+                updateTrackButtons()
+                scheduleUhdRechecks()
+            }
+            MediaPlayer.Event.Paused -> {
+                binding.playPauseButton.setImageResource(R.drawable.ic_play)
+                binding.playPauseButton.contentDescription = getString(R.string.detail_play)
+                handler.removeCallbacks(hideControlsRunnable)
+                setBuffering(false)
+                resetStallWatch()
+                handler.removeCallbacks(uhdCheckRunnable)
+                resetSurfaceValidation()
+                setControlsVisible(true)
+            }
+            MediaPlayer.Event.Stopped -> {
+                binding.playPauseButton.setImageResource(R.drawable.ic_play)
+                binding.playPauseButton.contentDescription = getString(R.string.detail_play)
+                setBuffering(false)
+                handler.removeCallbacks(uhdCheckRunnable)
+                resetSurfaceValidation()
+            }
+            MediaPlayer.Event.EndReached -> {
+                if (completionHandled) return
+                completionHandled = true
+                val completionToken = ++completionGeneration
+                playbackStarted = false
+                playbackEnded = true
+                handler.removeCallbacks(startupTimeoutRunnable)
+                handler.removeCallbacks(progressRunnable)
+                handler.removeCallbacks(saveRunnable)
+                handler.removeCallbacks(uhdCheckRunnable)
+                resetSurfaceValidation()
+                binding.playPauseButton.setImageResource(R.drawable.ic_restart)
+                binding.playPauseButton.contentDescription = getString(R.string.resume_from_start)
+                setBuffering(false)
+                setControlsVisible(true)
+                binding.playPauseButton.requestFocus()
+                onPlaybackFinished(completionToken)
+            }
+            MediaPlayer.Event.EncounteredError -> handlePlaybackError()
+            MediaPlayer.Event.LengthChanged -> updateDuration()
+        }
     }
 
     private fun promptResume(positionMs: Long) {
@@ -867,6 +1291,11 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     private fun preparePlayback(positionMs: Long) {
+        // Reusing a native player must still create a distinct media-event
+        // generation. Invalidate the old listener before any preparation state
+        // changes so queued callbacks from the previous URL cannot mutate this
+        // session; the replacement listener is installed after owner reservation.
+        invalidateEventSession()
         playbackRequested = true
         playbackStarted = false
         playbackEnded = false
@@ -875,43 +1304,72 @@ class VodPlayerActivity : BaseActivity() {
         recoveryInProgress = false
         resetStallWatch(positionMs)
         handler.removeCallbacks(startupTimeoutRunnable)
+        handler.removeCallbacks(uhdCheckRunnable)
+        resetSurfaceValidation()
+        // Keep all deferred-position sources synchronized. This also clears an
+        // older, higher background value when the viewer intentionally seeks
+        // backwards or starts the next item from zero.
+        pendingSeekMs = positionMs.coerceAtLeast(0L)
+        backgroundResumePosition = pendingSeekMs
         // initPlayer may finish during onCreate, before onStart marks the screen
         // foreground. Defer opening the subscription socket until STARTED; the
         // same path also safely absorbs a delayed retry that fires while away.
         if (!foreground) {
-            backgroundResumePosition = positionMs
             resumeAfterBackground = true
             return
         }
-        val vlc = libVlc ?: return
-        val mp = mediaPlayer ?: return
-        val url = streamUrl ?: return
-        pendingSeekMs = positionMs
+        val owner = nativeOwner ?: return
+        val ownerOperation = beginOwnerOperation(owner)
+        if (ownerOperation == null) {
+            // A background stop/start or earlier native command still owns these
+            // handles. Quarantine them and continue with a completely fresh owner.
+            quarantineOwner(owner, "prepare overlapped an active native operation")
+            try {
+                buildPlayer()
+                preparePlayback(positionMs)
+            } catch (error: Throwable) {
+                PlaybackLog.log(
+                    this,
+                    "VOD",
+                    "fresh owner prepare failed: ${error.javaClass.simpleName}",
+                )
+                showTerminalError()
+            }
+            return
+        }
+        val vlc = owner.libVlc
+        val mp = owner.mediaPlayer
+        val url = streamUrl ?: run {
+            cancelOwnerOperationBeforeDispatch(ownerOperation)
+            return
+        }
         binding.errorOverlay.visibility = View.GONE
         setBuffering(true)
         updateTrackButtons()
         val cachingMs = bufferMode.networkCachingMs
-        val media = Media(vlc, android.net.Uri.parse(url)).apply {
-            // Hardware decoding unless the global Decoder setting forces software
-            // (mirrors VlcPlayerEngine on the live TV path).
-            setHWDecoderEnabled(!forceSoftware, !forceSoftware)
-            addOption(":network-caching=$cachingMs")
-            addOption(":file-caching=$cachingMs")
-            addOption(":clock-jitter=0")
-            addOption(":clock-synchro=0")
-            if (forceSoftware) addOption(":avcodec-hw=none")
-            if (!allowPassthrough) {
-                addOption(":no-spdif")
-                // Force a 5.1 -> 2.0 stereo downmix so boxes that cannot open a
-                // multichannel PCM AudioTrack still get sound.
-                addOption(":stereo-mode=1")
+        val media = try {
+            Media(vlc, android.net.Uri.parse(url)).apply {
+                // Hardware decoding unless the global Decoder setting forces software
+                // (mirrors VlcPlayerEngine on the live TV path).
+                // Prefer hardware while respecting libVLC's device/codec safety list.
+                // force=true enabled known-broken Amlogic MediaCodec paths and could
+                // leave the SurfaceView permanently green.
+                setHWDecoderEnabled(!forceSoftware, false)
+                addOption(":network-caching=$cachingMs")
+                addOption(":file-caching=$cachingMs")
+                if (forceSoftware) addOption(":avcodec-hw=none")
+                if (!allowPassthrough) {
+                    addOption(":no-spdif")
+                    // Force a 5.1 -> 2.0 stereo downmix so boxes that cannot open a
+                    // multichannel PCM AudioTrack still get sound.
+                    addOption(":stereo-mode=1")
+                }
+                addOption(":http-reconnect")
+                addOption(":http-user-agent=${AppInfo.USER_AGENT}")
             }
-            if (forceSoftware) {
-                addOption(":deinterlace=1")
-                addOption(":deinterlace-mode=bob")
-            }
-            addOption(":http-reconnect")
-            addOption(":http-user-agent=${AppInfo.USER_AGENT}")
+        } catch (error: Throwable) {
+            cancelOwnerOperationBeforeDispatch(ownerOperation)
+            throw error
         }
         // Start on the shared VLC ops thread: FIFO ordering guarantees any queued
         // teardown (the live player released when this screen opened, or the UHD
@@ -920,58 +1378,144 @@ class VodPlayerActivity : BaseActivity() {
         val operation = playbackOpsSeq.incrementAndGet()
         startupTimeoutOperation = operation
         handler.postDelayed(startupTimeoutRunnable, STARTUP_TIMEOUT_MS)
+        val nativeCommandFinished = AtomicBoolean(false)
+        fun finishNativeCommand() {
+            if (nativeCommandFinished.compareAndSet(false, true)) {
+                nativeCommandsInFlight.decrementAndGet()
+            }
+        }
         nativeCommandsInFlight.incrementAndGet()
-        VlcOps.post {
+        ownerOperation.onAbandoned.set(::finishNativeCommand)
+        // Allocate the event generation before dispatch. If lifecycle/recovery
+        // invalidates it while setEventListener() is blocked, the eventual native
+        // callback is stale even before owner identity is checked.
+        val listenerSession = eventSession.incrementAndGet()
+        VlcOps.postBounded(
+            timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
+            onTimeout = {
+                finishNativeCommand()
+                if (
+                    playbackOpsSeq.compareAndSet(operation, operation + 1L) &&
+                    foreground &&
+                    !isFinishing &&
+                    !isDestroyed
+                ) {
+                    // Never touch the timed-out handles here. The abandoned
+                    // operation owns their eventual cleanup on its retired worker.
+                    quarantineOwner(owner, "native prepare timed out")
+                    handlePlaybackError()
+                }
+            },
+        ) playbackCommand@{
+            var startFailure: Throwable? = null
             try {
-                if (playbackOpsSeq.get() != operation || !foreground) return@post
+                if (
+                    playbackOpsSeq.get() != operation ||
+                    !foreground ||
+                    owner.abandoned.get()
+                ) return@playbackCommand
+                installEventListener(mp, listenerSession)
+                if (
+                    playbackOpsSeq.get() != operation ||
+                    !foreground ||
+                    owner.abandoned.get()
+                ) return@playbackCommand
                 mp.stop()
-                if (playbackOpsSeq.get() != operation || !foreground) return@post
+                if (
+                    playbackOpsSeq.get() != operation ||
+                    !foreground ||
+                    owner.abandoned.get()
+                ) return@playbackCommand
                 mp.media = media
                 mp.play()
-            } catch (_: Throwable) {
-                // VlcOps also protects its worker thread, but this local catch is
-                // needed to leave the spinner and enter the normal retry/fallback
-                // ladder when a native stop/setMedia/play call itself throws.
+            } catch (error: Throwable) {
+                startFailure = error
+            } finally {
+                runCatching { media.release() }
+                finishNativeCommand()
+                ownerOperation.onAbandoned.set(null)
+                finishOwnerOperationOnWorker(ownerOperation)
+            }
+            if (startFailure != null) {
+                // All native work above has ended before main enters recovery.
                 runOnUiThread {
                     if (
                         playbackOpsSeq.get() == operation &&
+                        nativeOwner === owner &&
+                        !owner.abandoned.get() &&
                         foreground &&
                         !isFinishing &&
                         !isDestroyed
                     ) {
+                        PlaybackLog.log(
+                            this,
+                            "VOD",
+                            "native prepare failed: " +
+                                startFailure?.javaClass?.simpleName,
+                        )
                         handlePlaybackError()
                     }
                 }
-            } finally {
-                nativeCommandsInFlight.decrementAndGet()
-                media.release()
             }
         }
-        startTimers()
     }
 
     /**
      * Recover an on-demand failure without leaving the viewer on a black screen.
-     * One same-path retry handles a transient CDN/network drop. If the decoder is
-     * AUTO and VLC hardware still fails, one software rebuild handles a genuine
-     * codec/MediaCodec problem. Explicit Hardware/Software choices are respected.
+     * Ordinary source/network failures retry the configured path before AUTO's
+     * normal fallback. A sampled green/blank frame or sustained freeze is stronger
+     * decoder evidence, so Hardware/Software are treated as preferences and the
+     * opposite decoder gets one bounded rescue attempt. The rescue budget is not
+     * reset by a Playing event, preventing hardware/software ping-pong.
      */
-    private fun handlePlaybackError() {
+    private fun handlePlaybackError(
+        evidence: RecoveryEvidence = RecoveryEvidence.GENERIC,
+    ) {
         if (!foreground || isFinishing || isDestroyed || recoveryInProgress) return
+        val errorOwner = nativeOwner
+        val ownerBusy = errorOwner?.activeOperation?.get() != null
+        val resumeAt =
+            if (ownerBusy) bestResumePosition(null)
+            else bestResumePosition(errorOwner?.mediaPlayer?.time)
+        invalidateEventSession()
+        errorOwner?.let { owner ->
+            if (owner.activeOperation.get() != null || owner.abandoned.get()) {
+                quarantineOwner(owner, "playback error during active native operation")
+            }
+        }
         recoveryInProgress = true
         handler.removeCallbacks(stablePlaybackRunnable)
         handler.removeCallbacks(startupTimeoutRunnable)
+        handler.removeCallbacks(uhdCheckRunnable)
+        resetSurfaceValidation()
         playbackStarted = false
         setBuffering(false)
-        val resumeAt = (mediaPlayer?.time ?: pendingSeekMs).coerceAtLeast(0L)
         PlaybackLog.log(
             this,
             "VOD",
             "playback error attempt=$playbackErrorAttempts " +
-                "decoder=$decoderMode software=$forceSoftware",
+                "decoder=$decoderMode software=$forceSoftware evidence=$evidence",
         )
 
         when {
+            evidence == RecoveryEvidence.CONFIRMED_VIDEO_FAILURE &&
+                !crossDecoderRescueAttempted -> {
+                crossDecoderRescueAttempted = true
+                playbackErrorAttempts = 0
+                val rescueWithSoftware = !forceSoftware
+                if (rescueWithSoftware) softwareFallbackAttempted = true
+                PlaybackLog.log(
+                    this,
+                    "VOD",
+                    "confirmed video failure -> one-shot " +
+                        if (rescueWithSoftware) {
+                            "software decoder rescue"
+                        } else {
+                            "hardware decoder rescue"
+                        },
+                )
+                rebuildPlayer(resumeAt = resumeAt, useSoftware = rescueWithSoftware)
+            }
             playbackErrorAttempts == 0 -> {
                 playbackErrorAttempts++
                 setBuffering(true)
@@ -1000,82 +1544,122 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     /**
-     * If we're software-decoding a UHD/4K stream (which no TV-box CPU can handle at
-     * 80–100 Mbps), rebuild the player on the hardware decoder and resume from the
-     * current position. Returns true when an escalation was kicked off so the caller
-     * stops touching the about-to-be-released player. Mirrors VlcPlayerEngine's
-     * software→hardware UHD escalation on the live TV path.
+     * If AUTO has fallen back to software for a UHD/4K stream (which no TV-box CPU
+     * can handle at 80–100 Mbps), rebuild on hardware and resume from the current
+     * position. Returns true when an escalation was kicked off so the caller stops
+     * touching the about-to-be-released player. Explicit SOFTWARE remains software.
      */
     private fun maybeEscalateForUhd(): Boolean {
         // Explicit "Software only" must remain software. AUTO may recover UHD by
         // moving back to hardware, where 4K decoding is realistically possible.
         if (decoderMode != DecoderMode.AUTO || uhdEscalated || !forceSoftware) return false
-        val track = mediaPlayer?.currentVideoTrack ?: return false
+        val track = currentIdlePlayer()?.currentVideoTrack ?: return false
         if (track.height < UHD_MIN_HEIGHT && track.width < UHD_MIN_WIDTH) return false
         uhdEscalated = true
-        val resumeAt = (mediaPlayer?.time ?: 0L).coerceAtLeast(0L)
+        handler.removeCallbacks(uhdCheckRunnable)
+        // Playing arrives before the initial resume seek is applied. Preserve that
+        // deferred position when the software player is immediately replaced.
+        val resumeAt = bestResumePosition()
         handler.post { escalateToHardware(resumeAt) }
         return true
     }
 
-    /** Tears down the software player and rebuilds it on hardware, resuming at [resumeAt]. */
+    /** Returns AUTO's software fallback to hardware, resuming at [resumeAt]. */
     private fun escalateToHardware(resumeAt: Long) {
+        if (!foreground || isFinishing || isDestroyed) {
+            uhdEscalated = false
+            return
+        }
         rebuildPlayer(resumeAt = resumeAt, useSoftware = false)
     }
 
     /**
      * Rebuild libVLC sequentially on the shared native-ops thread. This is used by
-     * decoder fallback/escalation and preserves the one-subscription-connection
-     * contract: old stop/release completes before the new Media starts.
+     * AUTO decoder fallback/escalation and preserves the one-subscription-
+     * connection contract: old stop/release completes before the new Media starts.
      */
     private fun rebuildPlayer(resumeAt: Long, useSoftware: Boolean) {
         handler.removeCallbacks(stablePlaybackRunnable)
         handler.removeCallbacks(startupTimeoutRunnable)
+        handler.removeCallbacks(uhdCheckRunnable)
+        resetSurfaceValidation()
         binding.errorOverlay.visibility = View.GONE
         setBuffering(true)
         playbackRequested = true
         playbackStarted = false
         backgroundResumePosition = resumeAt
         pendingSeekMs = resumeAt
-        val mp = mediaPlayer
-        val vlc = libVlc
-        mp?.setEventListener(null)
-        mp?.detachViews()
-        mediaPlayer = null
-        libVlc = null
-        videoLayout?.let { binding.videoContainer.removeView(it) }
-        videoLayout = null
         forceSoftware = useSoftware
         val operation = playbackOpsSeq.incrementAndGet()
-        nativeCommandsInFlight.incrementAndGet()
-        VlcOps.post {
+        fun continueWithFreshOwner() {
+            if (
+                isDestroyed ||
+                isFinishing ||
+                !foreground ||
+                playbackOpsSeq.get() != operation
+            ) {
+                return
+            }
             try {
-                // Native teardown must be best-effort per call. A provider/socket
-                // can make stop() throw; release still has to run.
-                runCatching { mp?.stop() }
-                runCatching { mp?.release() }
-                runCatching { vlc?.release() }
-            } finally {
+                buildPlayer()
+                preparePlayback(resumeAt)
+            } catch (error: Throwable) {
+                PlaybackLog.log(
+                    this,
+                    "VOD",
+                    "player rebuild failed: ${error.javaClass.simpleName}",
+                )
+                showTerminalError()
+            }
+        }
+
+        val retiringOwner = nativeOwner
+        if (retiringOwner == null) {
+            continueWithFreshOwner()
+            return
+        }
+        val ownerOperation = retireIdleOwnerOnMain(retiringOwner)
+        if (ownerOperation == null) {
+            // Another worker still owns these handles. It will clean them when it
+            // returns; recovery proceeds with a new owner immediately.
+            quarantineOwner(retiringOwner, "rebuild overlapped an active operation")
+            continueWithFreshOwner()
+            return
+        }
+
+        val nativeCleanupFinished = AtomicBoolean(false)
+        fun finishNativeCleanup() {
+            if (nativeCleanupFinished.compareAndSet(false, true)) {
                 nativeCommandsInFlight.decrementAndGet()
             }
-            runOnUiThread {
+        }
+        nativeCommandsInFlight.incrementAndGet()
+        ownerOperation.onAbandoned.set(::finishNativeCleanup)
+        VlcOps.postBounded(
+            timeoutMs = NATIVE_RELEASE_TIMEOUT_MS,
+            onTimeout = {
+                finishNativeCleanup()
                 if (
-                    isDestroyed ||
-                    isFinishing ||
-                    !foreground ||
-                    playbackOpsSeq.get() != operation
-                ) return@runOnUiThread
-                try {
-                    buildPlayer()
-                    preparePlayback(resumeAt)
-                } catch (error: Throwable) {
-                    PlaybackLog.log(
-                        this,
-                        "VOD",
-                        "player rebuild failed: ${error.javaClass.simpleName}",
-                    )
-                    showTerminalError()
+                    playbackOpsSeq.compareAndSet(operation, operation + 1L) &&
+                    foreground &&
+                    !isFinishing &&
+                    !isDestroyed
+                ) {
+                    quarantineOwner(retiringOwner, "native rebuild cleanup timed out")
+                    recoveryInProgress = false
+                    handlePlaybackError()
                 }
+            },
+        ) {
+            try {
+                cleanupOwnerOnCurrentWorker(retiringOwner)
+            } finally {
+                finishNativeCleanup()
+                ownerOperation.onAbandoned.set(null)
+                finishOwnerOperationOnWorker(ownerOperation)
+            }
+            runOnUiThread {
+                continueWithFreshOwner()
             }
         }
     }
@@ -1166,9 +1750,11 @@ class VodPlayerActivity : BaseActivity() {
         // Fresh playback session: re-evaluate the track hint and never resume.
         trackHintShown = false
         autoResume = false
+        lastKnownDurationMs = 0L
         uhdEscalated = false
         playbackErrorAttempts = 0
         softwareFallbackAttempted = false
+        crossDecoderRescueAttempted = false
         recoveryInProgress = false
         val configuredSoftware = decoderMode == DecoderMode.SOFTWARE
         forceSoftware = configuredSoftware
@@ -1190,7 +1776,7 @@ class VodPlayerActivity : BaseActivity() {
     // ---- Controls -------------------------------------------------------
 
     private fun togglePlayPause() {
-        val mp = mediaPlayer ?: return
+        val mp = currentIdlePlayer() ?: return
         when {
             playbackEnded -> {
                 playbackEnded = false
@@ -1198,6 +1784,7 @@ class VodPlayerActivity : BaseActivity() {
                 completionGeneration++
                 playbackErrorAttempts = 0
                 softwareFallbackAttempted = false
+                crossDecoderRescueAttempted = false
                 recoveryInProgress = false
                 rebuildPlayer(
                     resumeAt = 0L,
@@ -1210,7 +1797,7 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     private fun seekBy(deltaMs: Long) {
-        val mp = mediaPlayer ?: return
+        val mp = currentIdlePlayer() ?: return
         val length = mp.length.coerceAtLeast(0L)
         if (length <= 0L) return
         val target = (mp.time.coerceAtLeast(0L) + deltaMs).coerceIn(0L, length)
@@ -1218,6 +1805,7 @@ class VodPlayerActivity : BaseActivity() {
         completionHandled = false
         completionGeneration++
         pendingSeekMs = target
+        backgroundResumePosition = target
         mp.setTime(target)
         resetStallWatch(target)
         binding.seekBar.progress = target.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
@@ -1239,7 +1827,7 @@ class VodPlayerActivity : BaseActivity() {
      * ZOOM crops to fill by scaling up using the current video dimensions.
      */
     private fun applyAspect() {
-        val mp = mediaPlayer ?: return
+        val mp = currentIdlePlayer() ?: return
         when (aspect) {
             AspectRatio.ORIGINAL -> {
                 mp.setAspectRatio(null)
@@ -1268,7 +1856,7 @@ class VodPlayerActivity : BaseActivity() {
 
     /** Scale factor that crops the video to fill the container, keeping its AR. */
     private fun zoomScale(): Float {
-        val mp = mediaPlayer ?: return 0f
+        val mp = currentIdlePlayer() ?: return 0f
         val track = mp.currentVideoTrack ?: return 0f
         val vw = track.width
         val vh = track.height
@@ -1284,7 +1872,7 @@ class VodPlayerActivity : BaseActivity() {
     // ---- Track selection ------------------------------------------------
 
     private fun showTrackMenu(isAudio: Boolean) {
-        val mp = mediaPlayer ?: return
+        val mp = currentIdlePlayer() ?: return
         val tracks = if (isAudio) mp.audioTracks else mp.spuTracks
 
         val labels = mutableListOf<String>()
@@ -1347,7 +1935,7 @@ class VodPlayerActivity : BaseActivity() {
      * are stream-local and change between files.
      */
     private fun applyPreferredTracks() {
-        val mp = mediaPlayer ?: return
+        val mp = currentIdlePlayer() ?: return
         preferredAudioTrack
             ?.takeIf { it.isNotBlank() && it != TRACK_DISABLED }
             ?.let { token ->
@@ -1374,7 +1962,7 @@ class VodPlayerActivity : BaseActivity() {
      */
     private fun showTrackHintIfAvailable() {
         if (trackHintShown) return
-        val mp = mediaPlayer ?: return
+        val mp = currentIdlePlayer() ?: return
         // Count selectable tracks, ignoring VLC's own "Disable" entry (id -1).
         val audioCount = mp.audioTracks?.count { it.id != -1 } ?: 0
         val subtitleCount = mp.spuTracks?.count { it.id != -1 } ?: 0
@@ -1437,16 +2025,17 @@ class VodPlayerActivity : BaseActivity() {
     // ---- Progress / resume ---------------------------------------------
 
     private fun updateDuration() {
-        val mp = mediaPlayer ?: return
+        val mp = currentIdlePlayer() ?: return
         val duration = mp.length.coerceAtLeast(0L)
         if (duration <= 0L) return
+        lastKnownDurationMs = duration
         val seekMax = duration.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         if (binding.seekBar.max != seekMax) binding.seekBar.max = seekMax
         binding.totalTime.text = formatTime(duration)
     }
 
     private fun updateProgress() {
-        val mp = mediaPlayer ?: return
+        val mp = currentIdlePlayer() ?: return
         if (userSeeking) return
         if (binding.seekBar.max <= 0) updateDuration()
         val position = mp.time.coerceAtLeast(0L)
@@ -1456,11 +2045,15 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     private fun persistResume(durable: Boolean = false) {
-        val mp = mediaPlayer ?: return
         val meta = resumeMeta ?: return
-        val position = mp.time
-        val duration = mp.length.coerceAtLeast(0L)
+        val mp = currentIdlePlayer()
+        val position = bestResumePosition(mp?.time)
+        val duration = maxOf(
+            mp?.length ?: 0L,
+            lastKnownDurationMs,
+        ).coerceAtLeast(0L)
         if (duration <= 0L) return
+        lastKnownDurationMs = duration
         // Exiting can destroy lifecycleScope before Room commits. A final
         // lifecycle save therefore uses the app scope; periodic saves remain
         // tied to this screen.
@@ -1491,7 +2084,7 @@ class VodPlayerActivity : BaseActivity() {
         if (resumeAfterBackground && !resumeChoicePending) {
             resumeAfterBackground = false
             try {
-                if (mediaPlayer == null) buildPlayer()
+                if (nativeOwner == null) buildPlayer()
                 preparePlayback(backgroundResumePosition)
             } catch (error: Throwable) {
                 PlaybackLog.log(this, "VOD", "foreground restore failed: ${error.javaClass.simpleName}")
@@ -1504,6 +2097,23 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     override fun onStop() {
+        val stoppingOwner = nativeOwner
+        val ownerBusy = stoppingOwner?.activeOperation?.get() != null
+        backgroundResumePosition =
+            if (ownerBusy) bestResumePosition(null)
+            else bestResumePosition(stoppingOwner?.mediaPlayer?.time)
+        val wasPlaying =
+            if (ownerBusy) {
+                playbackStarted || binding.bufferingOverlay.visibility == View.VISIBLE
+            } else {
+                stoppingOwner?.mediaPlayer?.isPlaying == true ||
+                    binding.bufferingOverlay.visibility == View.VISIBLE
+            }
+        if (ownerBusy && stoppingOwner != null) {
+            quarantineOwner(stoppingOwner, "backgrounded during native operation")
+        } else {
+            invalidateEventSession()
+        }
         if (!playbackEnded) persistResume(durable = true)
         handler.removeCallbacks(progressRunnable)
         handler.removeCallbacks(saveRunnable)
@@ -1513,19 +2123,14 @@ class VodPlayerActivity : BaseActivity() {
         handler.removeCallbacks(trackHintRunnable)
         handler.removeCallbacks(hideTrackHintRunnable)
         handler.removeCallbacks(preferredTrackRunnable)
+        handler.removeCallbacks(uhdCheckRunnable)
+        resetSurfaceValidation()
         if (binding.trackHintBanner.visibility == View.VISIBLE) {
             trackHintShown = false
             binding.trackHintBanner.animate().cancel()
             binding.trackHintBanner.visibility = View.GONE
         }
         foreground = false
-        val mp = mediaPlayer
-        backgroundResumePosition = if (mp != null) {
-            mp.time.coerceAtLeast(0L)
-        } else {
-            maxOf(backgroundResumePosition, pendingSeekMs).coerceAtLeast(0L)
-        }
-        val wasPlaying = mp?.isPlaying == true || binding.bufferingOverlay.visibility == View.VISIBLE
         // A built MediaPlayer does not imply playback was requested: while the
         // resume prompt is open there is deliberately no socket to restore.
         val terminalErrorVisible = binding.errorOverlay.visibility == View.VISIBLE
@@ -1538,13 +2143,75 @@ class VodPlayerActivity : BaseActivity() {
         // Close the subscription connection in the background. Incrementing the
         // sequence also cancels a queued prepare that has not opened yet.
         playbackOpsSeq.incrementAndGet()
-        if (mp != null && playbackRequested && !resumeChoicePending && !playbackEnded) {
-            nativeCommandsInFlight.incrementAndGet()
-            VlcOps.post {
-                try {
-                    runCatching { mp.stop() }
-                } finally {
+        if (
+            !ownerBusy &&
+            stoppingOwner != null &&
+            playbackRequested &&
+            !resumeChoicePending &&
+            !playbackEnded
+        ) {
+            val ownerOperation = beginOwnerOperation(stoppingOwner)
+            if (ownerOperation == null) {
+                quarantineOwner(stoppingOwner, "background stop could not claim owner")
+                NowPlaying.clear(this)
+                super.onStop()
+                return
+            }
+            val nativeStopFinished = AtomicBoolean(false)
+            fun finishNativeStop() {
+                if (nativeStopFinished.compareAndSet(false, true)) {
                     nativeCommandsInFlight.decrementAndGet()
+                }
+            }
+            nativeCommandsInFlight.incrementAndGet()
+            ownerOperation.onAbandoned.set(::finishNativeStop)
+            VlcOps.postBounded(
+                timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
+                onTimeout = {
+                    finishNativeStop()
+                    quarantineOwner(stoppingOwner, "background native stop timed out")
+                },
+            ) {
+                var stopFailure: Throwable? = null
+                try {
+                    val failures = VlcOps.runAllBestEffort(
+                        { stoppingOwner.mediaPlayer.setEventListener(null) },
+                        { stoppingOwner.mediaPlayer.stop() },
+                    )
+                    stopFailure = failures.firstOrNull()
+                    failures.forEach { failure ->
+                        PlaybackLog.log(
+                            this,
+                            "VOD",
+                            "background stop cleanup failed: " +
+                                failure.javaClass.simpleName,
+                        )
+                    }
+                } finally {
+                    finishNativeStop()
+                    ownerOperation.onAbandoned.set(null)
+                    finishOwnerOperationOnWorker(ownerOperation)
+                }
+                if (stopFailure != null) {
+                    handler.post {
+                        if (nativeOwner === stoppingOwner) {
+                            quarantineOwner(stoppingOwner, "background native stop failed")
+                            if (foreground && !isFinishing && !isDestroyed) {
+                                try {
+                                    buildPlayer()
+                                    preparePlayback(backgroundResumePosition)
+                                } catch (error: Throwable) {
+                                    PlaybackLog.log(
+                                        this,
+                                        "VOD",
+                                        "stop-failure restore failed: " +
+                                            error.javaClass.simpleName,
+                                    )
+                                    showTerminalError()
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1559,24 +2226,32 @@ class VodPlayerActivity : BaseActivity() {
         debugBinder?.release()
         sleepTimer.release()
         castController.detach()
+        resetSurfaceValidation()
+        invalidateEventSession()
         handler.removeCallbacksAndMessages(null)
         foreground = false
         playbackOpsSeq.incrementAndGet()
-        // ANR fix: stop()/release() block on a stalled network — backing out of a
-        // stuck VOD must not freeze the UI. Events + views are cut on main, the
-        // blocking native teardown runs on the shared VLC ops thread.
-        val mp = mediaPlayer
-        val vlc = libVlc
-        mp?.setEventListener(null)
-        mp?.detachViews()
-        mediaPlayer = null
-        libVlc = null
-        videoLayout = null
-        if (mp != null || vlc != null) {
-            VlcOps.post {
-                runCatching { mp?.stop() }
-                runCatching { mp?.release() }
-                runCatching { vlc?.release() }
+        val destroyingOwner = nativeOwner
+        if (destroyingOwner != null) {
+            val ownerOperation = retireIdleOwnerOnMain(destroyingOwner)
+            if (ownerOperation == null) {
+                // An earlier timed/stopping operation owns these handles. Never
+                // enqueue a release for them on the replacement worker.
+                quarantineOwner(destroyingOwner, "destroyed during native operation")
+                super.onDestroy()
+                return
+            }
+            VlcOps.postBounded(
+                timeoutMs = NATIVE_RELEASE_TIMEOUT_MS,
+                onTimeout = {
+                    quarantineOwner(destroyingOwner, "destroy native release timed out")
+                },
+            ) {
+                try {
+                    cleanupOwnerOnCurrentWorker(destroyingOwner)
+                } finally {
+                    finishOwnerOperationOnWorker(ownerOperation)
+                }
             }
         }
         super.onDestroy()

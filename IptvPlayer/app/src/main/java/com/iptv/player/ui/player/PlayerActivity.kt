@@ -296,6 +296,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
                         decoderMode = playback.decoder,
                         allowPassthrough = allowPassthrough,
                         bufferMode = bufferMode,
+                        expectsVideo = !viewModel.radioMode,
                         callback = this@PlayerActivity
                     )
                     startChannel(channel)

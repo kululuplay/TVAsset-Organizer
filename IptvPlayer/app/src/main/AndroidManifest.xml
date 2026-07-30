@@ -26,10 +26,9 @@
         android:name="android.software.leanback"
         android:required="false" />
 
-    <!-- Arbitrary user-supplied IPTV portals commonly support HTTP only.
-         The network-security config still forces every app-owned/API host
-         to TLS; credentials at rest are encrypted and diagnostics redact
-         URL credentials. -->
+    <!-- Arbitrary user-supplied IPTV portals, redirects, CDN hosts and IP
+         endpoints commonly support HTTP only. App-owned endpoints remain HTTPS
+         URLs; credentials at rest are encrypted and diagnostics redact URLs. -->
     <application
         android:name=".IptvApp"
         android:allowBackup="false"
@@ -43,7 +42,7 @@
         android:theme="@style/Theme.IptvPlayer"
         android:largeHeap="true"
         android:networkSecurityConfig="@xml/network_security_config"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="true">
 
         <!-- Launcher: branded splash, routes onward. -->
         <activity

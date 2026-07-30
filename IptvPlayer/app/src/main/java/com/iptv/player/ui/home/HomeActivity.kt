@@ -1818,6 +1818,7 @@ class HomeActivity : BaseActivity() {
                 decoderMode = playback.decoder,
                 allowPassthrough = passthrough,
                 bufferMode = buffer,
+                expectsVideo = !radioMode,
                 callback = buildPreviewCallback()
             )
         }

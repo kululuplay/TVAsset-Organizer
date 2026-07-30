@@ -23,6 +23,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 object ServiceLocator {
@@ -120,6 +121,19 @@ object ServiceLocator {
                     chain.proceed(request)
                 }
                 .addInterceptor(logging)
+                // Network interceptors run for each request sent on the wire,
+                // including redirect follow-ups. Never expose the app-owned ingest
+                // key over cleartext HTTP while still allowing arbitrary provider
+                // and IPTV requests to use HTTP through this shared client.
+                .addNetworkInterceptor { chain ->
+                    val request = chain.request()
+                    if (request.url.scheme == "http" &&
+                        request.header("X-Kululu-Key") != null
+                    ) {
+                        throw IOException("Refusing to send X-Kululu-Key over cleartext HTTP")
+                    }
+                    chain.proceed(request)
+                }
                 .build()
 
             val retrofitBuilder = Retrofit.Builder()

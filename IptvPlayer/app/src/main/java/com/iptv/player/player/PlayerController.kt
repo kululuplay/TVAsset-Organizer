@@ -5,7 +5,7 @@
  *
  * AUTO + automatic decoder is reason-aware:
  *   audio/source failure: EXO -> VLC_HW -> VLC_SW
- *   invalid video/decode: EXO/VLC_HW -> VLC_SW
+ *   invalid video/decode: EXO -> VLC_HW -> VLC_SW
  *
  * Manual choices remain the preferred path for ordinary errors. A confirmed
  * green/frozen/unsupported decode may use one bounded compatibility fallback so
@@ -38,6 +38,10 @@ class PlayerController(
     private val decoderMode: DecoderMode = DecoderMode.AUTO,
     private val allowPassthrough: Boolean = false,
     private val bufferMode: BufferMode = BufferMode.NORMAL,
+    // Live TV must not be considered healthy merely because audio/cache reached
+    // READY. A verified video frame is the readiness boundary. Radio has no video
+    // frame, so it deliberately confirms playback from onPlaying instead.
+    private val expectsVideo: Boolean = true,
     // Live TV gets the same-channel auto-reconnect loop (a dropped/ended live
     // stream re-opens itself); set false for any non-live reuse so a stream that
     // legitimately ends is not endlessly re-opened.
@@ -85,9 +89,14 @@ class PlayerController(
         // the reissued play() resets the engine clock toward 0, which the old
         // baseline would read as "no progress" and false-trigger a reconnect.
         cancelWatchdog()
+        videoRebindPending = true
         eng.detachVideo()
         mainHandler.postDelayed({
-            if (generation != startGeneration || eng !== engine) return@postDelayed
+            if (generation != startGeneration || eng !== engine) {
+                if (generation == startGeneration) videoRebindPending = false
+                return@postDelayed
+            }
+            videoRebindPending = false
             eng.attachVideo(newContainer)
             // reset=true: hand-off needs a deterministic decoder/renderer reset
             // onto the re-attached surface (bare re-add can stall video).
@@ -132,6 +141,7 @@ class PlayerController(
     private var currentUrl: String? = null
     private var stage = Stage.EXO
     private val triedStages = mutableSetOf<Stage>()
+    private var videoRebindPending = false
     // Bumped on every (re)start so a delayed engine creation that has been
     // superseded becomes a no-op. Guards the SurfaceView-swap handoff gap.
     private var startGeneration = 0
@@ -263,6 +273,14 @@ class PlayerController(
     fun play(url: String, routeKey: String? = null) {
         suspended = false
         recoveryNeededOnResume = false
+        // A zap can arrive during preview -> fullscreen's delayed surface move.
+        // The callback is about to be cleared, so first finish the host move to
+        // the controller's already-updated container. Otherwise playback starts
+        // on a parentless or no-longer-visible surface.
+        if (videoRebindPending) {
+            videoRebindPending = false
+            engine?.attachVideo(container)
+        }
         // Cancel any pending retry from a previous stream so zapping is clean.
         mainHandler.removeCallbacksAndMessages(null)
         // A new channel cancels any in-flight reconnect so it can't fire against
@@ -298,11 +316,11 @@ class PlayerController(
 
         // Fast zap: when the next stream would start on the very same stage the
         // current engine is already running, keep that engine alive and just swap
-        // the stream on it. This skips the full release + re-create of a fresh
-        // LibVLC/ExoPlayer instance AND the ENGINE_SWAP_DELAY_MS surface-handoff
-        // guard. The SurfaceView is retained (no teardown), so it sidesteps the
-        // swap-gap green frame — but the decoder is still cleanly reconfigured for
-        // the new stream (reset below) so a resolution change can't freeze it.
+        // the stream on it. This skips the full engine/LibVLC/ExoPlayer rebuild and
+        // the ENGINE_SWAP_DELAY_MS surface-handoff guard. The engine-owned layout
+        // is retained; VLC may replace only its native MediaPlayer to isolate stale
+        // events. The decoder is still cleanly reconfigured for the new stream
+        // (reset below) so a resolution change cannot freeze it.
         // Only the steady state qualifies: if the current stream had already
         // fallen back to a different stage, drop through to a clean restart so the
         // new channel still gets the full hardware-first fallback ladder.
@@ -321,9 +339,9 @@ class PlayerController(
             // the new size never renders and the picture freezes on the differing
             // channel. A clean stop()+prepare on the SAME engine rebuilds the codec
             // for the new size WITHOUT recreating the SurfaceView (no Amlogic green).
-            // Still far cheaper than a full engine release+recreate: no new player
-            // instance, no ENGINE_SWAP surface-handoff gap. (libVLC already rebuilds
-            // a fresh Media + stop()s every play(), so reset is a no-op there.)
+            // Still far cheaper than a full engine release+recreate: no new
+            // LibVLC/layout and no ENGINE_SWAP surface-handoff gap. (VLC creates a
+            // fresh native MediaPlayer/Media per channel, so reset is a no-op there.)
             PlaybackLog.log(context, "Controller", "fast-zap reuse stage=$initial reset")
             reusable.play(url, reset = true)
             // The reused engine swaps in a fresh Media on a new socket, so cover the
@@ -358,9 +376,12 @@ class PlayerController(
     private fun rememberedStage(): Stage? {
         if (memoryIgnoredThisPlay || !routeMemoryEligible) return null
         val name = PlaybackRouteMemory.bestStage(currentRouteKey) ?: return null
-        val s = runCatching { Stage.valueOf(name) }.getOrNull() ?: return null
-        if (mode == PlayerMode.VLC && s == Stage.EXO) return null
-        return s
+        val remembered = runCatching { Stage.valueOf(name) }.getOrNull() ?: return null
+        // A last-resort Exo rescue may save the current VLC-preferred session,
+        // but the next channel visit must still begin on the engine the user
+        // explicitly selected.
+        if (mode == PlayerMode.VLC && remembered == Stage.EXO) return null
+        return remembered
     }
 
     private fun startStage(target: Stage) {
@@ -389,6 +410,7 @@ class PlayerController(
     }
 
     private fun startEngine(useVlc: Boolean, forceSoftware: Boolean) {
+        videoRebindPending = false
         // True when we are SWAPPING engines (fallback/stage change), as opposed to
         // the very first start where the container is already empty.
         val swapping = engine != null
@@ -401,23 +423,54 @@ class PlayerController(
 
         val create = Runnable {
             if (generation != startGeneration) return@Runnable
-            val newEngine: PlayerEngine =
-                if (useVlc) VlcPlayerEngine(context, forceSoftware, allowPassthrough, bufferMode.networkCachingMs)
-                else ExoPlayerEngine(
-                    context = context,
-                    allowPassthrough = allowPassthrough,
-                    bufferMode = bufferMode,
+            var candidate: PlayerEngine? = null
+            try {
+                val newEngine: PlayerEngine =
+                    if (useVlc) {
+                        VlcPlayerEngine(
+                            context,
+                            forceSoftware,
+                            allowPassthrough,
+                            bufferMode.networkCachingMs,
+                        )
+                    } else {
+                        ExoPlayerEngine(
+                            context = context,
+                            allowPassthrough = allowPassthrough,
+                            bufferMode = bufferMode,
+                            expectsVideo = expectsVideo,
+                        )
+                    }
+                candidate = newEngine
+                newEngine.bind(container)
+                if (generation != startGeneration) {
+                    newEngine.release()
+                    return@Runnable
+                }
+                // Capture the concrete engine instance. Native VLC callbacks can
+                // arrive after release; the identity gate in engineListener keeps
+                // them from advancing the newly-created route.
+                newEngine.setListener(engineListener(newEngine))
+                newEngine.setAudioDelayMs(audioDelayMs)
+                newEngine.setSubtitleDelayMs(subtitleDelayMs)
+                engine = newEngine
+                currentUrl?.let { newEngine.play(it) }
+            } catch (error: Throwable) {
+                if (engine === candidate) engine = null
+                runCatching { candidate?.release() }
+                PlaybackLog.log(
+                    context,
+                    "Controller",
+                    "engine init failed stage=$stage: ${error.javaClass.simpleName}",
                 )
-            newEngine.bind(container)
-            engine = newEngine
-            // Capture the concrete engine instance. Native VLC callbacks can arrive
-            // after release; without this identity gate a stale error from the old
-            // engine can incorrectly advance/reconnect the newly-created route.
-            newEngine.setListener(engineListener(newEngine))
-            // Re-apply any user delay offsets to the (new) engine.
-            newEngine.setAudioDelayMs(audioDelayMs)
-            newEngine.setSubtitleDelayMs(subtitleDelayMs)
-            currentUrl?.let { newEngine.play(it) }
+                // Keep engine construction failures inside the same bounded
+                // reason-aware ladder instead of crashing the TV UI.
+                mainHandler.post {
+                    if (generation == startGeneration && engine == null) {
+                        handleEngineFailure(Reason.STARTUP)
+                    }
+                }
+            }
         }
 
         if (swapping) {
@@ -455,7 +508,7 @@ class PlayerController(
         override fun onPlaying() = post {
             if (source !== engine || suspended) return@post
             callback.onPlaying(source.engineName)
-            onPlaybackProgress()
+            if (!expectsVideo) onPlaybackProgress()
         }
 
         override fun onVideoOutput() = post {
@@ -517,8 +570,8 @@ class PlayerController(
     }
 
     /**
-     * Called on the first confirmed playback (onPlaying / onVideoOutput) of the
-     * current stage. We mark playback confirmed and arm the stable-playback timer
+     * Called on the first confirmed playback (a verified frame for TV, onPlaying
+     * for radio) of the current stage. We mark playback confirmed and arm the stable-playback timer
      * but deliberately do NOT reset the reconnect window or the quick-decode-failure
      * counter yet: a stream that renders one frame then dies ~1.5s later (the
      * Amlogic MPEG2 hardware decoder loop) must not look "recovered", or the retry
@@ -558,14 +611,22 @@ class PlayerController(
             // radio could remember a green/no-frame stage for fourteen days.
             // Audio-only streams simply skip route memory; correctness wins over a
             // tiny startup optimisation for radio.
-            if (routeMemoryEligible && routeLearningAllowed && videoOutputConfirmed) {
+            val stageHonorsExplicitEngine =
+                mode != PlayerMode.VLC || stableStage != Stage.EXO
+            if (
+                routeMemoryEligible &&
+                routeLearningAllowed &&
+                videoOutputConfirmed &&
+                stageHonorsExplicitEngine
+            ) {
                 PlaybackRouteMemory.markStable(stableKey, stableStage.name)
             } else if (routeMemoryEligible) {
                 PlaybackLog.log(
                     context,
                     "Controller",
                     "route not learned (realVideo=$videoOutputConfirmed, " +
-                        "eligibleFailure=$routeLearningAllowed)",
+                        "eligibleFailure=$routeLearningAllowed, " +
+                        "honorsEngine=$stageHonorsExplicitEngine)",
                 )
             }
             // The remembered route (if any) is now confirmed; later drops take the
@@ -684,6 +745,25 @@ class PlayerController(
             } else {
                 reason
             }
+
+        // A single pre-playback network/source error is commonly a transient CDN
+        // or socket reset, not decoder evidence. Retry the preferred stage once
+        // before changing engine/decoder or distrusting a remembered route. The
+        // second unconfirmed error is promoted to STARTUP above and may then walk
+        // the bounded compatibility ladder.
+        if (
+            reason == Reason.ERROR &&
+            !playbackConfirmed &&
+            effectiveReason == Reason.ERROR
+        ) {
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "transient unconfirmed source error -> retry $stage once",
+            )
+            engageReconnect()
+            return
+        }
 
         // Tier 2 self-healing: a remembered route that fails BEFORE proving stable
         // is no longer trustworthy (the channel's codec changed, or the entry is
@@ -954,6 +1034,7 @@ class PlayerController(
     }
 
     private fun releaseEngine() {
+        videoRebindPending = false
         engine?.release()
         engine = null
         container.removeAllViews()
