@@ -746,6 +746,19 @@ class PlayerController(
                 reason
             }
 
+        // Quality/decode evidence is stronger than the old elapsed-time-only
+        // stable mark. If a route starts dropping frames, shows invalid output,
+        // loses audio or proves too slow after it was learned, remove it
+        // immediately so the next visit cannot start on that degraded path.
+        if (
+            effectiveReason == Reason.VIDEO ||
+            effectiveReason == Reason.DECODE ||
+            effectiveReason == Reason.AUDIO ||
+            effectiveReason == Reason.SOFTWARE_SLOW
+        ) {
+            PlaybackRouteMemory.forget(currentRouteKey, stage.name)
+        }
+
         // A single pre-playback network/source error is commonly a transient CDN
         // or socket reset, not decoder evidence. Retry the preferred stage once
         // before changing engine/decoder or distrusting a remembered route. The

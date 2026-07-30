@@ -34,7 +34,9 @@ object PlaybackRouteMemory {
     /** Bump to invalidate all stored entries if the record shape ever changes. */
     // v2 invalidates routes learned before real-frame/loss/green health checks.
     // Only this tiny cache is affected; login and Settings live in DataStore.
-    private const val SCHEMA = 2
+    // v3 invalidates routes learned before sustained dropped-frame quality was
+    // part of the definition of stable playback.
+    private const val SCHEMA = 3
 
     /** Hard cap on remembered channels; the least-recently-used is evicted past this. */
     private const val MAX_ENTRIES = 500
@@ -153,6 +155,23 @@ object PlaybackRouteMemory {
                 if (e.fail >= MAX_FAILURES) routes.remove(k)
             }
             persistAsync()
+        }
+    }
+
+    /**
+     * Immediately forget a route that was proven decode-quality-incompatible
+     * after its earlier stable window (for example periodic severe frame loss).
+     */
+    fun forget(key: String?, stage: String) {
+        val k = key ?: return
+        runCatching {
+            val removed = synchronized(lock) {
+                val e = routes[k] ?: return@synchronized false
+                if (e.stage != stage) return@synchronized false
+                routes.remove(k)
+                true
+            }
+            if (removed) persistAsync()
         }
     }
 
