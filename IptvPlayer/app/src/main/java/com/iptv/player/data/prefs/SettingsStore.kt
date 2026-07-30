@@ -24,13 +24,17 @@ import com.iptv.player.data.model.ContentSort
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlaybackSelection
+import com.iptv.player.data.model.PlaybackSelectionPolicy
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.data.model.SourceConfig
 import com.iptv.player.data.model.SourceType
 import com.iptv.player.security.SecureValueCodec
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -70,6 +74,7 @@ class SettingsStore(
         val PREF_SUBTITLE_TRACK = stringPreferencesKey("pref_subtitle_track")
         val EXPIRY_WARN_SUPPRESSED = longPreferencesKey("expiry_warn_suppressed")
         val SECURE_STORAGE_MIGRATED = booleanPreferencesKey("secure_storage_migrated_v1")
+        val PLAYBACK_PREFS_MIGRATED = booleanPreferencesKey("playback_prefs_migrated_v1")
 
         // Content Manager: per-content-type hidden categories + custom order.
         val HIDDEN_CATS_LIVE = stringSetPreferencesKey("hidden_cats_live")
@@ -125,27 +130,16 @@ class SettingsStore(
 
     // ---- Playback -------------------------------------------------------
 
-    val playbackSelection: Flow<PlaybackSelection> = context.dataStore.data.map { prefs ->
-        resolvedPlaybackSelection(prefs)
+    val playbackSelection: Flow<PlaybackSelection> = flow {
+        migratePlaybackPreferences()
+        emitAll(
+            context.dataStore.data
+                .map(::resolvedPlaybackSelection)
+                .distinctUntilChanged(),
+        )
     }
 
     val playerMode: Flow<PlayerMode> = playbackSelection.map { it.player }
-
-    suspend fun setPlayerMode(mode: PlayerMode) =
-        context.dataStore.edit { prefs ->
-            // Read the normalized value, not the raw legacy pair. Otherwise an
-            // old EXOPLAYER+SOFTWARE record is displayed as Hardware but silently
-            // turns back into Software when the user later selects AUTO/VLC.
-            val decoder = resolvedPlaybackSelection(prefs).decoder
-            prefs[Keys.PLAYER_MODE] = mode.name
-            // ExoPlayer is a MediaCodec engine and cannot honour "software only".
-            prefs[Keys.DECODER_MODE] =
-                if (mode == PlayerMode.EXOPLAYER && decoder == DecoderMode.SOFTWARE) {
-                    DecoderMode.HARDWARE.name
-                } else {
-                    decoder.name
-                }
-        }
 
     /** Decoder strategy: AUTO (hw + software fallback), HARDWARE, SOFTWARE. */
     val decoderMode: Flow<DecoderMode> = playbackSelection.map { it.decoder }
@@ -155,49 +149,49 @@ class SettingsStore(
     }
 
     /** Read player + decoder from the same DataStore revision. */
-    suspend fun getPlaybackSelection(): PlaybackSelection =
-        resolvedPlaybackSelection(context.dataStore.data.first())
-
-    suspend fun setDecoderMode(mode: DecoderMode) =
-        context.dataStore.edit { prefs ->
-            val player = PlayerMode.fromName(prefs[Keys.PLAYER_MODE])
-            prefs[Keys.DECODER_MODE] = mode.name
-            // Choosing software is an explicit request for VLC's software path.
-            if (mode == DecoderMode.SOFTWARE && player == PlayerMode.EXOPLAYER) {
-                prefs[Keys.PLAYER_MODE] = PlayerMode.VLC.name
-            }
-        }
+    suspend fun getPlaybackSelection(): PlaybackSelection {
+        migratePlaybackPreferences()
+        return resolvedPlaybackSelection(context.dataStore.data.first())
+    }
 
     /** Atomically update the two playback-routing axes (avoids transient conflicts). */
     suspend fun setPlaybackSelection(player: PlayerMode, decoder: DecoderMode) =
-        context.dataStore.edit {
-            it[Keys.PLAYER_MODE] = player.name
-            it[Keys.DECODER_MODE] =
-                if (player == PlayerMode.EXOPLAYER && decoder == DecoderMode.SOFTWARE) {
-                    DecoderMode.HARDWARE.name
-                } else {
-                    decoder.name
-                }
+        context.dataStore.edit { prefs ->
+            val selection = PlaybackSelectionPolicy.normalize(player, decoder)
+            prefs[Keys.PLAYER_MODE] = selection.player.name
+            prefs[Keys.DECODER_MODE] = selection.decoder.name
+            prefs[Keys.PLAYBACK_PREFS_MIGRATED] = true
         }
 
     /**
-     * Resolves legacy invalid pairs without exposing a contradictory UI/runtime
-     * state. New writes are normalized above; this keeps upgrades safe before the
-     * next settings edit persists the canonical pair.
+     * Persist a canonical playback pair once for installs that predate explicit
+     * playback preference versioning. Existing valid selections are kept exactly;
+     * missing/unknown values receive the current defaults, and the one historically
+     * invalid EXOPLAYER+SOFTWARE pair is normalised. No source/login key is touched.
+     *
+     * The marker makes this safe to call from every read path. Keeping migration in
+     * SettingsStore also guarantees a player cannot observe pre-migration defaults
+     * while an asynchronous app-start migration is still pending.
      */
+    private suspend fun migratePlaybackPreferences() =
+        context.dataStore.edit { prefs ->
+            if (prefs[Keys.PLAYBACK_PREFS_MIGRATED] == true) return@edit
+            val selection = PlaybackSelectionPolicy.normalize(
+                player = PlayerMode.fromName(prefs[Keys.PLAYER_MODE]),
+                decoder = DecoderMode.fromName(prefs[Keys.DECODER_MODE]),
+            )
+            prefs[Keys.PLAYER_MODE] = selection.player.name
+            prefs[Keys.DECODER_MODE] = selection.decoder.name
+            prefs[Keys.PLAYBACK_PREFS_MIGRATED] = true
+        }
+
+    /** Resolve defensively even if a future/corrupt writer bypasses the migration. */
     private fun resolvedPlaybackSelection(
         prefs: Preferences,
-    ): PlaybackSelection {
-        val player = PlayerMode.fromName(prefs[Keys.PLAYER_MODE])
-        val storedDecoder = DecoderMode.fromName(prefs[Keys.DECODER_MODE])
-        val decoder =
-            if (player == PlayerMode.EXOPLAYER && storedDecoder == DecoderMode.SOFTWARE) {
-                DecoderMode.HARDWARE
-            } else {
-                storedDecoder
-            }
-        return PlaybackSelection(player = player, decoder = decoder)
-    }
+    ): PlaybackSelection = PlaybackSelectionPolicy.normalize(
+        player = PlayerMode.fromName(prefs[Keys.PLAYER_MODE]),
+        decoder = DecoderMode.fromName(prefs[Keys.DECODER_MODE]),
+    )
 
     val streamFormat: Flow<StreamFormat> = context.dataStore.data.map {
         StreamFormat.fromName(it[Keys.LIVE_STREAM_FORMAT])

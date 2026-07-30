@@ -64,7 +64,14 @@ internal class VlcPlaybackHealth(
         val bytesDelta = positiveDelta(sample.readBytes, before.readBytes)
         val timeDelta = positiveDelta(sample.playbackTimeMs, before.playbackTimeMs)
 
-        if (displayedDelta > 0) lastDisplayedProgressAtMs = nowMs
+        val inputStillProgressing =
+            decodedDelta > 0 ||
+                bytesDelta >= MIN_INPUT_PROGRESS_BYTES ||
+                timeDelta >= MIN_TIME_PROGRESS_MS
+
+        if (displayedDelta > 0) {
+            lastDisplayedProgressAtMs = nowMs
+        }
 
         // Network buffering is not a decoder/output failure. Pause the freeze
         // deadline and break the "consecutive high-loss windows" sequence until
@@ -77,11 +84,14 @@ internal class VlcPlaybackHealth(
             return Decision(firstDisplayedFrame = firstFrame)
         }
 
-        val inputStillProgressing =
-            decodedDelta > 0 || bytesDelta >= MIN_INPUT_PROGRESS_BYTES || timeDelta >= MIN_TIME_PROGRESS_MS
         val frozen = !failureReported &&
             firstFrameReported &&
             displayedDelta == 0L &&
+            // Attribute the failure to decode/output only while input, decoded
+            // frames or the playback clock are still advancing. If the whole
+            // pipeline stopped, that is an ambiguous network/source stall and
+            // the controller's source reconnect watchdog must handle it instead
+            // of poisoning the channel's learned decoder route.
             inputStillProgressing &&
             nowMs - lastDisplayedProgressAtMs >= VIDEO_FREEZE_MS
 

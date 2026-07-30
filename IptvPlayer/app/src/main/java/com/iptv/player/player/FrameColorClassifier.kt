@@ -56,10 +56,50 @@ internal object FrameColorClassifier {
             deviation(sumB, sumB2) <= MAX_CHANNEL_DEVIATION
     }
 
+    /**
+     * True for an effectively empty decoder/surface buffer.
+     *
+     * A Vout callback only proves that libVLC created a surface. Some broken
+     * decoder paths leave that surface permanently black while audio/time keep
+     * advancing. Such a capture must not be promoted to "healthy video". The
+     * threshold is intentionally strict (nearly every pixel very dark and very
+     * little variation) so an ordinary dark programme scene is not rejected.
+     */
+    fun isVisuallyBlank(argb: IntArray): Boolean {
+        if (argb.size < MIN_PIXELS) return false
+
+        var darkPixels = 0
+        var sumBrightness = 0.0
+        var sumBrightnessSquared = 0.0
+        for (pixel in argb) {
+            val r = (pixel ushr 16) and 0xff
+            val g = (pixel ushr 8) and 0xff
+            val b = pixel and 0xff
+            val brightness = maxOf(r, g, b).toDouble()
+            if (brightness <= MAX_BLANK_PIXEL_BRIGHTNESS) darkPixels++
+            sumBrightness += brightness
+            sumBrightnessSquared += brightness * brightness
+        }
+
+        val count = argb.size.toDouble()
+        val darkRatio = darkPixels / count
+        val mean = sumBrightness / count
+        val deviation = sqrt(
+            (sumBrightnessSquared / count - mean * mean).coerceAtLeast(0.0),
+        )
+        return darkRatio >= MIN_BLANK_PIXEL_RATIO &&
+            mean <= MAX_BLANK_MEAN_BRIGHTNESS &&
+            deviation <= MAX_BLANK_DEVIATION
+    }
+
     private const val MIN_PIXELS = 64
     private const val MIN_GREEN = 55
     private const val MIN_GREEN_LEAD = 32
     private const val MIN_GREEN_RATIO = 0.86
     private const val MIN_MEAN_GREEN_LEAD = 38.0
     private const val MAX_CHANNEL_DEVIATION = 30.0
+    private const val MAX_BLANK_PIXEL_BRIGHTNESS = 24
+    private const val MIN_BLANK_PIXEL_RATIO = 0.97
+    private const val MAX_BLANK_MEAN_BRIGHTNESS = 18.0
+    private const val MAX_BLANK_DEVIATION = 8.0
 }

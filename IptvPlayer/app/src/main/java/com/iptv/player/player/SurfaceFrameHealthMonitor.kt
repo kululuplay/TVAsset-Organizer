@@ -12,13 +12,20 @@ import androidx.annotation.RequiresApi
 
 /**
  * Samples a SurfaceView into a tiny in-memory bitmap and detects persistent solid
- * green decoder output. No frame is stored or uploaded. PixelCopy failures are
- * ignored because some protected/old surfaces cannot be sampled safely.
+ * green or blank decoder output. No frame is stored or uploaded. PixelCopy
+ * failures are ignored because some protected/old surfaces cannot be sampled
+ * safely.
  */
 internal class SurfaceFrameHealthMonitor(
     private val handler: Handler,
     private val onSolidGreen: () -> Unit,
+    private val onPersistentBlank: () -> Unit = {},
     private val onHealthyFrame: () -> Unit = {},
+    // Hardware surfaces remain sampled at a low cadence because some vendor
+    // decoders turn green after initially healthy output. Software decode cannot
+    // hit that MediaCodec failure; stop after validation to avoid needless
+    // PixelCopy/GPU work on weak sticks.
+    private val continueAfterHealthy: Boolean = true,
 ) {
     private val lock = Any()
     private val recoveryGate = GreenFrameRecoveryGate()
@@ -107,13 +114,25 @@ internal class SurfaceFrameHealthMonitor(
                             if (sampleGeneration == generation && started) {
                                 sampleInFlight = false
                                 classifiedFrame = true
+                                val solidGreen =
+                                    FrameColorClassifier.isSolidGreen(pixels)
                                 decision = recoveryGate.onSample(
-                                    solidGreen = FrameColorClassifier.isSolidGreen(pixels),
+                                    solidGreen = solidGreen,
                                     nowMs = SystemClock.elapsedRealtime(),
+                                    visuallyBlank =
+                                        !solidGreen &&
+                                            FrameColorClassifier.isVisuallyBlank(pixels),
                                 )
                                 if (
                                     decision ==
-                                    GreenFrameRecoveryGate.Decision.SOLID_GREEN_FAILURE
+                                    GreenFrameRecoveryGate.Decision.SOLID_GREEN_FAILURE ||
+                                    decision ==
+                                    GreenFrameRecoveryGate.Decision.SOLID_BLANK_FAILURE ||
+                                    (
+                                        decision ==
+                                            GreenFrameRecoveryGate.Decision.FIRST_HEALTHY_FRAME &&
+                                            !continueAfterHealthy
+                                        )
                                 ) {
                                     started = false
                                     generation++
@@ -141,6 +160,8 @@ internal class SurfaceFrameHealthMonitor(
                             onHealthyFrame()
                         GreenFrameRecoveryGate.Decision.SOLID_GREEN_FAILURE ->
                             onSolidGreen()
+                        GreenFrameRecoveryGate.Decision.SOLID_BLANK_FAILURE ->
+                            onPersistentBlank()
                         GreenFrameRecoveryGate.Decision.WAIT -> Unit
                     }
                     nextDelayMs?.let { scheduleSample(sampleGeneration, it) }

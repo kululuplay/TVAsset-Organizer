@@ -19,8 +19,8 @@
  *     display-chroma overrides had ZERO effect (log still showed "output: 21
  *     Biplanar", never converted), so they were dropped. ExoPlayer (Media3) is the
  *     other native MediaCodec->Surface path and is selectable as the engine.
- *     Software deinterlace applies ONLY on the forceSoftware path. See the Amlogic
- *     green-screen memory note.
+ *     VLC's own adaptive deinterlacing is retained; forcing bob doubled work and
+ *     produced pixelation/freezes on weaker sticks.
  *   - forceSoftware: disable MediaCodec entirely when the decoder policy or
  *     evidence-based fallback selects VLC software.
  */
@@ -57,34 +57,61 @@ class VlcPlayerEngine(
     override val supportsDelay: Boolean = true
 
     private var libVlc: LibVLC? = null
+    @Volatile
     private var mediaPlayer: MediaPlayer? = null
     private var videoLayout: VLCVideoLayout? = null
+    // Desired host, not necessarily the layout's current parent while a native
+    // operation owns the surface. Null means detach/remove when native becomes
+    // idle. The generation makes delayed replacement attaches re-read the latest
+    // preview/fullscreen destination instead of resurrecting a stale container.
+    private var videoHost: ViewGroup? = null
+    private var videoHostGeneration = 0L
+    private var viewsAttached = false
+    private var hostMovePending = false
+    private var playerHasMedia = false
     private var listener: PlayerListener? = null
     private var videoOutputReported = false
     private var nativeVideoOutputObserved = false
+    private var nativeOutputHasFrameEvidence = false
     private var surfaceHealthyObserved = false
 
     private val playbackFailureReported = AtomicBoolean(false)
-    private val statsObserved = AtomicBoolean(false)
+    // Once a bounded JNI operation times out, its MediaPlayer/LibVLC handles are
+    // quarantined. The retired worker remains their sole owner until that call
+    // unwinds; no fresh worker may touch/release the same native objects.
+    private val nativeHandlesAbandoned = AtomicBoolean(false)
+    // A non-null stats object is not sufficient: affected libVLC/device builds
+    // expose a stats object whose video counters remain permanently zero. Only
+    // a real video counter signal makes stats authoritative for output health.
+    private val videoStatsUsable = AtomicBoolean(false)
     private val decodedVideoObserved = AtomicBoolean(false)
     private val playingObserved = AtomicBoolean(false)
     private val bufferingActive = AtomicBoolean(true)
     private val voutObserved = AtomicBoolean(false)
     private val playbackHealth = VlcPlaybackHealth(softwareDecode = forceSoftware)
     private val healthHandler = Handler(Looper.getMainLooper())
+    // Command continuations must survive health resets. Clearing healthHandler is
+    // expected on every zap; using it for cleanup->attach accounting leaked
+    // pendingOps and disabled all later health checks.
+    private val commandHandler = Handler(Looper.getMainLooper())
     private val surfaceFrameHealth = SurfaceFrameHealthMonitor(
         handler = healthHandler,
         onSolidGreen = {
             reportVideoInvalid("persistent solid-green SurfaceView output")
         },
+        onPersistentBlank = {
+            reportVideoInvalid("persistent blank SurfaceView output")
+        },
         onHealthyFrame = {
             surfaceHealthyObserved = true
             maybeReportVideoOutput()
         },
+        continueAfterHealthy = !forceSoftware,
     )
     private val surfaceValidationFallbackRunnable = Runnable {
         if (
             nativeVideoOutputObserved &&
+            nativeOutputHasFrameEvidence &&
             !videoOutputReported &&
             !playbackFailureReported.get() &&
             !surfaceFrameHealth.hasClassifiedFrame()
@@ -96,6 +123,15 @@ class VlcPlayerEngine(
                 "PixelCopy unavailable -> accept libVLC displayed-picture signal",
             )
             maybeReportVideoOutput()
+        }
+    }
+    private val surfaceValidationDeadlineRunnable = Runnable {
+        if (
+            nativeVideoOutputObserved &&
+            !videoOutputReported &&
+            !playbackFailureReported.get()
+        ) {
+            reportVideoInvalid("video surface could not be validated before deadline")
         }
     }
 
@@ -132,7 +168,13 @@ class VlcPlayerEngine(
             val mp = mediaPlayer ?: return
             if (mp.currentVideoTrack != null) {
                 readHealthSample(mp)?.let { sample ->
-                    statsObserved.set(true)
+                    if (
+                        sample.decodedVideo > 0L ||
+                        sample.displayedPictures > 0L ||
+                        sample.lostPictures > 0L
+                    ) {
+                        videoStatsUsable.set(true)
+                    }
                     if (sample.decodedVideo > 0L) decodedVideoObserved.set(true)
                     val decision = playbackHealth.evaluate(
                         sample = sample,
@@ -143,6 +185,12 @@ class VlcPlayerEngine(
                     if (decision.firstDisplayedFrame && !nativeVideoOutputObserved) {
                         observeNativeVideoOutput(
                             "displayedPictures advanced -> validate SurfaceView",
+                            hasFrameEvidence = true,
+                        )
+                    } else if (decision.firstDisplayedFrame) {
+                        observeNativeVideoOutput(
+                            "displayedPictures advanced after Vout -> validate SurfaceView",
+                            hasFrameEvidence = true,
                         )
                     }
                     when {
@@ -170,10 +218,11 @@ class VlcPlayerEngine(
             voutObserved.get() &&
             playingObserved.get() &&
             !bufferingActive.get() &&
-            !statsObserved.get()
+            !videoStatsUsable.get()
         ) {
             observeNativeVideoOutput(
                 "stats unavailable after Vout grace -> validate SurfaceView",
+                hasFrameEvidence = false,
             )
         }
     }
@@ -183,9 +232,9 @@ class VlcPlayerEngine(
     // audio/time but never produces even one video frame.
     private val noDisplayedFrameRunnable = Runnable {
         if (
-            !nativeVideoOutputObserved &&
+            !nativeOutputHasFrameEvidence &&
             !playbackFailureReported.get() &&
-            statsObserved.get() &&
+            videoStatsUsable.get() &&
             decodedVideoObserved.get() &&
             playingObserved.get() &&
             !bufferingActive.get() &&
@@ -201,7 +250,7 @@ class VlcPlayerEngine(
     // video so the controller can try one bounded compatibility route.
     private val noVideoPipelineRunnable = Runnable {
         if (
-            !nativeVideoOutputObserved &&
+            !nativeOutputHasFrameEvidence &&
             !playbackFailureReported.get() &&
             playingObserved.get() &&
             !bufferingActive.get() &&
@@ -221,23 +270,71 @@ class VlcPlayerEngine(
     private val vlcCachingMs: Int = networkCachingMs.coerceAtMost(MAX_VLC_LIVE_CACHING_MS)
 
     // ANR fix: MediaPlayer.stop() is SYNCHRONOUS and can block for seconds on a
-    // stalled network, so every blocking libVLC call (stop / stop+setMedia+play /
+    // stalled network, so every blocking libVLC call (stop / setMedia+play /
     // release) runs on the shared VlcOps thread instead of main. Two guards:
     //  - opsSeq: bumped by each play()/stop()/release() on the main thread; a
     //    queued runnable no-ops when its captured seq is no longer current, so a
     //    fast zap doesn't serially execute N blocking stop+play cycles (the
-    //    newest command's own stop() upholds stop-before-start).
-    //  - pendingOps: >0 while a stop/play command is queued or executing; the
-    //    event listener drops events during that window because they belong to
-    //    the PREVIOUS media (with async stop, a stale EncounteredError from the
-    //    old stalled stream could otherwise fire the controller's failure ladder
-    //    for the channel the user already left).
+    //    newest command's cleanup upholds stop-before-start).
+    //  - pendingOps: >0 while a stop/play command is queued or executing. Health
+    //    polling pauses during that window because reading native stats while a
+    //    native operation is mutating a MediaPlayer is unsafe. Events themselves
+    //    are isolated by a fresh MediaPlayer instance and an identity check.
     private val opsSeq = AtomicLong(0)
+    private val eventSession = AtomicLong(0)
     private val pendingOps = AtomicInteger(0)
-    // libVLC callbacks belong to the MediaPlayer, not to a specific Media. Bind
-    // them to the current MediaChanged boundary so a late error from the channel
-    // being stopped cannot fail the newly-zapped channel.
-    private val eventGenerationGate = VlcEventGenerationGate()
+    private data class DeferredPlay(val url: String, val reset: Boolean)
+    private var deferredPlay: DeferredPlay? = null
+
+    /**
+     * One completion gate for every bounded play/pause/resume/stop command.
+     * Timeout and normal return can race, so each command decrements exactly once.
+     * Every transition to zero is marshalled to the main thread where a deferred
+     * host move and the latest coalesced zap are drained in a deterministic order.
+     */
+    private fun newPendingCompletion(): () -> Unit {
+        val completed = AtomicBoolean(false)
+        pendingOps.incrementAndGet()
+        return completion@{
+            if (!completed.compareAndSet(false, true)) return@completion
+            if (decrementPendingSafely() == 0) {
+                commandHandler.post { onNativeCommandsIdle() }
+            }
+        }
+    }
+
+    private fun decrementPendingSafely(): Int {
+        while (true) {
+            val current = pendingOps.get()
+            if (current <= 0) {
+                PlaybackLog.log(
+                    context,
+                    engineName,
+                    "pending native command underflow prevented",
+                )
+                return 0
+            }
+            if (pendingOps.compareAndSet(current, current - 1)) return current - 1
+        }
+    }
+
+    private fun onNativeCommandsIdle() {
+        if (pendingOps.get() != 0) return
+        if (nativeHandlesAbandoned.get()) {
+            deferredPlay = null
+            hostMovePending = false
+            return
+        }
+        if (hostMovePending && !moveLayoutToDesiredHost()) return
+        val deferred = deferredPlay ?: return
+        // detachVideo() can complete before the controller's delayed attachVideo().
+        // Keep the latest zap queued until a real destination exists.
+        if (videoHost == null) return
+        deferredPlay = null
+        if (mediaPlayer != null && libVlc != null) {
+            play(deferred.url, deferred.reset)
+        }
+    }
 
     override fun bind(container: ViewGroup) {
         // Keep VLC close to its proven defaults. The old global clock overrides,
@@ -272,44 +369,111 @@ class VlcPlayerEngine(
         }
         val vlc = LibVLC(context, options)
         // Belt-and-braces: also set it on the instance (name + http UA).
-        vlc.setUserAgent(AppInfo.USER_AGENT, AppInfo.USER_AGENT)
-        val mp = MediaPlayer(vlc)
+        try {
+            vlc.setUserAgent(AppInfo.USER_AGENT, AppInfo.USER_AGENT)
+        } catch (error: Throwable) {
+            runCatching { vlc.release() }
+            throw error
+        }
+        val mp = try {
+            MediaPlayer(vlc)
+        } catch (error: Throwable) {
+            runCatching { vlc.release() }
+            throw error
+        }
 
-        val layout = VLCVideoLayout(context).apply {
+        val layout = createVideoLayout()
+        try {
+            container.addView(layout)
+            // attachViews fully wires libVLC's AWindow/IVLCVout handler (fixes the
+            // "libvlc window: request not implemented" green-screen spam). 4th arg
+            // useTextureView = false: SurfaceView is REQUIRED to show the Amlogic
+            // hardware underlay video plane — a TextureView always greens out.
+            // (3rd arg false = no subtitle surface yet; added with subtitles.)
+            mp.attachViews(layout, null, false, false)
+        } catch (error: Throwable) {
+            (layout.parent as? ViewGroup)?.removeView(layout)
+            VlcOps.postBounded(
+                timeoutMs = NATIVE_RELEASE_TIMEOUT_MS,
+                onTimeout = {},
+            ) {
+                VlcOps.runAllBestEffort(
+                    { mp.release() },
+                    { vlc.release() },
+                )
+            }
+            throw error
+        }
+
+        libVlc = vlc
+        mediaPlayer = mp
+        videoLayout = layout
+        videoHost = container
+        videoHostGeneration++
+        viewsAttached = true
+        hostMovePending = false
+        playerHasMedia = false
+        nativeHandlesAbandoned.set(false)
+    }
+
+    private fun createVideoLayout(): VLCVideoLayout =
+        VLCVideoLayout(context).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
+                ViewGroup.LayoutParams.MATCH_PARENT,
             )
         }
-        container.addView(layout)
-        // attachViews fully wires libVLC's AWindow/IVLCVout handler (fixes the
-        // "libvlc window: request not implemented" green-screen spam). 4th arg
-        // useTextureView = false: SurfaceView is REQUIRED to show the Amlogic
-        // hardware underlay video plane — a TextureView always greens out.
-        // (3rd arg false = no subtitle surface yet; added with subtitles.)
-        mp.attachViews(layout, null, false, false)
 
+    private data class VlcEventSnapshot(
+        val type: Int,
+        val buffering: Float,
+        val voutCount: Int,
+    )
+
+    private fun isCurrentSession(mp: MediaPlayer, session: Long): Boolean =
+        eventSession.get() == session && mediaPlayer === mp
+
+    private fun invalidateEventSession() {
+        eventSession.incrementAndGet()
+    }
+
+    /**
+     * Every channel gets its own native MediaPlayer. libVLC events contain no
+     * Media identity, so a reused player cannot distinguish a delayed Playing,
+     * Vout, Error or EndReached from the channel that was just stopped. The
+     * concrete-player identity check below makes that race impossible: queued
+     * events from a retired player can never mutate the current channel.
+     */
+    private fun installEventListener(mp: MediaPlayer, session: Long) {
         mp.setEventListener { event ->
-            // MediaChanged is the only reliable native boundary between two
-            // streams on a reused MediaPlayer. Process it even while the queued
-            // setMedia/play operation is still marked pending.
-            if (event.type == MediaPlayer.Event.MediaChanged) {
-                eventGenerationGate.onMediaChanged()
-                return@setEventListener
+            // libVLC invokes this callback on a native event thread. Capture only
+            // primitive values here, then serialize all state/listener mutations
+            // onto main and re-check both player identity and session. A retired
+            // channel can therefore never pass an early identity check and race
+            // the next channel while its callback is still executing.
+            val type = event.type
+            val snapshot = VlcEventSnapshot(
+                type = type,
+                buffering =
+                    if (type == MediaPlayer.Event.Buffering) event.buffering else 0f,
+                voutCount =
+                    if (type == MediaPlayer.Event.Vout) event.voutCount else 0,
+            )
+            healthHandler.post event@{
+                if (!isCurrentSession(mp, session)) return@event
+                handleEvent(mp, snapshot)
             }
-            // A queued stop/play is pending on the VLC ops thread: these events
-            // are from the PREVIOUS media — drop them (see pendingOps note).
-            if (pendingOps.get() > 0) return@setEventListener
-            if (!eventGenerationGate.acceptsCurrentMediaEvent()) {
-                return@setEventListener
-            }
-            when (event.type) {
+        }
+    }
+
+    private fun handleEvent(mp: MediaPlayer, event: VlcEventSnapshot) {
+        when (event.type) {
                 MediaPlayer.Event.Buffering -> {
                     // VLC keeps firing Buffering during normal playback (cache
-                    // top-ups), ending each cycle at 100%. Only treat <100% as
-                    // actual buffering; 100% means the stream is running, so hide
-                    // the spinner — otherwise it stays on screen forever.
-                    if (event.buffering < 100f) {
+                    // top-ups), normally ending each cycle near 100%. Use a
+                    // completion tolerance because native progress may stop at
+                    // 99.9; otherwise the spinner stays on screen forever.
+                    if (isVlcBuffering(event.buffering)) {
                         bufferingActive.set(true)
                         healthHandler.removeCallbacks(voutCompatibilityRunnable)
                         healthHandler.removeCallbacks(noDisplayedFrameRunnable)
@@ -334,7 +498,7 @@ class VlcPlayerEngine(
                     val firstPlaying = playingObserved.compareAndSet(false, true)
                     val resumedFromBuffering = bufferingActive.getAndSet(false)
                     // VLC only accepts delays once the track is running.
-                    applyDelays()
+                    applyDelays(mp)
                     listener?.onPlaying()
                     maybeRouteByProfile()
                     scheduleProfileRechecks()
@@ -350,7 +514,7 @@ class VlcPlayerEngine(
                 // onVideoOutput is emitted; PixelCopy separately rejects green.
                 MediaPlayer.Event.Vout -> {
                     // Vout(0) means the video surface was removed, not created.
-                    if (event.voutCount <= 0) return@setEventListener
+                    if (event.voutCount <= 0) return
                     voutObserved.set(true)
                     maybeRouteByProfile()
                     scheduleProfileRechecks()
@@ -364,11 +528,6 @@ class VlcPlayerEngine(
                     listener?.onError("VLC error")
                 }
             }
-        }
-
-        libVlc = vlc
-        mediaPlayer = mp
-        videoLayout = layout
     }
 
     /**
@@ -489,21 +648,41 @@ class VlcPlayerEngine(
         }
     }
 
-    private fun observeNativeVideoOutput(detail: String) {
-        if (nativeVideoOutputObserved || playbackFailureReported.get()) return
+    private fun observeNativeVideoOutput(
+        detail: String,
+        hasFrameEvidence: Boolean,
+    ) {
+        if (playbackFailureReported.get()) return
+        if (hasFrameEvidence) {
+            nativeOutputHasFrameEvidence = true
+            healthHandler.removeCallbacks(noDisplayedFrameRunnable)
+            healthHandler.removeCallbacks(noVideoPipelineRunnable)
+        }
+        val firstObservation = !nativeVideoOutputObserved
         nativeVideoOutputObserved = true
         healthHandler.removeCallbacks(voutCompatibilityRunnable)
-        healthHandler.removeCallbacks(noDisplayedFrameRunnable)
-        healthHandler.removeCallbacks(noVideoPipelineRunnable)
         PlaybackLog.log(context, engineName, detail)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            surfaceFrameHealth.start { findVideoSurface(videoLayout) }
+            if (firstObservation) {
+                surfaceFrameHealth.start { findVideoSurface(videoLayout) }
+            }
             healthHandler.removeCallbacks(surfaceValidationFallbackRunnable)
             healthHandler.postDelayed(
                 surfaceValidationFallbackRunnable,
                 PIXEL_VALIDATION_FALLBACK_MS,
             )
-        } else {
+            healthHandler.removeCallbacks(surfaceValidationDeadlineRunnable)
+            healthHandler.postDelayed(
+                surfaceValidationDeadlineRunnable,
+                if (hasFrameEvidence) {
+                    PIXEL_VALIDATION_DEADLINE_MS
+                } else {
+                    NO_VIDEO_PIPELINE_TIMEOUT_MS
+                },
+            )
+        } else if (hasFrameEvidence) {
+            // Older Android versions cannot sample the surface. Native displayed
+            // picture counters remain authoritative; Vout alone does not.
             surfaceHealthyObserved = true
             maybeReportVideoOutput()
         }
@@ -520,6 +699,9 @@ class VlcPlayerEngine(
         }
         videoOutputReported = true
         healthHandler.removeCallbacks(surfaceValidationFallbackRunnable)
+        healthHandler.removeCallbacks(surfaceValidationDeadlineRunnable)
+        healthHandler.removeCallbacks(noDisplayedFrameRunnable)
+        healthHandler.removeCallbacks(noVideoPipelineRunnable)
         PlaybackLog.log(context, engineName, "healthy SurfaceView frame confirmed")
         listener?.onVideoOutput()
     }
@@ -550,39 +732,200 @@ class VlcPlayerEngine(
 
     /**
      * Detach the running player from its VLCVideoLayout and remove that layout
-     * from its parent, leaving playback (audio + decode) running. libVLC requires
-     * detachViews() before the views can be re-homed. The same layout instance is
-     * reused on re-attach so no new surface plumbing is created.
+     * from its parent. A later hand-off replay creates a fresh MediaPlayer and
+     * SurfaceView; this old layout is kept only as a host-transfer placeholder
+     * until [play] completes the ordered teardown/replacement.
      */
     override fun detachVideo() {
-        mediaPlayer?.detachViews()
-        videoLayout?.let { (it.parent as? ViewGroup)?.removeView(it) }
+        videoHost = null
+        videoHostGeneration++
+        hostMovePending = true
+        // SurfaceView destruction can race the native call that is currently
+        // stopping/starting the decoder. Keep both the view and its parent intact
+        // until the shared completion gate reports native ownership idle.
+        if (pendingOps.get() > 0 || nativeHandlesAbandoned.get()) return
+        moveLayoutToDesiredHost()
     }
 
     /**
-     * Re-attach the existing VLCVideoLayout into [container] and re-wire libVLC's
-     * AWindow handler, without touching the Media/playback. Called after
-     * [detachVideo] (the controller inserts a short gap first so the old
-     * SurfaceView is torn down before the new one is composited — the Amlogic
-     * green-on-fresh-surface lesson).
+     * Re-home the layout placeholder into [container]. For an idle, never-started
+     * player this also attaches the native views. A running hand-off deliberately
+     * waits for [play] to release the old native player before attaching a fresh
+     * layout, avoiding an AWindow teardown race on Amlogic devices.
      */
     override fun attachVideo(container: ViewGroup) {
-        val mp = mediaPlayer ?: return
-        val layout = videoLayout ?: return
-        (layout.parent as? ViewGroup)?.removeView(layout)
-        container.addView(layout)
-        mp.attachViews(layout, null, false, false)
+        videoHost = container
+        videoHostGeneration++
+        hostMovePending = true
+        if (pendingOps.get() > 0 || nativeHandlesAbandoned.get()) return
+        if (moveLayoutToDesiredHost()) {
+            // Post so PlayerController's immediate replay can take precedence and
+            // clear the same deferred URL without causing a duplicate start.
+            commandHandler.post { onNativeCommandsIdle() }
+        }
     }
 
-    // reset is unused for libVLC: a Media can't be reused, so play() always builds
-    // a fresh Media and stop()s first regardless (single-connection contract).
+    /**
+     * Apply the latest detach/rebind request. This is main-thread only and never
+     * runs while a bounded native command is pending. [viewsAttached] is the
+     * source of truth, preventing detachViews() from being called twice on a
+     * libVLC AWindow that is already tearing down.
+     */
+    private fun moveLayoutToDesiredHost(): Boolean {
+        if (pendingOps.get() > 0 || nativeHandlesAbandoned.get()) return false
+        val layout = videoLayout ?: run {
+            hostMovePending = false
+            return true
+        }
+        val target = videoHost
+        val currentParent = layout.parent as? ViewGroup
+
+        if (target == null || currentParent !== target) {
+            if (viewsAttached) {
+                val mp = mediaPlayer ?: return false
+                try {
+                    mp.detachViews()
+                    viewsAttached = false
+                } catch (error: Throwable) {
+                    PlaybackLog.log(
+                        context,
+                        engineName,
+                        "surface detach failed: ${error.javaClass.simpleName}",
+                    )
+                    listener?.onError("VLC surface detach error")
+                    return false
+                }
+            }
+            currentParent?.removeView(layout)
+            if (target != null) target.addView(layout)
+        }
+
+        // A hand-off of a running player immediately calls play(), which creates
+        // a fresh player/surface. Re-attaching the retired native player here
+        // would race AWindow teardown. A never-started player can attach directly.
+        if (target != null && !playerHasMedia && !viewsAttached) {
+            val mp = mediaPlayer ?: return false
+            try {
+                mp.attachViews(layout, null, false, false)
+                viewsAttached = true
+            } catch (error: Throwable) {
+                PlaybackLog.log(
+                    context,
+                    engineName,
+                    "surface attach failed: ${error.javaClass.simpleName}",
+                )
+                listener?.onError("VLC surface attach error")
+                return false
+            }
+        }
+        hostMovePending = false
+        return true
+    }
+
+    // reset is unused for libVLC: every play gets a fresh native MediaPlayer and
+    // Media. Retiring the old player before the new one opens its URL preserves
+    // the provider's single-connection contract and isolates late native events.
     override fun play(url: String, reset: Boolean) {
+        if (nativeHandlesAbandoned.get()) {
+            PlaybackLog.log(context, engineName, "play refused on quarantined native handles")
+            listener?.onError("VLC native session unavailable")
+            return
+        }
+        // Never detach/swap a MediaPlayer while its previous stop/start is still
+        // inside JNI. Keep only the latest DPAD zap; finishPending re-enters play
+        // once native ownership is idle.
+        if (pendingOps.get() > 0) {
+            deferredPlay = DeferredPlay(url, reset)
+            PlaybackLog.log(context, engineName, "native command busy -> coalesce latest zap")
+            return
+        }
+        deferredPlay = null
         val vlc = libVlc ?: return
-        val mp = mediaPlayer ?: return
+        val retiredLayout = videoLayout ?: return
+        videoHost ?: return
+        val boundPlayer = mediaPlayer ?: return
+        val previousPlayer = boundPlayer.takeIf { playerHasMedia }
+        val mp = if (previousPlayer == null) {
+            // First start after bind: keep the already-attached player/surface.
+            boundPlayer
+        } else {
+            // Construct before disturbing the current player. If native player
+            // creation fails, the old channel remains attached and recoverable
+            // until the controller handles the reported startup error.
+            val replacement = try {
+                MediaPlayer(vlc)
+            } catch (error: Throwable) {
+                PlaybackLog.log(
+                    context,
+                    engineName,
+                    "replacement creation failed: ${error.javaClass.simpleName}",
+                )
+                listener?.onError("VLC player creation error")
+                return
+            }
+            invalidateEventSession()
+            try {
+                previousPlayer.setEventListener(null)
+                if (viewsAttached) {
+                    previousPlayer.detachViews()
+                    viewsAttached = false
+                }
+            } catch (error: Throwable) {
+                val restoredSession = eventSession.incrementAndGet()
+                installEventListener(previousPlayer, restoredSession)
+                val finishReplacementRelease = newPendingCompletion()
+                VlcOps.postBounded(
+                    timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
+                    onTimeout = {
+                        nativeHandlesAbandoned.set(true)
+                        deferredPlay = null
+                        invalidateEventSession()
+                        PlaybackLog.log(
+                            context,
+                            engineName,
+                            "replacement release timed out after detach failure",
+                        )
+                        finishReplacementRelease()
+                    },
+                    onTimedOutActionFinished = {
+                        // replacement.release() and the old player share this
+                        // LibVLC. Once it times out, quarantine the entire native
+                        // ownership set; only this retired worker may tear it down.
+                        releaseQuarantinedHandles(
+                            mp = previousPlayer,
+                            vlc = vlc,
+                            detail = "replacement release timeout",
+                        )
+                    },
+                ) {
+                    try {
+                        replacement.release()
+                    } finally {
+                        finishReplacementRelease()
+                    }
+                }
+                PlaybackLog.log(
+                    context,
+                    engineName,
+                    "retired surface detach failed: ${error.javaClass.simpleName}",
+                )
+                listener?.onError("VLC surface detach error")
+                return
+            }
+            // Removing now starts SurfaceView destruction before native teardown.
+            // The fresh view is added only after teardown plus a compositor gap.
+            (retiredLayout.parent as? ViewGroup)?.removeView(retiredLayout)
+            viewsAttached = false
+            mediaPlayer = replacement
+            replacement
+        }
+        val session = eventSession.incrementAndGet()
+        installEventListener(mp, session)
+        playerHasMedia = true
         profileCheckDone.set(false)
         profileHandler.removeCallbacksAndMessages(null)
         playbackFailureReported.set(false)
-        statsObserved.set(false)
+        videoStatsUsable.set(false)
         decodedVideoObserved.set(false)
         playingObserved.set(false)
         bufferingActive.set(true)
@@ -592,75 +935,296 @@ class VlcPlayerEngine(
         surfaceFrameHealth.reset()
         videoOutputReported = false
         nativeVideoOutputObserved = false
+        nativeOutputHasFrameEvidence = false
         surfaceHealthyObserved = false
-        val mediaGeneration = eventGenerationGate.beginPlay()
         // Reset the silent-audio guard on the main thread, then hand the blocking
-        // stop -> setMedia -> play sequence to the VLC ops thread as ONE runnable
+        // old-player cleanup -> setMedia -> play sequence to the VLC ops thread
+        // as ONE runnable
         // (FIFO keeps stop-before-start; the main thread never blocks on a stalled
-        // network). play() is also the fast-zap reuse path — the controller keeps
-        // the engine alive across same-stage channel changes — so the previous
-        // media must stop before the next starts (single-connection contract).
-        // On a freshly-bound engine that stop() is a harmless no-op.
+        // network). A fresh native player also means a queued callback from the
+        // previous channel cannot be mistaken for this one.
         audioHealAttempted = false
         audioHandler.removeCallbacksAndMessages(null)
         PlaybackLog.log(context, engineName, "play forceSoftware=$forceSoftware passthrough=$allowPassthrough")
         val mySeq = opsSeq.incrementAndGet()
-        pendingOps.incrementAndGet()
-        VlcOps.post {
+        val finishPending = newPendingCompletion()
+        if (previousPlayer == null) {
+            startMediaBounded(
+                vlc = vlc,
+                mp = mp,
+                url = url,
+                sequence = mySeq,
+                finishPending = finishPending,
+            )
+            return
+        }
+
+        VlcOps.postBounded(
+            timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
+            onTimeout = {
+                nativeHandlesAbandoned.set(true)
+                deferredPlay = null
+                invalidateEventSession()
+                if (
+                    opsSeq.compareAndSet(mySeq, mySeq + 1L) &&
+                    mediaPlayer === mp
+                ) {
+                    PlaybackLog.log(context, engineName, "retired player cleanup timed out")
+                    listener?.onError("VLC cleanup timeout")
+                }
+                finishPending()
+            },
+            onTimedOutActionFinished = {
+                // The retired action may have returned from stop/release after
+                // the watchdog rotated the queue. The replacement and LibVLC are
+                // now quarantined and must only be touched by this old worker.
+                releaseQuarantinedHandles(
+                    mp = mp,
+                    vlc = vlc,
+                    detail = "retired player cleanup timeout",
+                    stopFirst = false,
+                )
+            },
+        ) cleanup@{
+            if (nativeHandlesAbandoned.get()) {
+                finishPending()
+                return@cleanup
+            }
+            val stopFailure = runCatching { previousPlayer.stop() }.exceptionOrNull()
+            val releaseFailure = runCatching { previousPlayer.release() }.exceptionOrNull()
+            stopFailure?.let {
+                PlaybackLog.log(
+                    context,
+                    engineName,
+                    "zap stop failed: ${it.javaClass.simpleName}",
+                )
+            }
+            if (nativeHandlesAbandoned.get()) {
+                finishPending()
+                return@cleanup
+            }
+            if (releaseFailure != null) {
+                PlaybackLog.log(
+                    context,
+                    engineName,
+                    "zap release failed: ${releaseFailure.javaClass.simpleName}",
+                )
+                commandHandler.post {
+                    if (
+                        opsSeq.compareAndSet(mySeq, mySeq + 1L) &&
+                        mediaPlayer === mp
+                    ) {
+                        invalidateEventSession()
+                        listener?.onError("VLC cleanup error")
+                    }
+                }
+                // Account for the native command before VlcOps dequeues anything
+                // else. The error callback was posted first, so it invalidates the
+                // stage before finishPending's optional deferred-zap continuation.
+                finishPending()
+                return@cleanup
+            }
+
+            // Re-check after the (possibly long) teardown: don't attach/start a
+            // channel the user has already zapped away from.
+            if (opsSeq.get() != mySeq || mediaPlayer !== mp) {
+                finishPending()
+                return@cleanup
+            }
+            commandHandler.postDelayed(attach@{
+                if (opsSeq.get() != mySeq || mediaPlayer !== mp) {
+                    finishPending()
+                    return@attach
+                }
+                if (videoHost == null) {
+                    // A rebind is between detachVideo() and attachVideo(). Do not
+                    // bind the fresh AWindow back to the retired host; preserve
+                    // the newest zap until attachVideo supplies its generation.
+                    if (deferredPlay == null) {
+                        deferredPlay = DeferredPlay(url, reset)
+                    }
+                    finishPending()
+                    return@attach
+                }
+                try {
+                    attachFreshVideoLayout(mp)
+                } catch (error: Throwable) {
+                    opsSeq.compareAndSet(mySeq, mySeq + 1L)
+                    invalidateEventSession()
+                    PlaybackLog.log(
+                        context,
+                        engineName,
+                        "fresh surface attach failed: ${error.javaClass.simpleName}",
+                    )
+                    // Ownership remains with this engine; the controller's normal
+                    // release path performs the single stop/release sequence.
+                    listener?.onError("VLC surface error")
+                    finishPending()
+                    return@attach
+                }
+                startMediaBounded(
+                    vlc = vlc,
+                    mp = mp,
+                    url = url,
+                    sequence = mySeq,
+                    finishPending = finishPending,
+                )
+            }, SURFACE_REPLACEMENT_DELAY_MS)
+        }
+    }
+
+    /**
+     * Replace the SurfaceView only after the retired native player has released.
+     * Besides avoiding vendor AWindow teardown races, a new surface cannot retain
+     * the prior channel's last frame and falsely validate a black new channel.
+     * The destination is deliberately resolved here, not when play() began: a
+     * preview/fullscreen rebind may have changed hosts while cleanup was in JNI.
+     */
+    private fun attachFreshVideoLayout(replacement: MediaPlayer) {
+        val host = videoHost ?: error("VLC video host detached")
+        val hostGeneration = videoHostGeneration
+        val retiredLayout = videoLayout
+        val retiredParent = retiredLayout?.parent as? ViewGroup
+        val insertIndex =
+            if (retiredParent === host && retiredLayout != null) {
+                host.indexOfChild(retiredLayout).coerceAtLeast(0)
+            } else {
+                host.childCount
+            }
+        retiredLayout?.let { retiredParent?.removeView(it) }
+
+        val freshLayout = createVideoLayout()
+        host.addView(freshLayout, insertIndex.coerceIn(0, host.childCount))
+        var attached = false
+        try {
+            check(videoHost === host && videoHostGeneration == hostGeneration) {
+                "VLC video host changed before surface attach"
+            }
+            replacement.attachViews(freshLayout, null, false, false)
+            attached = true
+            check(videoHost === host && videoHostGeneration == hostGeneration) {
+                "VLC video host changed during surface attach"
+            }
+        } catch (error: Throwable) {
+            if (attached) runCatching { replacement.detachViews() }
+            host.removeView(freshLayout)
+            throw error
+        }
+        videoLayout = freshLayout
+        viewsAttached = true
+        hostMovePending = false
+    }
+
+    private fun startMediaBounded(
+        vlc: LibVLC,
+        mp: MediaPlayer,
+        url: String,
+        sequence: Long,
+        finishPending: () -> Unit,
+    ) {
+        VlcOps.postBounded(
+            timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
+            onTimeout = {
+                nativeHandlesAbandoned.set(true)
+                deferredPlay = null
+                invalidateEventSession()
+                if (
+                    opsSeq.compareAndSet(sequence, sequence + 1L) &&
+                    mediaPlayer === mp
+                ) {
+                    PlaybackLog.log(context, engineName, "native start timed out")
+                    listener?.onError("VLC start timeout")
+                }
+                finishPending()
+            },
+            onTimedOutActionFinished = {
+                releaseQuarantinedHandles(
+                    mp = mp,
+                    vlc = vlc,
+                    detail = "native start timeout",
+                )
+            },
+        ) start@{
             try {
-                // Superseded by a newer play/stop while queued -> skip entirely
-                // (the newer command's own stop() covers single-connection).
-                if (opsSeq.get() != mySeq) return@post
-                mp.stop()
-                // Re-check after the (possibly long) stop: don't start a channel
-                // the user has already zapped away from.
-                if (opsSeq.get() != mySeq) return@post
+                if (
+                    nativeHandlesAbandoned.get() ||
+                    opsSeq.get() != sequence ||
+                    mediaPlayer !== mp
+                ) return@start
                 val media = Media(vlc, android.net.Uri.parse(url)).apply {
                     // Hardware is preferred but never forced past libVLC's
                     // per-device safety list. The old force=true made AUTO and
                     // Hardware identical and enabled broken MediaCodec paths.
                     setHWDecoderEnabled(!forceSoftware, false)
-                    // Mirror the instance buffer tuning at the stream level.
                     addOption(":network-caching=$vlcCachingMs")
                     addOption(":live-caching=$vlcCachingMs")
                     if (forceSoftware) addOption(":avcodec-hw=none")
                     if (!allowPassthrough) {
                         addOption(":no-spdif")
-                        // Force a 5.1 -> 2.0 stereo downmix (mirrors the instance
-                        // option) so boxes that can't open a 6-channel PCM
-                        // AudioTrack still get sound.
                         addOption(":stereo-mode=1")
                     }
-                    // Auto-reconnect dropped HTTP connections instead of erroring out.
                     addOption(":http-reconnect")
-                    // Per-stream User-Agent override (covers playlist + segments).
                     addOption(":http-user-agent=${AppInfo.USER_AGENT}")
                 }
                 try {
-                    if (!eventGenerationGate.prepareMediaChange(mediaGeneration)) {
-                        return@post
-                    }
-                    try {
-                        mp.media = media
-                    } catch (error: Throwable) {
-                        eventGenerationGate.cancelPreparedMediaChange(mediaGeneration)
-                        throw error
-                    }
+                    mp.media = media
+                    if (opsSeq.get() != sequence || mediaPlayer !== mp) return@start
+                    mp.play()
                 } finally {
                     media.release()
                 }
-                // The user may have zapped again while native setMedia was
-                // running. Never start the superseded channel; its callbacks are
-                // already rejected by the generation gate.
-                if (
-                    opsSeq.get() != mySeq ||
-                    !eventGenerationGate.isActive(mediaGeneration)
-                ) return@post
-                mp.play()
+            } catch (error: Throwable) {
+                commandHandler.post {
+                    if (
+                        opsSeq.compareAndSet(sequence, sequence + 1L) &&
+                        mediaPlayer === mp
+                    ) {
+                        invalidateEventSession()
+                        PlaybackLog.log(
+                            context,
+                            engineName,
+                            "native start failed: ${error.javaClass.simpleName}",
+                        )
+                        listener?.onError("VLC start error")
+                    }
+                }
             } finally {
-                pendingOps.decrementAndGet()
+                finishPending()
             }
         }
+    }
+
+    /**
+     * Called only through VlcOps.onTimedOutActionFinished, on the exact retired
+     * worker whose operation timed out. There is intentionally no engine-global
+     * "first cleanup caller" flag: a queued later operation must never claim a
+     * prior operation's native handles.
+     */
+    private fun releaseQuarantinedHandles(
+        mp: MediaPlayer?,
+        vlc: LibVLC?,
+        detail: String,
+        stopFirst: Boolean = true,
+    ) {
+        val failures =
+            if (stopFirst) {
+                VlcOps.runAllBestEffort(
+                    { mp?.stop() },
+                    { mp?.release() },
+                    { vlc?.release() },
+                )
+            } else {
+                VlcOps.runAllBestEffort(
+                    { mp?.release() },
+                    { vlc?.release() },
+                )
+            }
+        PlaybackLog.log(
+            context,
+            engineName,
+            "quarantined native handles released after $detail " +
+                "(failures=${failures.size})",
+        )
     }
 
     /**
@@ -680,6 +1244,10 @@ class VlcPlayerEngine(
 
     private fun healSilentAudio() {
         if (audioHealAttempted) return
+        if (pendingOps.get() > 0 || nativeHandlesAbandoned.get()) {
+            audioHandler.postDelayed({ healSilentAudio() }, AUDIO_CHECK_DELAY_MS)
+            return
+        }
         val mp = mediaPlayer ?: return
         val firstReal = mp.audioTracks?.firstOrNull { it.id != -1 } ?: return
         if (mp.audioTrack == -1) {
@@ -692,16 +1260,65 @@ class VlcPlayerEngine(
     // libVLC's playback clock (ms). Advances while frames flow (including from
     // cache during a top-up); freezes once a silent network stall drains the
     // buffer — exactly the signal the controller's stall watchdog keys on.
-    override fun playbackPositionMs(): Long = mediaPlayer?.time ?: -1L
+    override fun playbackPositionMs(): Long {
+        if (pendingOps.get() > 0 || nativeHandlesAbandoned.get()) return -1L
+        return mediaPlayer?.time ?: -1L
+    }
 
     override fun pause() {
         val mp = mediaPlayer ?: return
-        VlcOps.post { mp.pause() }
+        val vlc = libVlc
+        if (nativeHandlesAbandoned.get()) return
+        val finishPending = newPendingCompletion()
+        VlcOps.postBounded(
+            timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
+            onTimeout = {
+                nativeHandlesAbandoned.set(true)
+                deferredPlay = null
+                invalidateEventSession()
+                PlaybackLog.log(context, engineName, "native pause timed out")
+                finishPending()
+            },
+            onTimedOutActionFinished = {
+                releaseQuarantinedHandles(mp, vlc, "native pause timeout")
+            },
+        ) {
+            try {
+                if (!nativeHandlesAbandoned.get()) mp.pause()
+            } finally {
+                finishPending()
+            }
+        }
     }
 
     override fun resume() {
         val mp = mediaPlayer ?: return
-        VlcOps.post { mp.play() }
+        val vlc = libVlc
+        if (nativeHandlesAbandoned.get()) {
+            listener?.onError("VLC native session unavailable")
+            return
+        }
+        val finishPending = newPendingCompletion()
+        VlcOps.postBounded(
+            timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
+            onTimeout = {
+                nativeHandlesAbandoned.set(true)
+                deferredPlay = null
+                invalidateEventSession()
+                PlaybackLog.log(context, engineName, "native resume timed out")
+                if (mediaPlayer === mp) listener?.onError("VLC resume timeout")
+                finishPending()
+            },
+            onTimedOutActionFinished = {
+                releaseQuarantinedHandles(mp, vlc, "native resume timeout")
+            },
+        ) {
+            try {
+                if (!nativeHandlesAbandoned.get()) mp.play()
+            } finally {
+                finishPending()
+            }
+        }
     }
 
     override fun stop() {
@@ -709,17 +1326,52 @@ class VlcPlayerEngine(
         audioHandler.removeCallbacksAndMessages(null)
         healthHandler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()
-        eventGenerationGate.invalidate()
+        deferredPlay = null
         val mp = mediaPlayer ?: return
+        val vlc = libVlc
+        if (nativeHandlesAbandoned.get()) {
+            invalidateEventSession()
+            return
+        }
+        // Invalidate callbacks immediately in Java state. The JNI listener detach
+        // itself belongs in the bounded worker below; a vendor implementation may
+        // block there just like stop()/detachViews().
+        invalidateEventSession()
         val mySeq = opsSeq.incrementAndGet()
-        pendingOps.incrementAndGet()
-        VlcOps.post {
+        val finishPending = newPendingCompletion()
+        VlcOps.postBounded(
+            timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
+            onTimeout = {
+                nativeHandlesAbandoned.set(true)
+                invalidateEventSession()
+                PlaybackLog.log(context, engineName, "native stop timed out")
+                finishPending()
+            },
+            onTimedOutActionFinished = {
+                releaseQuarantinedHandles(
+                    mp = mp,
+                    vlc = vlc,
+                    detail = "native stop timeout",
+                    stopFirst = false,
+                )
+            },
+        ) nativeStop@{
             try {
                 // A newer play/stop already queued -> its own stop supersedes this.
-                if (opsSeq.get() != mySeq) return@post
+                if (
+                    nativeHandlesAbandoned.get() ||
+                    opsSeq.get() != mySeq
+                ) return@nativeStop
+                runCatching { mp.setEventListener(null) }.onFailure {
+                    PlaybackLog.log(
+                        context,
+                        engineName,
+                        "stop listener detach failed: ${it.javaClass.simpleName}",
+                    )
+                }
                 mp.stop()
             } finally {
-                pendingOps.decrementAndGet()
+                finishPending()
             }
         }
     }
@@ -729,26 +1381,106 @@ class VlcPlayerEngine(
         audioHandler.removeCallbacksAndMessages(null)
         healthHandler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()
-        eventGenerationGate.invalidate()
-        // Main thread: cut events + detach the view surface, then hand the
-        // blocking native teardown to the VLC ops thread. Capturing locals and
-        // nulling the fields first means nothing else can touch this player, and
-        // stale queued plays no-op via the seq bump. Stopping with the vout
-        // already detached is fine (detachVideo() does the same on a live player).
+        deferredPlay = null
+        invalidateEventSession()
+        // Reserve this exact owner generation before inspecting pending native
+        // work. Public engine commands are main-thread serialized; the seq bump
+        // also invalidates delayed cleanup->attach continuations.
+        val releaseSequence = opsSeq.incrementAndGet()
+        val retiredLayout = videoLayout
+        fun removeRetiredLayout() {
+            retiredLayout?.let { layout ->
+                (layout.parent as? ViewGroup)?.removeView(layout)
+            }
+        }
+        if (nativeHandlesAbandoned.get()) {
+            // The timed-out worker owns these handles until it unwinds. Only
+            // relinquish Java/UI ownership here; touching JNI from a fresh worker
+            // would race the quarantined call.
+            removeRetiredLayout()
+            mediaPlayer = null
+            libVlc = null
+            videoLayout = null
+            videoHost = null
+            videoHostGeneration++
+            viewsAttached = false
+            hostMovePending = false
+            playerHasMedia = false
+            listener = null
+            return
+        }
+        // Capture the complete native owner. IVLCVout.detachViews is @MainThread:
+        // call it only when this reserved generation is provably idle. A pending
+        // owner stays untouched here; its exact worker/release sequence owns all
+        // native cleanup after the Android layout is removed.
         val mp = mediaPlayer
         val vlc = libVlc
-        mp?.setEventListener(null)
-        mp?.detachViews()
+        val canDetachIdleOwnerOnMain =
+            mp != null &&
+                viewsAttached &&
+                pendingOps.get() == 0 &&
+                mediaPlayer === mp &&
+                opsSeq.get() == releaseSequence
+        if (canDetachIdleOwnerOnMain) {
+            runCatching { mp?.detachViews() }
+                .onSuccess { viewsAttached = false }
+                .onFailure {
+                    PlaybackLog.log(
+                        context,
+                        engineName,
+                        "release main-thread detach failed: ${it.javaClass.simpleName}",
+                    )
+                }
+        }
+        // View hierarchy work is always main-thread and does not access native
+        // handles. For a pending owner, MediaPlayer.release() later performs the
+        // native vout cleanup on its exact serialized owner worker.
+        removeRetiredLayout()
         mediaPlayer = null
         libVlc = null
         videoLayout = null
+        videoHost = null
+        videoHostGeneration++
+        viewsAttached = false
+        hostMovePending = false
+        playerHasMedia = false
         listener = null
-        opsSeq.incrementAndGet()
         if (mp != null || vlc != null) {
-            VlcOps.post {
-                mp?.stop()
-                mp?.release()
-                vlc?.release()
+            val releaseOperationTimedOut = AtomicBoolean(false)
+            VlcOps.postBounded(
+                timeoutMs = NATIVE_RELEASE_TIMEOUT_MS,
+                onTimeout = {
+                    // Android cannot cancel a thread blocked in vendor JNI.
+                    // Quarantine this owner before the fresh worker can run, and
+                    // remove only its Android view on main. The retired worker
+                    // remains the sole native owner and continues the teardown
+                    // sequence if/when the blocked call returns.
+                    releaseOperationTimedOut.set(true)
+                    nativeHandlesAbandoned.set(true)
+                    removeRetiredLayout()
+                    PlaybackLog.log(context, engineName, "native release timed out")
+                },
+            ) releaseOwner@{
+                // If an earlier queued operation timed out, its exact retired
+                // worker owns cleanup for these handles. A fresh worker must
+                // not touch them a second time.
+                if (
+                    nativeHandlesAbandoned.get() &&
+                    !releaseOperationTimedOut.get()
+                ) return@releaseOwner
+                val failures = VlcOps.runAllBestEffort(
+                    { mp?.setEventListener(null) },
+                    { mp?.stop() },
+                    { mp?.release() },
+                    { vlc?.release() },
+                )
+                failures.forEach { failure ->
+                    PlaybackLog.log(
+                        context,
+                        engineName,
+                        "release cleanup failed: ${failure.javaClass.simpleName}",
+                    )
+                }
             }
         }
     }
@@ -765,6 +1497,7 @@ class VlcPlayerEngine(
      * bitrate (bits/s) is converted to kbps. Null fields render as "—".
      */
     override fun getStreamInfo(): StreamInfo? {
+        if (pendingOps.get() > 0 || nativeHandlesAbandoned.get()) return null
         val track = mediaPlayer?.currentVideoTrack ?: return null
         val den = track.frameRateDen
         val fps = if (den > 0) track.frameRateNum.toFloat() / den else 0f
@@ -799,19 +1532,28 @@ class VlcPlayerEngine(
     // VLC delays are expressed in microseconds.
     override fun setAudioDelayMs(ms: Long) {
         audioDelayMs = ms
-        mediaPlayer?.audioDelay = ms * 1000
+        if (pendingOps.get() == 0 && !nativeHandlesAbandoned.get()) {
+            mediaPlayer?.audioDelay = ms * 1000
+        }
     }
 
     override fun setSubtitleDelayMs(ms: Long) {
         subtitleDelayMs = ms
-        mediaPlayer?.spuDelay = ms * 1000
+        if (pendingOps.get() == 0 && !nativeHandlesAbandoned.get()) {
+            mediaPlayer?.spuDelay = ms * 1000
+        }
     }
 
-    private fun applyDelays() {
-        mediaPlayer?.let {
-            it.audioDelay = audioDelayMs * 1000
-            it.spuDelay = subtitleDelayMs * 1000
+    private fun applyDelays(mp: MediaPlayer) {
+        if (nativeHandlesAbandoned.get()) return
+        if (pendingOps.get() > 0) {
+            commandHandler.postDelayed({
+                if (mediaPlayer === mp) applyDelays(mp)
+            }, NATIVE_STATE_RETRY_MS)
+            return
         }
+        mp.audioDelay = audioDelayMs * 1000
+        mp.spuDelay = subtitleDelayMs * 1000
     }
 
     companion object {
@@ -833,11 +1575,16 @@ class VlcPlayerEngine(
         // for the first several seconds of every channel.
         private const val MAX_VLC_LIVE_CACHING_MS = 3000
         private const val PIXEL_VALIDATION_FALLBACK_MS = 1_800L
+        private const val PIXEL_VALIDATION_DEADLINE_MS = 9_000L
 
         private const val HEALTH_POLL_MS = 1500L
         private const val VOUT_STATS_GRACE_MS = 4500L
         private const val NO_DISPLAYED_FRAME_TIMEOUT_MS = 12_000L
         private const val NO_VIDEO_PIPELINE_TIMEOUT_MS = 20_000L
+        private const val NATIVE_OPERATION_TIMEOUT_MS = 8_000L
+        private const val NATIVE_RELEASE_TIMEOUT_MS = 12_000L
+        private const val NATIVE_STATE_RETRY_MS = 100L
+        private const val SURFACE_REPLACEMENT_DELAY_MS = 250L
 
         private const val GREEN_PRONE_MIN_HEIGHT = 1080
         private const val GREEN_PRONE_MIN_WIDTH = 1920

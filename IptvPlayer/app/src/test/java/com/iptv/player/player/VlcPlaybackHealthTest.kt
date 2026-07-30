@@ -42,6 +42,29 @@ class VlcPlaybackHealthTest {
     }
 
     @Test
+    fun `fully stopped pipeline is left to the source reconnect watchdog`() {
+        val health = VlcPlaybackHealth(softwareDecode = false)
+        health.evaluate(
+            sample(bytes = 10_000, decoded = 10, displayed = 10, time = 1_000),
+            0,
+        )
+        // Video output is frozen while decode/input still advances.
+        health.evaluate(
+            sample(bytes = 160_000, decoded = 40, displayed = 10, time = 4_000),
+            4_000,
+        )
+        // By the deadline the whole pipeline has stopped. This no longer proves
+        // a decoder failure; routing must remain unchanged while the controller
+        // reconnects the source.
+        val decision = health.evaluate(
+            sample(bytes = 160_000, decoded = 40, displayed = 10, time = 4_000),
+            8_000,
+        )
+
+        assertFalse(decision.videoFrozen)
+    }
+
+    @Test
     fun `two sustained high loss windows flag overloaded software decode`() {
         val health = VlcPlaybackHealth(softwareDecode = true)
         health.evaluate(sample(decoded = 10, displayed = 10, lost = 0), 0)

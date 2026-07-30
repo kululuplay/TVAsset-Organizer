@@ -1,14 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Require TLS by default. The fixed Xtream endpoint is the only service
-         that still needs cleartext HTTP compatibility. -->
-    <base-config cleartextTrafficPermitted="false">
+    <!-- IPTV portals frequently redirect to HTTP subdomains, CDN hosts or raw IP
+         addresses. Permit those user-supplied playback/login endpoints so Media3
+         and libVLC follow the same network policy. App-owned URLs are HTTPS. -->
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
 
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">kululu.live</domain>
-    </domain-config>
 </network-security-config>

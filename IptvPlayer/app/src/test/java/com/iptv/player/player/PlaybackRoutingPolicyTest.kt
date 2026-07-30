@@ -72,9 +72,9 @@ class PlaybackRoutingPolicyTest {
     }
 
     @Test
-    fun `automatic invalid hardware video goes directly to VLC software`() {
+    fun `automatic invalid Exo video tries safe VLC hardware before software`() {
         assertEquals(
-            Stage.VLC_SW,
+            Stage.VLC_HW,
             PlaybackRoutingPolicy.nextStage(
                 PlayerMode.AUTO,
                 DecoderMode.AUTO,
@@ -157,7 +157,7 @@ class PlaybackRoutingPolicyTest {
             ),
         )
         assertEquals(
-            Stage.VLC_SW,
+            Stage.VLC_HW,
             PlaybackRoutingPolicy.nextStage(
                 PlayerMode.EXOPLAYER,
                 DecoderMode.HARDWARE,
@@ -237,30 +237,30 @@ class PlaybackRoutingPolicyTest {
             Failure.VIDEO,
             triedStages = setOf(Stage.EXO),
         )
-        assertEquals(Stage.VLC_SW, afterGreen)
+        assertEquals(Stage.VLC_HW, afterGreen)
 
-        val afterSoftwareSlow = PlaybackRoutingPolicy.nextStage(
+        val afterVlcGreen = PlaybackRoutingPolicy.nextStage(
             PlayerMode.AUTO,
             DecoderMode.AUTO,
-            Stage.VLC_SW,
-            Failure.SOFTWARE_SLOW,
-            triedStages = setOf(Stage.EXO, Stage.VLC_SW),
+            Stage.VLC_HW,
+            Failure.VIDEO,
+            triedStages = setOf(Stage.EXO, Stage.VLC_HW),
         )
-        assertEquals(Stage.VLC_HW, afterSoftwareSlow)
+        assertEquals(Stage.VLC_SW, afterVlcGreen)
 
         assertNull(
             PlaybackRoutingPolicy.nextStage(
                 PlayerMode.AUTO,
                 DecoderMode.AUTO,
-                Stage.VLC_HW,
-                Failure.VIDEO,
+                Stage.VLC_SW,
+                Failure.SOFTWARE_SLOW,
                 triedStages = setOf(Stage.EXO, Stage.VLC_SW, Stage.VLC_HW),
             ),
         )
     }
 
     @Test
-    fun `explicit VLC software recovery cannot bounce back to a tried stage`() {
+    fun `explicit VLC software recovery uses Exo only after both VLC paths fail`() {
         assertEquals(
             Stage.VLC_HW,
             PlaybackRoutingPolicy.nextStage(
@@ -271,13 +271,23 @@ class PlaybackRoutingPolicyTest {
                 triedStages = setOf(Stage.VLC_SW),
             ),
         )
-        assertNull(
+        assertEquals(
+            Stage.EXO,
             PlaybackRoutingPolicy.nextStage(
                 PlayerMode.VLC,
                 DecoderMode.SOFTWARE,
                 Stage.VLC_HW,
                 Failure.VIDEO,
                 triedStages = setOf(Stage.VLC_SW, Stage.VLC_HW),
+            ),
+        )
+        assertNull(
+            PlaybackRoutingPolicy.nextStage(
+                PlayerMode.VLC,
+                DecoderMode.SOFTWARE,
+                Stage.EXO,
+                Failure.VIDEO,
+                triedStages = setOf(Stage.VLC_SW, Stage.VLC_HW, Stage.EXO),
             ),
         )
     }

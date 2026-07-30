@@ -36,6 +36,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
@@ -66,6 +67,12 @@ class ExoPlayerEngine(
     private val allowPassthrough: Boolean = false,
     /** Buffer size (user "Buffer size" setting) -> DefaultLoadControl durations. */
     private val bufferMode: BufferMode = BufferMode.NORMAL,
+    /**
+     * True for television/video playback, false for audio-only radio. Media3 READY
+     * is only a transport/cache state; for TV it must never be reported as healthy
+     * playback until a real frame has been verified on the video surface.
+     */
+    private val expectsVideo: Boolean = true,
 ) : PlayerEngine {
 
     override val engineName: String = "ExoPlayer"
@@ -81,11 +88,19 @@ class ExoPlayerEngine(
     private var videoOutputReported = false
     private var audioReported = false
     private val lastVideoFrameAtMs = AtomicLong(0L)
+    private var readyForPlayback = false
+    private var streamGeneration = 0L
+    private var activeMediaId: String? = null
+    private var trackSupportCheckRunnable: Runnable? = null
+    private var noFrameCheckRunnable: Runnable? = null
 
     private val surfaceFrameHealth = SurfaceFrameHealthMonitor(
         handler = handler,
         onSolidGreen = {
             reportVideoInvalid("persistent solid-green SurfaceView output")
+        },
+        onPersistentBlank = {
+            reportVideoInvalid("persistent blank SurfaceView output")
         },
         onHealthyFrame = {
             reportVerifiedVideoOutput()
@@ -111,12 +126,20 @@ class ExoPlayerEngine(
         }
     }
 
-    // Track selection can momentarily report no selected audio while the
-    // selector settles, so re-read once playback is READY and stable before
-    // declaring the stream silent. Avoids false libVLC fallbacks.
-    private val audioCheckRunnable = Runnable {
-        val p = player ?: return@Runnable
-        if (p.playbackState == Player.STATE_READY) checkAudioSupported(p.currentTracks)
+    // A successful first copy that caught a transient green/black surface followed
+    // by PixelCopy errors used to leave TV playback covered forever: the short
+    // "PixelCopy unavailable" escape hatch was disabled by that one classified
+    // sample, while the green gate could no longer gather enough evidence to decide.
+    // Every rendered first frame therefore has an absolute validation deadline.
+    private val surfaceValidationDeadlineRunnable = Runnable {
+        if (
+            expectsVideo &&
+            firstFrameRendered &&
+            !videoFailureReported &&
+            !videoOutputReported
+        ) {
+            reportVideoInvalid("video surface could not be validated before deadline")
+        }
     }
 
     private val videoProgressRunnable = object : Runnable {
@@ -175,52 +198,11 @@ class ExoPlayerEngine(
             .setLoadControl(loadControl)
             .build()
 
+        // Surface-size diagnostics are harmless across item changes. Playback
+        // health events use AnalyticsListener below because its EventTime carries
+        // the media item identity; Player.Listener does not, so a late READY/error
+        // from the previous channel could otherwise validate the new channel.
         exo.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(state: Int) {
-                when (state) {
-                    Player.STATE_BUFFERING -> listener?.onBuffering()
-                    Player.STATE_READY -> {
-                        // Give video a fresh grace period after a long network
-                        // rebuffer before judging the prior frame timestamp stale.
-                        if (firstFrameRendered) {
-                            lastVideoFrameAtMs.set(SystemClock.elapsedRealtime())
-                        }
-                        listener?.onPlaying()
-                        scheduleNoFrameCheck()
-                        scheduleVideoProgressCheck()
-                    }
-                    Player.STATE_ENDED -> listener?.onEnded()
-                }
-            }
-
-            override fun onTracksChanged(tracks: Tracks) {
-                handler.removeCallbacks(audioCheckRunnable)
-                handler.postDelayed(audioCheckRunnable, AUDIO_CHECK_DELAY_MS)
-            }
-
-            override fun onRenderedFirstFrame() {
-                firstFrameRendered = true
-                lastVideoFrameAtMs.compareAndSet(0L, SystemClock.elapsedRealtime())
-                PlaybackLog.log(context, engineName, "onRenderedFirstFrame")
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    surfaceFrameHealth.start {
-                        findVideoSurface(playerView?.videoSurfaceView ?: playerView)
-                    }
-                    handler.removeCallbacks(surfaceValidationFallbackRunnable)
-                    handler.postDelayed(
-                        surfaceValidationFallbackRunnable,
-                        PIXEL_VALIDATION_FALLBACK_MS,
-                    )
-                } else {
-                    reportVerifiedVideoOutput()
-                }
-            }
-
-            // Amlogic "1 second then green" tracing. A video-size change drives
-            // PlayerView's aspect relayout; with resize_mode=fit that RESIZES the
-            // SurfaceView, tearing down + recreating its surface so the compositor
-            // greens the new one. resize_mode=fill now keeps the surface constant —
-            // these two logs confirm whether any resize still slips through.
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 PlaybackLog.log(
                     context, engineName,
@@ -232,33 +214,114 @@ class ExoPlayerEngine(
             override fun onSurfaceSizeChanged(width: Int, height: Int) {
                 PlaybackLog.log(context, engineName, "onSurfaceSizeChanged ${width}x$height")
             }
+        })
 
-            override fun onPlayerError(error: PlaybackException) {
-                PlaybackLog.log(context, engineName, "onPlayerError ${error.errorCodeName}")
-                // Distinguish a hardware-DECODER failure (videoCodecError /
-                // ERROR_CODE_DECODING_FAILED etc.) from a network/source drop. The
-                // Amlogic MPEG2 decoder renders a frame then fails decoding ~1.5s in;
-                // routing it through onDecodeError lets the controller escalate to
-                // software instead of looping the reconnect on the same dead decoder.
-                if (isDecoderError(error.errorCode)) {
-                    val exoError = error as? ExoPlaybackException
-                    val rendererType =
-                        if (
-                            exoError?.type == ExoPlaybackException.TYPE_RENDERER &&
-                            exoError.rendererIndex >= 0
-                        ) {
-                            runCatching { exo.getRendererType(exoError.rendererIndex) }.getOrNull()
-                        } else {
-                            null
-                        }
-                    if (rendererType == C.TRACK_TYPE_AUDIO) {
-                        audioReported = true
-                        listener?.onAudioUnavailable()
-                    } else {
-                        listener?.onDecodeError(error.errorCodeName)
+        exo.addAnalyticsListener(object : AnalyticsListener {
+            override fun onPlaybackStateChanged(
+                eventTime: AnalyticsListener.EventTime,
+                state: Int,
+            ) {
+                if (!isCurrentEvent(eventTime)) return
+                when (state) {
+                    Player.STATE_BUFFERING -> {
+                        readyForPlayback = false
+                        cancelNoFrameCheck()
+                        listener?.onBuffering()
                     }
+                    Player.STATE_READY -> {
+                        readyForPlayback = true
+                        // Give video a fresh grace period after a long network
+                        // rebuffer before judging the prior frame timestamp stale.
+                        if (firstFrameRendered) {
+                            lastVideoFrameAtMs.set(SystemClock.elapsedRealtime())
+                        }
+                        // READY can be driven by audio while video is unsupported,
+                        // green or still waiting for a frame. Radio may be reported
+                        // immediately; TV is reported only after verified pixels.
+                        if (!expectsVideo || videoOutputReported) {
+                            listener?.onPlaying()
+                        }
+                        scheduleTrackSupportCheck()
+                        scheduleNoFrameCheck()
+                        scheduleVideoProgressCheck()
+                    }
+                    Player.STATE_ENDED -> {
+                        readyForPlayback = false
+                        cancelNoFrameCheck()
+                        listener?.onEnded()
+                    }
+                    Player.STATE_IDLE -> {
+                        readyForPlayback = false
+                        cancelNoFrameCheck()
+                    }
+                }
+            }
+
+            override fun onTracksChanged(
+                eventTime: AnalyticsListener.EventTime,
+                tracks: Tracks,
+            ) {
+                if (!isCurrentEvent(eventTime)) return
+                scheduleTrackSupportCheck()
+            }
+
+            override fun onRenderedFirstFrame(
+                eventTime: AnalyticsListener.EventTime,
+                output: Any,
+                renderTimeMs: Long,
+            ) {
+                if (!isCurrentEvent(eventTime)) return
+                firstFrameRendered = true
+                lastVideoFrameAtMs.set(renderTimeMs)
+                cancelNoFrameCheck()
+                PlaybackLog.log(context, engineName, "onRenderedFirstFrame")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    surfaceFrameHealth.start {
+                        findVideoSurface(playerView?.videoSurfaceView ?: playerView)
+                    }
+                    handler.removeCallbacks(surfaceValidationFallbackRunnable)
+                    handler.removeCallbacks(surfaceValidationDeadlineRunnable)
+                    handler.postDelayed(
+                        surfaceValidationFallbackRunnable,
+                        PIXEL_VALIDATION_FALLBACK_MS,
+                    )
+                    handler.postDelayed(
+                        surfaceValidationDeadlineRunnable,
+                        PIXEL_VALIDATION_DEADLINE_MS,
+                    )
                 } else {
-                    listener?.onError(error.errorCodeName)
+                    reportVerifiedVideoOutput()
+                }
+            }
+
+            override fun onPlayerError(
+                eventTime: AnalyticsListener.EventTime,
+                error: PlaybackException,
+            ) {
+                if (!isCurrentEvent(eventTime)) return
+                PlaybackLog.log(context, engineName, "onPlayerError ${error.errorCodeName}")
+                val exoError = error as? ExoPlaybackException
+                val rendererType =
+                    if (
+                        exoError?.type == ExoPlaybackException.TYPE_RENDERER &&
+                        exoError.rendererIndex >= 0
+                    ) {
+                        runCatching { exo.getRendererType(exoError.rendererIndex) }.getOrNull()
+                    } else {
+                        null
+                    }
+                when (
+                    ExoPlaybackFailureClassifier.classifyError(
+                        errorCode = error.errorCode,
+                        rendererType = rendererType,
+                    )
+                ) {
+                    ExoPlaybackFailureClassifier.Failure.AUDIO ->
+                        reportAudioUnavailable(error.errorCodeName)
+                    ExoPlaybackFailureClassifier.Failure.DECODE ->
+                        reportDecodeFailure(error.errorCodeName)
+                    ExoPlaybackFailureClassifier.Failure.ERROR ->
+                        listener?.onError(error.errorCodeName)
                 }
             }
         })
@@ -296,7 +359,6 @@ class ExoPlayerEngine(
                     "videoInputFormat ${format.width}x${format.height} " +
                         "${format.sampleMimeType} fps=${format.frameRate}"
                 )
-                maybeFlagGreenProneProfile(format)
             }
 
             override fun onDroppedVideoFrames(
@@ -369,77 +431,126 @@ class ExoPlayerEngine(
         }.setEnableDecoderFallback(true)
 
     /**
-     * If the media carries an audio track but none could be selected (the codec
-     * has no on-device decoder and passthrough is off), playback will be silent.
-     * Report it so the controller can fall back to libVLC's software decoder.
+     * Track selection can momentarily be unresolved while the manifest/extractor
+     * settles. Re-read after READY and classify the selected *and supported* paths;
+     * checking only Group.isSelected misses selected formats that exceed the device
+     * capabilities and results in silent AC-3/E-AC-3/MP2 playback.
      */
-    private fun checkAudioSupported(tracks: Tracks) {
+    private fun scheduleTrackSupportCheck() {
+        cancelTrackSupportCheck()
+        val generation = streamGeneration
+        val check = Runnable {
+            trackSupportCheckRunnable = null
+            if (generation != streamGeneration) return@Runnable
+            val exo = player ?: return@Runnable
+            if (exo.playbackState != Player.STATE_READY) return@Runnable
+            checkTrackSupport(exo.currentTracks)
+        }
+        trackSupportCheckRunnable = check
+        handler.postDelayed(check, TRACK_SUPPORT_CHECK_DELAY_MS)
+    }
+
+    /**
+     * Analytics events retain the timeline/item they belong to, even if a fast
+     * DPAD zap has already installed another MediaItem. Only the active item's
+     * callbacks may mutate health/readiness state.
+     */
+    private fun isCurrentEvent(eventTime: AnalyticsListener.EventTime): Boolean {
+        val expected = activeMediaId ?: return false
+        val timeline = eventTime.timeline
+        val windowIndex = eventTime.windowIndex
+        if (windowIndex < 0 || windowIndex >= timeline.windowCount) return false
+        val mediaId = runCatching {
+            timeline.getWindow(windowIndex, Timeline.Window()).mediaItem.mediaId
+        }.getOrNull()
+        return mediaId == expected
+    }
+
+    private fun cancelTrackSupportCheck() {
+        trackSupportCheckRunnable?.let(handler::removeCallbacks)
+        trackSupportCheckRunnable = null
+    }
+
+    private fun checkTrackSupport(tracks: Tracks) {
+        val groups = tracks.groups.map { group ->
+            ExoPlaybackFailureClassifier.TrackGroupState(
+                type = group.type,
+                selected = List(group.length) { index -> group.isTrackSelected(index) },
+                // DefaultTrackSelector may deliberately select a format that
+                // exceeds conservative capability declarations. If Media3 still
+                // selected it, allow that path to prove itself by frame/error
+                // evidence instead of forcing a false fallback after 1.2 seconds.
+                supported =
+                    List(group.length) { index ->
+                        group.isTrackSupported(index, /* allowExceedsCapabilities = */ true)
+                    },
+            )
+        }
+        when (
+            ExoPlaybackFailureClassifier.classifyTracks(
+                groups = groups,
+                expectsVideo = expectsVideo,
+            )
+        ) {
+            ExoPlaybackFailureClassifier.Failure.AUDIO ->
+                reportAudioUnavailable("audio track unsupported or unselected")
+            ExoPlaybackFailureClassifier.Failure.DECODE ->
+                reportDecodeFailure("video track unsupported or unselected")
+            ExoPlaybackFailureClassifier.Failure.ERROR,
+            null -> Unit
+        }
+    }
+
+    private fun reportAudioUnavailable(detail: String) {
         if (audioReported) return
-        var hasAudio = false
-        var audioSelected = false
-        for (group in tracks.groups) {
-            if (group.type == C.TRACK_TYPE_AUDIO) {
-                hasAudio = true
-                if (group.isSelected) audioSelected = true
-            }
-        }
-        if (hasAudio && !audioSelected) {
-            audioReported = true
-            PlaybackLog.log(
-                context,
-                engineName,
-                "audio track present but unsupported/unselected -> fallback " +
-                    "(state=${player?.playbackState}, groups=${tracks.groups.size})"
-            )
-            listener?.onAudioUnavailable()
-        }
+        audioReported = true
+        cancelTrackSupportCheck()
+        PlaybackLog.log(context, engineName, "$detail -> audio compatibility fallback")
+        listener?.onAudioUnavailable()
     }
 
-    /**
-     * Some Amlogic AVC decoders accept 1080p50/60, report a rendered frame and
-     * then output green buffers without a codec exception. PixelCopy confirms the
-     * actual colour on API 24+, while this narrow profile guard covers older TVs
-     * and surfaces that cannot be copied. UHD and non-AVC streams are excluded.
-     */
-    private fun maybeFlagGreenProneProfile(format: Format) {
-        // API 24+ devices are judged from the actual SurfaceView pixels instead
-        // of a codec/profile guess. This guard is only for old TVs where
-        // PixelCopy does not exist; otherwise a perfectly healthy 1080p50 stream
-        // could be needlessly pushed onto a slower software decoder.
-        if (videoFailureReported || Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) return
-        val h264 = format.sampleMimeType == MimeTypes.VIDEO_H264
-        val isUhd = format.height >= UHD_MIN_HEIGHT || format.width >= UHD_MIN_WIDTH
-        val is1080Class = !isUhd &&
-            (format.height >= GREEN_PRONE_MIN_HEIGHT || format.width >= GREEN_PRONE_MIN_WIDTH)
-        if (h264 && is1080Class && format.frameRate >= GREEN_PRONE_MIN_FPS) {
-            reportVideoInvalid(
-                "green-prone AVC ${format.width}x${format.height}@${format.frameRate}fps",
-            )
-        }
-    }
-
-    /**
-     * True for ExoPlayer error codes that mean the (hardware) video decoder failed
-     * — distinct from a network/source drop. These are the failures that loop on
-     * the same dead decoder, so the controller escalates them to software decode.
-     */
-    private fun isDecoderError(code: Int): Boolean = when (code) {
-        PlaybackException.ERROR_CODE_DECODING_FAILED,
-        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
-        PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
-        PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
-        PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES -> true
-        else -> false
+    private fun reportDecodeFailure(detail: String) {
+        if (videoFailureReported) return
+        videoFailureReported = true
+        surfaceFrameHealth.reset()
+        cancelTrackSupportCheck()
+        cancelNoFrameCheck()
+        handler.removeCallbacks(surfaceValidationFallbackRunnable)
+        handler.removeCallbacks(surfaceValidationDeadlineRunnable)
+        handler.removeCallbacks(videoProgressRunnable)
+        PlaybackLog.log(context, engineName, "$detail -> decoder compatibility fallback")
+        listener?.onDecodeError(detail)
     }
 
     private fun scheduleNoFrameCheck() {
-        handler.postDelayed({
-            // Reached READY with a video track but never rendered a frame =>
-            // decoder is stuck (often the green/blank failure with no error).
-            if (!videoFailureReported && !firstFrameRendered && player?.videoFormat != null) {
-                reportVideoInvalid("no first frame for video track")
+        cancelNoFrameCheck()
+        if (!expectsVideo || firstFrameRendered || videoFailureReported) return
+
+        val generation = streamGeneration
+        val check = Runnable {
+            noFrameCheckRunnable = null
+            if (
+                generation != streamGeneration ||
+                !expectsVideo ||
+                firstFrameRendered ||
+                videoFailureReported
+            ) {
+                return@Runnable
             }
-        }, NO_FRAME_TIMEOUT_MS)
+            // READY can be driven by a playable audio renderer. TV playback still
+            // requires a video frame, even when Media3 exposes no videoFormat
+            // because the device could not select a video decoder at all.
+            if (player?.playbackState == Player.STATE_READY) {
+                reportVideoInvalid("no first frame for expected video")
+            }
+        }
+        noFrameCheckRunnable = check
+        handler.postDelayed(check, NO_FRAME_TIMEOUT_MS)
+    }
+
+    private fun cancelNoFrameCheck() {
+        noFrameCheckRunnable?.let(handler::removeCallbacks)
+        noFrameCheckRunnable = null
     }
 
     private fun scheduleVideoProgressCheck() {
@@ -451,7 +562,10 @@ class ExoPlayerEngine(
         if (videoFailureReported) return
         videoFailureReported = true
         surfaceFrameHealth.reset()
+        cancelTrackSupportCheck()
+        cancelNoFrameCheck()
         handler.removeCallbacks(surfaceValidationFallbackRunnable)
+        handler.removeCallbacks(surfaceValidationDeadlineRunnable)
         handler.removeCallbacks(videoProgressRunnable)
         PlaybackLog.log(context, engineName, "$detail -> compatibility fallback")
         listener?.onVideoInvalid()
@@ -461,7 +575,13 @@ class ExoPlayerEngine(
         if (videoFailureReported || videoOutputReported) return
         videoOutputReported = true
         handler.removeCallbacks(surfaceValidationFallbackRunnable)
+        handler.removeCallbacks(surfaceValidationDeadlineRunnable)
         PlaybackLog.log(context, engineName, "healthy SurfaceView frame confirmed")
+        // The controller uses onPlaying as its engine-success signal. For TV that
+        // signal is intentionally withheld until this verified pixel output.
+        if (readyForPlayback) {
+            listener?.onPlaying()
+        }
         listener?.onVideoOutput()
     }
 
@@ -488,7 +608,7 @@ class ExoPlayerEngine(
 
     override fun play(url: String, reset: Boolean) {
         val exo = player ?: return
-        resetHealth()
+        val mediaId = resetHealth()
         PlaybackLog.log(context, engineName, "play passthrough=$allowPassthrough reset=$reset")
         // reset=true (channel-change zap AND preview<->fullscreen hand-off): stop()
         // before swapping the media so ExoPlayer rebuilds the video codec for the
@@ -504,19 +624,30 @@ class ExoPlayerEngine(
         // zap, but that is far better than a permanently frozen picture on every
         // channel whose resolution differs from the one fullscreen started on.
         if (reset) exo.stop()
-        exo.setMediaItem(MediaItem.fromUri(url))
+        exo.setMediaItem(
+            MediaItem.Builder()
+                .setUri(url)
+                .setMediaId(mediaId)
+                .build(),
+        )
         exo.playWhenReady = true
         exo.prepare()
     }
 
-    private fun resetHealth() {
+    private fun resetHealth(): String {
         handler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()
+        streamGeneration += 1
+        activeMediaId = "live-$streamGeneration"
         firstFrameRendered = false
         videoFailureReported = false
         videoOutputReported = false
         audioReported = false
+        readyForPlayback = false
+        trackSupportCheckRunnable = null
+        noFrameCheckRunnable = null
         lastVideoFrameAtMs.set(0L)
+        return checkNotNull(activeMediaId)
     }
 
     override fun pause() { player?.playWhenReady = false }
@@ -531,9 +662,14 @@ class ExoPlayerEngine(
     override fun release() {
         handler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()
+        streamGeneration += 1
+        activeMediaId = null
+        // Disconnect the render surface before releasing the codec. Several TV
+        // vendor MediaCodec implementations otherwise retain a destroyed view
+        // across the next engine/channel and fail configure with BAD_VALUE.
+        playerView?.player = null
         player?.release()
         player = null
-        playerView?.player = null
         playerView = null
         listener = null
     }
@@ -574,17 +710,13 @@ class ExoPlayerEngine(
     }
 
     companion object {
-        /** Debounce after a track change before judging audio as unselected. */
-        private const val AUDIO_CHECK_DELAY_MS = 1200L
+        /** Debounce after a track change before judging resolved track support. */
+        private const val TRACK_SUPPORT_CHECK_DELAY_MS = 1200L
         /** If no frame renders this long after READY, treat video as failed. */
-        private const val NO_FRAME_TIMEOUT_MS = 6000L
+        private const val NO_FRAME_TIMEOUT_MS = 8000L
         private const val VIDEO_HEALTH_POLL_MS = 2000L
         private const val VIDEO_FRAME_STALL_MS = 7000L
         private const val PIXEL_VALIDATION_FALLBACK_MS = 1_800L
-        private const val GREEN_PRONE_MIN_HEIGHT = 1080
-        private const val GREEN_PRONE_MIN_WIDTH = 1920
-        private const val GREEN_PRONE_MIN_FPS = 49f
-        private const val UHD_MIN_HEIGHT = 1440
-        private const val UHD_MIN_WIDTH = 2560
+        private const val PIXEL_VALIDATION_DEADLINE_MS = 9_000L
     }
 }
