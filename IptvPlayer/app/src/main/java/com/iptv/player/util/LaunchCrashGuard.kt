@@ -11,6 +11,8 @@
 package com.iptv.player.util
 
 import android.content.Context
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 object LaunchCrashGuard {
 
@@ -28,9 +30,19 @@ object LaunchCrashGuard {
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** True when a previous launch armed the guard but never confirmed success. */
-    fun previousLaunchCrashed(context: Context): Boolean =
-        runCatching { prefs(context).getBoolean(KEY_IN_PROGRESS, false) }.getOrDefault(false)
+    /**
+     * True when a previous launch armed the guard but never confirmed success.
+     *
+     * SharedPreferences may synchronously load its XML on the first access. Keep
+     * that read off the UI thread so the splash animation and first frame are not
+     * delayed on slower TV storage.
+     */
+    suspend fun previousLaunchCrashed(context: Context): Boolean =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                prefs(context).getBoolean(KEY_IN_PROGRESS, false)
+            }.getOrDefault(false)
+        }
 
     /**
      * Consume the armed guard after a crash was detected: disarm it (so an exit
@@ -38,33 +50,54 @@ object LaunchCrashGuard {
      * launch) and increment the consecutive-crash streak. Committed synchronously.
      * Returns the new streak (>= 1).
      */
-    fun consumeCrashAndCountStreak(context: Context): Int =
-        runCatching {
-            val p = prefs(context)
-            val streak = p.getInt(KEY_STREAK, 0) + 1
-            p.edit().putBoolean(KEY_IN_PROGRESS, false).putInt(KEY_STREAK, streak).commit()
-            streak
-        }.getOrDefault(1)
+    suspend fun consumeCrashAndCountStreak(context: Context): Int =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val p = prefs(context)
+                val streak = p.getInt(KEY_STREAK, 0) + 1
+                p.edit()
+                    .putBoolean(KEY_IN_PROGRESS, false)
+                    .putInt(KEY_STREAK, streak)
+                    .commit()
+                streak
+            }.getOrDefault(1)
+        }
 
     /** Current consecutive launch-crash streak (0 = last launch was healthy). */
-    fun crashStreak(context: Context): Int =
-        runCatching { prefs(context).getInt(KEY_STREAK, 0) }.getOrDefault(0)
+    suspend fun crashStreak(context: Context): Int =
+        withContext(Dispatchers.IO) {
+            runCatching { prefs(context).getInt(KEY_STREAK, 0) }.getOrDefault(0)
+        }
 
-    /** Arm the guard right before the risky Dashboard launch. Committed synchronously. */
-    fun markLaunchStarted(context: Context) {
-        runCatching { prefs(context).edit().putBoolean(KEY_IN_PROGRESS, true).commit() }
-    }
+    /**
+     * Arm the guard right before the risky Dashboard launch.
+     *
+     * Await the durable commit, but perform it on Dispatchers.IO. Replacing this
+     * with apply() would hide the main-thread violation at the cost of losing the
+     * guard when the process crashes before the asynchronous write reaches disk.
+     */
+    suspend fun markLaunchStarted(context: Context) =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                prefs(context).edit()
+                    .putBoolean(KEY_IN_PROGRESS, true)
+                    .commit()
+            }
+            Unit
+        }
 
     /**
      * Clear the guard once the home screen has drawn its first frame successfully.
      * Also resets the crash streak — the loop (if any) is broken.
      */
-    fun markLaunchSucceeded(context: Context) {
-        runCatching {
-            prefs(context).edit()
-                .putBoolean(KEY_IN_PROGRESS, false)
-                .putInt(KEY_STREAK, 0)
-                .apply()
+    suspend fun markLaunchSucceeded(context: Context) =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                prefs(context).edit()
+                    .putBoolean(KEY_IN_PROGRESS, false)
+                    .putInt(KEY_STREAK, 0)
+                    .commit()
+            }
+            Unit
         }
-    }
 }

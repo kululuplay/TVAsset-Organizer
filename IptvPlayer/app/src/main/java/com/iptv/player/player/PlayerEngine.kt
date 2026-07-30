@@ -99,6 +99,12 @@ data class StreamInfo(
 
 /** Playback state callbacks routed to the UI. */
 interface PlayerListener {
+    /**
+     * The backend has submitted the current stream to its real decoder/native
+     * start path. The controller starts its live startup deadline here, excluding
+     * any retired-player cleanup or coalesced-zap wait that happened beforehand.
+     */
+    fun onPlaybackSubmitted() {}
     fun onBuffering() {}
     fun onPlaying() {}
     /**

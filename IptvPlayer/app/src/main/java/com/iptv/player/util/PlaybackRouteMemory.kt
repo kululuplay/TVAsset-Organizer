@@ -36,7 +36,10 @@ object PlaybackRouteMemory {
     // Only this tiny cache is affected; login and Settings live in DataStore.
     // v3 invalidates routes learned before sustained dropped-frame quality was
     // part of the definition of stable playback.
-    private const val SCHEMA = 3
+    // v4 invalidates routes learned before rapid-zap session isolation and the
+    // corrected Fire TV frame-quality gates. Only this tiny route cache is
+    // discarded; account credentials and every user setting remain untouched.
+    private const val SCHEMA = 4
 
     /** Hard cap on remembered channels; the least-recently-used is evicted past this. */
     private const val MAX_ENTRIES = 500

@@ -878,8 +878,22 @@ class VlcPlayerEngine(
         // inside JNI. Keep only the latest DPAD zap; finishPending re-enters play
         // once native ownership is idle.
         if (pendingOps.get() > 0) {
+            // Cancel the continuation and every health/event callback belonging
+            // to the superseded channel immediately. Without this boundary, a
+            // late Playing/Vout event from the in-flight start could validate the
+            // channel the controller has already switched to.
+            opsSeq.incrementAndGet()
+            invalidateEventSession()
+            profileHandler.removeCallbacksAndMessages(null)
+            audioHandler.removeCallbacksAndMessages(null)
+            healthHandler.removeCallbacksAndMessages(null)
+            surfaceFrameHealth.reset()
             deferredPlay = DeferredPlay(url, reset)
-            PlaybackLog.log(context, engineName, "native command busy -> coalesce latest zap")
+            PlaybackLog.log(
+                context,
+                engineName,
+                "native command busy -> cancel stale continuation and coalesce latest zap",
+            )
             return
         }
         deferredPlay = null
@@ -1002,14 +1016,16 @@ class VlcPlayerEngine(
         VlcOps.postBounded(
             timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
             onTimeout = {
-                nativeHandlesAbandoned.set(true)
+                val firstAbandon =
+                    nativeHandlesAbandoned.compareAndSet(false, true)
                 deferredPlay = null
+                opsSeq.incrementAndGet()
                 invalidateEventSession()
-                if (
-                    opsSeq.compareAndSet(mySeq, mySeq + 1L) &&
-                    mediaPlayer === mp
-                ) {
+                if (firstAbandon) {
                     PlaybackLog.log(context, engineName, "retired player cleanup timed out")
+                    // The queued latest zap depends on this same LibVLC owner.
+                    // Notify the controller even when it already advanced opsSeq;
+                    // otherwise it waits for the much longer startup watchdog.
                     listener?.onError("VLC cleanup timeout")
                 }
                 finishPending()
@@ -1162,17 +1178,23 @@ class VlcPlayerEngine(
         sequence: Long,
         finishPending: () -> Unit,
     ) {
+        // This point is reached only after any retired player cleanup and Surface
+        // replacement have completed. The controller's startup budget must begin
+        // here—not when a rapid zap was merely stored in deferredPlay.
+        listener?.onPlaybackSubmitted()
         VlcOps.postBounded(
             timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
             onTimeout = {
-                nativeHandlesAbandoned.set(true)
+                val firstAbandon =
+                    nativeHandlesAbandoned.compareAndSet(false, true)
                 deferredPlay = null
+                opsSeq.incrementAndGet()
                 invalidateEventSession()
-                if (
-                    opsSeq.compareAndSet(sequence, sequence + 1L) &&
-                    mediaPlayer === mp
-                ) {
+                if (firstAbandon) {
                     PlaybackLog.log(context, engineName, "native start timed out")
+                    // Abandoning LibVLC is engine-wide. Even if a newer zap already
+                    // invalidated [sequence], that newest request was waiting on
+                    // these same handles and must be recovered immediately.
                     listener?.onError("VLC start timeout")
                 }
                 finishPending()

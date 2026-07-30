@@ -8,6 +8,7 @@
 package com.iptv.player.util
 
 import android.content.Context
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -32,19 +33,19 @@ class LaunchCrashGuardTest {
     }
 
     @Test
-    fun `fresh install reports no crash and zero streak`() {
+    fun `fresh install reports no crash and zero streak`() = runBlocking {
         assertFalse(LaunchCrashGuard.previousLaunchCrashed(context))
         assertEquals(0, LaunchCrashGuard.crashStreak(context))
     }
 
     @Test
-    fun `armed guard that is never cleared counts as a crash`() {
+    fun `armed guard that is never cleared counts as a crash`() = runBlocking {
         LaunchCrashGuard.markLaunchStarted(context)
         assertTrue(LaunchCrashGuard.previousLaunchCrashed(context))
     }
 
     @Test
-    fun `successful launch clears the guard and the streak`() {
+    fun `successful launch clears the guard and the streak`() = runBlocking {
         LaunchCrashGuard.markLaunchStarted(context)
         LaunchCrashGuard.markLaunchSucceeded(context)
         assertFalse(LaunchCrashGuard.previousLaunchCrashed(context))
@@ -52,7 +53,7 @@ class LaunchCrashGuardTest {
     }
 
     @Test
-    fun `consuming a crash disarms the guard and increments the streak`() {
+    fun `consuming a crash disarms the guard and increments the streak`() = runBlocking {
         LaunchCrashGuard.markLaunchStarted(context)
         val streak = LaunchCrashGuard.consumeCrashAndCountStreak(context)
         assertEquals(1, streak)
@@ -62,7 +63,7 @@ class LaunchCrashGuardTest {
     }
 
     @Test
-    fun `consecutive crashes reach the safe-mode threshold`() {
+    fun `consecutive crashes reach the safe-mode threshold`() = runBlocking {
         LaunchCrashGuard.markLaunchStarted(context)
         LaunchCrashGuard.consumeCrashAndCountStreak(context)
         LaunchCrashGuard.markLaunchStarted(context)
@@ -72,7 +73,7 @@ class LaunchCrashGuardTest {
     }
 
     @Test
-    fun `healthy launch between crashes breaks the streak`() {
+    fun `healthy launch between crashes breaks the streak`() = runBlocking {
         LaunchCrashGuard.markLaunchStarted(context)
         LaunchCrashGuard.consumeCrashAndCountStreak(context)
         // This launch completes fine…

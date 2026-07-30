@@ -75,8 +75,10 @@ class DashboardActivity : BaseActivity() {
         // (this post runs after the first traversal and the initial onResume),
         // proving the login -> splash -> home path completed without crashing.
         binding.root.post {
-            LaunchCrashGuard.markLaunchSucceeded(this)
-            Logger.i("Dashboard", "launch confirmed stable")
+            lifecycleScope.launch {
+                LaunchCrashGuard.markLaunchSucceeded(this@DashboardActivity)
+                Logger.i("Dashboard", "launch confirmed stable")
+            }
         }
         Logger.i("Dashboard", "onCreate end")
     }
