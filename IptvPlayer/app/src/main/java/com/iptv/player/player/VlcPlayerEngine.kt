@@ -90,7 +90,7 @@ class VlcPlayerEngine(
     private val playingObserved = AtomicBoolean(false)
     private val bufferingActive = AtomicBoolean(true)
     private val voutObserved = AtomicBoolean(false)
-    private val playbackHealth = VlcPlaybackHealth(softwareDecode = forceSoftware)
+    private val playbackHealth = VlcPlaybackHealth()
     private val healthHandler = Handler(Looper.getMainLooper())
     // Command continuations must survive health resets. Clearing healthHandler is
     // expected on every zap; using it for cleanup->attach accounting leaked
@@ -200,8 +200,6 @@ class VlcPlayerEngine(
                             reportSoftwareTooSlow("software video output froze while input/time advanced")
                         decision.videoFrozen ->
                             reportVideoInvalid("video output froze while input/time advanced")
-                        decision.softwareTooSlow ->
-                            reportSoftwareTooSlow("sustained lost-picture ratio above 25%")
                     }
                 }
             }

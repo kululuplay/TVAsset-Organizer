@@ -61,7 +61,7 @@ class VlcHardwareDevicePolicyTest {
     }
 
     @Test
-    fun `marking unsafe VLC hardware unavailable skips it in normal ladder`() {
+    fun `Amlogic EXO video failure skips unsafe VLC hardware and selects software`() {
         assertEquals(
             Stage.VLC_SW,
             PlaybackRoutingPolicy.nextStage(
@@ -92,42 +92,6 @@ class VlcHardwareDevicePolicyTest {
             VlcHardwareDevicePolicy.canReuseEngineForStreamChange(
                 stage = Stage.EXO,
                 bypassVlcHardware = false,
-            ),
-        )
-    }
-
-    @Test
-    fun `Amlogic EXO output failure gets one cold retry`() {
-        assertTrue(
-            VlcHardwareDevicePolicy.shouldColdRetryExoOutput(
-                current = Stage.EXO,
-                failure = Failure.VIDEO,
-                alreadyRetried = false,
-                bypassVlcHardware = true,
-            ),
-        )
-        assertTrue(
-            VlcHardwareDevicePolicy.shouldColdRetryExoOutput(
-                current = Stage.EXO,
-                failure = Failure.STARTUP,
-                alreadyRetried = false,
-                bypassVlcHardware = true,
-            ),
-        )
-        assertFalse(
-            VlcHardwareDevicePolicy.shouldColdRetryExoOutput(
-                current = Stage.EXO,
-                failure = Failure.VIDEO,
-                alreadyRetried = true,
-                bypassVlcHardware = true,
-            ),
-        )
-        assertFalse(
-            VlcHardwareDevicePolicy.shouldColdRetryExoOutput(
-                current = Stage.EXO,
-                failure = Failure.ERROR,
-                alreadyRetried = false,
-                bypassVlcHardware = true,
             ),
         )
     }

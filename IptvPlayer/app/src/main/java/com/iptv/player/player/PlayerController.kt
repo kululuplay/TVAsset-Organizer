@@ -101,7 +101,6 @@ class PlayerController(
                 "Amlogic EXO handoff -> cold engine restart",
             )
             videoRebindPending = false
-            coldExoOutputRetryAttempted = false
             playbackConfirmed = false
             videoOutputConfirmed = false
             stageStartMs = 0L
@@ -207,9 +206,6 @@ class PlayerController(
     // ExoPlayer and explicit decoder choices are never overridden by memory.
     private var currentRawRouteKey: String? = null
     private var currentRouteKey: String? = null
-    // One bounded fresh-engine recovery for an Amlogic Exo output stall. Kept
-    // per channel so a defective source cannot bounce forever on the same codec.
-    private var coldExoOutputRetryAttempted = false
     // True while the CURRENT play started on a remembered stage that DIFFERS from
     // the cold base stage and has not yet proved stable. If it fails before then,
     // we distrust the memory and restart from the base ladder (see handleFailure).
@@ -356,7 +352,6 @@ class PlayerController(
         // routeKey; namespace it by the active settings pair as well.
         currentRawRouteKey = routeKey
         currentRouteKey = routeKey?.let { "${mode.name}|${decoderMode.name}|$it" }
-        coldExoOutputRetryAttempted = false
         playbackConfirmed = false
         videoOutputConfirmed = false
         memoryIgnoredThisPlay = false
@@ -876,33 +871,10 @@ class PlayerController(
             return
         }
 
-        // The real-device log shows Amlogic Exo can render/validate one frame
-        // after a stream reset, then stop video while audio continues. Before
-        // sending a 1080p stream to CPU-heavy VLC software decode, retire the
-        // complete Exo engine and try one fresh hardware codec instance.
-        if (
-            VlcHardwareDevicePolicy.shouldColdRetryExoOutput(
-                current = stage,
-                failure = effectiveReason,
-                alreadyRetried = coldExoOutputRetryAttempted,
-                bypassVlcHardware = bypassVlcHardware,
-            )
-        ) {
-            coldExoOutputRetryAttempted = true
-            PlaybackLog.log(
-                context,
-                "Controller",
-                "Amlogic EXO $effectiveReason -> one cold engine retry",
-            )
-            recordStability(
-                "cold_retry",
-                "warn",
-                "Amlogic EXO $effectiveReason",
-            )
-            resetReconnect()
-            startStage(Stage.EXO)
-            return
-        }
+        // Every Amlogic EXO stream boundary already owns a fresh engine/codec.
+        // If that fresh decoder produces one verified frame and then stalls,
+        // repeating the identical codec only delays the bounded VLC fallback.
+        // Let the compatibility ladder advance immediately.
 
         // Repeated hardware DECODE failures must not loop on the same dead decoder.
         // Two shapes of this failure:
