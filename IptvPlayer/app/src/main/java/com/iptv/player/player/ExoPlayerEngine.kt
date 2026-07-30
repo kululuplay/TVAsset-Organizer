@@ -692,11 +692,13 @@ class ExoPlayerEngine(
         droppedFrameHealth.reset()
         streamGeneration += 1
         activeMediaId = null
+        val retiredView = playerView
         // Disconnect the render surface before releasing the codec. Several TV
         // vendor MediaCodec implementations otherwise retain a destroyed view
         // across the next engine/channel and fail configure with BAD_VALUE.
-        playerView?.player = null
+        retiredView?.player = null
         player?.release()
+        (retiredView?.parent as? ViewGroup)?.removeView(retiredView)
         player = null
         playerView = null
         listener = null

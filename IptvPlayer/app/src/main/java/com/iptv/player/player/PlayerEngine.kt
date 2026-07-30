@@ -43,7 +43,11 @@ interface PlayerEngine {
     fun resume()
     fun stop()
 
-    /** Release all native resources. Engine is unusable afterwards. */
+    /**
+     * Release all native resources and remove this engine's own video view from
+     * its parent. Engine is unusable afterwards. Owning view removal here lets a
+     * backend order Surface destruction after its native decoder has stopped.
+     */
     fun release()
 
     fun setListener(listener: PlayerListener?)
