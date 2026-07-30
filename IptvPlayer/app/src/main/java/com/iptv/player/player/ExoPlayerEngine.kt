@@ -93,6 +93,7 @@ class ExoPlayerEngine(
     private var activeMediaId: String? = null
     private var trackSupportCheckRunnable: Runnable? = null
     private var noFrameCheckRunnable: Runnable? = null
+    private val droppedFrameHealth = DroppedFrameRecoveryGate()
 
     private val surfaceFrameHealth = SurfaceFrameHealthMonitor(
         handler = handler,
@@ -272,7 +273,9 @@ class ExoPlayerEngine(
             ) {
                 if (!isCurrentEvent(eventTime)) return
                 firstFrameRendered = true
-                lastVideoFrameAtMs.set(renderTimeMs)
+                val nowMs = SystemClock.elapsedRealtime()
+                lastVideoFrameAtMs.set(nowMs)
+                droppedFrameHealth.onFirstFrame(nowMs)
                 cancelNoFrameCheck()
                 PlaybackLog.log(context, engineName, "onRenderedFirstFrame")
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -346,6 +349,7 @@ class ExoPlayerEngine(
                 initializedTimestampMs: Long,
                 initializationDurationMs: Long
             ) {
+                if (!isCurrentEvent(eventTime)) return
                 PlaybackLog.log(context, engineName, "videoDecoder=$decoderName")
             }
 
@@ -354,6 +358,7 @@ class ExoPlayerEngine(
                 format: Format,
                 decoderReuseEvaluation: DecoderReuseEvaluation?
             ) {
+                if (!isCurrentEvent(eventTime)) return
                 PlaybackLog.log(
                     context, engineName,
                     "videoInputFormat ${format.width}x${format.height} " +
@@ -366,14 +371,29 @@ class ExoPlayerEngine(
                 droppedFrames: Int,
                 elapsedMs: Long
             ) {
+                if (!isCurrentEvent(eventTime)) return
                 PlaybackLog.log(context, engineName, "droppedVideoFrames=$droppedFrames/${elapsedMs}ms")
+                val breach = droppedFrameHealth.onDroppedFrames(
+                    nowMs = SystemClock.elapsedRealtime(),
+                    droppedFrames = droppedFrames,
+                )
+                if (breach != null) {
+                    reportVideoInvalid(
+                        "excessive frame loss ${breach.droppedFrames} frames/" +
+                            "${breach.windowMs}ms",
+                    )
+                }
             }
 
             override fun onVideoCodecError(
                 eventTime: AnalyticsListener.EventTime,
                 videoCodecError: Exception
             ) {
+                if (!isCurrentEvent(eventTime)) return
                 PlaybackLog.log(context, engineName, "videoCodecError ${videoCodecError.message}")
+                reportDecodeFailure(
+                    videoCodecError.message ?: videoCodecError.javaClass.simpleName,
+                )
             }
         })
 
@@ -405,7 +425,7 @@ class ExoPlayerEngine(
      */
     private fun buildRenderersFactory(): DefaultRenderersFactory =
         object : DefaultRenderersFactory(context) {
-            @Suppress("DEPRECATION")
+            @Suppress("DEPRECATION", "UNUSED_PARAMETER")
             override fun buildAudioSink(
                 context: Context,
                 enableFloatOutput: Boolean,
@@ -425,7 +445,11 @@ class ExoPlayerEngine(
                 }
                 builder
                     .setEnableFloatOutput(enableFloatOutput)
-                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    // Live TV always runs at 1x. Vendor AudioTrack implementations
+                    // on Amlogic/Xiaomi/Fire TV frequently expose stale/retrograde
+                    // timestamps when playback-params mode is active. Let Media3
+                    // use its stable default clock path instead.
+                    .setEnableAudioTrackPlaybackParams(false)
                 return builder.build()
             }
         }.setEnableDecoderFallback(true)
@@ -513,6 +537,7 @@ class ExoPlayerEngine(
         if (videoFailureReported) return
         videoFailureReported = true
         surfaceFrameHealth.reset()
+        droppedFrameHealth.reset()
         cancelTrackSupportCheck()
         cancelNoFrameCheck()
         handler.removeCallbacks(surfaceValidationFallbackRunnable)
@@ -562,6 +587,7 @@ class ExoPlayerEngine(
         if (videoFailureReported) return
         videoFailureReported = true
         surfaceFrameHealth.reset()
+        droppedFrameHealth.reset()
         cancelTrackSupportCheck()
         cancelNoFrameCheck()
         handler.removeCallbacks(surfaceValidationFallbackRunnable)
@@ -637,6 +663,7 @@ class ExoPlayerEngine(
     private fun resetHealth(): String {
         handler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()
+        droppedFrameHealth.reset()
         streamGeneration += 1
         activeMediaId = "live-$streamGeneration"
         firstFrameRendered = false
@@ -662,6 +689,7 @@ class ExoPlayerEngine(
     override fun release() {
         handler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()
+        droppedFrameHealth.reset()
         streamGeneration += 1
         activeMediaId = null
         // Disconnect the render surface before releasing the codec. Several TV

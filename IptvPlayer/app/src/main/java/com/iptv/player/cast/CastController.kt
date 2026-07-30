@@ -8,6 +8,9 @@
 package com.iptv.player.cast
 
 import android.app.Activity
+import android.app.UiModeManager
+import android.content.Context
+import android.content.res.Configuration
 import android.widget.Toast
 import androidx.mediarouter.app.MediaRouteChooserDialog
 import com.google.android.gms.cast.framework.CastSession
@@ -26,7 +29,16 @@ class CastController(
         val isLive: Boolean
     )
 
-    val isAvailable: Boolean get() = CastHelper.isAvailable(activity)
+    private var attached = false
+
+    private val isTelevision: Boolean
+        get() =
+            (activity.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager)
+                ?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
+
+    val isAvailable: Boolean
+        get() = CastDevicePolicy.shouldInitialize(isTelevision) &&
+            CastHelper.isAvailable(activity)
 
     private val sessionListener = object : SessionManagerListener<CastSession> {
         override fun onSessionStarted(session: CastSession, sessionId: String) = loadCurrent()
@@ -41,14 +53,16 @@ class CastController(
     }
 
     fun attach() {
+        if (!isAvailable || attached) return
+        val sessionManager = CastHelper.castContext(activity)?.sessionManager ?: return
         runCatching {
-            CastHelper.castContext(activity)
-                ?.sessionManager
-                ?.addSessionManagerListener(sessionListener, CastSession::class.java)
-        }
+            sessionManager.addSessionManagerListener(sessionListener, CastSession::class.java)
+        }.onSuccess { attached = true }
     }
 
     fun detach() {
+        if (!attached) return
+        attached = false
         runCatching {
             CastHelper.castContext(activity)
                 ?.sessionManager
@@ -58,6 +72,10 @@ class CastController(
 
     /** Cast button handler: load if connected, otherwise show the route chooser. */
     fun onCastButtonClicked() {
+        if (!isAvailable) {
+            toast(R.string.cast_unavailable)
+            return
+        }
         val ctx = CastHelper.castContext(activity)
         if (ctx == null) {
             toast(R.string.cast_unavailable)
