@@ -55,8 +55,9 @@ class PlayerController(
 
     /**
      * Re-home the currently running engine onto [newContainer] for a live
-     * preview <-> fullscreen hand-off, then RESTART the stream on the same engine
-     * so the picture reliably reappears on the new surface.
+     * preview <-> fullscreen hand-off, then restart the stream so the picture
+     * reliably reappears on the new surface. Amlogic Exo uses a complete cold
+     * engine restart because same-codec stop/prepare can freeze after one frame.
      *
      * The detach -> delay -> attach sequence mirrors the engine-swap timing: a
      * SurfaceView's underlying surface is torn down asynchronously, so adding the
@@ -84,6 +85,33 @@ class PlayerController(
         container = newContainer
         val eng = engine ?: return
         val url = currentUrl
+        if (
+            url != null &&
+            !VlcHardwareDevicePolicy.canReuseEngineForStreamChange(
+                stage = stage,
+                bypassVlcHardware = bypassVlcHardware,
+            )
+        ) {
+            // Moving a running Amlogic Exo Surface and stop/prepare-reusing the
+            // same codec has the same one-frame-then-freeze signature as a zap.
+            // Retire the complete engine and bind a fresh codec to the new host.
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "Amlogic EXO handoff -> cold engine restart",
+            )
+            videoRebindPending = false
+            coldExoOutputRetryAttempted = false
+            playbackConfirmed = false
+            videoOutputConfirmed = false
+            stageStartMs = 0L
+            mainHandler.removeCallbacksAndMessages(null)
+            stableHandler.removeCallbacksAndMessages(null)
+            resetReconnect()
+            cancelWatchdog()
+            startStage(stage)
+            return
+        }
         val generation = ++startGeneration
         // The replay below is a restart boundary for the watchdog: drop the stall
         // poll now — its position baseline belongs to the pre-handoff surface, and
@@ -179,6 +207,9 @@ class PlayerController(
     // ExoPlayer and explicit decoder choices are never overridden by memory.
     private var currentRawRouteKey: String? = null
     private var currentRouteKey: String? = null
+    // One bounded fresh-engine recovery for an Amlogic Exo output stall. Kept
+    // per channel so a defective source cannot bounce forever on the same codec.
+    private var coldExoOutputRetryAttempted = false
     // True while the CURRENT play started on a remembered stage that DIFFERS from
     // the cold base stage and has not yet proved stable. If it fails before then,
     // we distrust the memory and restart from the base ladder (see handleFailure).
@@ -325,6 +356,7 @@ class PlayerController(
         // routeKey; namespace it by the active settings pair as well.
         currentRawRouteKey = routeKey
         currentRouteKey = routeKey?.let { "${mode.name}|${decoderMode.name}|$it" }
+        coldExoOutputRetryAttempted = false
         playbackConfirmed = false
         videoOutputConfirmed = false
         memoryIgnoredThisPlay = false
@@ -347,18 +379,20 @@ class PlayerController(
         // restart) when memory actually changes the starting stage.
         usingRememberedRoute = remembered != null && remembered != base
 
-        // Fast zap: when the next stream would start on the very same stage the
-        // current engine is already running, keep that engine alive and just swap
-        // the stream on it. This skips the full engine/LibVLC/ExoPlayer rebuild and
-        // the ENGINE_SWAP_DELAY_MS surface-handoff guard. The engine-owned layout
-        // is retained; VLC may replace only its native MediaPlayer to isolate stale
-        // events. The decoder is still cleanly reconfigured for the new stream
-        // (reset below) so a resolution change cannot freeze it.
+        // Fast zap: on device/engine combinations proven safe for reuse, keep the
+        // current engine alive and swap only the stream. Amlogic Exo deliberately
+        // does not qualify: real-device evidence shows its stop/prepare codec can
+        // render one new frame, then freeze while audio keeps advancing.
         // Only the steady state qualifies: if the current stream had already
         // fallen back to a different stage, drop through to a clean restart so the
         // new channel still gets the full hardware-first fallback ladder.
         val reusable = engine
-        if (reusable != null && stage == initial) {
+        val canReuse =
+            VlcHardwareDevicePolicy.canReuseEngineForStreamChange(
+                stage = initial,
+                bypassVlcHardware = bypassVlcHardware,
+            )
+        if (reusable != null && stage == initial && canReuse) {
             // A fast zap keeps the same SurfaceView, but the frame currently on it
             // belongs to the previous channel and the next decoder may briefly
             // output green while its format settles. Re-arm the UI cover exactly
@@ -382,6 +416,13 @@ class PlayerController(
             // never produces a frame would otherwise hang with no event).
             armStartupTimeout()
             return
+        }
+        if (reusable != null && stage == initial && !canReuse) {
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "Amlogic EXO zap -> cold engine restart",
+            )
         }
 
         triedStages.clear()
@@ -832,6 +873,34 @@ class PlayerController(
             quickDecodeFailures = 0
             triedStages.clear()
             startStage(baseInitialStage())
+            return
+        }
+
+        // The real-device log shows Amlogic Exo can render/validate one frame
+        // after a stream reset, then stop video while audio continues. Before
+        // sending a 1080p stream to CPU-heavy VLC software decode, retire the
+        // complete Exo engine and try one fresh hardware codec instance.
+        if (
+            VlcHardwareDevicePolicy.shouldColdRetryExoOutput(
+                current = stage,
+                failure = effectiveReason,
+                alreadyRetried = coldExoOutputRetryAttempted,
+                bypassVlcHardware = bypassVlcHardware,
+            )
+        ) {
+            coldExoOutputRetryAttempted = true
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "Amlogic EXO $effectiveReason -> one cold engine retry",
+            )
+            recordStability(
+                "cold_retry",
+                "warn",
+                "Amlogic EXO $effectiveReason",
+            )
+            resetReconnect()
+            startStage(Stage.EXO)
             return
         }
 

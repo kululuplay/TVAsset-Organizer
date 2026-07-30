@@ -31,6 +31,32 @@ internal object VlcHardwareDevicePolicy {
         if (bypassVlcHardware && preferred == Stage.VLC_HW) Stage.EXO else preferred
 
     /**
+     * Amlogic's OMX decoder can emit a valid first frame after Media3 stop/prepare
+     * and then stop returning video while audio continues. A fresh ExoPlayer/codec
+     * instance is therefore required for each stream boundary on these devices;
+     * other engines/devices retain the faster reuse path.
+     */
+    fun canReuseEngineForStreamChange(
+        stage: Stage,
+        bypassVlcHardware: Boolean,
+    ): Boolean = !(bypassVlcHardware && stage == Stage.EXO)
+
+    /**
+     * A verified Exo output stall/no-frame event on Amlogic deserves one cold
+     * Media3 rebuild before falling back to CPU-heavy VLC software decoding.
+     */
+    fun shouldColdRetryExoOutput(
+        current: Stage,
+        failure: Failure,
+        alreadyRetried: Boolean,
+        bypassVlcHardware: Boolean,
+    ): Boolean =
+        bypassVlcHardware &&
+            current == Stage.EXO &&
+            !alreadyRetried &&
+            (failure == Failure.VIDEO || failure == Failure.STARTUP)
+
+    /**
      * EXO is the hardware substitute for an unsafe VLC hardware path. If that
      * substitute itself proves media-incompatible in explicit VLC mode, retain
      * one bounded VLC-software rescue instead of ending the ladder immediately.

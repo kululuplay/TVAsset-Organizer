@@ -75,6 +75,64 @@ class VlcHardwareDevicePolicyTest {
     }
 
     @Test
+    fun `Amlogic EXO stream changes require a fresh engine`() {
+        assertFalse(
+            VlcHardwareDevicePolicy.canReuseEngineForStreamChange(
+                stage = Stage.EXO,
+                bypassVlcHardware = true,
+            ),
+        )
+        assertTrue(
+            VlcHardwareDevicePolicy.canReuseEngineForStreamChange(
+                stage = Stage.VLC_SW,
+                bypassVlcHardware = true,
+            ),
+        )
+        assertTrue(
+            VlcHardwareDevicePolicy.canReuseEngineForStreamChange(
+                stage = Stage.EXO,
+                bypassVlcHardware = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `Amlogic EXO output failure gets one cold retry`() {
+        assertTrue(
+            VlcHardwareDevicePolicy.shouldColdRetryExoOutput(
+                current = Stage.EXO,
+                failure = Failure.VIDEO,
+                alreadyRetried = false,
+                bypassVlcHardware = true,
+            ),
+        )
+        assertTrue(
+            VlcHardwareDevicePolicy.shouldColdRetryExoOutput(
+                current = Stage.EXO,
+                failure = Failure.STARTUP,
+                alreadyRetried = false,
+                bypassVlcHardware = true,
+            ),
+        )
+        assertFalse(
+            VlcHardwareDevicePolicy.shouldColdRetryExoOutput(
+                current = Stage.EXO,
+                failure = Failure.VIDEO,
+                alreadyRetried = true,
+                bypassVlcHardware = true,
+            ),
+        )
+        assertFalse(
+            VlcHardwareDevicePolicy.shouldColdRetryExoOutput(
+                current = Stage.EXO,
+                failure = Failure.ERROR,
+                alreadyRetried = false,
+                bypassVlcHardware = true,
+            ),
+        )
+    }
+
+    @Test
     fun `explicit VLC retains one software rescue after substituted EXO failure`() {
         assertEquals(
             Stage.VLC_SW,
