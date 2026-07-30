@@ -138,7 +138,6 @@ class PlayerController(
                 stageStartMs = 0L
                 stableHandler.removeCallbacksAndMessages(null)
                 eng.play(url, reset = true)
-                armStartupTimeout()
             }
         }, ENGINE_SWAP_DELAY_MS)
     }
@@ -411,10 +410,6 @@ class PlayerController(
             // fresh native MediaPlayer/Media per channel, so reset is a no-op there.)
             PlaybackLog.log(context, "Controller", "fast-zap reuse stage=$initial reset")
             reusable.play(url, reset = true)
-            // The reused engine swaps in a fresh Media on a new socket, so cover the
-            // zap with the startup timeout too (a silently stalling new channel that
-            // never produces a frame would otherwise hang with no event).
-            armStartupTimeout()
             return
         }
         if (reusable != null && stage == initial && !canReuse) {
@@ -464,6 +459,10 @@ class PlayerController(
 
     private fun startStage(target: Stage) {
         callback.onPlaybackRestarting()
+        // Retire the prior stage's startup/stall watchdog now. The replacement
+        // backend re-arms a fresh startup budget through onPlaybackSubmitted()
+        // only after its real decoder/native start path is reached.
+        cancelWatchdog()
         // A GENUINE stage change (ladder move / escalation) starts a fresh decoder,
         // so reset the quick-decode-failure count. A reconnect replay of the SAME
         // stage keeps it, so a 1.5s-then-fail loop still escalates after a couple.
@@ -481,10 +480,6 @@ class PlayerController(
         val useVlc = target != Stage.EXO
         val forceSoftware = target == Stage.VLC_SW
         startEngine(useVlc, forceSoftware)
-        // Guard this (re)start: if it never reaches confirmed playback (a socket
-        // that opens but delivers no data, firing no error), the startup timeout
-        // turns the silent hang into a normal failure the ladder/reconnect handles.
-        armStartupTimeout()
     }
 
     private fun startEngine(useVlc: Boolean, forceSoftware: Boolean) {
@@ -575,6 +570,14 @@ class PlayerController(
     }
 
     private fun engineListener(source: PlayerEngine) = object : PlayerListener {
+        override fun onPlaybackSubmitted() = post {
+            if (source !== engine || suspended) return@post
+            // A coalesced VLC zap may wait behind a bounded native cleanup before
+            // this callback. Start the budget only now, when this URL has reached
+            // the actual decoder/native start path.
+            armStartupTimeout()
+        }
+
         override fun onBuffering() = post {
             if (source !== engine || suspended) return@post
             callback.onBuffering()
@@ -1038,8 +1041,9 @@ class PlayerController(
      * degrades to the previous behaviour: a single fatal error, no reconnect loop.
      */
     private fun engageReconnect() {
-        // The reconnect attempt's own startup timeout (armed in startStage) takes
-        // over watchdog duty, so drop any current poll/timeout to avoid overlap.
+        // The reconnect attempt's own startup timeout (armed once its replacement
+        // engine actually receives play()) takes over watchdog duty, so drop any
+        // current poll/timeout to avoid overlap.
         cancelWatchdog()
         if (suspended) {
             recoveryNeededOnResume = true

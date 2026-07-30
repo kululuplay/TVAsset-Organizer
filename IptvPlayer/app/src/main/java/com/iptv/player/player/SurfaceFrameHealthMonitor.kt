@@ -62,6 +62,24 @@ internal class SurfaceFrameHealthMonitor(
         scheduleSample(sampleGeneration, INITIAL_SAMPLE_DELAY_MS)
     }
 
+    /**
+     * Re-baseline an already-running monitor after PlayerView changes output
+     * size/surface. An in-flight PixelCopy from the retired output is invalidated,
+     * while the provider and monitoring lifecycle stay attached to this stream.
+     */
+    fun onOutputTransition() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        val sampleGeneration = synchronized(lock) {
+            if (!started || surfaceProvider == null) return
+            generation++
+            sampleInFlight = false
+            classifiedFrame = false
+            recoveryGate.onOutputTransition()
+            generation
+        }
+        scheduleSample(sampleGeneration, INITIAL_SAMPLE_DELAY_MS)
+    }
+
     @RequiresApi(Build.VERSION_CODES.N)
     private fun scheduleSample(sampleGeneration: Int, delayMs: Long) {
         handler.postDelayed({ sample(sampleGeneration) }, delayMs)
@@ -114,14 +132,14 @@ internal class SurfaceFrameHealthMonitor(
                             if (sampleGeneration == generation && started) {
                                 sampleInFlight = false
                                 classifiedFrame = true
-                                val solidGreen =
-                                    FrameColorClassifier.isSolidGreen(pixels)
+                                val solidGreen = FrameColorClassifier.isSolidGreen(pixels)
+                                val visuallyBlank =
+                                    !solidGreen &&
+                                        FrameColorClassifier.isVisuallyBlank(pixels)
                                 decision = recoveryGate.onSample(
                                     solidGreen = solidGreen,
                                     nowMs = SystemClock.elapsedRealtime(),
-                                    visuallyBlank =
-                                        !solidGreen &&
-                                            FrameColorClassifier.isVisuallyBlank(pixels),
+                                    visuallyBlank = visuallyBlank,
                                 )
                                 if (
                                     decision ==
@@ -137,12 +155,13 @@ internal class SurfaceFrameHealthMonitor(
                                     started = false
                                     generation++
                                 } else {
-                                    nextDelayMs =
-                                        if (recoveryGate.hasHealthyFrame) {
-                                            STEADY_SAMPLE_INTERVAL_MS
-                                        } else {
+                                    nextDelayMs = when {
+                                        !recoveryGate.hasHealthyFrame ->
                                             STARTUP_SAMPLE_INTERVAL_MS
-                                        }
+                                        solidGreen || visuallyBlank ->
+                                            SUSPECT_SAMPLE_INTERVAL_MS
+                                        else -> STEADY_SAMPLE_INTERVAL_MS
+                                    }
                                 }
                             }
                         }
@@ -196,7 +215,11 @@ internal class SurfaceFrameHealthMonitor(
         // PixelCopy is serialized: the next capture is scheduled only after the
         // previous callback completes. This prevents a delayed old green capture
         // from racing a newer healthy one and restarting an already-correct image.
-        private const val STEADY_SAMPLE_INTERVAL_MS = 1_500L
+        // Healthy Amlogic surfaces log a costly full-resolution gralloc copy for
+        // every sample. Sample healthy output sparingly, then temporarily increase
+        // cadence as soon as a suspicious green/blank frame is observed.
+        private const val STEADY_SAMPLE_INTERVAL_MS = 5_000L
+        private const val SUSPECT_SAMPLE_INTERVAL_MS = 500L
     }
 }
 

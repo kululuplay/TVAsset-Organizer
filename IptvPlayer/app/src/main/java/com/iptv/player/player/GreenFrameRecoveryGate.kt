@@ -53,6 +53,14 @@ internal class GreenFrameRecoveryGate(
         failureReported = false
     }
 
+    /**
+     * A new output surface/geometry has no trustworthy pixels yet, even when the
+     * decoder was healthy on the previous surface. Give the replacement surface
+     * the normal startup grace instead of applying the short steady-state green
+     * deadline to compositor/codec transition frames.
+     */
+    fun onOutputTransition() = reset()
+
     fun onSample(
         solidGreen: Boolean,
         nowMs: Long,

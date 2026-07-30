@@ -16,6 +16,7 @@ import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.Executors
 
 object Logger {
 
@@ -29,6 +30,9 @@ object Logger {
 
     private val lock = Any()
     private val timestamp = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US)
+    private val fileWriter = Executors.newSingleThreadExecutor { task ->
+        Thread(task, "field-log-writer").apply { isDaemon = true }
+    }
 
     @Volatile private var logDir: File? = null
     @Volatile private var crashHandlerInstalled = false
@@ -85,6 +89,24 @@ object Logger {
     private fun write(level: String, tag: String, msg: String, tr: Throwable?) {
         val safeMessage = SensitiveDataRedactor.redact(msg)
         val safeStack = tr?.let { SensitiveDataRedactor.redact(Log.getStackTraceString(it)) }
+        mirrorToLogcat(level, tag, safeMessage, safeStack)
+        val dir = logDir ?: return
+        // File.length(), rotation and append can take hundreds of milliseconds on
+        // cold/slow TV storage. Serialize them on one daemon worker so callers
+        // (especially Splash/Dashboard on the main looper) only enqueue work.
+        runCatching {
+            fileWriter.execute {
+                appendToFile(dir, level, tag, safeMessage, safeStack)
+            }
+        }
+    }
+
+    private fun mirrorToLogcat(
+        level: String,
+        tag: String,
+        safeMessage: String,
+        safeStack: String?,
+    ) {
         // Always mirror to logcat for tethered debugging.
         when (level) {
             "E" -> Log.e(tag, safeMessage + safeStack?.let { "\n$it" }.orEmpty())
@@ -92,18 +114,37 @@ object Logger {
             "D" -> Log.d(tag, safeMessage)
             else -> Log.i(tag, safeMessage)
         }
-        val dir = logDir ?: return
+    }
+
+    private fun appendToFile(
+        dir: File,
+        level: String,
+        tag: String,
+        safeMessage: String,
+        safeStack: String?,
+    ) {
         synchronized(lock) {
             runCatching {
-                val file = File(dir, FILE)
-                if (file.length() > MAX_BYTES) rotate(dir, file)
-                FileWriter(file, true).use { w ->
-                    w.append(timestamp.format(Date())).append(' ')
-                        .append(level).append('/').append(tag).append(": ")
-                        .append(safeMessage).append('\n')
-                    if (safeStack != null) w.append(safeStack).append('\n')
-                }
+                appendToFileLocked(dir, level, tag, safeMessage, safeStack)
             }
+        }
+    }
+
+    /** Caller must hold [lock]; SimpleDateFormat and rotation are protected too. */
+    private fun appendToFileLocked(
+        dir: File,
+        level: String,
+        tag: String,
+        safeMessage: String,
+        safeStack: String?,
+    ) {
+        val file = File(dir, FILE)
+        if (file.length() > MAX_BYTES) rotate(dir, file)
+        FileWriter(file, true).use { writer ->
+            writer.append(timestamp.format(Date())).append(' ')
+                .append(level).append('/').append(tag).append(": ")
+                .append(safeMessage).append('\n')
+            if (safeStack != null) writer.append(safeStack).append('\n')
         }
     }
 
@@ -135,17 +176,30 @@ object Logger {
         synchronized(lock) { runCatching { File(dir, MARKER).delete() } }
     }
 
-    /** Drop a tiny marker so the next launch knows to upload the captured crash. */
-    private fun markCrashPending(throwable: Throwable) {
+    /**
+     * A dying process cannot rely on the daemon queue being drained. Write the
+     * fatal line and marker together on the crashing thread under the same lock.
+     * Blocking is intentional here: the app is already terminating and durable
+     * diagnostics matter more than responsiveness.
+     */
+    private fun writeCrash(thread: Thread, throwable: Throwable) {
+        val tag = "FATAL"
+        val message = "Uncaught exception on thread '${thread.name}'"
+        val safeMessage = SensitiveDataRedactor.redact(message)
+        val safeStack = SensitiveDataRedactor.redact(Log.getStackTraceString(throwable))
+        mirrorToLogcat("E", tag, safeMessage, safeStack)
         val dir = logDir ?: return
         synchronized(lock) {
+            runCatching {
+                appendToFileLocked(dir, "E", tag, safeMessage, safeStack)
+            }
             runCatching {
                 val summary =
                     SensitiveDataRedactor.redact(
                         "${throwable.javaClass.name}: ${throwable.message ?: ""}",
                     ).take(500)
-                FileWriter(File(dir, MARKER), false).use { w ->
-                    w.append(System.currentTimeMillis().toString())
+                FileWriter(File(dir, MARKER), false).use { writer ->
+                    writer.append(System.currentTimeMillis().toString())
                         .append('\n')
                         .append(summary)
                 }
@@ -160,8 +214,7 @@ object Logger {
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             // Capture the crash before the process is torn down, then defer to the
             // platform handler so normal crash reporting / process death still happens.
-            e("FATAL", "Uncaught exception on thread '${thread.name}'", throwable)
-            markCrashPending(throwable)
+            writeCrash(thread, throwable)
             previous?.uncaughtException(thread, throwable)
         }
     }

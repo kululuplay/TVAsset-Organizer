@@ -427,6 +427,10 @@ class SettingsStore(
             prefs[Keys.USERNAME] = username
             prefs[Keys.PASSWORD] = password
             prefs[Keys.M3U_URL] = m3uUrl
+            // EPG_UPDATED_AT belongs to the active source. A provider/profile
+            // change must never let the new account reuse the old account's
+            // four-hour cold-start freshness window.
+            prefs[Keys.EPG_UPDATED_AT] = 0L
         }
     }
 
@@ -464,6 +468,7 @@ class SettingsStore(
             prefs.remove(Keys.USERNAME)
             prefs.remove(Keys.PASSWORD)
             prefs.remove(Keys.M3U_URL)
+            prefs.remove(Keys.EPG_UPDATED_AT)
         }
     }
 

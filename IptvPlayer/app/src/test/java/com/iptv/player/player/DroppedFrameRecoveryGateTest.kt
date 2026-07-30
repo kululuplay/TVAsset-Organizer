@@ -167,4 +167,40 @@ class DroppedFrameRecoveryGateTest {
             ),
         )
     }
+
+    @Test
+    fun `real device sparse drops remain healthy`() {
+        val gate = DroppedFrameRecoveryGate(
+            startupGraceMs = 0,
+            windowMs = 2_000,
+            thresholdFrames = 12,
+            confirmationMs = 1_000,
+        )
+        gate.onFirstFrame(nowMs = 0)
+
+        // Fire TV log 6: one isolated drop, then 16 drops accumulated over more
+        // than 12 seconds, followed by a tiny 19 ms callback. Only the fraction
+        // inside the rolling window may count; this is not sustained visible loss.
+        assertNull(
+            gate.onDroppedFrames(
+                nowMs = 12_000,
+                droppedFrames = 1,
+                elapsedMs = 24,
+            ),
+        )
+        assertNull(
+            gate.onDroppedFrames(
+                nowMs = 24_437,
+                droppedFrames = 16,
+                elapsedMs = 12_437,
+            ),
+        )
+        assertNull(
+            gate.onDroppedFrames(
+                nowMs = 24_456,
+                droppedFrames = 2,
+                elapsedMs = 19,
+            ),
+        )
+    }
 }

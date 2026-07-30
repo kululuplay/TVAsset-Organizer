@@ -87,7 +87,19 @@ object SplashPrefetch {
         val repo = ServiceLocator.repository
         try {
             stage(Stage.LIVE) { repo.refreshLive(config) }
-            stage(Stage.EPG) { repo.refreshEpg(config) }
+            stage(Stage.EPG) {
+                val nowMs = System.currentTimeMillis()
+                val lastUpdatedAtMs = ServiceLocator.settings.getEpgUpdatedAt()
+                if (shouldRefreshEpg(lastUpdatedAtMs, nowMs)) {
+                    repo.refreshEpg(config)
+                } else {
+                    // XMLTV parse + Room upserts occupied this weak Fire TV for
+                    // about 12 seconds while its first live stream was opening.
+                    // A recently completed guide is already usable, so avoid
+                    // repeating that CPU/network/storage work on every cold start.
+                    Logger.d(TAG, "EPG cache is fresh; cold-start refresh skipped")
+                }
+            }
             stage(Stage.LIBRARY) {
                 // Both movies and series are lazy per-category, so only the cheap
                 // category lists are fetched here — never the whole catalog.
@@ -147,3 +159,11 @@ object SplashPrefetch {
 
     private const val TAG = "SplashPrefetch"
 }
+
+/** Pure policy kept outside the singleton so timestamp edge cases stay testable. */
+internal fun shouldRefreshEpg(lastUpdatedAtMs: Long, nowMs: Long): Boolean =
+    lastUpdatedAtMs <= 0L ||
+        nowMs < lastUpdatedAtMs ||
+        nowMs - lastUpdatedAtMs >= EPG_COLD_START_REFRESH_INTERVAL_MS
+
+private const val EPG_COLD_START_REFRESH_INTERVAL_MS = 4L * 60L * 60L * 1_000L

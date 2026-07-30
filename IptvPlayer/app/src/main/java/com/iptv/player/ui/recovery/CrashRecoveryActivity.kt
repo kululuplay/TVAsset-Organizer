@@ -62,10 +62,10 @@ class CrashRecoveryActivity : AppCompatActivity() {
      * best-effort: any failure here must never take down the recovery screen.
      */
     private fun maybeEnterSafeMode() {
-        val streak = LaunchCrashGuard.crashStreak(this)
-        if (streak < LaunchCrashGuard.SAFE_MODE_THRESHOLD) return
-        binding.recoverySafeMode.visibility = View.VISIBLE
         lifecycleScope.launch {
+            val streak = LaunchCrashGuard.crashStreak(this@CrashRecoveryActivity)
+            if (streak < LaunchCrashGuard.SAFE_MODE_THRESHOLD) return@launch
+            binding.recoverySafeMode.visibility = View.VISIBLE
             runCatching {
                 val settings = ServiceLocator.settings
                 settings.setPlaybackSelection(PlayerMode.AUTO, DecoderMode.AUTO)
@@ -116,8 +116,11 @@ class CrashRecoveryActivity : AppCompatActivity() {
 
     private fun retry() {
         // Re-arm the guard so a repeat crash is caught again, then try the home.
-        LaunchCrashGuard.markLaunchStarted(this)
-        startActivity(Intent(this, DashboardActivity::class.java))
-        finish()
+        binding.btnRecoveryRetry.isEnabled = false
+        lifecycleScope.launch {
+            LaunchCrashGuard.markLaunchStarted(this@CrashRecoveryActivity)
+            startActivity(Intent(this@CrashRecoveryActivity, DashboardActivity::class.java))
+            finish()
+        }
     }
 }

@@ -225,6 +225,19 @@ class ExoPlayerEngine(
                     lastSurfaceWidth = width
                     lastSurfaceHeight = height
                     if (firstFrameRendered) {
+                        surfaceFrameHealth.onOutputTransition()
+                        if (!videoOutputReported) {
+                            handler.removeCallbacks(surfaceValidationFallbackRunnable)
+                            handler.removeCallbacks(surfaceValidationDeadlineRunnable)
+                            handler.postDelayed(
+                                surfaceValidationFallbackRunnable,
+                                PIXEL_VALIDATION_FALLBACK_MS,
+                            )
+                            handler.postDelayed(
+                                surfaceValidationDeadlineRunnable,
+                                PIXEL_VALIDATION_DEADLINE_MS,
+                            )
+                        }
                         droppedFrameHealth.onOutputTransition(
                             SystemClock.elapsedRealtime(),
                         )
@@ -736,6 +749,7 @@ class ExoPlayerEngine(
         )
         exo.playWhenReady = true
         exo.prepare()
+        listener?.onPlaybackSubmitted()
     }
 
     private fun resetHealth(): String {

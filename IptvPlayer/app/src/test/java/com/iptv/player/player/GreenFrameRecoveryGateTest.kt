@@ -200,4 +200,34 @@ class GreenFrameRecoveryGateTest {
             gate.onSample(solidGreen = false, nowMs = 600L),
         )
     }
+
+    @Test
+    fun `surface transition restores startup grace after healthy playback`() {
+        val gate = GreenFrameRecoveryGate()
+        gate.onSample(solidGreen = false, nowMs = 0L)
+        gate.onSample(solidGreen = false, nowMs = 200L)
+        assertTrue(gate.hasHealthyFrame)
+
+        gate.onOutputTransition()
+        assertFalse(gate.hasHealthyFrame)
+
+        // This would have failed at the 1.2 second steady-state deadline if the
+        // previous surface's healthy state leaked into the replacement output.
+        assertEquals(
+            GreenFrameRecoveryGate.Decision.WAIT,
+            gate.onSample(solidGreen = true, nowMs = 1_000L),
+        )
+        assertEquals(
+            GreenFrameRecoveryGate.Decision.WAIT,
+            gate.onSample(solidGreen = true, nowMs = 3_000L),
+        )
+        assertEquals(
+            GreenFrameRecoveryGate.Decision.WAIT,
+            gate.onSample(solidGreen = false, nowMs = 3_200L),
+        )
+        assertEquals(
+            GreenFrameRecoveryGate.Decision.FIRST_HEALTHY_FRAME,
+            gate.onSample(solidGreen = false, nowMs = 3_400L),
+        )
+    }
 }
