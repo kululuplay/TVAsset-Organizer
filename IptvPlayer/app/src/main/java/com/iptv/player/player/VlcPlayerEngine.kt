@@ -30,6 +30,7 @@ import android.content.Context
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.StrictMode
 import android.os.SystemClock
 import android.view.ViewGroup
 import java.util.concurrent.CountDownLatch
@@ -166,6 +167,13 @@ class VlcPlayerEngine(
             if (pendingOps.get() > 0) {
                 healthHandler.postDelayed(this, HEALTH_POLL_MS)
                 return
+            }
+            // A live TS video track can replace placeholder dimensions long
+            // after Playing/Vout. Keep checking until software is either proven
+            // UHD-incompatible or the stream ends; this is a cheap metadata read.
+            if (forceSoftware && !profileCheckDone.get()) {
+                maybeRouteByProfile()
+                if (playbackFailureReported.get()) return
             }
             val mp = mediaPlayer ?: return
             if (mp.currentVideoTrack != null) {
@@ -367,7 +375,15 @@ class VlcPlayerEngine(
             options.add("--no-spdif")
             options.add("--stereo-mode=1")
         }
-        val vlc = LibVLC(context, options)
+        // LibVLC lazily reads its native plugin cache during construction. Scope
+        // that known, bounded read so debug StrictMode does not misclassify the
+        // library bootstrap as an accidental app disk access.
+        val previousThreadPolicy = StrictMode.allowThreadDiskReads()
+        val vlc = try {
+            LibVLC(context, options)
+        } finally {
+            StrictMode.setThreadPolicy(previousThreadPolicy)
+        }
         // Belt-and-braces: also set it on the instance (name + http UA).
         try {
             vlc.setUserAgent(AppInfo.USER_AGENT, AppInfo.USER_AGENT)
@@ -487,6 +503,7 @@ class VlcPlayerEngine(
                         // chance to read a now-populated frame rate, in case the
                         // delayed re-checks all fired before fps was known.
                         maybeRouteByProfile()
+                        if (playbackFailureReported.get()) return
                         if (firstPlaying || resumedFromBuffering) {
                             scheduleHealthChecks()
                             scheduleOutputTimeouts()
@@ -501,6 +518,7 @@ class VlcPlayerEngine(
                     applyDelays(mp)
                     listener?.onPlaying()
                     maybeRouteByProfile()
+                    if (playbackFailureReported.get()) return
                     scheduleProfileRechecks()
                     scheduleAudioCheck()
                     scheduleHealthChecks()
@@ -517,6 +535,7 @@ class VlcPlayerEngine(
                     if (event.voutCount <= 0) return
                     voutObserved.set(true)
                     maybeRouteByProfile()
+                    if (playbackFailureReported.get()) return
                     scheduleProfileRechecks()
                     scheduleHealthChecks(immediate = true)
                     scheduleVoutCompatibility()
@@ -543,16 +562,21 @@ class VlcPlayerEngine(
         // live TS. Bail without claiming so the rechecks can identify a real UHD
         // stream before deciding whether a software path is viable.
         if (track.width <= 0 || track.height <= 0) return
-        val isUhd = track.height >= UHD_MIN_HEIGHT || track.width >= UHD_MIN_WIDTH
+        val isUhd =
+            VlcHardwareDevicePolicy.requiresHardwareDecode(
+                width = track.width,
+                height = track.height,
+            )
 
         if (forceSoftware) {
             if (isUhd && claimRouting()) {
                 reportSoftwareTooSlow(
                     "UHD ${track.width}x${track.height} cannot sustain software decode",
                 )
-            } else if (!isUhd) {
-                claimRouting()
             }
+            // Live TS metadata can first expose a placeholder 720p size and then
+            // update to 2160p. Do not claim a non-UHD snapshot: keep all delayed
+            // checks armed so that later real dimensions still escape software.
             return
         }
 
@@ -662,6 +686,25 @@ class VlcPlayerEngine(
         nativeVideoOutputObserved = true
         healthHandler.removeCallbacks(voutCompatibilityRunnable)
         PlaybackLog.log(context, engineName, detail)
+        if (
+            shouldTrustVlcNativeFrame(
+                forceSoftware = forceSoftware,
+                hasDisplayedPictureEvidence = hasFrameEvidence,
+            )
+        ) {
+            // Software displayedPictures is authoritative vout evidence. Cancel
+            // an earlier PixelCopy monitor that may have sampled a stale/blank
+            // SurfaceView before this first real native picture arrived.
+            surfaceFrameHealth.reset()
+            surfaceHealthyObserved = true
+            PlaybackLog.log(
+                context,
+                engineName,
+                "software displayed-picture evidence accepted",
+            )
+            maybeReportVideoOutput()
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             if (firstObservation) {
                 surfaceFrameHealth.start { findVideoSurface(videoLayout) }
@@ -1565,11 +1608,6 @@ class VlcPlayerEngine(
     }
 
     companion object {
-        // UHD/4K threshold (QHD 1440p and up). Above this, software decode can't
-        // keep up with 80–100 Mbps streams, so the hardware decoder is mandatory.
-        private const val UHD_MIN_HEIGHT = 1440
-        private const val UHD_MIN_WIDTH = 2560
-
         // Delays (ms after Playing/Vout) for re-reading the track frame rate. Live
         // TS often reports fps=0 on the first event, so we re-check until it
         // populates; the Buffering(100%) re-check covers any longer tail.

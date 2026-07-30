@@ -93,6 +93,9 @@ class ExoPlayerEngine(
     private var activeMediaId: String? = null
     private var trackSupportCheckRunnable: Runnable? = null
     private var noFrameCheckRunnable: Runnable? = null
+    private var hardwareDecodeRequired = false
+    private var lastSurfaceWidth = 0
+    private var lastSurfaceHeight = 0
     private val droppedFrameHealth = DroppedFrameRecoveryGate()
 
     private val surfaceFrameHealth = SurfaceFrameHealthMonitor(
@@ -214,6 +217,19 @@ class ExoPlayerEngine(
 
             override fun onSurfaceSizeChanged(width: Int, height: Int) {
                 PlaybackLog.log(context, engineName, "onSurfaceSizeChanged ${width}x$height")
+                if (
+                    width > 0 &&
+                    height > 0 &&
+                    (width != lastSurfaceWidth || height != lastSurfaceHeight)
+                ) {
+                    lastSurfaceWidth = width
+                    lastSurfaceHeight = height
+                    if (firstFrameRendered) {
+                        droppedFrameHealth.onOutputTransition(
+                            SystemClock.elapsedRealtime(),
+                        )
+                    }
+                }
             }
         })
 
@@ -359,6 +375,12 @@ class ExoPlayerEngine(
                 decoderReuseEvaluation: DecoderReuseEvaluation?
             ) {
                 if (!isCurrentEvent(eventTime)) return
+                hardwareDecodeRequired =
+                    hardwareDecodeRequired ||
+                    VlcHardwareDevicePolicy.requiresHardwareDecode(
+                        width = format.width,
+                        height = format.height,
+                    )
                 PlaybackLog.log(
                     context, engineName,
                     "videoInputFormat ${format.width}x${format.height} " +
@@ -373,9 +395,22 @@ class ExoPlayerEngine(
             ) {
                 if (!isCurrentEvent(eventTime)) return
                 PlaybackLog.log(context, engineName, "droppedVideoFrames=$droppedFrames/${elapsedMs}ms")
+                // UHD software decode is categorically slower than real time on
+                // TV sticks. A drop callback alone must not evict a healthy
+                // MediaCodec path into that impossible route; real codec errors,
+                // solid output and the frame-stall watchdog remain authoritative.
+                if (hardwareDecodeRequired) {
+                    PlaybackLog.log(
+                        context,
+                        engineName,
+                        "UHD drop batch observed; keep hardware path pending real output failure",
+                    )
+                    return
+                }
                 val breach = droppedFrameHealth.onDroppedFrames(
                     nowMs = SystemClock.elapsedRealtime(),
                     droppedFrames = droppedFrames,
+                    elapsedMs = elapsedMs,
                 )
                 if (breach != null) {
                     reportVideoInvalid(
@@ -460,7 +495,10 @@ class ExoPlayerEngine(
      * checking only Group.isSelected misses selected formats that exceed the device
      * capabilities and results in silent AC-3/E-AC-3/MP2 playback.
      */
-    private fun scheduleTrackSupportCheck() {
+    private fun scheduleTrackSupportCheck(
+        delayMs: Long = TRACK_SUPPORT_CHECK_DELAY_MS,
+        selectionSettled: Boolean = false,
+    ) {
         cancelTrackSupportCheck()
         val generation = streamGeneration
         val check = Runnable {
@@ -468,10 +506,30 @@ class ExoPlayerEngine(
             if (generation != streamGeneration) return@Runnable
             val exo = player ?: return@Runnable
             if (exo.playbackState != Player.STATE_READY) return@Runnable
-            checkTrackSupport(exo.currentTracks)
+            val pendingSelection = checkTrackSupport(
+                tracks = exo.currentTracks,
+                selectionSettled = selectionSettled,
+            )
+            if (
+                pendingSelection &&
+                !selectionSettled &&
+                generation == streamGeneration &&
+                !videoFailureReported &&
+                !audioReported
+            ) {
+                PlaybackLog.log(
+                    context,
+                    engineName,
+                    "supported track not selected yet -> wait for live-TS metadata",
+                )
+                scheduleTrackSupportCheck(
+                    delayMs = TRACK_PENDING_RECHECK_DELAY_MS,
+                    selectionSettled = true,
+                )
+            }
         }
         trackSupportCheckRunnable = check
-        handler.postDelayed(check, TRACK_SUPPORT_CHECK_DELAY_MS)
+        handler.postDelayed(check, delayMs)
     }
 
     /**
@@ -495,7 +553,10 @@ class ExoPlayerEngine(
         trackSupportCheckRunnable = null
     }
 
-    private fun checkTrackSupport(tracks: Tracks) {
+    private fun checkTrackSupport(
+        tracks: Tracks,
+        selectionSettled: Boolean,
+    ): Boolean {
         val groups = tracks.groups.map { group ->
             ExoPlaybackFailureClassifier.TrackGroupState(
                 type = group.type,
@@ -514,15 +575,32 @@ class ExoPlayerEngine(
             ExoPlaybackFailureClassifier.classifyTracks(
                 groups = groups,
                 expectsVideo = expectsVideo,
+                selectionSettled = selectionSettled,
             )
         ) {
             ExoPlaybackFailureClassifier.Failure.AUDIO ->
-                reportAudioUnavailable("audio track unsupported or unselected")
+                reportAudioUnavailable(
+                    if (selectionSettled) {
+                        "audio track unavailable after settle timeout"
+                    } else {
+                        "audio track unsupported"
+                    },
+                )
             ExoPlaybackFailureClassifier.Failure.DECODE ->
-                reportDecodeFailure("video track unsupported or unselected")
+                reportDecodeFailure(
+                    if (selectionSettled) {
+                        "video track unavailable after settle timeout"
+                    } else {
+                        "video track unsupported"
+                    },
+                )
             ExoPlaybackFailureClassifier.Failure.ERROR,
             null -> Unit
         }
+        return ExoPlaybackFailureClassifier.hasPendingSupportedSelection(
+            groups = groups,
+            expectsVideo = expectsVideo,
+        )
     }
 
     private fun reportAudioUnavailable(detail: String) {
@@ -671,6 +749,9 @@ class ExoPlayerEngine(
         videoOutputReported = false
         audioReported = false
         readyForPlayback = false
+        hardwareDecodeRequired = false
+        lastSurfaceWidth = 0
+        lastSurfaceHeight = 0
         trackSupportCheckRunnable = null
         noFrameCheckRunnable = null
         lastVideoFrameAtMs.set(0L)
@@ -742,6 +823,8 @@ class ExoPlayerEngine(
     companion object {
         /** Debounce after a track change before judging resolved track support. */
         private const val TRACK_SUPPORT_CHECK_DELAY_MS = 1200L
+        /** Extra settle time for a supported live-TS track not selected yet. */
+        private const val TRACK_PENDING_RECHECK_DELAY_MS = 2_800L
         /** If no frame renders this long after READY, treat video as failed. */
         private const val NO_FRAME_TIMEOUT_MS = 8000L
         private const val VIDEO_HEALTH_POLL_MS = 2000L

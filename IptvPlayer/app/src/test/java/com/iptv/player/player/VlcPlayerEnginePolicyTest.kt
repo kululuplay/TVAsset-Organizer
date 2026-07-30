@@ -20,4 +20,26 @@ class VlcPlayerEnginePolicyTest {
         assertTrue(isVlcBuffering(Float.NEGATIVE_INFINITY))
         assertTrue(isVlcBuffering(Float.POSITIVE_INFINITY))
     }
+
+    @Test
+    fun `software displayed pictures bypass unreliable PixelCopy validation`() {
+        assertTrue(
+            shouldTrustVlcNativeFrame(
+                forceSoftware = true,
+                hasDisplayedPictureEvidence = true,
+            ),
+        )
+        assertFalse(
+            shouldTrustVlcNativeFrame(
+                forceSoftware = false,
+                hasDisplayedPictureEvidence = true,
+            ),
+        )
+        assertFalse(
+            shouldTrustVlcNativeFrame(
+                forceSoftware = true,
+                hasDisplayedPictureEvidence = false,
+            ),
+        )
+    }
 }

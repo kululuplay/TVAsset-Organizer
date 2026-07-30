@@ -13,6 +13,58 @@ import org.junit.Test
 class VlcHardwareDevicePolicyTest {
 
     @Test
+    fun `QHD and UHD profiles require hardware decode`() {
+        assertTrue(VlcHardwareDevicePolicy.requiresHardwareDecode(3840, 2160))
+        assertTrue(VlcHardwareDevicePolicy.requiresHardwareDecode(2560, 1080))
+        assertTrue(VlcHardwareDevicePolicy.requiresHardwareDecode(1920, 1440))
+        assertFalse(VlcHardwareDevicePolicy.requiresHardwareDecode(1920, 1080))
+    }
+
+    @Test
+    fun `Amlogic UHD excludes both unsafe VLC paths`() {
+        val unavailable = VlcHardwareDevicePolicy.unavailableStages(
+            bypassVlcHardware = true,
+            width = 3840,
+            height = 2160,
+        )
+        assertEquals(
+            setOf(Stage.VLC_HW, Stage.VLC_SW),
+            unavailable,
+        )
+        assertNull(
+            PlaybackRoutingPolicy.nextStage(
+                mode = PlayerMode.AUTO,
+                decoderMode = DecoderMode.AUTO,
+                current = Stage.EXO,
+                failure = Failure.VIDEO,
+                triedStages = setOf(Stage.EXO) + unavailable,
+            ),
+        )
+        assertEquals(
+            setOf(Stage.VLC_HW),
+            VlcHardwareDevicePolicy.unavailableStages(
+                bypassVlcHardware = true,
+                width = 1920,
+                height = 1080,
+            ),
+        )
+        assertEquals(
+            setOf(Stage.VLC_SW),
+            VlcHardwareDevicePolicy.unavailableStages(
+                bypassVlcHardware = false,
+                width = 3840,
+                height = 2160,
+            ),
+        )
+    }
+
+    @Test
+    fun `temporary HD metadata does not classify a later UHD profile as software safe`() {
+        assertFalse(VlcHardwareDevicePolicy.requiresHardwareDecode(1280, 720))
+        assertTrue(VlcHardwareDevicePolicy.requiresHardwareDecode(3840, 2160))
+    }
+
+    @Test
     fun `Amlogic OMX and C2 video decoders bypass VLC hardware`() {
         assertTrue(
             VlcHardwareDevicePolicy.shouldBypassVlcHardware(
@@ -114,6 +166,36 @@ class VlcHardwareDevicePolicyTest {
                 current = Stage.EXO,
                 failure = Failure.ERROR,
                 triedStages = setOf(Stage.EXO, Stage.VLC_HW),
+                bypassVlcHardware = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `software overload gets one bounded hardware revisit`() {
+        assertEquals(
+            Stage.EXO,
+            VlcHardwareDevicePolicy.lastChanceAfterSoftwareOverload(
+                current = Stage.VLC_SW,
+                failure = Failure.SOFTWARE_SLOW,
+                alreadyUsed = false,
+                bypassVlcHardware = true,
+            ),
+        )
+        assertEquals(
+            Stage.VLC_HW,
+            VlcHardwareDevicePolicy.lastChanceAfterSoftwareOverload(
+                current = Stage.VLC_SW,
+                failure = Failure.SOFTWARE_SLOW,
+                alreadyUsed = false,
+                bypassVlcHardware = false,
+            ),
+        )
+        assertNull(
+            VlcHardwareDevicePolicy.lastChanceAfterSoftwareOverload(
+                current = Stage.VLC_SW,
+                failure = Failure.SOFTWARE_SLOW,
+                alreadyUsed = true,
                 bypassVlcHardware = true,
             ),
         )
