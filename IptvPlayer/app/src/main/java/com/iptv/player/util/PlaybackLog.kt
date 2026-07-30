@@ -22,6 +22,7 @@ import java.util.ArrayDeque
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.CopyOnWriteArraySet
+import java.util.concurrent.Executors
 
 object PlaybackLog {
 
@@ -37,6 +38,9 @@ object PlaybackLog {
     private val shortStamp = SimpleDateFormat("HH:mm:ss", Locale.US)
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val fileWriter = Executors.newSingleThreadExecutor { task ->
+        Thread(task, "playback-log-writer").apply { isDaemon = true }
+    }
 
     /** Live tail for the Debug overlay (newest last). Guarded by [ring] itself. */
     private val ring = ArrayDeque<String>()
@@ -61,11 +65,20 @@ object PlaybackLog {
         if (listeners.isNotEmpty()) {
             mainHandler.post { listeners.forEach { it.onLog(shortLine) } }
         }
+        val persistentLine = "${stamp.format(now)} [$tag] $safeMessage\n"
+        val appContext = context.applicationContext
+        // Media3/VLC diagnostics arrive on the main looper. Keep file lookup,
+        // length checks and writes on one ordered worker so logging cannot add
+        // StrictMode disk stalls during a channel/decoder transition.
         runCatching {
-            val file = file(context) ?: return
-            // Truncate when it grows past the cap so it never fills the disk.
-            if (file.length() > MAX_BYTES) file.writeText("")
-            file.appendText("${stamp.format(now)} [$tag] $safeMessage\n")
+            fileWriter.execute {
+                runCatching fileOperation@ {
+                    val file = file(appContext) ?: return@fileOperation
+                    // Truncate when it grows past the cap so it never fills disk.
+                    if (file.length() > MAX_BYTES) file.writeText("")
+                    file.appendText(persistentLine)
+                }
+            }
         }
     }
 
