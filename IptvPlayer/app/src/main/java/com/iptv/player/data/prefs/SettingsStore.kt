@@ -30,6 +30,7 @@ import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.data.model.SourceConfig
 import com.iptv.player.data.model.SourceType
 import com.iptv.player.security.SecureValueCodec
+import com.iptv.player.util.KululuEndpoint
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
@@ -407,7 +408,9 @@ class SettingsStore(
         val type = runCatching { SourceType.valueOf(typeName) }.getOrNull() ?: return null
         return SourceConfig(
             type = type,
-            serverUrl = secureValues.decrypt(prefs[Keys.SERVER_URL]),
+            serverUrl = KululuEndpoint.migrateLegacyServerUrl(
+                secureValues.decrypt(prefs[Keys.SERVER_URL]),
+            ),
             username = secureValues.decrypt(prefs[Keys.USERNAME]),
             password = secureValues.decrypt(prefs[Keys.PASSWORD]),
             m3uUrl = secureValues.decrypt(prefs[Keys.M3U_URL])
@@ -417,7 +420,9 @@ class SettingsStore(
     suspend fun saveSource(config: SourceConfig) {
         // Encrypt before opening the DataStore transaction: secure-storage failure
         // aborts the save and never falls back to writing cleartext credentials.
-        val serverUrl = secureValues.encrypt(config.serverUrl)
+        val serverUrl = secureValues.encrypt(
+            KululuEndpoint.migrateLegacyServerUrl(config.serverUrl),
+        )
         val username = secureValues.encrypt(config.username)
         val password = secureValues.encrypt(config.password)
         val m3uUrl = secureValues.encrypt(config.m3uUrl)

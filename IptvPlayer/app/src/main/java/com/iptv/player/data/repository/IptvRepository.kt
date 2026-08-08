@@ -64,6 +64,7 @@ import com.iptv.player.data.remote.XtreamUrlBuilder
 import com.iptv.player.security.SecureValueCodec
 import com.iptv.player.util.AppError
 import com.iptv.player.util.Logger
+import com.iptv.player.util.KululuEndpoint
 import com.iptv.player.util.Outcome
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -1437,7 +1438,9 @@ class IptvRepository(
                 ProfileEntity(
                     name = name,
                     sourceType = config.type.name,
-                    serverUrl = secureValues.encrypt(config.serverUrl),
+                    serverUrl = secureValues.encrypt(
+                        KululuEndpoint.migrateLegacyServerUrl(config.serverUrl),
+                    ),
                     username = secureValues.encrypt(config.username),
                     password = secureValues.encrypt(config.password),
                     m3uUrl = secureValues.encrypt(config.m3uUrl),
@@ -1472,7 +1475,8 @@ class IptvRepository(
 
     private fun ProfileEntity.matches(config: SourceConfig): Boolean =
         sourceType == config.type.name &&
-            secureValues.decrypt(serverUrl) == config.serverUrl &&
+            KululuEndpoint.migrateLegacyServerUrl(secureValues.decrypt(serverUrl)) ==
+                KululuEndpoint.migrateLegacyServerUrl(config.serverUrl) &&
             secureValues.decrypt(username) == config.username &&
             secureValues.decrypt(password) == config.password &&
             secureValues.decrypt(m3uUrl) == config.m3uUrl
@@ -1554,8 +1558,8 @@ class IptvRepository(
         contentId = contentId,
         kind = ResumeKind.fromRaw(type),
         title = title,
-        posterUrl = posterUrl,
-        streamUrl = secureValues.decrypt(streamUrl),
+        posterUrl = KululuEndpoint.migrateLegacyAssetUrl(posterUrl),
+        streamUrl = KululuEndpoint.migrateLegacyAssetUrl(secureValues.decrypt(streamUrl)).orEmpty(),
         positionMs = positionMs,
         durationMs = durationMs,
         vodId = vodId,
@@ -1723,7 +1727,10 @@ class IptvRepository(
     // ---- Mapping helpers ------------------------------------------------
 
     private fun ChannelEntity.toModel(isFav: Boolean = false) = Channel(
-        id = id, name = name, streamUrl = secureValues.decrypt(streamUrl), logoUrl = logoUrl,
+        id = id,
+        name = name,
+        streamUrl = KululuEndpoint.migrateLegacyAssetUrl(secureValues.decrypt(streamUrl)).orEmpty(),
+        logoUrl = KululuEndpoint.migrateLegacyAssetUrl(logoUrl),
         categoryId = categoryId, categoryName = categoryName,
         epgChannelId = epgChannelId, number = number,
         type = ContentType.valueOf(type), isFavorite = isFav, catchupDays = catchupDays,
@@ -1750,26 +1757,35 @@ class IptvRepository(
     }
 
     private fun VodEntity.toModel() = VodItem(
-        id = id, name = name, streamUrl = secureValues.decrypt(streamUrl), posterUrl = posterUrl,
-        backdropUrl = backdropUrl,
+        id = id,
+        name = name,
+        streamUrl = KululuEndpoint.migrateLegacyAssetUrl(secureValues.decrypt(streamUrl)).orEmpty(),
+        posterUrl = KululuEndpoint.migrateLegacyAssetUrl(posterUrl),
+        backdropUrl = KululuEndpoint.migrateLegacyAssetUrl(backdropUrl),
         categoryId = categoryId, categoryName = categoryName, rating = rating,
         plot = plot, cast = cast, director = director, genre = genre,
         releaseDate = releaseDate, durationSecs = durationSecs,
-        trailerUrl = trailerUrl, tmdbId = tmdbId
+        trailerUrl = KululuEndpoint.migrateLegacyAssetUrl(trailerUrl), tmdbId = tmdbId
     )
 
     private fun SeriesEntity.toModel() = Series(
-        id = id, name = name, posterUrl = posterUrl, backdropUrl = backdropUrl, categoryId = categoryId,
+        id = id,
+        name = name,
+        posterUrl = KululuEndpoint.migrateLegacyAssetUrl(posterUrl),
+        backdropUrl = KululuEndpoint.migrateLegacyAssetUrl(backdropUrl),
+        categoryId = categoryId,
         categoryName = categoryName, rating = rating, plot = plot, cast = cast,
         director = director, genre = genre, releaseDate = releaseDate,
-        trailerUrl = trailerUrl, tmdbId = tmdbId
+        trailerUrl = KululuEndpoint.migrateLegacyAssetUrl(trailerUrl), tmdbId = tmdbId
     )
 
     private fun EpisodeEntity.toModel() = Episode(
         id = id, seriesId = seriesId, seasonNumber = seasonNumber,
         episodeNumber = episodeNumber, title = title,
-        streamUrl = secureValues.decrypt(streamUrl),
-        plot = plot, durationSecs = durationSecs, posterUrl = posterUrl
+        streamUrl = KululuEndpoint.migrateLegacyAssetUrl(secureValues.decrypt(streamUrl)).orEmpty(),
+        plot = plot,
+        durationSecs = durationSecs,
+        posterUrl = KululuEndpoint.migrateLegacyAssetUrl(posterUrl),
     )
 
     private fun ProgramEntity.toModel() = Program(
@@ -1782,7 +1798,9 @@ class IptvRepository(
         name = name,
         config = SourceConfig(
             type = runCatching { SourceType.valueOf(sourceType) }.getOrDefault(SourceType.XTREAM),
-            serverUrl = secureValues.decrypt(serverUrl),
+            serverUrl = KululuEndpoint.migrateLegacyServerUrl(
+                secureValues.decrypt(serverUrl),
+            ),
             username = secureValues.decrypt(username),
             password = secureValues.decrypt(password),
             m3uUrl = secureValues.decrypt(m3uUrl),
