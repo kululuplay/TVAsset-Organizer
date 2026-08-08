@@ -23,6 +23,9 @@ import com.iptv.player.data.ServiceLocator
 import com.iptv.player.databinding.ActivityAboutBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.update.ApkInstaller
+import com.iptv.player.update.ApkInstallValidator
+import com.iptv.player.update.ApkValidationFailure
+import com.iptv.player.update.ApkValidationResult
 import com.iptv.player.update.UpdateChecker
 import com.iptv.player.update.UpdateInfo
 import com.iptv.player.update.UpdateResult
@@ -47,6 +50,7 @@ class AboutActivity : BaseActivity() {
     private var downloadFile: File? = null
     private var downloadJob: Job? = null
     private var activeCall: Call? = null
+    private var downloadExpectedBytes: Long = -1L
 
     /**
      * Set when we arrived from the launch-time prompt (EXTRA_AUTO_CHECK). It makes
@@ -201,6 +205,7 @@ class AboutActivity : BaseActivity() {
         showProgress(0L, -1L, 0.0)
 
         val outFile = File(dir, "update-${System.currentTimeMillis()}.apk")
+        downloadExpectedBytes = -1L
 
         downloadJob = lifecycleScope.launch {
             val ok = withContext(Dispatchers.IO) {
@@ -213,6 +218,7 @@ class AboutActivity : BaseActivity() {
                         if (!resp.isSuccessful) return@use
                         val body = resp.body ?: return@use
                         val total = body.contentLength()
+                        downloadExpectedBytes = total
                         body.byteStream().use { input ->
                             FileOutputStream(outFile).use { output ->
                                 val buffer = ByteArray(64 * 1024)
@@ -243,6 +249,11 @@ class AboutActivity : BaseActivity() {
                                     }
                                 }
                                 output.flush()
+                                if (total > 0L && downloaded != total) {
+                                    throw java.io.IOException(
+                                        "Incomplete APK: expected=$total actual=$downloaded",
+                                    )
+                                }
                             }
                         }
                         success = true
@@ -361,6 +372,19 @@ class AboutActivity : BaseActivity() {
             binding.btnCheckUpdate.requestFocus()
             return
         }
+
+        when (val validation = ApkInstallValidator.validate(
+            context = this,
+            file = target,
+            expectedSize = downloadExpectedBytes,
+        )) {
+            ApkValidationResult.Valid -> Unit
+            is ApkValidationResult.Invalid -> {
+                runCatching { target.delete() }
+                showInstallValidationError(validation.failure)
+                return
+            }
+        }
         binding.updateProgressBar.isIndeterminate = false
         binding.updateProgressBar.progress = 100
         binding.updatePercent.text = String.format(Locale.getDefault(), "%d%%", 100)
@@ -382,6 +406,30 @@ class AboutActivity : BaseActivity() {
             binding.btnUpdateNow.visibility = View.VISIBLE
             binding.btnUpdateNow.requestFocus()
         }
+    }
+
+    private fun showInstallValidationError(failure: ApkValidationFailure) {
+        val message = when (failure) {
+            ApkValidationFailure.MISSING -> R.string.about_update_file_missing
+            ApkValidationFailure.INCOMPLETE -> R.string.about_update_file_incomplete
+            ApkValidationFailure.INSUFFICIENT_STORAGE -> R.string.about_update_storage_low
+            ApkValidationFailure.INVALID_APK -> R.string.about_update_invalid_apk
+            ApkValidationFailure.WRONG_PACKAGE -> R.string.about_update_wrong_package
+            ApkValidationFailure.NOT_NEWER -> R.string.about_update_not_newer
+            ApkValidationFailure.SIGNATURE_MISMATCH -> R.string.about_update_signature_mismatch
+        }
+        binding.updateProgressCard.visibility = View.GONE
+        binding.btnCancelUpdate.visibility = View.GONE
+        binding.aboutUpdateStatus.visibility = View.VISIBLE
+        binding.aboutUpdateStatus.setText(message)
+        binding.aboutUpdateStatus.setTextColor(
+            ContextCompat.getColor(this, R.color.danger),
+        )
+        binding.btnCheckUpdate.visibility = View.VISIBLE
+        binding.btnCheckUpdate.isClickable = true
+        binding.btnCheckUpdate.alpha = 1f
+        binding.btnUpdateNow.visibility = View.VISIBLE
+        binding.btnUpdateNow.requestFocus()
     }
 
     /** Human-readable byte count (B / KB / MB / GB). */
