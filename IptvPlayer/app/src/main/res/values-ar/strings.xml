@@ -72,6 +72,8 @@
     <string name="audio_track">الصوت</string>
     <string name="subtitle_track">الترجمة</string>
     <string name="subtitles_off">إيقاف</string>
+    <string name="subtitles_auto">تلقائي</string>
+    <string name="error_audio_focus_unavailable">يستخدم تطبيق آخر الصوت. أغلقه أو حاول مرة أخرى.</string>
     <string name="aspect_ratio">نسبة العرض</string>
     <string name="resume_prompt_title">استئناف التشغيل؟</string>
     <string name="resume_prompt_message">المتابعة من حيث توقفت؟</string>
@@ -120,7 +122,7 @@
     <string name="settings_playback">التشغيل</string>
     <string name="settings_player_mode">محرك البث التلفزيوني المباشر</string>
     <string name="settings_live_player_header">محرك البث المباشر</string>
-    <string name="settings_player_scope_desc">يبدأ الوضع التلقائي البث المباشر عبر ExoPlayer العتادي، ولا يستخدم مساراً آمناً خاصاً بالقناة إلا بعد تأكيد خطأ في الترميز أو صورة خضراء أو متجمدة. خيارات فك الترميز تفضيلات كي لا تبقى قناة غير متوافقة عالقة في مسار معطّل.</string>
+    <string name="settings_player_scope_desc">يبدأ الوضع التلقائي البث المباشر عبر ExoPlayer العتادي، ويستخدم مساراً آمناً خاصاً بالقناة بعد تأكيد خطأ في الترميز أو صورة خضراء أو متجمدة. تستخدم الأفلام والمسلسلات والمشاهدة اللاحقة Media3 للتنسيقات الحديثة وتنتقل تلقائياً إلى VLC للحاويات القديمة أو عند تأكيد عدم توافق فك الترميز أو الصوت أو الترجمة أو الإخراج. تبقى اختيارات المشغّل وفك الترميز تفضيلات حتى لا يبقى أي محتوى عالقاً في مسار معطّل.</string>
     <string name="settings_playback_tuning_header">ضبط التشغيل</string>
     <string name="settings_player_auto">تلقائي (موصى به)</string>
     <string name="settings_player_auto_desc">ExoPlayer أولاً؛ إصلاح تلقائي لأخطاء الصوت والصورة المؤكدة</string>
@@ -138,8 +140,9 @@
     <string name="settings_stream_format_ts">MPEG-TS ‏(.ts) — الأكثر توافقاً</string>
     <string name="settings_stream_format_hls">HLS ‏(.m3u8) — متكيّف</string>
     <string name="settings_buffer">حجم التخزين المؤقت</string>
+    <string name="settings_buffer_adaptive">تلقائي متكيف (موصى به)</string>
     <string name="settings_buffer_low">منخفض (تبديل سريع)</string>
-    <string name="settings_buffer_normal">عادي (موصى به)</string>
+    <string name="settings_buffer_normal">عادي (متوازن)</string>
     <string name="settings_buffer_high">مرتفع (توقفات أقل)</string>
     <string name="settings_debug_overlay">طبقة التصحيح (المشغّل والمعاينة)</string>
     <string name="settings_language">اللغة</string>

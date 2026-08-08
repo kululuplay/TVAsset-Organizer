@@ -9,7 +9,6 @@ import android.content.Context
 import com.iptv.player.data.local.AppDatabase
 import com.iptv.player.data.prefs.SettingsStore
 import com.iptv.player.data.repository.IptvRepository
-import com.iptv.player.player.PlayerController
 import com.iptv.player.security.SecureValueCodec
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.Logger
@@ -45,47 +44,6 @@ object ServiceLocator {
      * from cancelling the others.
      */
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    /**
-     * Transient hand-off slot for a live preview's PlayerController that is being
-     * promoted to the fullscreen player. HomeActivity parks the still-playing
-     * controller here and launches PlayerActivity in "adopt" mode; PlayerActivity
-     * consumes it (rebinding the engine to its own surface) so going fullscreen
-     * never tears down and reconnects the single stream. Cleared on consume, so at
-     * most one controller is ever parked and it is owned by exactly one screen.
-     */
-    @Volatile private var pendingLiveController: PlayerController? = null
-
-    /**
-     * Channel id parked alongside the controller on the REVERSE hand-off (fullscreen
-     * -> preview), so Home can restore the right caption/now-playing when it
-     * re-adopts. Null on the forward hand-off (the player gets its channel from the
-     * launch intent).
-     */
-    @Volatile private var pendingLiveChannelId: String? = null
-
-    /**
-     * Park a live controller for the other screen to adopt. [channelId] is set only
-     * on the reverse hand-off so Home knows which channel the picture is showing.
-     */
-    fun handOverLiveController(controller: PlayerController, channelId: String? = null) {
-        pendingLiveController = controller
-        pendingLiveChannelId = channelId
-    }
-
-    /** Take (and clear) the parked controller, or null if none was handed over. */
-    fun consumePendingLiveController(): PlayerController? {
-        val controller = pendingLiveController
-        pendingLiveController = null
-        return controller
-    }
-
-    /** Take (and clear) the channel id parked with a reverse hand-off, or null. */
-    fun consumePendingLiveChannelId(): String? {
-        val id = pendingLiveChannelId
-        pendingLiveChannelId = null
-        return id
-    }
 
     fun init(context: Context) {
         if (initialized) return

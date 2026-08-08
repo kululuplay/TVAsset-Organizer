@@ -92,6 +92,8 @@
     <string name="audio_track">Audio</string>
     <string name="subtitle_track">Subtitles</string>
     <string name="subtitles_off">Off</string>
+    <string name="subtitles_auto">Automatic</string>
+    <string name="error_audio_focus_unavailable">Another app is using audio. Close it or try again.</string>
     <string name="aspect_ratio">Aspect ratio</string>
     <string name="resume_prompt_title">Resume playback?</string>
     <string name="resume_prompt_message">Continue from where you left off?</string>
@@ -99,6 +101,9 @@
     <string name="resume_continue">Resume</string>
     <string name="resume_prompt_position_label">You stopped at</string>
     <string name="track_hint_title">More viewing options</string>
+    <string name="next_episode_title">UP NEXT</string>
+    <string name="next_episode_countdown">Playing automatically in %1$d seconds</string>
+    <string name="next_episode_play_now">Play now</string>
     <string name="track_hint_audio_subtitle">This title offers multiple audio languages and subtitles</string>
     <string name="track_hint_audio">This title offers multiple audio languages</string>
     <string name="track_hint_subtitle">This title offers subtitle options</string>
@@ -150,7 +155,7 @@
     <string name="settings_playback">Playback</string>
     <string name="settings_player_mode">Live TV player engine</string>
     <string name="settings_live_player_header">Live TV engine</string>
-    <string name="settings_player_scope_desc">Auto starts live TV with ExoPlayer hardware and uses a channel-specific safe fallback only after a confirmed codec, green-frame or frozen-video failure. Movies, series and catch-up keep VLC for broad container, audio-track and subtitle support. Decoder choices are preferences so an incompatible channel never stays trapped on a broken path.</string>
+    <string name="settings_player_scope_desc">Auto starts Live TV with ExoPlayer hardware and uses a channel-specific safe fallback after a confirmed codec, green-frame or frozen-video failure. Movies, series and catch-up use Media3 for modern formats and automatically switch to VLC for legacy containers or verified decoder, audio, subtitle and output incompatibilities. Player and decoder choices remain preferences, so content never stays trapped on a broken path.</string>
     <string name="settings_playback_tuning_header">Playback tuning</string>
     <string name="settings_player_auto">Auto (recommended)</string>
     <string name="settings_player_auto_desc">ExoPlayer first; verified video/audio failures recover automatically</string>
@@ -168,8 +173,9 @@
     <string name="settings_stream_format_ts">MPEG-TS (.ts) — most compatible</string>
     <string name="settings_stream_format_hls">HLS (.m3u8) — adaptive</string>
     <string name="settings_buffer">Buffer size</string>
+    <string name="settings_buffer_adaptive">Adaptive (recommended)</string>
     <string name="settings_buffer_low">Low (fast zap)</string>
-    <string name="settings_buffer_normal">Normal (recommended)</string>
+    <string name="settings_buffer_normal">Normal (balanced)</string>
     <string name="settings_buffer_high">High (fewer stalls)</string>
     <string name="stream_info">Stream info</string>
     <string name="stream_info_unavailable">Stream info not available yet</string>

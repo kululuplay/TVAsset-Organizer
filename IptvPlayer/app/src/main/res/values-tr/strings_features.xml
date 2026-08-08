@@ -69,6 +69,7 @@
     <string name="cast">Yayınla</string>
     <string name="cast_unavailable">Yayın cihazı bulunamadı.</string>
     <string name="cast_started">Yayın başladı.</string>
+    <string name="error_playback_ownership_uncertain">Oynatma bağlantısının kapandığı doğrulanamadı. Yeniden denemeden önce Cast oturumunu sonlandırın veya uygulamayı yeniden başlatın.</string>
 
     <!-- Uygulama içi güncelleme -->
     <string name="about_checking">Güncellemeler denetleniyor…</string>

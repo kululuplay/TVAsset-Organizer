@@ -37,16 +37,19 @@ object CastHelper {
         castContext(context)?.sessionManager?.currentCastSession?.isConnected == true
 
     /**
-     * Loads a stream onto the connected Cast device. Returns false when no session
-     * is active or the SDK is unavailable. Note: the default receiver plays
-     * HLS/MP4/WebM; raw MPEG-TS live streams generally will not cast.
+     * Submits a stream to the connected Cast device. The Boolean return only says
+     * whether a request could be submitted; [onResult] reports the receiver's
+     * asynchronous acceptance. Note: the default receiver plays HLS/MP4/WebM;
+     * raw MPEG-TS live streams generally will not cast.
      */
     fun loadMedia(
         context: Context,
         url: String,
         title: String,
         imageUrl: String?,
-        isLive: Boolean
+        isLive: Boolean,
+        startPositionMs: Long = 0L,
+        onResult: ((Boolean) -> Unit)? = null,
     ): Boolean = try {
         val client = castContext(context)?.sessionManager?.currentCastSession?.remoteMediaClient
         if (client == null) {
@@ -65,16 +68,32 @@ object CastHelper {
                 .setContentType(guessMime(url))
                 .setMetadata(metadata)
                 .build()
-            client.load(
-                MediaLoadRequestData.Builder()
-                    .setMediaInfo(mediaInfo)
-                    .setAutoplay(true)
-                    .build()
-            )
+            val request = MediaLoadRequestData.Builder()
+                .setMediaInfo(mediaInfo)
+                .setAutoplay(true)
+            if (!isLive && startPositionMs > 0L) {
+                request.setCurrentTime(startPositionMs)
+            }
+            client.load(request.build()).setResultCallback { result ->
+                runCatching { onResult?.invoke(result.status.isSuccess) }
+            }
             true
         }
     } catch (t: Throwable) {
         false
+    }
+
+    /** Last receiver position known by the Cast SDK; main-thread only. */
+    fun currentPositionMs(context: Context): Long? = try {
+        castContext(context)
+            ?.sessionManager
+            ?.currentCastSession
+            ?.remoteMediaClient
+            ?.takeIf { it.hasMediaSession() }
+            ?.approximateStreamPosition
+            ?.takeIf { it >= 0L }
+    } catch (t: Throwable) {
+        null
     }
 
     private fun guessMime(url: String): String {

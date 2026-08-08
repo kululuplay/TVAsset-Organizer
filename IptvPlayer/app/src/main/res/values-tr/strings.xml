@@ -75,6 +75,8 @@
     <string name="audio_track">Ses</string>
     <string name="subtitle_track">Altyazı</string>
     <string name="subtitles_off">Kapalı</string>
+    <string name="subtitles_auto">Otomatik</string>
+    <string name="error_audio_focus_unavailable">Başka bir uygulama sesi kullanıyor. Kapatın veya tekrar deneyin.</string>
     <string name="aspect_ratio">En boy oranı</string>
     <string name="resume_prompt_title">Oynatmaya devam edilsin mi?</string>
     <string name="resume_prompt_message">Kaldığınız yerden devam edilsin mi?</string>
@@ -82,6 +84,9 @@
     <string name="resume_continue">Devam et</string>
     <string name="resume_prompt_position_label">Kaldığınız yer</string>
     <string name="track_hint_title">Daha fazla seçenek</string>
+    <string name="next_episode_title">SIRADAKİ BÖLÜM</string>
+    <string name="next_episode_countdown">%1$d saniye sonra otomatik oynatılacak</string>
+    <string name="next_episode_play_now">Şimdi oynat</string>
     <string name="track_hint_audio_subtitle">Bu içerik birden fazla dil ve altyazı seçeneği sunuyor</string>
     <string name="track_hint_audio">Bu içerik birden fazla dil seçeneği sunuyor</string>
     <string name="track_hint_subtitle">Bu içerik altyazı seçeneği sunuyor</string>
@@ -130,7 +135,7 @@
     <string name="settings_playback">Oynatma</string>
     <string name="settings_player_mode">Canlı TV oynatıcı motoru</string>
     <string name="settings_live_player_header">Canlı TV motoru</string>
-    <string name="settings_player_scope_desc">Otomatik mod Canlı TV\'yi ExoPlayer donanım yoluyla başlatır; yalnızca doğrulanmış codec, yeşil kare veya donmuş görüntü hatasında kanala özel güvenli yola geçer. Film, dizi ve Geri Sar geniş format, ses ve altyazı desteği için VLC kullanır. Decoder seçimleri tercihtir; uyumsuz kanal bozuk bir yolda kilitli kalmaz.</string>
+    <string name="settings_player_scope_desc">Otomatik mod Canlı TV\'yi ExoPlayer donanım yoluyla başlatır; doğrulanmış codec, yeşil ekran veya donmuş görüntü hatasında kanala özel güvenli yola geçer. Film, dizi ve Geri Sar modern formatlarda Media3 kullanır; eski kapsayıcılar veya doğrulanmış decoder, ses, altyazı ve görüntü uyumsuzluklarında otomatik olarak VLC\'ye geçer. Oynatıcı ve decoder seçimleri tercihtir; içerik bozuk bir yolda kilitli kalmaz.</string>
     <string name="settings_playback_tuning_header">Oynatma ayarları</string>
     <string name="settings_player_auto">Otomatik (önerilen)</string>
     <string name="settings_player_auto_desc">Önce ExoPlayer; doğrulanmış görüntü/ses hataları otomatik düzeltilir</string>
@@ -148,8 +153,9 @@
     <string name="settings_stream_format_ts">MPEG-TS (.ts) — en uyumlu</string>
     <string name="settings_stream_format_hls">HLS (.m3u8) — uyarlanır</string>
     <string name="settings_buffer">Tampon boyutu</string>
+    <string name="settings_buffer_adaptive">Uyarlanabilir (önerilen)</string>
     <string name="settings_buffer_low">Düşük (hızlı geçiş)</string>
-    <string name="settings_buffer_normal">Normal (önerilen)</string>
+    <string name="settings_buffer_normal">Normal (dengeli)</string>
     <string name="settings_buffer_high">Yüksek (daha az donma)</string>
     <string name="stream_info">Yayın bilgisi</string>
     <string name="stream_info_unavailable">Yayın bilgisi henüz yok</string>

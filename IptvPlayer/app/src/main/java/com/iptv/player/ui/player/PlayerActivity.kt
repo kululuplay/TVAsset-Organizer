@@ -23,14 +23,23 @@ import androidx.lifecycle.withStarted
 import coil.load
 import com.iptv.player.R
 import com.iptv.player.cast.CastController
+import com.iptv.player.cast.ProviderConnectionSafety
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.NowNext
 import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.databinding.ActivityPlayerBinding
+import com.iptv.player.playback.android.PlaybackQoeRuntime
+import com.iptv.player.playback.core.PlaybackEndReason
+import com.iptv.player.playback.core.PlaybackEngineKind
+import com.iptv.player.playback.core.PlaybackFailure
+import com.iptv.player.playback.core.PlaybackSessionId
+import com.iptv.player.player.LivePlaybackQoePolicy
 import com.iptv.player.player.LiveStreamUrl
+import com.iptv.player.player.LiveSubtitlePreference
 import com.iptv.player.player.PlayerController
 import com.iptv.player.player.StreamInfo
+import com.iptv.player.player.TvPlaybackSession
 import com.iptv.player.util.AutoRetryPolicy
 import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NowPlaying
@@ -57,12 +66,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         const val EXTRA_CATEGORY_ID = "extra_category_id"
         /** When true, up/down zapping stays within the radio list, not Live TV. */
         const val EXTRA_RADIO_MODE = "extra_radio_mode"
-        /**
-         * When true, adopt the live preview's already-playing PlayerController
-         * (parked on ServiceLocator) instead of creating a fresh one — going
-         * fullscreen then continues the picture with no reconnect/re-buffer.
-         */
-        const val EXTRA_ADOPT_PREVIEW = "extra_adopt_preview"
         /** Initial channel was already approved by the launching parental gate. */
         const val EXTRA_PARENTAL_AUTHORIZED = "extra_parental_authorized"
         /** Adult category approved on Home; avoids prompting again for each CH+/-. */
@@ -76,9 +79,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
          * the engine (the libVLC/Amlogic stop-restart overlap that froze the picture).
          */
         private const val ZAP_DEBOUNCE_MS = 280L
-        // Safety cap for the preview->fullscreen black-gap cover, in case the
-        // engine never emits a fresh video-output event after the surface swap.
-        private const val HANDOFF_COVER_TIMEOUT_MS = 6000L
     }
 
     private lateinit var binding: ActivityPlayerBinding
@@ -94,7 +94,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     private val zapHandler = Handler(Looper.getMainLooper())
     private var pendingZapChannel: Channel? = null
     private val overlayHandler = Handler(Looper.getMainLooper())
-    private val handoffCoverHandler = Handler(Looper.getMainLooper())
     // Post-fatal automatic retry (see onFatalError / AutoRetryPolicy): countdown
     // ticks + the pending retry live on this handler; the attempt index picks the
     // next backoff delay and only resets on success or an explicit user action.
@@ -106,28 +105,21 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     private var unlockedAdultCategoryId: String? = null
     private var pinPromptInFlight = false
 
-    /** True when this player adopted the live preview's controller (came from Home). */
-    private var adoptedPreview = false
-
-    /**
-     * Adopted preview controller consumed in onCreate but not yet transferred to
-     * [controller] — the channel resolve that precedes the assignment is async, so
-     * a fast BACK can destroy this activity mid-setup. Held here so onDestroy can
-     * still release it; otherwise the handed-over stream keeps decoding and playing
-     * audio in the background with nothing owning it (ghost audio after exit).
-     * Cleared once ownership transfers to [controller] (or the adopt path is dropped).
-     */
-    private var pendingAdopted: PlayerController? = null
-
-    /**
-     * True once we've parked the controller for Home to re-adopt on BACK (the
-     * reverse hand-off), so onStop/onDestroy must NOT pause or release it — Home
-     * now owns the single live connection and keeps the picture going.
-     */
-    private var handingBack = false
-
     /** User's preferred live container; applied to the URL at play time. */
     private var streamFormat: StreamFormat = StreamFormat.TS
+    private var resolvedStreamFormat: StreamFormat? = null
+
+    /** Platform media buttons, audio focus and noisy-output ownership. */
+    private lateinit var playbackSession: TvPlaybackSession
+    private var localPlaybackRequested = false
+    private var localStreamSubmitted = false
+    private var castOwnsPlayback = false
+    private var castLoadPending = false
+    private var suppressConnectedCastReloadOnce = false
+    private var pendingLocalRestartAfterCast = false
+
+    /** Opaque, URL/title-free QoE session for the current fullscreen channel. */
+    private var qoeSessionId: PlaybackSessionId? = null
 
     /** Diagnostics overlay state (toggled via the menu / INFO key). */
     private val statsHandler = Handler(Looper.getMainLooper())
@@ -135,10 +127,26 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     private val sleepTimer = SleepTimer { finish() }
     private val castController by lazy {
-        CastController(this) {
-            val channel = currentChannel ?: return@CastController null
-            CastController.CastMedia(channel.streamUrl, channel.name, channel.logoUrl, isLive = true)
-        }
+        CastController(
+            activity = this,
+            onCastLoadStarting = { onQuiesced -> onCastLoadStarting(onQuiesced) },
+            onCastQuiesceFailed = { onCastQuiesceFailed() },
+            onCastLoadFailed = { onCastLoadFailed() },
+            mediaProvider = mediaProvider@{
+                val channel = currentChannel ?: return@mediaProvider null
+                CastController.CastMedia(
+                    url = LiveStreamUrl.applyFormat(
+                        channel.streamUrl,
+                        resolvedStreamFormat ?: streamFormat,
+                    ),
+                    title = channel.name,
+                    imageUrl = channel.logoUrl,
+                    isLive = true,
+                )
+            },
+            onCastStarted = { onCastPlaybackStarted() },
+            onCastEnded = { onCastPlaybackEnded() },
+        )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -146,17 +154,49 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        playbackSession = TvPlaybackSession(
+            context = this,
+            tag = "KULULUPLAY-Live",
+            controls = TvPlaybackSession.Controls(
+                onPlay = { resumeLocalPlayback() },
+                onPause = { pauseLocalPlayback(abandonFocus = false) },
+                onToggle = {
+                    if (localPlaybackRequested) {
+                        pauseLocalPlayback(abandonFocus = false)
+                    } else {
+                        resumeLocalPlayback()
+                    }
+                },
+                onStop = { pauseLocalPlayback(abandonFocus = true) },
+                onNext = { requestZap(+1) },
+                onPrevious = { requestZap(-1) },
+            ),
+        )
+
         castController.attach()
 
         // Manual retry after the reconnect window expired: re-open the same
         // channel and reset the reconnect state. An explicit user action also
         // restarts the automatic-retry schedule from scratch.
         binding.retryButton.setOnClickListener {
+            if (castOwnsPlayback) {
+                castController.reloadCurrentMedia()
+                return@setOnClickListener
+            }
             cancelAutoRetry(resetAttempts = true)
             binding.errorOverlay.visibility = View.GONE
             binding.bufferingLabel.setText(R.string.buffering)
             binding.bufferingIndicator.visibility = View.VISIBLE
-            if (::controller.isInitialized) controller.retry()
+            if (::controller.isInitialized && !castOwnsPlayback) {
+                if (prepareLocalPlaybackRequest()) {
+                    if (localStreamSubmitted) {
+                        beginQoeSessionIfNeeded()
+                        controller.retry()
+                    } else {
+                        currentChannel?.let(::startChannel)
+                    }
+                }
+            }
         }
 
         // On-screen Debug overlay (engine/stage + live PlaybackLog tail), gated by
@@ -185,15 +225,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         viewModel.categoryId = intent.getStringExtra(EXTRA_CATEGORY_ID)
         unlockedAdultCategoryId = intent.getStringExtra(EXTRA_AUTHORIZED_CATEGORY_ID)
 
-        // Take the handed-over preview controller (if any) immediately so it is
-        // never left parked. Null when launched normally (Favorites/number-zap).
-        val adopted: PlayerController? =
-            if (intent.getBooleanExtra(EXTRA_ADOPT_PREVIEW, false))
-                ServiceLocator.consumePendingLiveController() else null
-        // Track it until ownership transfers to [controller] below, so a teardown
-        // during the async channel resolve still releases the handed-over stream.
-        pendingAdopted = adopted
-
         lifecycleScope.launch {
             streamFormat = viewModel.streamFormat()
             val channel = viewModel.resolveChannel(channelId)
@@ -202,9 +233,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             // resume this one-time result only when this Activity is visible again.
             lifecycle.withStarted {
                 if (channel == null) {
-                    // Release the adopted connection so the hand-off can't orphan it.
-                    adopted?.release()
-                    pendingAdopted = null
                     Toast.makeText(
                         this@PlayerActivity,
                         R.string.error_unknown,
@@ -216,7 +244,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
                 if (intent.getBooleanExtra(EXTRA_PARENTAL_AUTHORIZED, false)) {
                     unlockedAdultChannels.add(channel.id)
                 }
-                authorizeInitialChannel(channel, adopted)
+                authorizeInitialChannel(channel)
             }
         }
     }
@@ -226,9 +254,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
      * pass an authorization token after their PIN gate, while any unguarded or
      * future entry point is stopped here before a surface or metadata is shown.
      */
-    private fun authorizeInitialChannel(channel: Channel, adopted: PlayerController?) {
+    private fun authorizeInitialChannel(channel: Channel) {
         if (!requiresParentalAuthorization(channel)) {
-            initializeChannel(channel, adopted)
+            initializeChannel(channel)
             return
         }
         pinPromptInFlight = true
@@ -237,70 +265,39 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             isAdult = true,
             onDenied = {
                 pinPromptInFlight = false
-                adopted?.release()
-                pendingAdopted = null
                 finish()
             },
         ) {
             pinPromptInFlight = false
             unlockedAdultChannels.add(channel.id)
-            initializeChannel(channel, adopted)
+            initializeChannel(channel)
         }
     }
 
-    private fun initializeChannel(channel: Channel, adopted: PlayerController?) {
+    private fun initializeChannel(channel: Channel) {
         lifecycleScope.launch {
-            if (adopted != null) {
-                lifecycle.withStarted {
-                    if (isFinishing || isDestroyed) {
-                        adopted.release()
-                        pendingAdopted = null
-                        return@withStarted
-                    }
-                    // Seamless hand-off: rebind the still-playing engine to this
-                    // screen's surface and take ownership.
-                    adoptedPreview = true
-                    controller = adopted
-                    // Ownership transferred to [controller]; onDestroy now releases it
-                    // via the ::controller path, so the pending reference is no longer needed.
-                    pendingAdopted = null
-                    controller.setCallback(this@PlayerActivity)
-                    // The hand-off tears down and recreates the video surface, so the
-                    // picture goes black for a beat (audio keeps playing) until the new
-                    // surface gets its first frame. Cover that gap with the buffering
-                    // indicator; onVideoResumed() clears it, with a safety timeout.
-                    binding.playbackCover.visibility = View.VISIBLE
-                    binding.bufferingIndicator.visibility = View.VISIBLE
-                    handoffCoverHandler.postDelayed(
-                        { binding.bufferingIndicator.visibility = View.GONE },
-                        HANDOFF_COVER_TIMEOUT_MS
-                    )
-                    controller.rebind(binding.videoContainer)
-                    currentChannel = channel
-                    viewModel.markWatched(channel.id)
-                    showOverlay(channel)
-                    if (statsVisible) refreshStats()
-                }
-            } else {
-                val playback = viewModel.playbackSelection()
-                val allowPassthrough = viewModel.audioPassthrough()
-                val bufferMode = viewModel.bufferMode()
-                // Each settings read can suspend. Gate the actual player creation
-                // again so onStop cannot be followed by hidden playback/ghost audio.
-                lifecycle.withStarted {
-                    if (isFinishing || isDestroyed) return@withStarted
-                    controller = PlayerController(
-                        context = this@PlayerActivity,
-                        container = binding.videoContainer,
-                        mode = playback.player,
-                        decoderMode = playback.decoder,
-                        allowPassthrough = allowPassthrough,
-                        bufferMode = bufferMode,
-                        expectsVideo = !viewModel.radioMode,
-                        callback = this@PlayerActivity
-                    )
-                    startChannel(channel)
-                }
+            val playback = viewModel.playbackSelection()
+            val allowPassthrough = viewModel.audioPassthrough()
+            val bufferMode = viewModel.bufferMode()
+            val preferredAudioLanguage = viewModel.liveAudioLanguage()
+            val preferredSubtitlePreference = viewModel.liveSubtitlePreference()
+            // Each settings read can suspend. Gate the actual player creation
+            // again so onStop cannot be followed by hidden playback/ghost audio.
+            lifecycle.withStarted {
+                if (isFinishing || isDestroyed) return@withStarted
+                controller = PlayerController(
+                    context = this@PlayerActivity,
+                    container = binding.videoContainer,
+                    mode = playback.player,
+                    decoderMode = playback.decoder,
+                    allowPassthrough = allowPassthrough,
+                    bufferMode = bufferMode,
+                    expectsVideo = !viewModel.radioMode,
+                    preferredAudioLanguage = preferredAudioLanguage,
+                    preferredSubtitlePreference = preferredSubtitlePreference,
+                    callback = this@PlayerActivity
+                )
+                startChannel(channel)
             }
         }
     }
@@ -344,7 +341,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         zapHandler.postDelayed({
             // Guard the lifecycle: don't start a stream if we've left the foreground
             // or are tearing down between the press and this settle.
-            if (isFinishing || isDestroyed || handingBack) return@postDelayed
+            if (isFinishing || isDestroyed) return@postDelayed
             if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@postDelayed
             val ch = pendingZapChannel ?: return@postDelayed
             pendingZapChannel = null
@@ -375,19 +372,56 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     }
 
     private fun startChannel(channel: Channel) {
+        finishQoeSession(PlaybackEndReason.REPLACED)
         currentChannel = channel
+        resolvedStreamFormat = null
+        localStreamSubmitted = false
+        pendingLocalRestartAfterCast = false
         viewModel.markWatched(channel.id)
         // A new channel cancels any reconnect-failed state from the previous one,
         // including a pending automatic retry aimed at the old channel.
         cancelAutoRetry(resetAttempts = true)
         binding.errorOverlay.visibility = View.GONE
+        if (castOwnsPlayback) {
+            // The receiver owns the only stream connection. Update it directly;
+            // the paused local controller is restarted on this latest channel
+            // only after the Cast session really ends.
+            castController.reloadCurrentMedia()
+            showOverlay(channel)
+            return
+        }
+        if (castLoadPending) {
+            castController.reloadCurrentMedia()
+            showOverlay(channel)
+            return
+        }
+        val offerConnectedCast = castController.isConnected && !suppressConnectedCastReloadOnce
+        suppressConnectedCastReloadOnce = false
+        if (offerConnectedCast) {
+            // Activity recreation can outlive a Cast session. Submit only after
+            // channel/format state is ready; the two-phase callbacks quiesce local
+            // playback before the receiver opens the provider URL.
+            castController.reloadCurrentMedia()
+            showOverlay(channel)
+            return
+        }
+        if (!prepareLocalPlaybackRequest()) {
+            showOverlay(channel)
+            return
+        }
         // Per-channel route-memory key (Tier 2 self-healing): the channel id plus
         // the chosen container format, which together determine the stream the
         // decoder sees. No URL/token so it survives credential rotation.
         controller.play(
             LiveStreamUrl.applyFormat(channel.streamUrl, streamFormat),
             routeKey = LiveStreamUrl.routeKey(channel.id, streamFormat, channel.streamUrl),
+            transportKey = LiveStreamUrl.transportKey(
+                channel.id,
+                channel.streamUrl,
+                streamFormat,
+            ),
         )
+        localStreamSubmitted = true
         showOverlay(channel)
         if (statsVisible) refreshStats()
     }
@@ -502,27 +536,10 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             statsVisible -> hideStats()
             binding.infoOverlay.visibility == View.VISIBLE -> hideOverlay()
             else -> {
-                handBackPreviewIfPossible()
+                finishQoeSession(PlaybackEndReason.USER_STOP)
                 super.onBackPressed()
             }
         }
-    }
-
-    /**
-     * Reverse hand-off: when leaving a player that adopted the live preview, park
-     * the still-playing controller (plus the current channel id) so Home re-adopts
-     * it into the preview surface instead of a dead/closed preview. onStop/onDestroy
-     * then skip pause/release because Home now owns the single live connection.
-     * Only the BACK exit hands back; sleep-timer/error exits fall through to release.
-     */
-    private fun handBackPreviewIfPossible() {
-        if (!adoptedPreview || !::controller.isInitialized) return
-        // Drop any pending debounced zap so it can't start a stream on the
-        // controller after we've handed it back to Home.
-        zapHandler.removeCallbacksAndMessages(null)
-        pendingZapChannel = null
-        handingBack = true
-        ServiceLocator.handOverLiveController(controller, currentChannel?.id)
     }
 
     // ---- Player menu (MENU key) ----------------------------------------
@@ -541,6 +558,16 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             actions.add { showDelayDialog(audio = false) }
         }
 
+        if (::controller.isInitialized && controller.audioTracks().isNotEmpty()) {
+            labels.add(getString(R.string.audio_track))
+            actions.add { showLiveTrackDialog(audio = true) }
+        }
+
+        if (::controller.isInitialized && controller.subtitleTracks().isNotEmpty()) {
+            labels.add(getString(R.string.subtitle_track))
+            actions.add { showLiveTrackDialog(audio = false) }
+        }
+
         if (castController.isAvailable) {
             labels.add(getString(R.string.cast))
             actions.add { castController.onCastButtonClicked() }
@@ -554,6 +581,69 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             getString(R.string.player_menu),
             labels.map { PlayerDialogs.Option(it) },
         ) { which -> actions[which].invoke() }
+    }
+
+    /** Engine-agnostic, D-pad friendly live audio/subtitle selector. */
+    private fun showLiveTrackDialog(audio: Boolean) {
+        if (!::controller.isInitialized) return
+        val tracks = if (audio) controller.audioTracks() else controller.subtitleTracks()
+        if (audio && tracks.isEmpty()) return
+        val options = buildList {
+            if (!audio) {
+                add(
+                    PlayerDialogs.Option(
+                        getString(R.string.subtitles_auto),
+                        selected = controller.subtitlePreference is LiveSubtitlePreference.Auto,
+                    ),
+                )
+                add(
+                    PlayerDialogs.Option(
+                        getString(R.string.subtitles_off),
+                        selected = controller.subtitlePreference is LiveSubtitlePreference.Off,
+                    ),
+                )
+            }
+            tracks.forEach { add(PlayerDialogs.Option(it.label, it.selected)) }
+        }
+        PlayerDialogs.showOptions(
+            this,
+            getString(if (audio) R.string.audio_track else R.string.subtitle_track),
+            options,
+        ) { index ->
+            if (!audio && index == 0) {
+                if (controller.selectSubtitleAuto()) {
+                    lifecycleScope.launch {
+                        viewModel.setLiveSubtitlePreference(LiveSubtitlePreference.Auto)
+                    }
+                }
+                return@showOptions
+            }
+            if (!audio && index == 1) {
+                if (controller.selectSubtitleTrack(null)) {
+                    lifecycleScope.launch {
+                        viewModel.setLiveSubtitlePreference(LiveSubtitlePreference.Off)
+                    }
+                }
+                return@showOptions
+            }
+            val trackIndex = if (audio) index else index - 2
+            val track = tracks.getOrNull(trackIndex) ?: return@showOptions
+            val selected = if (audio) {
+                controller.selectAudioTrack(track.id)
+            } else {
+                controller.selectSubtitleTrack(track.id)
+            }
+            if (selected && track.language != null) {
+                lifecycleScope.launch {
+                    if (audio) viewModel.setLiveAudioLanguage(track.language)
+                    else {
+                        LiveSubtitlePreference.Language.from(track.language)?.let {
+                            viewModel.setLiveSubtitlePreference(it)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun showSleepDialog() {
@@ -683,6 +773,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     // ---- Controller callbacks ------------------------------------------
 
     override fun onBuffering() {
+        if (castOwnsPlayback || castLoadPending) return
         // A playback attempt is underway (auto retry, manual retry or a zap) —
         // stop any pending countdown but keep the attempt count: only a real
         // success (onPlaying/onVideoResumed) forgives past failures, otherwise
@@ -691,39 +782,79 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         binding.errorOverlay.visibility = View.GONE
         binding.bufferingLabel.setText(R.string.buffering)
         binding.bufferingIndicator.visibility = View.VISIBLE
+        PlaybackQoeRuntime.setRebuffering(qoeSessionId, true)
+        if (!castOwnsPlayback && localPlaybackRequested) playbackSession.setPlaying(true)
     }
 
     override fun onPlaying(engineName: String) {
+        if (castOwnsPlayback || castLoadPending) return
         cancelAutoRetry(resetAttempts = true)
         binding.errorOverlay.visibility = View.GONE
+        PlaybackQoeRuntime.markEngine(qoeSessionId, LivePlaybackQoePolicy.engine(engineName))
+        PlaybackQoeRuntime.markReady(qoeSessionId)
+        PlaybackQoeRuntime.setRebuffering(qoeSessionId, false)
+        if (!castOwnsPlayback) {
+            localPlaybackRequested = true
+            playbackSession.setPlaying(true)
+        }
         // Audio/cache readiness can arrive while the decoder surface is still
         // green. TV remains covered until onVideoResumed() confirms fresh pixels;
         // radio has no video frame and may become ready here.
         if (viewModel.radioMode) {
+            PlaybackQoeRuntime.markFirstFrame(qoeSessionId)
             binding.playbackCover.visibility = View.GONE
             binding.bufferingIndicator.visibility = View.GONE
         }
     }
 
     override fun onPlaybackRestarting() {
+        if (castOwnsPlayback || castLoadPending) return
         cancelAutoRetry(resetAttempts = false)
         binding.errorOverlay.visibility = View.GONE
         binding.playbackCover.visibility = View.VISIBLE
         binding.bufferingLabel.setText(R.string.buffering)
         binding.bufferingIndicator.visibility = View.VISIBLE
+        PlaybackQoeRuntime.setRebuffering(qoeSessionId, true)
     }
 
     override fun onVideoResumed() {
+        if (castOwnsPlayback || castLoadPending) return
         // First real frame on the (re)attached surface — clear the hand-off cover
         // and any reconnect indicator the moment playback genuinely resumes.
         cancelAutoRetry(resetAttempts = true)
-        handoffCoverHandler.removeCallbacksAndMessages(null)
         binding.errorOverlay.visibility = View.GONE
         binding.playbackCover.visibility = View.GONE
         binding.bufferingIndicator.visibility = View.GONE
+        PlaybackQoeRuntime.markFirstFrame(qoeSessionId)
+        PlaybackQoeRuntime.setRebuffering(qoeSessionId, false)
+        if (!castOwnsPlayback) {
+            localPlaybackRequested = true
+            playbackSession.setPlaying(true)
+        }
+    }
+
+    override fun onEngineChanged(engineName: String) {
+        if (castOwnsPlayback || castLoadPending) return
+        PlaybackQoeRuntime.markEngine(qoeSessionId, LivePlaybackQoePolicy.engine(engineName))
+    }
+
+    override fun onTransportResolved(format: StreamFormat) {
+        resolvedStreamFormat = format
+        val transport = LivePlaybackQoePolicy.transport(format)
+        if (qoeSessionId == null && localPlaybackRequested && !castOwnsPlayback) {
+            beginQoeSessionIfNeeded(format)
+        } else {
+            PlaybackQoeRuntime.markTransport(qoeSessionId, transport)
+        }
+    }
+
+    override fun onPlaybackFailure(failure: PlaybackFailure) {
+        if (castOwnsPlayback || castLoadPending) return
+        PlaybackQoeRuntime.recordFailure(qoeSessionId, failure)
     }
 
     override fun onRetrying(attempt: Int) {
+        if (castOwnsPlayback || castLoadPending) return
         // Non-blocking "stream not responding, retrying…" indicator over the
         // picture while the controller re-opens the same channel. Cleared
         // automatically by onPlaying / onVideoResumed once playback resumes.
@@ -735,12 +866,15 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     }
 
     override fun onFatalError() {
+        if (castOwnsPlayback || castLoadPending) return
         // Reconnect window elapsed with no recovery: replace the spinner with a
         // clear message and a focusable manual-retry button, then keep retrying
         // on our own growing schedule so an unattended TV heals by itself once
         // the provider/network comes back.
         binding.playbackCover.visibility = View.VISIBLE
         binding.bufferingIndicator.visibility = View.GONE
+        PlaybackQoeRuntime.setRebuffering(qoeSessionId, false)
+        playbackSession.setPlaying(false)
         binding.errorMessage.setText(R.string.error_cannot_connect)
         binding.errorOverlay.visibility = View.VISIBLE
         binding.retryButton.requestFocus()
@@ -759,6 +893,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         val delayMs = AutoRetryPolicy.delayForAttempt(autoRetryAttempt)
         if (delayMs == null) {
             binding.errorMessage.setText(R.string.error_auto_retry_exhausted)
+            finishQoeSession(PlaybackEndReason.FATAL_FAILURE)
             return
         }
         tickAutoRetryCountdown((delayMs / 1000L).coerceAtLeast(1L))
@@ -771,7 +906,16 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             binding.errorOverlay.visibility = View.GONE
             binding.bufferingLabel.setText(R.string.buffering)
             binding.bufferingIndicator.visibility = View.VISIBLE
-            if (::controller.isInitialized) controller.retry()
+            if (::controller.isInitialized && !castOwnsPlayback) {
+                if (prepareLocalPlaybackRequest()) {
+                    if (localStreamSubmitted) {
+                        beginQoeSessionIfNeeded()
+                        controller.retry()
+                    } else {
+                        currentChannel?.let(::startChannel)
+                    }
+                }
+            }
             return
         }
         binding.errorMessage.text = getString(R.string.error_auto_retry_countdown, secondsLeft)
@@ -788,9 +932,166 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         if (resetAttempts) autoRetryAttempt = 0
     }
 
+    // ---- Platform playback ownership + anonymous QoE -------------------
+
+    private fun prepareLocalPlaybackRequest(): Boolean {
+        if (castOwnsPlayback || castLoadPending) return false
+        if (!ProviderConnectionSafety.newConnectionAllowed) {
+            localPlaybackRequested = false
+            playbackSession.setPlaying(false)
+            binding.playbackCover.visibility = View.VISIBLE
+            binding.bufferingIndicator.visibility = View.GONE
+            binding.errorMessage.setText(R.string.error_playback_ownership_uncertain)
+            binding.errorOverlay.visibility = View.VISIBLE
+            binding.retryButton.requestFocus()
+            return false
+        }
+        // Focus is requested before opening/reopening the local stream. TV devices
+        // normally grant immediately; the listener still owns transient/permanent
+        // loss and noisy-output pauses after this boundary.
+        if (!playbackSession.requestAudioFocus()) {
+            localPlaybackRequested = false
+            playbackSession.setPlaying(false)
+            binding.playbackCover.visibility = View.VISIBLE
+            binding.bufferingIndicator.visibility = View.GONE
+            binding.errorMessage.setText(R.string.error_audio_focus_unavailable)
+            binding.errorOverlay.visibility = View.VISIBLE
+            binding.retryButton.requestFocus()
+            return false
+        }
+        localPlaybackRequested = true
+        playbackSession.setPlaying(true)
+        return true
+    }
+
+    private fun resumeLocalPlayback() {
+        if (
+            castOwnsPlayback ||
+            castLoadPending ||
+            !::controller.isInitialized ||
+            !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        ) return
+        if (!prepareLocalPlaybackRequest()) return
+        if (!localStreamSubmitted) {
+            currentChannel?.let(::startChannel)
+            return
+        }
+        beginQoeSessionIfNeeded()
+        controller.resume()
+    }
+
+    private fun pauseLocalPlayback(abandonFocus: Boolean) {
+        localPlaybackRequested = false
+        PlaybackQoeRuntime.setRebuffering(qoeSessionId, false)
+        playbackSession.setPlaying(false)
+        if (::controller.isInitialized) controller.pause()
+        if (abandonFocus) playbackSession.abandonAudioFocus()
+    }
+
+    private fun onCastPlaybackStarted() {
+        // The receiver accepted the load after the preflight confirmed the local
+        // socket was closed. Transfer ownership and finalize the local QoE session.
+        val replacingLocalPlayback = !castOwnsPlayback
+        castLoadPending = false
+        castOwnsPlayback = true
+        cancelAutoRetry(resetAttempts = false)
+        if (replacingLocalPlayback) finishQoeSession(PlaybackEndReason.REPLACED)
+    }
+
+    private fun onCastLoadStarting(onQuiesced: (Boolean) -> Unit) {
+        if (castOwnsPlayback) {
+            onQuiesced(true)
+            return
+        }
+        if (castLoadPending) return
+        castLoadPending = true
+        // The receiver is about to open the provider URL. Close the local socket
+        // first to preserve single-connection accounts; QoE is finalized only if
+        // the remote load actually succeeds.
+        localPlaybackRequested = false
+        PlaybackQoeRuntime.setRebuffering(qoeSessionId, false)
+        playbackSession.setPlaying(false)
+        playbackSession.abandonAudioFocus()
+        if (::controller.isInitialized) {
+            controller.quiesce(onQuiesced)
+        } else {
+            onQuiesced(true)
+        }
+    }
+
+    private fun onCastQuiesceFailed() {
+        castLoadPending = false
+        castOwnsPlayback = false
+        suppressConnectedCastReloadOnce = true
+        pendingLocalRestartAfterCast = false
+        cancelAutoRetry(resetAttempts = false)
+        binding.playbackCover.visibility = View.VISIBLE
+        binding.bufferingIndicator.visibility = View.GONE
+        binding.errorMessage.setText(R.string.error_playback_ownership_uncertain)
+        binding.errorOverlay.visibility = View.VISIBLE
+        binding.retryButton.requestFocus()
+        finishQoeSession(PlaybackEndReason.FATAL_FAILURE)
+    }
+
+    private fun onCastLoadFailed() {
+        castLoadPending = false
+        suppressConnectedCastReloadOnce = true
+        if (
+            isFinishing ||
+            isDestroyed ||
+            !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        ) {
+            pendingLocalRestartAfterCast = true
+            return
+        }
+        currentChannel?.let(::startChannel)
+    }
+
+    private fun onCastPlaybackEnded() {
+        if (!castOwnsPlayback) return
+        castOwnsPlayback = false
+        castLoadPending = false
+        suppressConnectedCastReloadOnce = true
+        pendingLocalRestartAfterCast = true
+        if (
+            isFinishing ||
+            isDestroyed ||
+            !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        ) return
+        // The user may have changed channels while casting. Start the latest one,
+        // not the stale URL retained by the paused local controller.
+        currentChannel?.let {
+            pendingLocalRestartAfterCast = false
+            startChannel(it)
+        }
+    }
+
+    private fun beginQoeSessionIfNeeded(
+        format: StreamFormat = resolvedStreamFormat ?: streamFormat,
+    ) {
+        if (qoeSessionId != null || castOwnsPlayback || currentChannel == null) return
+        val descriptor = LivePlaybackQoePolicy.sessionDescriptor(
+            radio = viewModel.radioMode,
+            hls = format == StreamFormat.HLS,
+        )
+        qoeSessionId = PlaybackQoeRuntime.start(
+            kind = descriptor.content,
+            engine = PlaybackEngineKind.UNKNOWN,
+            transport = descriptor.transport,
+        )
+    }
+
+    private fun finishQoeSession(reason: PlaybackEndReason) {
+        val id = qoeSessionId ?: return
+        qoeSessionId = null
+        PlaybackQoeRuntime.setRebuffering(id, false)
+        PlaybackQoeRuntime.finish(id, reason)
+    }
+
     // ---- Lifecycle ------------------------------------------------------
 
     override fun onStop() {
+        playbackSession.setActive(false)
         // Never carry a half-press across background/foreground. Some Bluetooth
         // remotes lose the UP event while an Activity is stopping.
         confirmPress.clear()
@@ -801,15 +1102,34 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         zapHandler.removeCallbacksAndMessages(null)
         pendingZapChannel = null
         cancelAutoRetry(resetAttempts = false)
-        // Don't pause when handing the controller back to Home — it must keep
-        // playing into the preview surface that Home re-adopted.
-        if (!handingBack && ::controller.isInitialized) controller.pause()
+        if (!castOwnsPlayback) {
+            finishQoeSession(PlaybackEndReason.BACKGROUND)
+            if (!castLoadPending) {
+                pauseLocalPlayback(abandonFocus = true)
+            } else {
+                playbackSession.setPlaying(false)
+                playbackSession.abandonAudioFocus()
+            }
+        } else {
+            playbackSession.setPlaying(false)
+            playbackSession.abandonAudioFocus()
+        }
         NowPlaying.clear(this)
     }
 
     override fun onStart() {
         super.onStart()
-        if (::controller.isInitialized) controller.resume()
+        playbackSession.setActive(true)
+        if (::controller.isInitialized && !castOwnsPlayback && !castLoadPending) {
+            if (pendingLocalRestartAfterCast) {
+                currentChannel?.let {
+                    pendingLocalRestartAfterCast = false
+                    startChannel(it)
+                }
+            } else {
+                resumeLocalPlayback()
+            }
+        }
         currentChannel?.let { NowPlaying.set(this, it.name, "Canlı") }
     }
 
@@ -818,21 +1138,14 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         epgJob?.cancel()
         sleepTimer.release()
         castController.detach()
+        finishQoeSession(PlaybackEndReason.APP_SHUTDOWN)
+        playbackSession.release()
         zapHandler.removeCallbacksAndMessages(null)
         overlayHandler.removeCallbacksAndMessages(null)
-        handoffCoverHandler.removeCallbacksAndMessages(null)
         autoRetryHandler.removeCallbacksAndMessages(null)
         statsHandler.removeCallbacksAndMessages(null)
         debugBinder?.release()
-        // Don't release a controller we've handed back to Home — it owns it now.
-        if (!handingBack) {
-            if (::controller.isInitialized) controller.release()
-            // Adopted preview controller torn down before onCreate finished wiring
-            // it to [controller]: release it so the handed-over stream can't keep
-            // decoding/playing audio in the background with no owner.
-            else pendingAdopted?.release()
-        }
-        pendingAdopted = null
+        if (::controller.isInitialized) controller.release()
     }
 
     // ---- Diagnostics overlay -------------------------------------------

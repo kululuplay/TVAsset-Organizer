@@ -1489,6 +1489,7 @@ class SettingsActivity : BaseActivity() {
 
     private fun bufferModeLabel(mode: BufferMode): String = getString(
         when (mode) {
+            BufferMode.ADAPTIVE -> R.string.settings_buffer_adaptive
             BufferMode.LOW -> R.string.settings_buffer_low
             BufferMode.NORMAL -> R.string.settings_buffer_normal
             BufferMode.HIGH -> R.string.settings_buffer_high
@@ -1496,7 +1497,12 @@ class SettingsActivity : BaseActivity() {
     )
 
     private fun showBufferModeDialog() {
-        val modes = listOf(BufferMode.LOW, BufferMode.NORMAL, BufferMode.HIGH)
+        val modes = listOf(
+            BufferMode.ADAPTIVE,
+            BufferMode.LOW,
+            BufferMode.NORMAL,
+            BufferMode.HIGH,
+        )
         val labels = modes.map { bufferModeLabel(it) }.toTypedArray()
         AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
             .setTitle(R.string.settings_buffer)

@@ -148,9 +148,18 @@ data class ProfileEntity(
  * screens can render and reopen content without another network/cache lookup.
  * contentId is prefixed: "vod_<id>" for movies, "ep_<id>" for episodes.
  */
-@Entity(tableName = "resume", indices = [Index("updatedAt"), Index("seriesId")])
+@Entity(
+    tableName = "resume",
+    primaryKeys = ["profileId", "contentId"],
+    indices = [
+        Index(value = ["profileId", "updatedAt"]),
+        Index(value = ["profileId", "seriesId"]),
+    ],
+)
 data class ResumeEntity(
-    @PrimaryKey val contentId: String,
+    /** Active subscription/profile that owns this playback state. */
+    val profileId: Long,
+    val contentId: String,
     val positionMs: Long,
     val durationMs: Long,
     val updatedAt: Long,
@@ -175,9 +184,15 @@ data class ResumeEntity(
  * "watched" tick must survive that deletion. contentId is prefixed the same
  * way as resume: "vod_<id>" for movies, "ep_<id>" for episodes.
  */
-@Entity(tableName = "watched", indices = [Index("seriesId")])
+@Entity(
+    tableName = "watched",
+    primaryKeys = ["profileId", "contentId"],
+    indices = [Index(value = ["profileId", "seriesId"])],
+)
 data class WatchedEntity(
-    @PrimaryKey val contentId: String,
+    /** Active subscription/profile that owns this watched marker. */
+    val profileId: Long,
+    val contentId: String,
     /** "movie" or "episode". */
     val type: String = "movie",
     /** Set for episodes so a series can mark all its watched episodes at once. */

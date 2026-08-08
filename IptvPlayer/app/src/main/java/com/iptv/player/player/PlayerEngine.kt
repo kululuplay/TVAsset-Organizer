@@ -44,6 +44,16 @@ interface PlayerEngine {
     fun stop()
 
     /**
+     * Stop the provider connection and report when backend shutdown really
+     * completed. Media3 is synchronous; libVLC overrides this because its JNI stop
+     * is bounded on a worker. Cast handoff must wait for this boundary.
+     */
+    fun stopAndThen(onStopped: (Boolean) -> Unit) {
+        stop()
+        onStopped(true)
+    }
+
+    /**
      * Release all native resources and remove this engine's own video view from
      * its parent. Engine is unusable afterwards. Owning view removal here lets a
      * backend order Surface destruction after its native decoder has stopped.
@@ -79,6 +89,31 @@ interface PlayerEngine {
      */
     fun getStreamInfo(): StreamInfo? = null
 
+    /** Currently discovered selectable live audio tracks. */
+    fun audioTracks(): List<PlayerTrack> = emptyList()
+
+    /** Currently discovered selectable live subtitle tracks. */
+    fun subtitleTracks(): List<PlayerTrack> = emptyList()
+
+    /** Select an engine track by [PlayerTrack.id]. */
+    fun selectAudioTrack(id: String): Boolean = false
+
+    /** null disables subtitles; otherwise selects a [PlayerTrack.id]. */
+    fun selectSubtitleTrack(id: String?): Boolean = false
+
+    /** Apply persisted ISO language preferences when matching tracks appear. */
+    fun setPreferredTrackLanguages(audio: String?, subtitle: String?) {}
+
+    /** Apply the durable AUTO/OFF/LANGUAGE live-subtitle choice. */
+    fun setSubtitlePreference(preference: LiveSubtitlePreference): Boolean = false
+
+    /**
+     * True only when startup source failures can be separated from auth/not-found
+     * responses. The controller must not probe another TS/HLS suffix based on an
+     * opaque native error that might actually be HTTP 401/403/404.
+     */
+    val supportsPreciseSourceErrors: Boolean get() = false
+
     /** Identifies which backend this is (for UI badges / logging). */
     val engineName: String
 }
@@ -95,6 +130,13 @@ data class StreamInfo(
     val codec: String?,
     val bitrateKbps: Int?,
     val engine: String
+)
+
+data class PlayerTrack(
+    val id: String,
+    val label: String,
+    val language: String?,
+    val selected: Boolean,
 )
 
 /** Playback state callbacks routed to the UI. */
@@ -124,6 +166,12 @@ interface PlayerListener {
      * source drop so the controller may try one untried compatibility route.
      */
     fun onStartupFailure(message: String?) {}
+
+    /**
+     * Network/source/manifest startup failure. [httpStatus] is supplied when the
+     * backend exposes it so auth/not-found responses never trigger TS/HLS probing.
+     */
+    fun onSourceFailure(message: String?, httpStatus: Int? = null) {}
 
     /**
      * A hardware-decoder failure specifically (ExoPlayer ERROR_CODE_DECODING_FAILED

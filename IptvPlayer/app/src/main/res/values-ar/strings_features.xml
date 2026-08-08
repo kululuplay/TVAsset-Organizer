@@ -68,6 +68,7 @@
     <string name="cast">بث</string>
     <string name="cast_unavailable">لا يوجد جهاز بث متاح.</string>
     <string name="cast_started">بدأ البث.</string>
+    <string name="error_playback_ownership_uncertain">تعذر التحقق من إغلاق اتصال التشغيل. أنهِ جلسة البث أو أعد تشغيل التطبيق قبل المحاولة مجددًا.</string>
 
     <!-- التحديث داخل التطبيق -->
     <string name="about_checking">جارٍ البحث عن تحديثات…</string>

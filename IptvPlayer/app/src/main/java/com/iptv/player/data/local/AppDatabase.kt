@@ -65,7 +65,7 @@ import com.iptv.player.data.local.dao.WatchedDao
         ChannelFtsEntity::class,
         WatchedEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -170,6 +170,66 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v12 -> v13: scope VOD resume/watched state to a subscription profile.
+         *
+         * Room cannot read the active profile stored in DataStore while executing a
+         * SQLite migration. Existing rows therefore move losslessly into a one-time
+         * legacy scope (-1); the repository atomically claims that scope for the
+         * active profile before its first playback-state read/write.
+         */
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `resume_new` (" +
+                        "`profileId` INTEGER NOT NULL, `contentId` TEXT NOT NULL, " +
+                        "`positionMs` INTEGER NOT NULL, `durationMs` INTEGER NOT NULL, " +
+                        "`updatedAt` INTEGER NOT NULL, `type` TEXT NOT NULL, " +
+                        "`title` TEXT NOT NULL, `posterUrl` TEXT, `streamUrl` TEXT NOT NULL, " +
+                        "`vodId` TEXT, `seriesId` TEXT, `seasonNumber` INTEGER NOT NULL, " +
+                        "`episodeNumber` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`profileId`, `contentId`))"
+                )
+                db.execSQL(
+                    "INSERT INTO `resume_new` " +
+                        "(`profileId`, `contentId`, `positionMs`, `durationMs`, `updatedAt`, " +
+                        "`type`, `title`, `posterUrl`, `streamUrl`, `vodId`, `seriesId`, " +
+                        "`seasonNumber`, `episodeNumber`) " +
+                        "SELECT -1, `contentId`, `positionMs`, `durationMs`, `updatedAt`, " +
+                        "`type`, `title`, `posterUrl`, `streamUrl`, `vodId`, `seriesId`, " +
+                        "`seasonNumber`, `episodeNumber` FROM `resume`"
+                )
+                db.execSQL("DROP TABLE `resume`")
+                db.execSQL("ALTER TABLE `resume_new` RENAME TO `resume`")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_resume_profileId_updatedAt` " +
+                        "ON `resume` (`profileId`, `updatedAt`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_resume_profileId_seriesId` " +
+                        "ON `resume` (`profileId`, `seriesId`)"
+                )
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `watched_new` (" +
+                        "`profileId` INTEGER NOT NULL, `contentId` TEXT NOT NULL, " +
+                        "`type` TEXT NOT NULL, `seriesId` TEXT, `watchedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`profileId`, `contentId`))"
+                )
+                db.execSQL(
+                    "INSERT INTO `watched_new` " +
+                        "(`profileId`, `contentId`, `type`, `seriesId`, `watchedAt`) " +
+                        "SELECT -1, `contentId`, `type`, `seriesId`, `watchedAt` FROM `watched`"
+                )
+                db.execSQL("DROP TABLE `watched`")
+                db.execSQL("ALTER TABLE `watched_new` RENAME TO `watched`")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_watched_profileId_seriesId` " +
+                        "ON `watched` (`profileId`, `seriesId`)"
+                )
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(
                 context.applicationContext,
@@ -181,6 +241,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_9_10,
                     MIGRATION_10_11,
                     MIGRATION_11_12,
+                    MIGRATION_12_13,
                 )
                 // Safety net for upgrades from versions older than 8 (dev-only
                 // builds that predate real migrations); v8 -> v9 is non-destructive.

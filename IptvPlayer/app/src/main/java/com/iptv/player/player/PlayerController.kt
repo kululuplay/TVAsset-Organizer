@@ -14,6 +14,7 @@
  */
 package com.iptv.player.player
 
+import android.app.ActivityManager
 import android.content.Context
 import android.media.MediaCodecList
 import android.os.Handler
@@ -23,10 +24,15 @@ import android.view.ViewGroup
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
+import com.iptv.player.data.model.StreamFormat
+import com.iptv.player.playback.core.FailureSignal
+import com.iptv.player.playback.core.PlaybackFailure
+import com.iptv.player.playback.core.PlaybackFailureClassifier
 import com.iptv.player.player.PlaybackRoutingPolicy.Failure as Reason
 import com.iptv.player.player.PlaybackRoutingPolicy.Stage
 import com.iptv.player.util.PlaybackLog
 import com.iptv.player.util.PlaybackRouteMemory
+import com.iptv.player.util.LiveTransportMemory
 import com.iptv.player.util.StabilityTelemetry
 
 class PlayerController(
@@ -47,6 +53,8 @@ class PlayerController(
     // stream re-opens itself); set false for any non-live reuse so a stream that
     // legitimately ends is not endlessly re-opened.
     private val isLive: Boolean = true,
+    preferredAudioLanguage: String? = null,
+    preferredSubtitlePreference: LiveSubtitlePreference = LiveSubtitlePreference.Auto,
     private var callback: Callback
 ) {
 
@@ -157,6 +165,12 @@ class PlayerController(
          * Default no-op so callbacks that don't care need not implement it.
          */
         fun onVideoResumed() {}
+        /** Active backend changed; value is mapped to a closed enum before QoE. */
+        fun onEngineChanged(engineName: String) {}
+        /** Effective TS/HLS route after channel memory or a bounded fallback. */
+        fun onTransportResolved(format: StreamFormat) {}
+        /** Structured, URL/message-free failure suitable for bounded QoE. */
+        fun onPlaybackFailure(failure: PlaybackFailure) {}
         /** Emitted only after all retries + fallback are exhausted. */
         fun onFatalError()
         fun onRetrying(attempt: Int)
@@ -190,6 +204,7 @@ class PlayerController(
 
     private var engine: PlayerEngine? = null
     private var currentUrl: String? = null
+    private var currentOriginalUrl: String? = null
     private var stage = Stage.EXO
     private val triedStages = mutableSetOf<Stage>()
     private var videoRebindPending = false
@@ -205,6 +220,10 @@ class PlayerController(
     // ExoPlayer and explicit decoder choices are never overridden by memory.
     private var currentRawRouteKey: String? = null
     private var currentRouteKey: String? = null
+    private var currentTransportKey: String? = null
+    private var currentTransportFormat: StreamFormat? = null
+    private var transportFallbackUsed = false
+    private var usingRememberedTransport = false
     // True while the CURRENT play started on a remembered stage that DIFFERS from
     // the cold base stage and has not yet proved stable. If it fails before then,
     // we distrust the memory and restart from the base ladder (see handleFailure).
@@ -257,6 +276,13 @@ class PlayerController(
     // unconfirmed failures mean the preferred engine cannot start this stream.
     // Preserve this across same-stage reconnects and route after the second one.
     private var unconfirmedStartFailures = 0
+    private var adaptiveRebuffers = 0
+    private var adaptiveBufferingActive = false
+    private val lowRamDevice: Boolean = runCatching {
+        val manager = context.applicationContext
+            .getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        manager.isLowRamDevice
+    }.getOrDefault(false)
 
     // Fires once the current stage has played for STABLE_PLAYBACK_MS without
     // failing: only THEN is playback treated as truly recovered (reconnect window
@@ -266,6 +292,8 @@ class PlayerController(
 
     private var audioDelayMs = 0L
     private var subtitleDelayMs = 0L
+    private var currentPreferredAudioLanguage = TrackLanguage.normalize(preferredAudioLanguage)
+    private var currentSubtitlePreference = preferredSubtitlePreference
 
     // ---- Live-TV auto-reconnect -------------------------------------------
     // Layered ABOVE the decode-fallback ladder: once the ladder has no untried
@@ -314,6 +342,8 @@ class PlayerController(
 
     val currentAudioDelayMs: Long get() = audioDelayMs
     val currentSubtitleDelayMs: Long get() = subtitleDelayMs
+    val subtitlePreference: LiveSubtitlePreference get() = currentSubtitlePreference
+    val resolvedTransportFormat: StreamFormat? get() = currentTransportFormat
 
     fun setAudioDelay(ms: Long) {
         audioDelayMs = ms
@@ -325,7 +355,52 @@ class PlayerController(
         engine?.setSubtitleDelayMs(ms)
     }
 
-    fun play(url: String, routeKey: String? = null) {
+    fun audioTracks(): List<PlayerTrack> = engine?.audioTracks().orEmpty()
+
+    fun subtitleTracks(): List<PlayerTrack> = engine?.subtitleTracks().orEmpty()
+
+    fun selectAudioTrack(id: String): Boolean {
+        val language = audioTracks().firstOrNull { it.id == id }?.language
+        val selected = engine?.selectAudioTrack(id) == true
+        if (selected && language != null) {
+            currentPreferredAudioLanguage = language
+            engine?.setPreferredTrackLanguages(
+                currentPreferredAudioLanguage,
+                currentSubtitlePreference.languageOrNull(),
+            )
+            engine?.setSubtitlePreference(currentSubtitlePreference)
+        }
+        return selected
+    }
+
+    fun selectSubtitleTrack(id: String?): Boolean {
+        val language = id?.let { selectedId ->
+            subtitleTracks().firstOrNull { it.id == selectedId }?.language
+        }
+        val selected = engine?.selectSubtitleTrack(id) == true
+        if (selected) {
+            currentSubtitlePreference = when {
+                id == null -> LiveSubtitlePreference.Off
+                language != null ->
+                    LiveSubtitlePreference.Language.from(language)
+                        ?: LiveSubtitlePreference.Auto
+                else -> currentSubtitlePreference
+            }
+            engine?.setSubtitlePreference(currentSubtitlePreference)
+        }
+        return selected
+    }
+
+    fun selectSubtitleAuto(): Boolean {
+        currentSubtitlePreference = LiveSubtitlePreference.Auto
+        return engine?.setSubtitlePreference(currentSubtitlePreference) == true
+    }
+
+    fun play(
+        url: String,
+        routeKey: String? = null,
+        transportKey: String? = null,
+    ) {
         suspended = false
         recoveryNeededOnResume = false
         // A zap can arrive during preview -> fullscreen's delayed surface move.
@@ -347,15 +422,34 @@ class PlayerController(
         quickDecodeFailures = 0
         softwareSlowHardwareRetryUsed = false
         unconfirmedStartFailures = 0
+        adaptiveRebuffers = 0
+        adaptiveBufferingActive = false
         // Tear down the previous channel's stall/startup watchdog; the (re)start
         // path below re-arms it for this channel.
         cancelWatchdog()
-        currentUrl = url
+        currentOriginalUrl = url
+        currentTransportKey = transportKey
+        transportFallbackUsed = false
+        val configuredFormat = LiveStreamUrl.detectFormat(url)
+        val rememberedTransport =
+            if (transportKey != null && configuredFormat != null) {
+                LiveTransportMemory.bestFormat(transportKey)
+            } else {
+                null
+            }
+        currentTransportFormat = rememberedTransport ?: configuredFormat
+        currentUrl = currentTransportFormat?.let { LiveStreamUrl.applyFormat(url, it) } ?: url
+        currentTransportFormat?.let(callback::onTransportResolved)
+        usingRememberedTransport =
+            rememberedTransport != null && rememberedTransport != configuredFormat
         // A route learned under VLC/Auto must not override a later Exo/Hardware
         // preference (or vice versa). The source/policy fingerprint is already in
         // routeKey; namespace it by the active settings pair as well.
         currentRawRouteKey = routeKey
-        currentRouteKey = routeKey?.let { "${mode.name}|${decoderMode.name}|$it" }
+        val effectiveRouteKey = currentTransportFormat
+            ?.let { LiveStreamUrl.routeKeyWithFormat(routeKey, it) }
+            ?: routeKey
+        currentRouteKey = effectiveRouteKey?.let { "${mode.name}|${decoderMode.name}|$it" }
         playbackConfirmed = false
         videoOutputConfirmed = false
         memoryIgnoredThisPlay = false
@@ -409,7 +503,11 @@ class PlayerController(
             // LibVLC/layout and no ENGINE_SWAP surface-handoff gap. (VLC creates a
             // fresh native MediaPlayer/Media per channel, so reset is a no-op there.)
             PlaybackLog.log(context, "Controller", "fast-zap reuse stage=$initial reset")
-            reusable.play(url, reset = true)
+            // Use the controller-resolved URL, not the caller's original URL:
+            // transport memory may have selected the alternate TS/HLS container.
+            // Replaying [url] here silently discarded that decision only on the
+            // fast-zap path and also desynchronised route/transport memory.
+            reusable.play(currentUrl ?: url, reset = true)
             return
         }
         if (reusable != null && stage == initial && !canReuse) {
@@ -425,7 +523,12 @@ class PlayerController(
         PlaybackLog.log(
             context, "Controller",
             "play mode=$mode decoder=$decoderMode start=$stage" +
-                if (usingRememberedRoute) " (route memory)" else ""
+                (if (usingRememberedRoute) " (route memory)" else "") +
+                (if (usingRememberedTransport) {
+                    " transport=$currentTransportFormat (memory)"
+                } else {
+                    ""
+                })
         )
         startStage(stage)
     }
@@ -500,17 +603,27 @@ class PlayerController(
             try {
                 val newEngine: PlayerEngine =
                     if (useVlc) {
+                        val effectiveBuffer = AdaptiveBufferPolicy.resolve(
+                            configured = bufferMode,
+                            lowRamDevice = lowRamDevice,
+                            recentRebuffers = adaptiveRebuffers,
+                        )
                         VlcPlayerEngine(
                             context,
                             forceSoftware,
                             allowPassthrough,
-                            bufferMode.networkCachingMs,
+                            effectiveBuffer.networkCachingMs,
                         )
                     } else {
+                        val effectiveBuffer = AdaptiveBufferPolicy.resolve(
+                            configured = bufferMode,
+                            lowRamDevice = lowRamDevice,
+                            recentRebuffers = adaptiveRebuffers,
+                        )
                         ExoPlayerEngine(
                             context = context,
                             allowPassthrough = allowPassthrough,
-                            bufferMode = bufferMode,
+                            bufferMode = effectiveBuffer,
                             expectsVideo = expectsVideo,
                         )
                     }
@@ -526,7 +639,13 @@ class PlayerController(
                 newEngine.setListener(engineListener(newEngine))
                 newEngine.setAudioDelayMs(audioDelayMs)
                 newEngine.setSubtitleDelayMs(subtitleDelayMs)
+                newEngine.setPreferredTrackLanguages(
+                    currentPreferredAudioLanguage,
+                    currentSubtitlePreference.languageOrNull(),
+                )
+                newEngine.setSubtitlePreference(currentSubtitlePreference)
                 engine = newEngine
+                callback.onEngineChanged(newEngine.engineName)
                 currentUrl?.let { newEngine.play(it) }
             } catch (error: Throwable) {
                 if (engine === candidate) engine = null
@@ -580,17 +699,27 @@ class PlayerController(
 
         override fun onBuffering() = post {
             if (source !== engine || suspended) return@post
+            if (
+                bufferMode == BufferMode.ADAPTIVE &&
+                playbackConfirmed &&
+                !adaptiveBufferingActive
+            ) {
+                adaptiveRebuffers = (adaptiveRebuffers + 1).coerceAtMost(6)
+                adaptiveBufferingActive = true
+            }
             callback.onBuffering()
         }
 
         override fun onPlaying() = post {
             if (source !== engine || suspended) return@post
+            adaptiveBufferingActive = false
             callback.onPlaying(source.engineName)
             if (!expectsVideo) onPlaybackProgress()
         }
 
         override fun onVideoOutput() = post {
             if (source !== engine || suspended) return@post
+            adaptiveBufferingActive = false
             val firstVideoOutput = !videoOutputConfirmed
             videoOutputConfirmed = true
             unconfirmedStartFailures = 0
@@ -615,6 +744,12 @@ class PlayerController(
             // A live stream should not end; the server closed/restarted it. Treat
             // as a drop and reconnect the same channel. (Non-live ignores it.)
             if (isLive) {
+                notifyPlaybackFailure(
+                    PlaybackFailureClassifier.classify(
+                        FailureSignal.Network(FailureSignal.NetworkKind.END_OF_STREAM),
+                        PlaybackFailure.Phase.PLAYBACK,
+                    ),
+                )
                 PlaybackLog.log(context, "Controller", "live stream ended -> reconnect")
                 engageReconnect()
             }
@@ -625,6 +760,46 @@ class PlayerController(
 
         override fun onStartupFailure(message: String?) =
             post { if (source === engine) handleEngineFailure(Reason.STARTUP) }
+
+        override fun onSourceFailure(message: String?, httpStatus: Int?) = post {
+            if (source !== engine) return@post
+            if (suspended) {
+                recoveryNeededOnResume = true
+                return@post
+            }
+            val manifestFailure = message?.contains("manifest", ignoreCase = true) == true
+            notifyPlaybackFailure(
+                when {
+                    httpStatus != null && httpStatus in 400..599 ->
+                        PlaybackFailureClassifier.classify(
+                            FailureSignal.Http(httpStatus),
+                            PlaybackFailure.Phase.OPEN_SOURCE,
+                        )
+                    manifestFailure -> PlaybackFailureClassifier.classify(
+                        FailureSignal.Source(FailureSignal.SourceKind.MALFORMED),
+                        PlaybackFailure.Phase.OPEN_SOURCE,
+                    )
+                    else -> PlaybackFailureClassifier.classify(
+                        FailureSignal.Network(FailureSignal.NetworkKind.CONNECT),
+                        PlaybackFailure.Phase.OPEN_SOURCE,
+                    )
+                },
+            )
+            if (
+                !playbackConfirmed &&
+                tryTransportFallback(
+                    failure = if (manifestFailure) {
+                        LiveTransportPolicy.Failure.MANIFEST
+                    } else {
+                        LiveTransportPolicy.Failure.SOURCE_STARTUP
+                    },
+                    httpStatus = httpStatus,
+                )
+            ) {
+                return@post
+            }
+            handleEngineFailure(Reason.ERROR, reportFailure = false)
+        }
 
         override fun onDecodeError(message: String?) =
             post { if (source === engine) handleEngineFailure(Reason.DECODE) }
@@ -639,12 +814,104 @@ class PlayerController(
             post { if (source === engine) handleEngineFailure(Reason.SOFTWARE_SLOW) }
     }
 
-    private fun handleEngineFailure(reason: Reason) {
+    private fun handleEngineFailure(
+        reason: Reason,
+        reportFailure: Boolean = true,
+    ) {
         if (suspended) {
             recoveryNeededOnResume = true
             return
         }
+        if (reportFailure) notifyPlaybackFailure(failureFor(reason))
         handleFailure(reason)
+    }
+
+    private fun notifyPlaybackFailure(failure: PlaybackFailure) {
+        callback.onPlaybackFailure(failure)
+    }
+
+    /** Translate engine/routing evidence without retaining native text or URLs. */
+    private fun failureFor(reason: Reason): PlaybackFailure {
+        val phase = if (playbackConfirmed) {
+            PlaybackFailure.Phase.PLAYBACK
+        } else {
+            PlaybackFailure.Phase.STARTUP
+        }
+        val signal: FailureSignal = when (reason) {
+            Reason.ERROR -> if (playbackConfirmed) {
+                FailureSignal.Network(FailureSignal.NetworkKind.RESET)
+            } else {
+                FailureSignal.Network(FailureSignal.NetworkKind.CONNECT)
+            }
+            Reason.STARTUP -> FailureSignal.Timeout(FailureSignal.TimeoutKind.STARTUP)
+            Reason.AUDIO -> FailureSignal.Decoder(
+                FailureSignal.DecoderKind.INIT,
+                PlaybackFailure.Component.AUDIO,
+            )
+            Reason.VIDEO -> FailureSignal.Output(PlaybackFailure.Component.VIDEO)
+            Reason.SOFTWARE_SLOW ->
+                FailureSignal.Resource(FailureSignal.ResourceKind.EXHAUSTED)
+            Reason.DECODE -> FailureSignal.Decoder(
+                FailureSignal.DecoderKind.RUNTIME,
+                PlaybackFailure.Component.VIDEO,
+            )
+        }
+        return PlaybackFailureClassifier.classify(signal, phase)
+    }
+
+    /** Try the alternate container once without ever changing host/scheme/port. */
+    private fun tryTransportFallback(
+        failure: LiveTransportPolicy.Failure,
+        httpStatus: Int? = null,
+    ): Boolean {
+        val url = currentUrl ?: return false
+        val alternative = LiveTransportPolicy.alternate(
+            currentUrl = url,
+            currentFormat = currentTransportFormat,
+            failure = failure,
+            httpStatus = httpStatus,
+            alreadyTried = transportFallbackUsed,
+        ) ?: return false
+
+        if (usingRememberedTransport) {
+            LiveTransportMemory.forget(currentTransportKey, currentTransportFormat)
+        }
+        transportFallbackUsed = true
+        usingRememberedTransport = false
+        currentUrl = alternative.url
+        currentTransportFormat = alternative.format
+        callback.onTransportResolved(alternative.format)
+        val effectiveRouteKey = LiveStreamUrl.routeKeyWithFormat(
+            currentRawRouteKey,
+            alternative.format,
+        )
+        currentRouteKey = effectiveRouteKey?.let { "${mode.name}|${decoderMode.name}|$it" }
+        unconfirmedStartFailures = 0
+        resetReconnect()
+        // A different container has a different demux/startup profile. Give it a
+        // fresh, bounded engine ladder instead of inheriting "already tried"
+        // stages from the failed container. Route memory is also namespaced by
+        // format, so only a winner learned for this exact alternative may steer
+        // the new attempt.
+        triedStages.clear()
+        memoryIgnoredThisPlay = false
+        usingRememberedRoute = false
+        val base = baseInitialStage()
+        val remembered = rememberedStage()
+        val restartStage = remembered ?: base
+        usingRememberedRoute = remembered != null && remembered != base
+        PlaybackLog.log(
+            context,
+            "Controller",
+            "source startup -> one transport retry ${alternative.format} stage=$restartStage",
+        )
+        recordStability(
+            "transport_fallback",
+            "warn",
+            "to=${alternative.format} status=${httpStatus ?: "unknown"}",
+        )
+        startStage(restartStage)
+        return true
     }
 
     /**
@@ -707,6 +974,13 @@ class PlayerController(
                         "honorsEngine=$stageHonorsExplicitEngine)",
                 )
             }
+            if (isLive && (!expectsVideo || videoOutputConfirmed)) {
+                LiveTransportMemory.markStable(
+                    currentTransportKey,
+                    currentTransportFormat,
+                )
+                usingRememberedTransport = false
+            }
             // The remembered route (if any) is now confirmed; later drops take the
             // normal same-stage reconnect path, not the distrust-and-restart path.
             usingRememberedRoute = false
@@ -752,6 +1026,20 @@ class PlayerController(
             if (gen != watchdogGen || playbackConfirmed) return@postDelayed
             PlaybackLog.log(context, "Controller", "no playback within ${STARTUP_TIMEOUT_MS}ms -> treat as error")
             recordStability("start_timeout", "warn")
+            notifyPlaybackFailure(
+                PlaybackFailureClassifier.classify(
+                    FailureSignal.Timeout(FailureSignal.TimeoutKind.STARTUP),
+                    PlaybackFailure.Phase.STARTUP,
+                ),
+            )
+            if (
+                engine?.supportsPreciseSourceErrors == true &&
+                tryTransportFallback(
+                    LiveTransportPolicy.Failure.SOURCE_STARTUP,
+                )
+            ) {
+                return@postDelayed
+            }
             handleFailure(Reason.STARTUP)
         }, STARTUP_TIMEOUT_MS)
     }
@@ -795,6 +1083,12 @@ class PlayerController(
             if (now - lastProgressAtMs >= STALL_TIMEOUT_MS) {
                 PlaybackLog.log(context, "Controller", "live stall (no progress ${STALL_TIMEOUT_MS}ms) -> reconnect")
                 recordStability("stall", "warn")
+                notifyPlaybackFailure(
+                    PlaybackFailureClassifier.classify(
+                        FailureSignal.Timeout(FailureSignal.TimeoutKind.STALL),
+                        PlaybackFailure.Phase.PLAYBACK,
+                    ),
+                )
                 cancelWatchdog()
                 engageReconnect()
                 return@postDelayed
@@ -1098,7 +1392,11 @@ class PlayerController(
         PlaybackLog.log(context, "Controller", "manual retry")
         // [currentRouteKey] already contains the settings namespace used by route
         // memory. Reusing it as an input would namespace it again on every retry.
-        play(url, currentRawRouteKey)
+        play(
+            currentOriginalUrl ?: url,
+            currentRawRouteKey,
+            currentTransportKey,
+        )
     }
 
     /** Cancel any in-flight reconnect and clear its schedule/window state. */
@@ -1138,6 +1436,11 @@ class PlayerController(
     fun streamInfo(): StreamInfo? = engine?.getStreamInfo()
 
     fun pause() {
+        quiesce { }
+    }
+
+    /** Close the active provider socket and notify a Cast preflight on completion. */
+    fun quiesce(onStopped: (Boolean) -> Unit) {
         // A paused VLC/Exo instance can keep an IPTV subscription socket occupied.
         // Stop it when the owner leaves the foreground and rebuild the same stage
         // on resume. Also invalidate a delayed engine/surface creation already in
@@ -1149,7 +1452,16 @@ class PlayerController(
         stableHandler.removeCallbacksAndMessages(null)
         resetReconnect()
         cancelWatchdog()
-        engine?.stop()
+        val target = engine
+        if (target == null) {
+            onStopped(true)
+            return
+        }
+        target.stopAndThen { stopped ->
+            post {
+                onStopped(stopped && suspended && engine === target)
+            }
+        }
     }
 
     fun resume() {

@@ -13,14 +13,16 @@ import androidx.annotation.RequiresApi
 /**
  * Samples a SurfaceView into a tiny in-memory bitmap and detects persistent solid
  * green or blank decoder output. No frame is stored or uploaded. PixelCopy
- * failures are ignored because some protected/old surfaces cannot be sampled
- * safely.
+ * failures use a bounded capability probe because some protected/old surfaces
+ * cannot be sampled safely; the engine may then fall back to native frame proof.
  */
 internal class SurfaceFrameHealthMonitor(
     private val handler: Handler,
     private val onSolidGreen: () -> Unit,
     private val onPersistentBlank: () -> Unit = {},
     private val onHealthyFrame: () -> Unit = {},
+    /** Called once when this stream's surface cannot be sampled after bounded retries. */
+    private val onSamplingUnavailable: () -> Unit = {},
     // Hardware surfaces remain sampled at a low cadence because some vendor
     // decoders turn green after initially healthy output. Software decode cannot
     // hit that MediaCodec failure; stop after validation to avoid needless
@@ -29,13 +31,16 @@ internal class SurfaceFrameHealthMonitor(
 ) {
     private val lock = Any()
     private val recoveryGate = GreenFrameRecoveryGate()
+    private val unavailableRetry = SurfaceSampleRetryPolicy()
     private var generation = 0
     private var started = false
     private var sampleInFlight = false
     private var classifiedFrame = false
+    private var samplingUnavailable = false
     private var surfaceProvider: (() -> SurfaceView?)? = null
 
     fun hasClassifiedFrame(): Boolean = synchronized(lock) { classifiedFrame }
+    fun isSamplingUnavailable(): Boolean = synchronized(lock) { samplingUnavailable }
 
     fun reset() {
         synchronized(lock) {
@@ -43,7 +48,9 @@ internal class SurfaceFrameHealthMonitor(
             started = false
             sampleInFlight = false
             classifiedFrame = false
+            samplingUnavailable = false
             recoveryGate.reset()
+            unavailableRetry.reset()
             surfaceProvider = null
         }
     }
@@ -55,8 +62,10 @@ internal class SurfaceFrameHealthMonitor(
             started = true
             sampleInFlight = false
             classifiedFrame = false
+            samplingUnavailable = false
             surfaceProvider = provider
             recoveryGate.reset()
+            unavailableRetry.reset()
             generation
         }
         scheduleSample(sampleGeneration, INITIAL_SAMPLE_DELAY_MS)
@@ -70,11 +79,14 @@ internal class SurfaceFrameHealthMonitor(
     fun onOutputTransition() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
         val sampleGeneration = synchronized(lock) {
-            if (!started || surfaceProvider == null) return
+            if (surfaceProvider == null) return
             generation++
+            started = true
             sampleInFlight = false
             classifiedFrame = false
+            samplingUnavailable = false
             recoveryGate.onOutputTransition()
+            unavailableRetry.reset()
             generation
         }
         scheduleSample(sampleGeneration, INITIAL_SAMPLE_DELAY_MS)
@@ -132,6 +144,7 @@ internal class SurfaceFrameHealthMonitor(
                             if (sampleGeneration == generation && started) {
                                 sampleInFlight = false
                                 classifiedFrame = true
+                                unavailableRetry.onSuccess()
                                 val solidGreen = FrameColorClassifier.isSolidGreen(pixels)
                                 val visuallyBlank =
                                     !solidGreen &&
@@ -166,12 +179,7 @@ internal class SurfaceFrameHealthMonitor(
                             }
                         }
                     } else {
-                        synchronized(lock) {
-                            if (sampleGeneration == generation && started) {
-                                sampleInFlight = false
-                                nextDelayMs = SAMPLE_RETRY_DELAY_MS
-                            }
-                        }
+                        nextDelayMs = onSampleUnavailable(sampleGeneration)
                     }
                     bitmap.recycle()
                     when (decision) {
@@ -195,15 +203,32 @@ internal class SurfaceFrameHealthMonitor(
 
     @RequiresApi(Build.VERSION_CODES.N)
     private fun retryAfterUnavailableSurface(sampleGeneration: Int) {
-        val retry = synchronized(lock) {
-            if (sampleGeneration != generation || !started) {
-                false
-            } else {
-                sampleInFlight = false
-                true
+        onSampleUnavailable(sampleGeneration)?.let {
+            scheduleSample(sampleGeneration, it)
+        }
+    }
+
+    /**
+     * Applies a bounded exponential retry budget. Once exhausted, PixelCopy is
+     * disabled for this stream and the engine's native first-frame fallback owns
+     * readiness. reset()/a new stream creates a fresh capability probe.
+     */
+    private fun onSampleUnavailable(sampleGeneration: Int): Long? {
+        var exhausted = false
+        val delay = synchronized(lock) {
+            if (sampleGeneration != generation || !started) return@synchronized null
+            sampleInFlight = false
+            unavailableRetry.onUnavailable().also { nextDelay ->
+                if (nextDelay == null) {
+                    started = false
+                    samplingUnavailable = true
+                    generation++
+                    exhausted = true
+                }
             }
         }
-        if (retry) scheduleSample(sampleGeneration, SAMPLE_RETRY_DELAY_MS)
+        if (exhausted) onSamplingUnavailable()
+        return delay
     }
 
     private companion object {
@@ -211,7 +236,6 @@ internal class SurfaceFrameHealthMonitor(
         private const val SAMPLE_HEIGHT = 18
         private const val INITIAL_SAMPLE_DELAY_MS = 120L
         private const val STARTUP_SAMPLE_INTERVAL_MS = 220L
-        private const val SAMPLE_RETRY_DELAY_MS = 350L
         // PixelCopy is serialized: the next capture is scheduled only after the
         // previous callback completes. This prevents a delayed old green capture
         // from racing a newer healthy one and restarting an already-correct image.

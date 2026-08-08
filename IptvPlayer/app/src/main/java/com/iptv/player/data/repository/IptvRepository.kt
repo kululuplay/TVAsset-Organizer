@@ -70,8 +70,14 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -102,6 +108,9 @@ class IptvRepository(
     private val resumeDao = db.resumeDao()
     private val watchedDao = db.watchedDao()
     private val epgMappingDao = db.epgMappingDao()
+    private val playbackStateMigrationMutex = Mutex()
+    /** Process-local fast path; guarded exclusively by [playbackStateMigrationMutex]. */
+    private val claimedLegacyPlaybackProfiles = mutableSetOf<Long>()
 
     /**
      * Encrypt sensitive values written by versions before secure field storage.
@@ -117,7 +126,7 @@ class IptvRepository(
             migrated += migrateEncryptedColumn(sql, "channels", "id", "streamUrl")
             migrated += migrateEncryptedColumn(sql, "vod", "id", "streamUrl")
             migrated += migrateEncryptedColumn(sql, "episodes", "id", "streamUrl")
-            migrated += migrateEncryptedColumn(sql, "resume", "contentId", "streamUrl")
+            migrated += migrateEncryptedResumeUrls(sql)
             migrated += migrateEncryptedColumn(sql, "profiles", "id", "serverUrl")
             migrated += migrateEncryptedColumn(sql, "profiles", "id", "username")
             migrated += migrateEncryptedColumn(sql, "profiles", "id", "password")
@@ -148,6 +157,32 @@ class IptvRepository(
             db.execSQL(
                 "UPDATE `$table` SET `$valueColumn` = ? WHERE `$idColumn` = ?",
                 arrayOf(secureValues.encrypt(value), id),
+            )
+        }
+        return pending.size
+    }
+
+    /** Resume is keyed by (profileId, contentId) as of schema v13. */
+    private fun migrateEncryptedResumeUrls(db: SupportSQLiteDatabase): Int {
+        val pending = mutableListOf<Triple<Long, String, String>>()
+        db.query(
+            "SELECT `profileId`, `contentId`, `streamUrl` FROM `resume` " +
+                "WHERE `streamUrl` IS NOT NULL AND `streamUrl` != ''",
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val profileId = cursor.getLong(0)
+                val contentId = cursor.getString(1)
+                val value = cursor.getString(2)
+                if (!secureValues.isEncrypted(value)) {
+                    pending += Triple(profileId, contentId, value)
+                }
+            }
+        }
+        pending.forEach { (profileId, contentId, value) ->
+            db.execSQL(
+                "UPDATE `resume` SET `streamUrl` = ? " +
+                    "WHERE `profileId` = ? AND `contentId` = ?",
+                arrayOf(secureValues.encrypt(value), profileId, contentId),
             )
         }
         return pending.size
@@ -1491,7 +1526,13 @@ class IptvRepository(
         runCatching { java.net.URI(url).host }.getOrNull()
             ?.takeIf { it.isNotBlank() } ?: "Playlist"
 
-    suspend fun removeProfile(id: Long) = withContext(Dispatchers.IO) { profileDao.remove(id) }
+    suspend fun removeProfile(id: Long) = withContext(Dispatchers.IO) {
+        db.withTransaction {
+            resumeDao.clearProfile(id)
+            watchedDao.clearProfile(id)
+            profileDao.remove(id)
+        }
+    }
 
     suspend fun getProfile(id: Long): Profile? = withContext(Dispatchers.IO) {
         profileDao.getById(id)?.toModel()
@@ -1499,59 +1540,171 @@ class IptvRepository(
 
     // ---- Resume positions ----------------------------------------------
 
-    suspend fun saveResume(meta: ResumeMeta, positionMs: Long, durationMs: Long) =
-        withContext(Dispatchers.IO) {
-            // Don't persist trivial or near-complete positions: clearing them keeps
-            // the Continue Watching rail to genuinely in-progress content.
-            if (positionMs < 10_000 || (durationMs > 0 && positionMs > durationMs - 30_000)) {
-                resumeDao.clear(meta.contentId)
-                // A near-complete position means the title was finished: record it
-                // as watched so the tick survives the resume row being cleared.
-                if (durationMs > 0 && positionMs > durationMs - 30_000) {
-                    markWatched(meta.contentId, meta.kind.raw, meta.seriesId)
-                }
-            } else {
-                resumeDao.save(
-                    ResumeEntity(
-                        contentId = meta.contentId,
-                        positionMs = positionMs,
-                        durationMs = durationMs,
-                        updatedAt = System.currentTimeMillis(),
-                        type = meta.kind.raw,
-                        title = meta.title,
-                        posterUrl = meta.posterUrl,
-                        streamUrl = secureValues.encrypt(meta.streamUrl),
-                        vodId = meta.vodId,
-                        seriesId = meta.seriesId,
-                        seasonNumber = meta.seasonNumber,
-                        episodeNumber = meta.episodeNumber
-                    )
+    /**
+     * v12 could not associate its global playback rows with a DataStore profile
+     * during Room migration. Claim that one-time legacy scope for the currently
+     * active profile before the first state access, without exposing it to a later
+     * profile switch. Existing data is copied before deletion in one transaction.
+     */
+    private suspend fun claimLegacyPlaybackState(profileId: Long) {
+        if (profileId < 0L) return
+        playbackStateMigrationMutex.withLock {
+            if (profileId in claimedLegacyPlaybackProfiles) return@withLock
+            if (settings.getActiveProfileId() != profileId) return@withLock
+            db.withTransaction {
+                val sql = db.openHelper.writableDatabase
+                sql.execSQL(
+                    "INSERT OR REPLACE INTO resume " +
+                        "(profileId, contentId, positionMs, durationMs, updatedAt, type, title, " +
+                        "posterUrl, streamUrl, vodId, seriesId, seasonNumber, episodeNumber) " +
+                        "SELECT ?, contentId, positionMs, durationMs, updatedAt, type, title, " +
+                        "posterUrl, streamUrl, vodId, seriesId, seasonNumber, episodeNumber " +
+                        "FROM resume WHERE profileId = -1",
+                    arrayOf(profileId),
                 )
+                sql.execSQL(
+                    "INSERT OR REPLACE INTO watched " +
+                        "(profileId, contentId, type, seriesId, watchedAt) " +
+                        "SELECT ?, contentId, type, seriesId, watchedAt " +
+                        "FROM watched WHERE profileId = -1",
+                    arrayOf(profileId),
+                )
+                sql.execSQL("DELETE FROM resume WHERE profileId = -1")
+                sql.execSQL("DELETE FROM watched WHERE profileId = -1")
             }
+            claimedLegacyPlaybackProfiles += profileId
         }
-
-    suspend fun getResume(contentId: String): Long = withContext(Dispatchers.IO) {
-        resumeDao.get(contentId)?.positionMs ?: 0L
     }
 
+    private suspend fun activePlaybackProfileId(): Long {
+        val profileId = settings.getActiveProfileId()
+        claimLegacyPlaybackState(profileId)
+        return profileId
+    }
+
+    suspend fun saveResume(meta: ResumeMeta, positionMs: Long, durationMs: Long) =
+        withContext(Dispatchers.IO) {
+            val profileId = activePlaybackProfileId()
+            saveResumeRow(profileId, meta, positionMs, durationMs)
+        }
+
+    /**
+     * Persist against the profile that opened the player. Lifecycle-final writes
+     * may outlive the Activity and race a profile switch, so resolving DataStore
+     * again inside that coroutine would leak the old title into the new profile.
+     */
+    suspend fun saveResumeForProfile(
+        profileId: Long,
+        meta: ResumeMeta,
+        positionMs: Long,
+        durationMs: Long,
+    ) = withContext(Dispatchers.IO) {
+        claimLegacyPlaybackState(profileId)
+        saveResumeRow(profileId, meta, positionMs, durationMs)
+    }
+
+    private suspend fun saveResumeRow(
+        profileId: Long,
+        meta: ResumeMeta,
+        positionMs: Long,
+        durationMs: Long,
+    ) {
+        // Don't persist trivial or near-complete positions: clearing them keeps
+        // the Continue Watching rail to genuinely in-progress content.
+        if (positionMs < 10_000 || (durationMs > 0 && positionMs > durationMs - 30_000)) {
+            resumeDao.clear(profileId, meta.contentId)
+            // A near-complete position means the title was finished: record it
+            // as watched so the tick survives the resume row being cleared.
+            if (durationMs > 0 && positionMs > durationMs - 30_000) {
+                markWatchedRow(profileId, meta.contentId, meta.kind.raw, meta.seriesId)
+            }
+        } else {
+            resumeDao.save(
+                ResumeEntity(
+                    profileId = profileId,
+                    contentId = meta.contentId,
+                    positionMs = positionMs,
+                    durationMs = durationMs,
+                    updatedAt = System.currentTimeMillis(),
+                    type = meta.kind.raw,
+                    title = meta.title,
+                    posterUrl = meta.posterUrl,
+                    streamUrl = secureValues.encrypt(meta.streamUrl),
+                    vodId = meta.vodId,
+                    seriesId = meta.seriesId,
+                    seasonNumber = meta.seasonNumber,
+                    episodeNumber = meta.episodeNumber,
+                )
+            )
+        }
+    }
+
+    suspend fun getResume(contentId: String): Long = withContext(Dispatchers.IO) {
+        val profileId = activePlaybackProfileId()
+        resumeDao.get(profileId, contentId)?.positionMs ?: 0L
+    }
+
+    suspend fun getResumeForProfile(profileId: Long, contentId: String): Long =
+        withContext(Dispatchers.IO) {
+            claimLegacyPlaybackState(profileId)
+            resumeDao.get(profileId, contentId)?.positionMs ?: 0L
+        }
+
     suspend fun clearResume(contentId: String) = withContext(Dispatchers.IO) {
-        resumeDao.clear(contentId)
+        val profileId = activePlaybackProfileId()
+        resumeDao.clear(profileId, contentId)
+    }
+
+    suspend fun clearResumeForProfile(profileId: Long, contentId: String) =
+        withContext(Dispatchers.IO) {
+            claimLegacyPlaybackState(profileId)
+            resumeDao.clear(profileId, contentId)
+        }
+
+    /**
+     * Commit EndReached state for the profile that opened the player. Resume
+     * removal and the watched badge are one Room transaction, so process death or
+     * a concurrent observer can never expose a half-completed title.
+     */
+    suspend fun completePlaybackForProfile(
+        profileId: Long,
+        contentId: String,
+        type: String,
+        seriesId: String? = null,
+    ) = withContext(Dispatchers.IO) {
+        claimLegacyPlaybackState(profileId)
+        db.withTransaction {
+            resumeDao.clear(profileId, contentId)
+            markWatchedRow(profileId, contentId, type, seriesId)
+        }
     }
 
     /** Reactive Continue Watching rail: most recent in-progress items first. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     fun observeContinueWatching(limit: Int = 20): Flow<List<ContinueItem>> =
-        resumeDao.observeRecent(limit).map { rows -> rows.map { it.toContinueItem() } }
+        settings.activeProfileId
+            .distinctUntilChanged()
+            .flatMapLatest { profileId ->
+                flow {
+                    claimLegacyPlaybackState(profileId)
+                    emitAll(resumeDao.observeRecent(profileId, limit))
+                }
+            }
+            .map { rows -> rows.map { it.toContinueItem() } }
 
     /** Saved positions (ms) keyed by raw episode id for one series. */
     suspend fun episodeProgress(seriesId: String): Map<String, Long> =
         withContext(Dispatchers.IO) {
-            resumeDao.forSeries(seriesId).associate { it.contentId.removePrefix("ep_") to it.positionMs }
+            val profileId = activePlaybackProfileId()
+            resumeDao.forSeries(profileId, seriesId)
+                .associate { it.contentId.removePrefix("ep_") to it.positionMs }
         }
 
     /** Last-watched episode of a series for a one-tap continue action. */
     suspend fun latestSeriesResume(seriesId: String): ContinueItem? =
         withContext(Dispatchers.IO) {
-            resumeDao.latestForSeries(seriesId)?.toContinueItem()
+            val profileId = activePlaybackProfileId()
+            resumeDao.latestForSeries(profileId, seriesId)?.toContinueItem()
         }
 
     private fun ResumeEntity.toContinueItem() = ContinueItem(
@@ -1570,7 +1723,8 @@ class IptvRepository(
 
     /** Watch-progress percent (0..100) keyed by resume contentId, for grid bars. */
     suspend fun allWatchProgress(): Map<String, Int> = withContext(Dispatchers.IO) {
-        resumeDao.all().associate { row ->
+        val profileId = activePlaybackProfileId()
+        resumeDao.all(profileId).associate { row ->
             val pct = if (row.durationMs > 0) {
                 ((row.positionMs * 100) / row.durationMs).toInt().coerceIn(0, 100)
             } else 0
@@ -1586,7 +1740,8 @@ class IptvRepository(
      * cheaply know whether every episode is finished.)
      */
     suspend fun seriesWatchProgress(): Map<String, Int> = withContext(Dispatchers.IO) {
-        resumeDao.all()
+        val profileId = activePlaybackProfileId()
+        resumeDao.all(profileId)
             .filter { it.seriesId != null && it.durationMs > 0 }
             .groupBy { it.seriesId!! }
             .mapValues { (_, rows) ->
@@ -1599,27 +1754,57 @@ class IptvRepository(
 
     suspend fun markWatched(contentId: String, type: String, seriesId: String? = null) =
         withContext(Dispatchers.IO) {
-            watchedDao.mark(
-                com.iptv.player.data.local.entity.WatchedEntity(
-                    contentId = contentId,
-                    type = type,
-                    seriesId = seriesId,
-                    watchedAt = System.currentTimeMillis()
-                )
-            )
+            val profileId = activePlaybackProfileId()
+            markWatchedRow(profileId, contentId, type, seriesId)
         }
 
+    suspend fun markWatchedForProfile(
+        profileId: Long,
+        contentId: String,
+        type: String,
+        seriesId: String? = null,
+    ) = withContext(Dispatchers.IO) {
+        claimLegacyPlaybackState(profileId)
+        markWatchedRow(profileId, contentId, type, seriesId)
+    }
+
+    private suspend fun markWatchedRow(
+        profileId: Long,
+        contentId: String,
+        type: String,
+        seriesId: String?,
+    ) {
+        watchedDao.mark(
+            com.iptv.player.data.local.entity.WatchedEntity(
+                profileId = profileId,
+                contentId = contentId,
+                type = type,
+                seriesId = seriesId,
+                watchedAt = System.currentTimeMillis(),
+            )
+        )
+    }
+
     suspend fun isWatched(contentId: String): Boolean =
-        withContext(Dispatchers.IO) { watchedDao.isWatched(contentId) }
+        withContext(Dispatchers.IO) {
+            val profileId = activePlaybackProfileId()
+            watchedDao.isWatched(profileId, contentId)
+        }
 
     /** All watched content ids, for badging the movie/series grids. */
     suspend fun watchedIds(): Set<String> =
-        withContext(Dispatchers.IO) { watchedDao.allIds().toSet() }
+        withContext(Dispatchers.IO) {
+            val profileId = activePlaybackProfileId()
+            watchedDao.allIds(profileId).toSet()
+        }
 
     /** Watched episode ids for one series (raw episode ids, "ep_" stripped). */
     suspend fun watchedEpisodeIds(seriesId: String): Set<String> =
         withContext(Dispatchers.IO) {
-            watchedDao.idsForSeries(seriesId).map { it.removePrefix("ep_") }.toSet()
+            val profileId = activePlaybackProfileId()
+            watchedDao.idsForSeries(profileId, seriesId)
+                .map { it.removePrefix("ep_") }
+                .toSet()
         }
 
     // ---- Similar / recommended -----------------------------------------

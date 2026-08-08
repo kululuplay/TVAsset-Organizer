@@ -72,6 +72,8 @@
     <string name="audio_track">Audio</string>
     <string name="subtitle_track">Untertitel</string>
     <string name="subtitles_off">Aus</string>
+    <string name="subtitles_auto">Automatisch</string>
+    <string name="error_audio_focus_unavailable">Eine andere App verwendet den Ton. Schließen Sie sie oder versuchen Sie es erneut.</string>
     <string name="aspect_ratio">Seitenverhältnis</string>
     <string name="resume_prompt_title">Wiedergabe fortsetzen?</string>
     <string name="resume_prompt_message">Dort fortfahren, wo Sie aufgehört haben?</string>
@@ -79,6 +81,9 @@
     <string name="resume_continue">Fortsetzen</string>
     <string name="resume_prompt_position_label">Sie haben angehalten bei</string>
     <string name="track_hint_title">Weitere Optionen</string>
+    <string name="next_episode_title">ALS NÄCHSTES</string>
+    <string name="next_episode_countdown">Automatische Wiedergabe in %1$d Sekunden</string>
+    <string name="next_episode_play_now">Jetzt abspielen</string>
     <string name="track_hint_audio_subtitle">Dieser Titel bietet mehrere Audiosprachen und Untertitel</string>
     <string name="track_hint_audio">Dieser Titel bietet mehrere Audiosprachen</string>
     <string name="track_hint_subtitle">Dieser Titel bietet Untertitel</string>
@@ -120,7 +125,7 @@
     <string name="settings_playback">Wiedergabe</string>
     <string name="settings_player_mode">Live-TV-Player-Engine</string>
     <string name="settings_live_player_header">Live-TV-Engine</string>
-    <string name="settings_player_scope_desc">Automatisch startet Live-TV mit ExoPlayer-Hardware und wechselt nur bei bestätigtem Codec-, Grünbild- oder Standbildfehler kanalbezogen auf einen sicheren Pfad. Filme, Serien und Catch-up nutzen VLC. Decoderoptionen sind Präferenzen, damit kein inkompatibler Sender auf einem defekten Pfad hängen bleibt.</string>
+    <string name="settings_player_scope_desc">Automatisch startet Live-TV mit ExoPlayer-Hardware und wechselt bei bestätigtem Codec-, Grünbild- oder Standbildfehler kanalbezogen auf einen sicheren Pfad. Filme, Serien und Catch-up nutzen Media3 für moderne Formate und wechseln bei älteren Containern oder bestätigten Decoder-, Audio-, Untertitel- und Ausgabefehlern automatisch zu VLC. Player- und Decoderoptionen bleiben Präferenzen, damit Inhalte nie auf einem defekten Pfad hängen bleiben.</string>
     <string name="settings_playback_tuning_header">Wiedergabe-Optimierung</string>
     <string name="settings_player_auto">Automatisch (empfohlen)</string>
     <string name="settings_player_auto_desc">Zuerst ExoPlayer; bestätigte Bild-/Tonfehler werden automatisch behoben</string>
@@ -138,8 +143,9 @@
     <string name="settings_stream_format_ts">MPEG-TS (.ts) — höchste Kompatibilität</string>
     <string name="settings_stream_format_hls">HLS (.m3u8) — adaptiv</string>
     <string name="settings_buffer">Puffergröße</string>
+    <string name="settings_buffer_adaptive">Adaptiv (empfohlen)</string>
     <string name="settings_buffer_low">Niedrig (schnelles Umschalten)</string>
-    <string name="settings_buffer_normal">Normal (empfohlen)</string>
+    <string name="settings_buffer_normal">Normal (ausgewogen)</string>
     <string name="settings_buffer_high">Hoch (weniger Unterbrechungen)</string>
     <string name="settings_language">Sprache</string>
     <string name="settings_general">Allgemein</string>
