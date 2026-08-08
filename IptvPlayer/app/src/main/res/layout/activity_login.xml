@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Cinematic split login. Left: Kululu IPTV brand hero (logo, tagline,
      feature highlights). Right: frosted glass sign-in card asking only for
-     username + password; the server is fixed (http://kululu.live:8080) and the
+     username + password; the server is fixed (https://kululu.live) and the
      app connects automatically. All controls are focusable and D-pad friendly. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"

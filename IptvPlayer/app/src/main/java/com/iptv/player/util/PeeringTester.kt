@@ -42,9 +42,9 @@ import kotlin.math.abs
 
 object PeeringTester {
 
-    /** Our IPTV/panel server. Port 8080 is the open service port (verified). */
-    const val SERVER_HOST = "212.95.63.171"
-    const val SERVER_PORT = 8080
+    /** Canonical HTTPS service endpoint used by current application builds. */
+    const val SERVER_HOST = "kululu.live"
+    const val SERVER_PORT = 443
 
     private const val DEFAULT_DURATION_MS = 180_000L
     private const val DEFAULT_INTERVAL_MS = 1_000L

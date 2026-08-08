@@ -2,7 +2,7 @@
  * LoginActivity.kt
  * Launcher screen. On start, if a source is already saved it routes straight to
  * Home. Otherwise it shows a D-pad friendly login asking only for a username and
- * password; the Xtream server is fixed (http://kululu.live:8080) and the app
+ * password; the Xtream server is fixed (https://kululu.live) and the app
  * connects to it automatically. All controls are focusable and remote-usable.
  */
 package com.iptv.player.ui.login
@@ -20,6 +20,7 @@ import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.hideSoftKeyboard
 import com.iptv.player.ui.splash.SplashActivity
 import com.iptv.player.util.AppError
+import com.iptv.player.util.KululuEndpoint
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -153,6 +154,6 @@ class LoginActivity : BaseActivity() {
     }
 
     companion object {
-        private const val FIXED_SERVER_URL = "http://kululu.live:8080"
+        private const val FIXED_SERVER_URL = KululuEndpoint.HTTPS_SERVER_URL
     }
 }
