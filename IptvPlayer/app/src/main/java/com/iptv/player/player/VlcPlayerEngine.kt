@@ -109,25 +109,24 @@ class VlcPlayerEngine(
             surfaceHealthyObserved = true
             maybeReportVideoOutput()
         },
+        onSamplingUnavailable = {
+            if (
+                nativeVideoOutputObserved &&
+                nativeOutputHasFrameEvidence &&
+                !videoOutputReported &&
+                !playbackFailureReported.get()
+            ) {
+                surfaceHealthyObserved = true
+                PlaybackLog.log(
+                    context,
+                    engineName,
+                    "PixelCopy capability unavailable -> accept libVLC displayed-picture signal",
+                )
+                maybeReportVideoOutput()
+            }
+        },
         continueAfterHealthy = !forceSoftware,
     )
-    private val surfaceValidationFallbackRunnable = Runnable {
-        if (
-            nativeVideoOutputObserved &&
-            nativeOutputHasFrameEvidence &&
-            !videoOutputReported &&
-            !playbackFailureReported.get() &&
-            !surfaceFrameHealth.hasClassifiedFrame()
-        ) {
-            surfaceHealthyObserved = true
-            PlaybackLog.log(
-                context,
-                engineName,
-                "PixelCopy unavailable -> accept libVLC displayed-picture signal",
-            )
-            maybeReportVideoOutput()
-        }
-    }
     private val surfaceValidationDeadlineRunnable = Runnable {
         if (
             nativeVideoOutputObserved &&
@@ -141,6 +140,8 @@ class VlcPlayerEngine(
     // Stored so they can be re-applied once playback (re)starts.
     private var audioDelayMs = 0L
     private var subtitleDelayMs = 0L
+    private var preferredAudioLanguage: String? = null
+    private var subtitlePreference: LiveSubtitlePreference = LiveSubtitlePreference.Auto
 
     // One-shot per stream so the decode-profile check fires at most once.
     // AtomicBoolean: maybeRouteByProfile() runs from BOTH the VLC native event
@@ -541,9 +542,19 @@ class VlcPlayerEngine(
                     scheduleVoutCompatibility()
                     scheduleOutputTimeouts()
                 }
+                MediaPlayer.Event.ESAdded -> {
+                    // Live MPEG-TS tracks often arrive after Playing. Re-apply the
+                    // persisted ISO language preference once the ES list settles.
+                    scheduleAudioCheck()
+                }
                 MediaPlayer.Event.EndReached -> listener?.onEnded()
                 MediaPlayer.Event.EncounteredError -> {
                     PlaybackLog.log(context, engineName, "EncounteredError (forceSoftware=$forceSoftware)")
+                    // libVLC's event exposes no HTTP status or manifest/source
+                    // classification. Treating this opaque event as a source
+                    // signal could rewrite TS/HLS after an authoritative
+                    // 401/403/404, so the safe compatibility path is the normal
+                    // bounded engine/reconnect policy with no format probing.
                     listener?.onError("VLC error")
                 }
             }
@@ -709,11 +720,6 @@ class VlcPlayerEngine(
             if (firstObservation) {
                 surfaceFrameHealth.start { findVideoSurface(videoLayout) }
             }
-            healthHandler.removeCallbacks(surfaceValidationFallbackRunnable)
-            healthHandler.postDelayed(
-                surfaceValidationFallbackRunnable,
-                PIXEL_VALIDATION_FALLBACK_MS,
-            )
             healthHandler.removeCallbacks(surfaceValidationDeadlineRunnable)
             healthHandler.postDelayed(
                 surfaceValidationDeadlineRunnable,
@@ -729,6 +735,14 @@ class VlcPlayerEngine(
             surfaceHealthyObserved = true
             maybeReportVideoOutput()
         }
+        if (
+            hasFrameEvidence &&
+            surfaceFrameHealth.isSamplingUnavailable() &&
+            !videoOutputReported
+        ) {
+            surfaceHealthyObserved = true
+            maybeReportVideoOutput()
+        }
     }
 
     private fun maybeReportVideoOutput() {
@@ -741,7 +755,6 @@ class VlcPlayerEngine(
             return
         }
         videoOutputReported = true
-        healthHandler.removeCallbacks(surfaceValidationFallbackRunnable)
         healthHandler.removeCallbacks(surfaceValidationDeadlineRunnable)
         healthHandler.removeCallbacks(noDisplayedFrameRunnable)
         healthHandler.removeCallbacks(noVideoPipelineRunnable)
@@ -1299,9 +1312,14 @@ class VlcPlayerEngine(
      * stereo downmix in bind()/play().)
      */
     private fun scheduleAudioCheck() {
-        if (audioHealAttempted) return
         audioHandler.removeCallbacksAndMessages(null)
-        audioHandler.postDelayed({ healSilentAudio() }, AUDIO_CHECK_DELAY_MS)
+        audioHandler.postDelayed(
+            {
+                healSilentAudio()
+                applyPreferredTracks()
+            },
+            AUDIO_CHECK_DELAY_MS,
+        )
     }
 
     private fun healSilentAudio() {
@@ -1316,6 +1334,29 @@ class VlcPlayerEngine(
             audioHealAttempted = true
             PlaybackLog.log(context, engineName, "audio present but unselected -> selecting track ${firstReal.id}")
             mp.audioTrack = firstReal.id
+        }
+    }
+
+    private fun applyPreferredTracks() {
+        if (pendingOps.get() > 0 || nativeHandlesAbandoned.get()) return
+        val mp = mediaPlayer ?: return
+        preferredAudioLanguage?.let { language ->
+            mp.audioTracks
+                ?.firstOrNull {
+                    it.id != -1 && TrackLanguage.normalize(it.name) == language
+                }
+                ?.let { if (mp.audioTrack != it.id) mp.audioTrack = it.id }
+        }
+        when (val preference = subtitlePreference) {
+            LiveSubtitlePreference.Auto -> Unit
+            LiveSubtitlePreference.Off -> if (mp.spuTrack != -1) mp.spuTrack = -1
+            is LiveSubtitlePreference.Language -> {
+                mp.spuTracks
+                    ?.firstOrNull {
+                        it.id != -1 && TrackLanguage.normalize(it.name) == preference.code
+                    }
+                    ?.let { if (mp.spuTrack != it.id) mp.spuTrack = it.id }
+            }
         }
     }
 
@@ -1384,15 +1425,23 @@ class VlcPlayerEngine(
     }
 
     override fun stop() {
+        stopAndThen { }
+    }
+
+    override fun stopAndThen(onStopped: (Boolean) -> Unit) {
         profileHandler.removeCallbacksAndMessages(null)
         audioHandler.removeCallbacksAndMessages(null)
         healthHandler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()
         deferredPlay = null
-        val mp = mediaPlayer ?: return
+        val mp = mediaPlayer ?: run {
+            onStopped(true)
+            return
+        }
         val vlc = libVlc
         if (nativeHandlesAbandoned.get()) {
             invalidateEventSession()
+            onStopped(false)
             return
         }
         // Invalidate callbacks immediately in Java state. The JNI listener detach
@@ -1401,6 +1450,11 @@ class VlcPlayerEngine(
         invalidateEventSession()
         val mySeq = opsSeq.incrementAndGet()
         val finishPending = newPendingCompletion()
+        val callbackDelivered = AtomicBoolean(false)
+        fun deliverStopped(success: Boolean) {
+            if (!callbackDelivered.compareAndSet(false, true)) return
+            commandHandler.post { onStopped(success) }
+        }
         VlcOps.postBounded(
             timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
             onTimeout = {
@@ -1408,6 +1462,7 @@ class VlcPlayerEngine(
                 invalidateEventSession()
                 PlaybackLog.log(context, engineName, "native stop timed out")
                 finishPending()
+                deliverStopped(false)
             },
             onTimedOutActionFinished = {
                 releaseQuarantinedHandles(
@@ -1418,6 +1473,7 @@ class VlcPlayerEngine(
                 )
             },
         ) nativeStop@{
+            var stopped = false
             try {
                 // A newer play/stop already queued -> its own stop supersedes this.
                 if (
@@ -1432,8 +1488,10 @@ class VlcPlayerEngine(
                     )
                 }
                 mp.stop()
+                stopped = true
             } finally {
                 finishPending()
+                deliverStopped(stopped)
             }
         }
     }
@@ -1585,6 +1643,62 @@ class VlcPlayerEngine(
         )
     }
 
+    override fun audioTracks(): List<PlayerTrack> = vlcTracks(audio = true)
+
+    override fun subtitleTracks(): List<PlayerTrack> = vlcTracks(audio = false)
+
+    private fun vlcTracks(audio: Boolean): List<PlayerTrack> {
+        if (pendingOps.get() > 0 || nativeHandlesAbandoned.get()) return emptyList()
+        val mp = mediaPlayer ?: return emptyList()
+        val selected = if (audio) mp.audioTrack else mp.spuTrack
+        val tracks = if (audio) mp.audioTracks else mp.spuTracks
+        return tracks
+            ?.filter { it.id != -1 }
+            ?.map {
+                PlayerTrack(
+                    id = it.id.toString(),
+                    label = it.name,
+                    language = TrackLanguage.normalize(it.name),
+                    selected = it.id == selected,
+                )
+            }
+            .orEmpty()
+    }
+
+    override fun selectAudioTrack(id: String): Boolean {
+        if (pendingOps.get() > 0 || nativeHandlesAbandoned.get()) return false
+        val trackId = id.toIntOrNull() ?: return false
+        val mp = mediaPlayer ?: return false
+        if (mp.audioTracks?.none { it.id == trackId } != false) return false
+        mp.audioTrack = trackId
+        return true
+    }
+
+    override fun selectSubtitleTrack(id: String?): Boolean {
+        if (pendingOps.get() > 0 || nativeHandlesAbandoned.get()) return false
+        val trackId = id?.toIntOrNull() ?: -1
+        val mp = mediaPlayer ?: return false
+        if (trackId != -1 && mp.spuTracks?.none { it.id == trackId } != false) return false
+        mp.spuTrack = trackId
+        return true
+    }
+
+    override fun setPreferredTrackLanguages(audio: String?, subtitle: String?) {
+        preferredAudioLanguage = TrackLanguage.normalize(audio)
+        LiveSubtitlePreference.Language.from(subtitle)?.let { subtitlePreference = it }
+        if (pendingOps.get() == 0 && !nativeHandlesAbandoned.get()) {
+            applyPreferredTracks()
+        }
+    }
+
+    override fun setSubtitlePreference(preference: LiveSubtitlePreference): Boolean {
+        subtitlePreference = preference
+        if (pendingOps.get() > 0 || nativeHandlesAbandoned.get()) return false
+        val available = mediaPlayer != null
+        applyPreferredTracks()
+        return available
+    }
+
     /**
      * libVLC's track codec field is not consistently typed across versions (an
      * Int fourcc on some, a String on others). Accept Any? so this compiles
@@ -1642,7 +1756,6 @@ class VlcPlayerEngine(
         // caching must stay at or below this or the audio decoder drops frames
         // for the first several seconds of every channel.
         private const val MAX_VLC_LIVE_CACHING_MS = 3000
-        private const val PIXEL_VALIDATION_FALLBACK_MS = 1_800L
         private const val PIXEL_VALIDATION_DEADLINE_MS = 9_000L
 
         private const val HEALTH_POLL_MS = 1500L

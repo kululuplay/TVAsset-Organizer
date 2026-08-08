@@ -70,6 +70,7 @@
     <string name="cast">Cast</string>
     <string name="cast_unavailable">No cast device available.</string>
     <string name="cast_started">Casting started.</string>
+    <string name="error_playback_ownership_uncertain">Playback ownership could not be verified. End the Cast session or restart the app before retrying.</string>
 
     <!-- In-app update -->
     <string name="about_checking">Checking for updates…</string>

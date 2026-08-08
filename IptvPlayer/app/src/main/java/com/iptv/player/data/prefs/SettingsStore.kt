@@ -27,6 +27,7 @@ import com.iptv.player.data.model.PlaybackSelection
 import com.iptv.player.data.model.PlaybackSelectionPolicy
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.model.StreamFormat
+import com.iptv.player.player.LiveSubtitlePreference
 import com.iptv.player.data.model.SourceConfig
 import com.iptv.player.data.model.SourceType
 import com.iptv.player.security.SecureValueCodec
@@ -73,6 +74,8 @@ class SettingsStore(
         val AUTO_SYNC_HOURS = intPreferencesKey("auto_sync_hours")
         val PREF_AUDIO_TRACK = stringPreferencesKey("pref_audio_track")
         val PREF_SUBTITLE_TRACK = stringPreferencesKey("pref_subtitle_track")
+        val LIVE_AUDIO_LANGUAGE = stringPreferencesKey("live_audio_language")
+        val LIVE_SUBTITLE_LANGUAGE = stringPreferencesKey("live_subtitle_language")
         val EXPIRY_WARN_SUPPRESSED = longPreferencesKey("expiry_warn_suppressed")
         val SECURE_STORAGE_MIGRATED = booleanPreferencesKey("secure_storage_migrated_v1")
         val PLAYBACK_PREFS_MIGRATED = booleanPreferencesKey("playback_prefs_migrated_v1")
@@ -275,6 +278,36 @@ class SettingsStore(
 
     suspend fun setPreferredSubtitleTrack(token: String) =
         context.dataStore.edit { it[Keys.PREF_SUBTITLE_TRACK] = token }
+
+    /** Stable ISO language preferences for the engine-agnostic live player. */
+    suspend fun getLiveAudioLanguage(): String? =
+        context.dataStore.data.first()[Keys.LIVE_AUDIO_LANGUAGE]
+
+    suspend fun setLiveAudioLanguage(language: String?) =
+        context.dataStore.edit { prefs ->
+            val normalized = com.iptv.player.player.TrackLanguage.normalize(language)
+            if (normalized == null) prefs.remove(Keys.LIVE_AUDIO_LANGUAGE)
+            else prefs[Keys.LIVE_AUDIO_LANGUAGE] = normalized
+        }
+
+    suspend fun getLiveSubtitlePreference(): LiveSubtitlePreference =
+        LiveSubtitlePreference.fromStorage(
+            context.dataStore.data.first()[Keys.LIVE_SUBTITLE_LANGUAGE],
+        )
+
+    suspend fun setLiveSubtitlePreference(preference: LiveSubtitlePreference) =
+        context.dataStore.edit { prefs ->
+            prefs[Keys.LIVE_SUBTITLE_LANGUAGE] = preference.storageValue()
+        }
+
+    /** Compatibility for callers compiled against the former language-only API. */
+    suspend fun getLiveSubtitleLanguage(): String? =
+        getLiveSubtitlePreference().languageOrNull()
+
+    suspend fun setLiveSubtitleLanguage(language: String?) =
+        setLiveSubtitlePreference(
+            LiveSubtitlePreference.Language.from(language) ?: LiveSubtitlePreference.Auto,
+        )
 
     // ---- Language -------------------------------------------------------
 

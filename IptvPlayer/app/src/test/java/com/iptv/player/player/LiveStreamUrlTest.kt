@@ -124,6 +124,61 @@ class LiveStreamUrlTest {
 
         assertNotEquals(ts, hls)
         assertNotEquals(ts, otherProvider)
-        assertEquals(true, ts.startsWith("p2|"))
+        assertEquals(true, ts.startsWith("p3|"))
+    }
+
+    @Test
+    fun `transport memory never overrides a later explicit format choice`() {
+        val tsPreference = LiveStreamUrl.transportKey(
+            "channel-42",
+            "https://one.example/live/42.ts",
+            StreamFormat.TS,
+        )
+        val hlsPreference = LiveStreamUrl.transportKey(
+            "channel-42",
+            "https://one.example/live/42.ts",
+            StreamFormat.HLS,
+        )
+
+        assertNotEquals(tsPreference, hlsPreference)
+        assertEquals(true, tsPreference.startsWith("t2|"))
+    }
+
+    @Test
+    fun `endpoint fingerprint normalizes scheme host and effective default port`() {
+        val implicit = LiveStreamUrl.routeKey(
+            "channel-42",
+            StreamFormat.TS,
+            "HTTPS://Example.Test/live/42.ts",
+        )
+        val explicit = LiveStreamUrl.routeKey(
+            "channel-42",
+            StreamFormat.TS,
+            "https://example.test:443/live/42.ts",
+        )
+
+        assertEquals(implicit, explicit)
+    }
+
+    @Test
+    fun `endpoint fingerprint separates schemes and non-default ports`() {
+        val https = LiveStreamUrl.transportKey(
+            "channel-42",
+            "https://example.test/live/42.ts",
+            StreamFormat.TS,
+        )
+        val http = LiveStreamUrl.transportKey(
+            "channel-42",
+            "http://example.test/live/42.ts",
+            StreamFormat.TS,
+        )
+        val alternatePort = LiveStreamUrl.transportKey(
+            "channel-42",
+            "https://example.test:8443/live/42.ts",
+            StreamFormat.TS,
+        )
+
+        assertNotEquals(https, http)
+        assertNotEquals(https, alternatePort)
     }
 }

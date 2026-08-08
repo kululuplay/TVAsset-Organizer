@@ -23,6 +23,7 @@
 package com.iptv.player.util
 
 import android.content.Context
+import com.iptv.player.playback.core.PlaybackQoeRecord
 import org.json.JSONObject
 import java.io.File
 import java.util.ArrayDeque
@@ -93,6 +94,29 @@ object StabilityTelemetry {
             }
             synchronized(lock) {
                 events.addLast(ev)
+                while (events.size > MAX_EVENTS) {
+                    events.removeFirst()
+                    dropped.incrementAndGet()
+                }
+            }
+            persistAsync()
+        }
+    }
+
+    /**
+     * Persist one closed-schema QoE aggregate without channel/title/URL defaults.
+     * The core record cannot contain arbitrary text; every accepted field is
+     * enumerated by PlaybackQoeRecord.toSafeFields().
+     */
+    fun recordQoe(record: PlaybackQoeRecord) {
+        runCatching {
+            val event = JSONObject().apply {
+                put("t", System.currentTimeMillis())
+                put("type", "playback_qoe")
+                record.toSafeFields().forEach { (key, value) -> put(key, value) }
+            }
+            synchronized(lock) {
+                events.addLast(event)
                 while (events.size > MAX_EVENTS) {
                     events.removeFirst()
                     dropped.incrementAndGet()

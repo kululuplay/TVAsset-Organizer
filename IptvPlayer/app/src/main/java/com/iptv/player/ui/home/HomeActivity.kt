@@ -32,11 +32,21 @@ import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.iptv.player.R
 import com.iptv.player.cast.CastController
+import com.iptv.player.cast.ProviderConnectionSafety
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.Program
+import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.databinding.ActivityHomeBinding
+import com.iptv.player.playback.android.PlaybackQoeRuntime
+import com.iptv.player.playback.core.PlaybackEndReason
+import com.iptv.player.playback.core.PlaybackEngineKind
+import com.iptv.player.playback.core.PlaybackFailure
+import com.iptv.player.playback.core.PlaybackSessionId
+import com.iptv.player.player.LivePlaybackQoePolicy
+import com.iptv.player.player.LiveSubtitlePreference
 import com.iptv.player.player.PlayerController
+import com.iptv.player.player.TvPlaybackSession
 import com.iptv.player.ui.catchup.CatchupActivity
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.ChannelText
@@ -132,6 +142,15 @@ class HomeActivity : BaseActivity() {
     /** Live preview player bound to the preview card (one connection at a time). */
     private var previewController: PlayerController? = null
     private var debugBinder: DebugOverlayBinder? = null
+    private lateinit var playbackSession: TvPlaybackSession
+    private var localPreviewPlaybackRequested = false
+    private var previewStreamSubmitted = false
+    private var castOwnsPreviewPlayback = false
+    private var castLoadPending = false
+    private var suppressConnectedCastReloadOnce = false
+    private var previewStreamFormat = StreamFormat.TS
+    private var resolvedPreviewStreamFormat: StreamFormat? = null
+    private var previewQoeSessionId: PlaybackSessionId? = null
 
     /** Debounce job so scrolling channels doesn't thrash the single stream socket. */
     private var previewJob: kotlinx.coroutines.Job? = null
@@ -224,15 +243,28 @@ class HomeActivity : BaseActivity() {
 
     private val sleepTimer = SleepTimer { finish() }
     private val castController by lazy {
-        CastController(this) {
-            val channel = previewingChannel ?: return@CastController null
-            CastController.CastMedia(
-                channel.streamUrl,
-                ChannelText.clean(channel.name),
-                channel.logoUrl,
-                isLive = true,
-            )
-        }
+        CastController(
+            activity = this,
+            onCastLoadStarting = { onQuiesced ->
+                onPreviewCastLoadStarting(onQuiesced)
+            },
+            onCastQuiesceFailed = { onPreviewCastQuiesceFailed() },
+            onCastLoadFailed = { onPreviewCastLoadFailed() },
+            onCastStarted = { onPreviewCastStarted() },
+            onCastEnded = { onPreviewCastEnded() },
+            mediaProvider = mediaProvider@{
+                val channel = previewingChannel ?: return@mediaProvider null
+                CastController.CastMedia(
+                    url = LiveStreamUrl.applyFormat(
+                        channel.streamUrl,
+                        resolvedPreviewStreamFormat ?: previewStreamFormat,
+                    ),
+                    title = ChannelText.clean(channel.name),
+                    imageUrl = channel.logoUrl,
+                    isLive = true,
+                )
+            },
+        )
     }
 
     /** Invalidates delayed RecyclerView focus requests after a mode/layout change. */
@@ -303,6 +335,22 @@ class HomeActivity : BaseActivity() {
         binding = ActivityHomeBinding.inflate(layoutInflater)
         browseLayoutSnapshot = captureBrowseLayout()
         setContentView(binding.root)
+        playbackSession = TvPlaybackSession(
+            context = this,
+            tag = "KULULUPLAY-Live-Home",
+            controls = TvPlaybackSession.Controls(
+                onPlay = { resumePreviewPlayback() },
+                onPause = { pausePreviewPlayback(abandonFocus = false) },
+                onToggle = {
+                    if (localPreviewPlaybackRequested) {
+                        pausePreviewPlayback(abandonFocus = false)
+                    } else {
+                        resumePreviewPlayback()
+                    }
+                },
+                onStop = { pausePreviewPlayback(abandonFocus = true) },
+            ),
+        )
         castController.attach()
 
         setupLists()
@@ -1754,6 +1802,11 @@ class HomeActivity : BaseActivity() {
             return
         }
 
+        if (previewingChannel?.id != channel.id) {
+            finishPreviewQoe(PlaybackEndReason.REPLACED)
+            resolvedPreviewStreamFormat = null
+            previewStreamSubmitted = false
+        }
         if (currentInfoChannel?.id != channel.id) {
             // Fullscreen CH+/CH- changes the playing/info channel while the guide
             // panel is hidden. Invalidate the old focused channel's list now so
@@ -1805,11 +1858,44 @@ class HomeActivity : BaseActivity() {
         val passthrough = settings.audioPassthrough.first()
         val buffer = settings.bufferMode.first()
         val streamFormat = settings.streamFormat.first()
+        val preferredAudioLanguage = settings.getLiveAudioLanguage()
+        val preferredSubtitlePreference = settings.getLiveSubtitlePreference()
         currentCoroutineContext().ensureActive()
         if (
             previewingChannel?.id != channel.id ||
             previewState != LivePreviewPressPolicy.Phase.STARTING
         ) return
+        previewStreamFormat = streamFormat
+        if (castOwnsPreviewPlayback) {
+            castController.reloadCurrentMedia()
+            markPreviewReady()
+            return
+        }
+        if (castLoadPending) {
+            castController.reloadCurrentMedia()
+            return
+        }
+        val offerConnectedCast = castController.isConnected && !suppressConnectedCastReloadOnce
+        suppressConnectedCastReloadOnce = false
+        if (offerConnectedCast) {
+            castController.reloadCurrentMedia()
+            return
+        }
+        if (!preparePreviewPlaybackRequest()) {
+            previewState = LivePreviewPressPolicy.Phase.FAILED
+            pendingFullscreenChannelId = null
+            binding.previewLoading.visibility = View.GONE
+            binding.previewStatus.setText(
+                if (ProviderConnectionSafety.newConnectionAllowed) {
+                    R.string.error_audio_focus_unavailable
+                } else {
+                    R.string.error_playback_ownership_uncertain
+                },
+            )
+            binding.previewStatus.visibility = View.VISIBLE
+            if (ProviderConnectionSafety.newConnectionAllowed) scheduleAutoRetry()
+            return
+        }
         if (previewController == null) {
             previewController = PlayerController(
                 context = this,
@@ -1819,13 +1905,21 @@ class HomeActivity : BaseActivity() {
                 allowPassthrough = passthrough,
                 bufferMode = buffer,
                 expectsVideo = !radioMode,
+                preferredAudioLanguage = preferredAudioLanguage,
+                preferredSubtitlePreference = preferredSubtitlePreference,
                 callback = buildPreviewCallback()
             )
         }
         previewController?.play(
             LiveStreamUrl.applyFormat(channel.streamUrl, streamFormat),
             routeKey = LiveStreamUrl.routeKey(channel.id, streamFormat, channel.streamUrl),
+            transportKey = LiveStreamUrl.transportKey(
+                channel.id,
+                channel.streamUrl,
+                streamFormat,
+            ),
         )
+        previewStreamSubmitted = true
     }
 
     private var previewHasRenderedFrame = false
@@ -1848,20 +1942,37 @@ class HomeActivity : BaseActivity() {
     /** UI callback: TV becomes READY only after a real frame; radio on audio playback. */
     private fun buildPreviewCallback() = object : PlayerController.Callback {
         override fun onBuffering() {
+            if (castOwnsPreviewPlayback || castLoadPending) return
             cancelAutoRetry(resetAttempts = false)
             previewState = LivePreviewPressPolicy.Phase.STARTING
             binding.previewLoading.visibility = View.VISIBLE
             binding.previewStatus.setText(R.string.buffering)
             binding.previewStatus.visibility = View.VISIBLE
+            PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, true)
+            if (!castOwnsPreviewPlayback && localPreviewPlaybackRequested) {
+                playbackSession.setPlaying(true)
+            }
         }
         override fun onPlaying(engineName: String) {
+            if (castOwnsPreviewPlayback || castLoadPending) return
             if (previewEngineName != null && previewEngineName != engineName) {
                 previewHasRenderedFrame = false
             }
             previewEngineName = engineName
+            PlaybackQoeRuntime.markEngine(
+                previewQoeSessionId,
+                LivePlaybackQoePolicy.engine(engineName),
+            )
+            PlaybackQoeRuntime.markReady(previewQoeSessionId)
+            PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, false)
+            if (!castOwnsPreviewPlayback) {
+                localPreviewPlaybackRequested = true
+                playbackSession.setPlaying(true)
+            }
             // Audio-only radio has no video-frame callback. For TV, retain the logo
             // and buffering cover until a real decoded frame reaches the SurfaceView.
             if (radioMode) {
+                PlaybackQoeRuntime.markFirstFrame(previewQoeSessionId)
                 showPreviewIdentityPlaceholder()
                 markPreviewReady()
             } else if (previewHasRenderedFrame) {
@@ -1869,6 +1980,7 @@ class HomeActivity : BaseActivity() {
             }
         }
         override fun onPlaybackRestarting() {
+            if (castOwnsPreviewPlayback || castLoadPending) return
             cancelAutoRetry(resetAttempts = false)
             previewState = LivePreviewPressPolicy.Phase.STARTING
             previewHasRenderedFrame = false
@@ -1878,13 +1990,42 @@ class HomeActivity : BaseActivity() {
             binding.previewLoading.visibility = View.VISIBLE
             binding.previewStatus.setText(R.string.buffering)
             binding.previewStatus.visibility = View.VISIBLE
+            PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, true)
         }
         override fun onVideoResumed() {
+            if (castOwnsPreviewPlayback || castLoadPending) return
             previewHasRenderedFrame = true
             binding.infoLogo.visibility = View.GONE
+            PlaybackQoeRuntime.markFirstFrame(previewQoeSessionId)
+            PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, false)
             markPreviewReady()
         }
+        override fun onEngineChanged(engineName: String) {
+            if (castOwnsPreviewPlayback || castLoadPending) return
+            PlaybackQoeRuntime.markEngine(
+                previewQoeSessionId,
+                LivePlaybackQoePolicy.engine(engineName),
+            )
+        }
+        override fun onTransportResolved(format: StreamFormat) {
+            resolvedPreviewStreamFormat = format
+            val transport = LivePlaybackQoePolicy.transport(format)
+            if (
+                previewQoeSessionId == null &&
+                localPreviewPlaybackRequested &&
+                !castOwnsPreviewPlayback
+            ) {
+                beginPreviewQoe(format)
+            } else {
+                PlaybackQoeRuntime.markTransport(previewQoeSessionId, transport)
+            }
+        }
+        override fun onPlaybackFailure(failure: PlaybackFailure) {
+            if (castOwnsPreviewPlayback || castLoadPending) return
+            PlaybackQoeRuntime.recordFailure(previewQoeSessionId, failure)
+        }
         override fun onFatalError() {
+            if (castOwnsPreviewPlayback || castLoadPending) return
             binding.previewPlaybackCover.visibility = View.VISIBLE
             showPreviewIdentityPlaceholder()
             binding.previewVideo.keepScreenOn = false
@@ -1893,9 +2034,12 @@ class HomeActivity : BaseActivity() {
             binding.previewLoading.visibility = View.GONE
             binding.previewStatus.setText(R.string.preview_playback_failed)
             binding.previewStatus.visibility = View.VISIBLE
+            PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, false)
+            playbackSession.setPlaying(false)
             scheduleAutoRetry()
         }
         override fun onRetrying(attempt: Int) {
+            if (castOwnsPreviewPlayback || castLoadPending) return
             cancelAutoRetry(resetAttempts = false)
             previewState = LivePreviewPressPolicy.Phase.STARTING
             previewHasRenderedFrame = false
@@ -1905,6 +2049,7 @@ class HomeActivity : BaseActivity() {
             binding.previewLoading.visibility = View.VISIBLE
             binding.previewStatus.text = getString(R.string.reconnecting, attempt)
             binding.previewStatus.visibility = View.VISIBLE
+            PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, true)
         }
     }
 
@@ -1913,6 +2058,7 @@ class HomeActivity : BaseActivity() {
         val delayMs = AutoRetryPolicy.delayForAttempt(autoRetryAttempt)
         if (delayMs == null) {
             binding.previewStatus.setText(R.string.error_auto_retry_exhausted)
+            finishPreviewQoe(PlaybackEndReason.FATAL_FAILURE)
             return
         }
         tickAutoRetry((delayMs / 1000L).coerceAtLeast(1L))
@@ -1922,9 +2068,9 @@ class HomeActivity : BaseActivity() {
         if (secondsLeft <= 0L) {
             if (
                 previewState != LivePreviewPressPolicy.Phase.FAILED ||
-                previewController == null ||
                 isFinishing ||
                 isDestroyed ||
+                castOwnsPreviewPlayback ||
                 !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
             ) return
             autoRetryAttempt++
@@ -1933,7 +2079,14 @@ class HomeActivity : BaseActivity() {
             previewEngineName = null
             binding.previewLoading.visibility = View.VISIBLE
             binding.previewStatus.setText(R.string.buffering)
-            previewController?.retry()
+            val channel = previewingChannel ?: return
+            if (!previewStreamSubmitted || previewController == null) {
+                previewJob?.cancel()
+                previewJob = lifecycleScope.launch { startPreview(channel) }
+            } else if (preparePreviewPlaybackRequest()) {
+                beginPreviewQoe()
+                previewController?.retry()
+            }
             return
         }
         binding.previewStatus.text =
@@ -1945,6 +2098,187 @@ class HomeActivity : BaseActivity() {
     private fun cancelAutoRetry(resetAttempts: Boolean) {
         autoRetryHandler.removeCallbacksAndMessages(null)
         if (resetAttempts) autoRetryAttempt = 0
+    }
+
+    // ---- Platform playback ownership + anonymous QoE -------------------
+
+    private fun preparePreviewPlaybackRequest(): Boolean {
+        if (castOwnsPreviewPlayback || castLoadPending) return false
+        if (!ProviderConnectionSafety.newConnectionAllowed) {
+            localPreviewPlaybackRequested = false
+            playbackSession.setPlaying(false)
+            return false
+        }
+        if (!playbackSession.requestAudioFocus()) {
+            localPreviewPlaybackRequested = false
+            playbackSession.setPlaying(false)
+            return false
+        }
+        localPreviewPlaybackRequested = true
+        playbackSession.setPlaying(true)
+        return true
+    }
+
+    private fun resumePreviewPlayback() {
+        if (
+            castOwnsPreviewPlayback ||
+            castLoadPending ||
+            previewingChannel == null ||
+            !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        ) return
+        if (!preparePreviewPlaybackRequest()) {
+            binding.previewLoading.visibility = View.GONE
+            binding.previewStatus.setText(
+                if (ProviderConnectionSafety.newConnectionAllowed) {
+                    R.string.error_audio_focus_unavailable
+                } else {
+                    R.string.error_playback_ownership_uncertain
+                },
+            )
+            binding.previewStatus.visibility = View.VISIBLE
+            return
+        }
+        if (!previewStreamSubmitted) {
+            val channel = previewingChannel ?: return
+            previewState = LivePreviewPressPolicy.Phase.STARTING
+            previewJob?.cancel()
+            previewJob = lifecycleScope.launch { startPreview(channel) }
+            return
+        }
+        val controller = previewController ?: return
+        beginPreviewQoe()
+        previewState = LivePreviewPressPolicy.Phase.STARTING
+        controller.resume()
+    }
+
+    private fun pausePreviewPlayback(abandonFocus: Boolean) {
+        localPreviewPlaybackRequested = false
+        PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, false)
+        playbackSession.setPlaying(false)
+        previewController?.pause()
+        if (abandonFocus) playbackSession.abandonAudioFocus()
+    }
+
+    private fun onPreviewCastStarted() {
+        if (castOwnsPreviewPlayback) return
+        castLoadPending = false
+        castOwnsPreviewPlayback = true
+        cancelAutoRetry(resetAttempts = false)
+        finishPreviewQoe(PlaybackEndReason.REPLACED)
+        // The preflight already confirmed the local provider socket is closed.
+        previewState = LivePreviewPressPolicy.Phase.READY
+        binding.previewLoading.visibility = View.GONE
+        binding.previewStatus.visibility = View.GONE
+    }
+
+    private fun onPreviewCastLoadStarting(onQuiesced: (Boolean) -> Unit) {
+        if (castOwnsPreviewPlayback) {
+            onQuiesced(true)
+            return
+        }
+        if (castLoadPending) return
+        castLoadPending = true
+        localPreviewPlaybackRequested = false
+        PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, false)
+        playbackSession.setPlaying(false)
+        playbackSession.abandonAudioFocus()
+        previewState = LivePreviewPressPolicy.Phase.STARTING
+        binding.previewLoading.visibility = View.VISIBLE
+        binding.previewStatus.setText(R.string.buffering)
+        binding.previewStatus.visibility = View.VISIBLE
+        val controller = previewController
+        if (controller == null) {
+            onQuiesced(true)
+        } else {
+            controller.quiesce(onQuiesced)
+        }
+    }
+
+    private fun onPreviewCastQuiesceFailed() {
+        castLoadPending = false
+        castOwnsPreviewPlayback = false
+        suppressConnectedCastReloadOnce = true
+        cancelAutoRetry(resetAttempts = false)
+        finishPreviewQoe(PlaybackEndReason.FATAL_FAILURE)
+        previewState = LivePreviewPressPolicy.Phase.FAILED
+        binding.previewPlaybackCover.visibility = View.VISIBLE
+        binding.previewLoading.visibility = View.GONE
+        binding.previewStatus.setText(R.string.error_playback_ownership_uncertain)
+        binding.previewStatus.visibility = View.VISIBLE
+    }
+
+    private fun onPreviewCastLoadFailed() {
+        castLoadPending = false
+        suppressConnectedCastReloadOnce = true
+        val channel = previewingChannel ?: return
+        if (
+            isFinishing ||
+            isDestroyed ||
+            !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        ) return
+        resolvedPreviewStreamFormat = null
+        previewStreamSubmitted = false
+        previewState = LivePreviewPressPolicy.Phase.STARTING
+        previewHasRenderedFrame = false
+        previewEngineName = null
+        binding.previewPlaybackCover.visibility = View.VISIBLE
+        binding.previewLoading.visibility = View.VISIBLE
+        binding.previewStatus.setText(R.string.buffering)
+        binding.previewStatus.visibility = View.VISIBLE
+        previewJob?.cancel()
+        previewJob = lifecycleScope.launch { startPreview(channel) }
+    }
+
+    private fun onPreviewCastEnded() {
+        if (!castOwnsPreviewPlayback) return
+        castOwnsPreviewPlayback = false
+        castLoadPending = false
+        suppressConnectedCastReloadOnce = true
+        val channel = previewingChannel ?: return
+        if (
+            isFinishing ||
+            isDestroyed ||
+            !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        ) return
+        // Cast may have zapped while local playback was suspended. Cold-start the
+        // latest selected channel instead of resuming the controller's stale URL.
+        resolvedPreviewStreamFormat = null
+        previewStreamSubmitted = false
+        previewState = LivePreviewPressPolicy.Phase.STARTING
+        previewHasRenderedFrame = false
+        previewEngineName = null
+        binding.previewPlaybackCover.visibility = View.VISIBLE
+        binding.previewLoading.visibility = View.VISIBLE
+        binding.previewStatus.setText(R.string.buffering)
+        binding.previewStatus.visibility = View.VISIBLE
+        previewJob?.cancel()
+        previewJob = lifecycleScope.launch { startPreview(channel) }
+    }
+
+    private fun beginPreviewQoe(
+        format: StreamFormat = resolvedPreviewStreamFormat ?: previewStreamFormat,
+    ) {
+        if (
+            previewQoeSessionId != null ||
+            castOwnsPreviewPlayback ||
+            previewingChannel == null
+        ) return
+        val descriptor = LivePlaybackQoePolicy.sessionDescriptor(
+            radio = radioMode,
+            hls = format == StreamFormat.HLS,
+        )
+        previewQoeSessionId = PlaybackQoeRuntime.start(
+            kind = descriptor.content,
+            engine = PlaybackEngineKind.UNKNOWN,
+            transport = descriptor.transport,
+        )
+    }
+
+    private fun finishPreviewQoe(reason: PlaybackEndReason) {
+        val id = previewQoeSessionId ?: return
+        previewQoeSessionId = null
+        PlaybackQoeRuntime.setRebuffering(id, false)
+        PlaybackQoeRuntime.finish(id, reason)
     }
 
     /**
@@ -2411,6 +2745,16 @@ class HomeActivity : BaseActivity() {
             actions.add { showInlineDelayDialog(audio = false) }
         }
 
+        if (controller?.audioTracks()?.isNotEmpty() == true) {
+            labels.add(getString(R.string.audio_track))
+            actions.add { showInlineTrackDialog(audio = true) }
+        }
+
+        if (controller != null) {
+            labels.add(getString(R.string.subtitle_track))
+            actions.add { showInlineTrackDialog(audio = false) }
+        }
+
         if (castController.isAvailable) {
             labels.add(getString(R.string.cast))
             actions.add { castController.onCastButtonClicked() }
@@ -2468,6 +2812,74 @@ class HomeActivity : BaseActivity() {
         ) { index ->
             val value = values[index].toLong()
             if (audio) controller.setAudioDelay(value) else controller.setSubtitleDelay(value)
+        }
+    }
+
+    /** D-pad friendly live track chooser shared by preview and inline fullscreen. */
+    private fun showInlineTrackDialog(audio: Boolean) {
+        val controller = previewController ?: return
+        val tracks = if (audio) controller.audioTracks() else controller.subtitleTracks()
+        if (audio && tracks.isEmpty()) return
+        val options = buildList {
+            if (!audio) {
+                add(
+                    PlayerDialogs.Option(
+                        getString(R.string.subtitles_auto),
+                        selected = controller.subtitlePreference is LiveSubtitlePreference.Auto,
+                    ),
+                )
+                add(
+                    PlayerDialogs.Option(
+                        getString(R.string.subtitles_off),
+                        selected = controller.subtitlePreference is LiveSubtitlePreference.Off,
+                    ),
+                )
+            }
+            tracks.forEach { add(PlayerDialogs.Option(it.label, it.selected)) }
+        }
+        PlayerDialogs.showOptions(
+            this,
+            getString(if (audio) R.string.audio_track else R.string.subtitle_track),
+            options,
+        ) { index ->
+            if (!audio && index == 0) {
+                if (controller.selectSubtitleAuto()) {
+                    lifecycleScope.launch {
+                        ServiceLocator.settings.setLiveSubtitlePreference(
+                            LiveSubtitlePreference.Auto,
+                        )
+                    }
+                }
+                return@showOptions
+            }
+            if (!audio && index == 1) {
+                if (controller.selectSubtitleTrack(null)) {
+                    lifecycleScope.launch {
+                        ServiceLocator.settings.setLiveSubtitlePreference(
+                            LiveSubtitlePreference.Off,
+                        )
+                    }
+                }
+                return@showOptions
+            }
+            val trackIndex = if (audio) index else index - 2
+            val track = tracks.getOrNull(trackIndex) ?: return@showOptions
+            val selected = if (audio) {
+                controller.selectAudioTrack(track.id)
+            } else {
+                controller.selectSubtitleTrack(track.id)
+            }
+            if (selected && track.language != null) {
+                lifecycleScope.launch {
+                    if (audio) {
+                        ServiceLocator.settings.setLiveAudioLanguage(track.language)
+                    } else {
+                        LiveSubtitlePreference.Language.from(track.language)?.let {
+                            ServiceLocator.settings.setLiveSubtitlePreference(it)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -2549,6 +2961,8 @@ class HomeActivity : BaseActivity() {
         super.onDestroy()
         sleepTimer.release()
         castController.detach()
+        finishPreviewQoe(PlaybackEndReason.APP_SHUTDOWN)
+        playbackSession.release()
         autoRetryHandler.removeCallbacksAndMessages(null)
         fullscreenEpgHandler.removeCallbacksAndMessages(null)
         fullscreenGuideEpgJob?.cancel()
@@ -2556,7 +2970,9 @@ class HomeActivity : BaseActivity() {
     }
 
     /** Stops + releases the preview so the single stream connection is freed. */
-    private fun stopPreview() {
+    private fun stopPreview(
+        endReason: PlaybackEndReason = PlaybackEndReason.USER_STOP,
+    ) {
         closeFullscreenGuide(showPlayingEpg = false)
         previewJob?.cancel()
         captionJob?.cancel()
@@ -2568,6 +2984,14 @@ class HomeActivity : BaseActivity() {
         lastCaptionEpgRequestAtMs = 0L
         stopFullscreenEpgTicker()
         cancelAutoRetry(resetAttempts = true)
+        finishPreviewQoe(endReason)
+        if (!castLoadPending) {
+            pausePreviewPlayback(abandonFocus = true)
+        } else {
+            localPreviewPlaybackRequested = false
+            playbackSession.setPlaying(false)
+            playbackSession.abandonAudioFocus()
+        }
         previewController?.release()
         previewController = null
         previewingChannel = null
@@ -2575,6 +2999,8 @@ class HomeActivity : BaseActivity() {
         previewState = LivePreviewPressPolicy.Phase.IDLE
         previewHasRenderedFrame = false
         previewEngineName = null
+        previewStreamSubmitted = false
+        resolvedPreviewStreamFormat = null
         pendingFullscreenChannelId = null
         previewChannelScope = emptyList()
         previewChannelScopeLabel = null
@@ -2596,6 +3022,7 @@ class HomeActivity : BaseActivity() {
 
     override fun onStart() {
         super.onStart()
+        playbackSession.setActive(true)
         externalNavigationInFlight = false
         // Coming back from Settings/Catch-up: restore the channel row after the
         // lifecycle-scoped list collector re-subscribes.
@@ -2603,11 +3030,12 @@ class HomeActivity : BaseActivity() {
     }
 
     override fun onStop() {
+        playbackSession.setActive(false)
         super.onStop()
         // External navigation really leaves Home, so restore its browse layout for
         // the next start and then release the sole live connection.
         exitPreviewFullscreen(restoreFocus = false)
-        stopPreview()
+        stopPreview(PlaybackEndReason.BACKGROUND)
         // Stop any in-flight EPG fetch so the guide isn't loaded off-screen.
         nowNextJob?.cancel()
         binding.epgLoading.visibility = View.GONE

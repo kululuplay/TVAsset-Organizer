@@ -68,6 +68,7 @@
     <string name="cast">Diffuser</string>
     <string name="cast_unavailable">Aucun appareil de diffusion disponible.</string>
     <string name="cast_started">Diffusion démarrée.</string>
+    <string name="error_playback_ownership_uncertain">La fermeture de la connexion de lecture n’a pas pu être confirmée. Arrêtez la session Cast ou redémarrez l’application.</string>
 
     <!-- Mise à jour intégrée -->
     <string name="about_checking">Recherche de mises à jour…</string>

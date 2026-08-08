@@ -72,6 +72,8 @@
     <string name="audio_track">Audio</string>
     <string name="subtitle_track">Ondertiteling</string>
     <string name="subtitles_off">Uit</string>
+    <string name="subtitles_auto">Automatisch</string>
+    <string name="error_audio_focus_unavailable">Een andere app gebruikt audio. Sluit deze of probeer het opnieuw.</string>
     <string name="aspect_ratio">Beeldverhouding</string>
     <string name="resume_prompt_title">Afspelen hervatten?</string>
     <string name="resume_prompt_message">Verdergaan waar je was gebleven?</string>
@@ -120,7 +122,7 @@
     <string name="settings_playback">Afspelen</string>
     <string name="settings_player_mode">Live-tv-speler-engine</string>
     <string name="settings_live_player_header">Live-tv-engine</string>
-    <string name="settings_player_scope_desc">Automatisch start live-tv met ExoPlayer-hardware en gebruikt alleen na een bevestigde codec-, groenbeeld- of vastloopfout een veilig kanaalspecifiek pad. Decoderkeuzes zijn voorkeuren, zodat een incompatibel kanaal nooit op een defect pad vast blijft zitten.</string>
+    <string name="settings_player_scope_desc">Automatisch start live-tv met ExoPlayer-hardware en gebruikt na een bevestigde codec-, groenbeeld- of vastloopfout een veilig kanaalspecifiek pad. Films, series en terugkijken gebruiken Media3 voor moderne formaten en schakelen bij oudere containers of bevestigde decoder-, audio-, ondertitel- en uitvoerproblemen automatisch over op VLC. Speler- en decoderkeuzes blijven voorkeuren, zodat inhoud nooit op een defect pad vast blijft zitten.</string>
     <string name="settings_playback_tuning_header">Afspeelinstellingen</string>
     <string name="settings_player_auto">Automatisch (aanbevolen)</string>
     <string name="settings_player_auto_desc">Eerst ExoPlayer; bevestigde beeld-/geluidsfouten herstellen automatisch</string>
@@ -138,8 +140,9 @@
     <string name="settings_stream_format_ts">MPEG-TS (.ts) — meest compatibel</string>
     <string name="settings_stream_format_hls">HLS (.m3u8) — adaptief</string>
     <string name="settings_buffer">Buffergrootte</string>
+    <string name="settings_buffer_adaptive">Adaptief (aanbevolen)</string>
     <string name="settings_buffer_low">Laag (snel zappen)</string>
-    <string name="settings_buffer_normal">Normaal (aanbevolen)</string>
+    <string name="settings_buffer_normal">Normaal (gebalanceerd)</string>
     <string name="settings_buffer_high">Hoog (minder onderbrekingen)</string>
     <string name="settings_language">Taal</string>
     <string name="settings_general">Algemeen</string>

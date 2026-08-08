@@ -12,6 +12,7 @@ import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.StreamFormat
+import com.iptv.player.player.LiveSubtitlePreference
 import com.iptv.player.ui.home.HomeViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -64,6 +65,17 @@ class PlayerViewModel : ViewModel() {
     suspend fun bufferMode(): BufferMode = settings.getBufferMode()
 
     suspend fun audioPassthrough(): Boolean = settings.getAudioPassthrough()
+
+    suspend fun liveAudioLanguage(): String? = settings.getLiveAudioLanguage()
+
+    suspend fun liveSubtitlePreference(): LiveSubtitlePreference =
+        settings.getLiveSubtitlePreference()
+
+    suspend fun setLiveAudioLanguage(language: String?) =
+        settings.setLiveAudioLanguage(language)
+
+    suspend fun setLiveSubtitlePreference(preference: LiveSubtitlePreference) =
+        settings.setLiveSubtitlePreference(preference)
 
     suspend fun resolveChannel(channelId: String): Channel? {
         if (playlist.isEmpty()) loadPlaylist()

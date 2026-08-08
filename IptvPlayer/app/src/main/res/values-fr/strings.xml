@@ -72,6 +72,8 @@
     <string name="audio_track">Audio</string>
     <string name="subtitle_track">Sous-titres</string>
     <string name="subtitles_off">Désactivés</string>
+    <string name="subtitles_auto">Automatique</string>
+    <string name="error_audio_focus_unavailable">Une autre application utilise l’audio. Fermez-la ou réessayez.</string>
     <string name="aspect_ratio">Format d\'image</string>
     <string name="resume_prompt_title">Reprendre la lecture ?</string>
     <string name="resume_prompt_message">Reprendre où vous vous êtes arrêté ?</string>
@@ -120,7 +122,7 @@
     <string name="settings_playback">Lecture</string>
     <string name="settings_player_mode">Moteur TV en direct</string>
     <string name="settings_live_player_header">Moteur TV en direct</string>
-    <string name="settings_player_scope_desc">Le mode automatique démarre la TV en direct avec ExoPlayer matériel et n\'utilise un chemin sûr propre à la chaîne qu\'après une erreur confirmée de codec, d\'image verte ou figée. Les choix de décodeur sont des préférences afin qu\'aucune chaîne incompatible ne reste bloquée.</string>
+    <string name="settings_player_scope_desc">Le mode automatique démarre la TV en direct avec ExoPlayer matériel et utilise un chemin sûr propre à la chaîne après une erreur confirmée de codec, d\'image verte ou figée. Les films, séries et programmes de rattrapage utilisent Media3 pour les formats modernes et passent automatiquement à VLC pour les anciens conteneurs ou les incompatibilités confirmées de décodeur, d\'audio, de sous-titres ou de sortie. Les choix du lecteur et du décodeur restent des préférences afin qu\'aucun contenu ne reste bloqué.</string>
     <string name="settings_playback_tuning_header">Réglages de lecture</string>
     <string name="settings_player_auto">Automatique (recommandé)</string>
     <string name="settings_player_auto_desc">ExoPlayer d\'abord ; récupération automatique des erreurs audio/vidéo confirmées</string>
@@ -138,8 +140,9 @@
     <string name="settings_stream_format_ts">MPEG-TS (.ts) — compatibilité maximale</string>
     <string name="settings_stream_format_hls">HLS (.m3u8) — adaptatif</string>
     <string name="settings_buffer">Taille du tampon</string>
+    <string name="settings_buffer_adaptive">Adaptatif (recommandé)</string>
     <string name="settings_buffer_low">Faible (zapping rapide)</string>
-    <string name="settings_buffer_normal">Normal (recommandé)</string>
+    <string name="settings_buffer_normal">Normal (équilibré)</string>
     <string name="settings_buffer_high">Élevé (moins de coupures)</string>
     <string name="settings_language">Langue</string>
     <string name="settings_general">Général</string>

@@ -361,33 +361,41 @@ interface ResumeDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun save(resume: ResumeEntity)
 
-    @Query("SELECT * FROM resume WHERE contentId = :contentId LIMIT 1")
-    suspend fun get(contentId: String): ResumeEntity?
+    @Query("SELECT * FROM resume WHERE profileId = :profileId AND contentId = :contentId LIMIT 1")
+    suspend fun get(profileId: Long, contentId: String): ResumeEntity?
 
     /**
      * Most recently watched, in-progress movies/episodes for the Continue Watching
      * rail. Catch-up sessions keep a resume position but are excluded by type.
      */
     @Query(
-        "SELECT * FROM resume WHERE positionMs > 0 AND type IN ('movie', 'episode') " +
+        "SELECT * FROM resume WHERE profileId = :profileId " +
+            "AND positionMs > 0 AND type IN ('movie', 'episode') " +
             "ORDER BY updatedAt DESC LIMIT :limit"
     )
-    fun observeRecent(limit: Int): Flow<List<ResumeEntity>>
+    fun observeRecent(profileId: Long, limit: Int): Flow<List<ResumeEntity>>
 
     /** All saved positions for a series' episodes (for per-row progress). */
-    @Query("SELECT * FROM resume WHERE seriesId = :seriesId")
-    suspend fun forSeries(seriesId: String): List<ResumeEntity>
+    @Query("SELECT * FROM resume WHERE profileId = :profileId AND seriesId = :seriesId")
+    suspend fun forSeries(profileId: Long, seriesId: String): List<ResumeEntity>
 
     /** Every saved position, used to draw progress bars across a movie/series grid. */
-    @Query("SELECT * FROM resume WHERE positionMs > 0 AND durationMs > 0")
-    suspend fun all(): List<ResumeEntity>
+    @Query("SELECT * FROM resume WHERE profileId = :profileId AND positionMs > 0 AND durationMs > 0")
+    suspend fun all(profileId: Long): List<ResumeEntity>
 
     /** Last-watched episode of a series, for a one-tap "continue" action. */
-    @Query("SELECT * FROM resume WHERE seriesId = :seriesId ORDER BY updatedAt DESC LIMIT 1")
-    suspend fun latestForSeries(seriesId: String): ResumeEntity?
+    @Query(
+        "SELECT * FROM resume WHERE profileId = :profileId AND seriesId = :seriesId " +
+            "ORDER BY updatedAt DESC LIMIT 1"
+    )
+    suspend fun latestForSeries(profileId: Long, seriesId: String): ResumeEntity?
 
-    @Query("DELETE FROM resume WHERE contentId = :contentId")
-    suspend fun clear(contentId: String)
+    @Query("DELETE FROM resume WHERE profileId = :profileId AND contentId = :contentId")
+    suspend fun clear(profileId: Long, contentId: String)
+
+    @Query("DELETE FROM resume WHERE profileId = :profileId")
+    suspend fun clearProfile(profileId: Long)
+
 }
 
 @Dao
@@ -396,19 +404,29 @@ interface WatchedDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun mark(entry: WatchedEntity)
 
-    @Query("SELECT EXISTS(SELECT 1 FROM watched WHERE contentId = :contentId)")
-    suspend fun isWatched(contentId: String): Boolean
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM watched " +
+            "WHERE profileId = :profileId AND contentId = :contentId)"
+    )
+    suspend fun isWatched(profileId: Long, contentId: String): Boolean
 
     /** All watched content ids, used to badge movie/series grids. */
-    @Query("SELECT contentId FROM watched")
-    suspend fun allIds(): List<String>
+    @Query("SELECT contentId FROM watched WHERE profileId = :profileId")
+    suspend fun allIds(profileId: Long): List<String>
 
     /** Watched episode ids for one series, used to badge the episode rail. */
-    @Query("SELECT contentId FROM watched WHERE seriesId = :seriesId")
-    suspend fun idsForSeries(seriesId: String): List<String>
+    @Query(
+        "SELECT contentId FROM watched " +
+            "WHERE profileId = :profileId AND seriesId = :seriesId"
+    )
+    suspend fun idsForSeries(profileId: Long, seriesId: String): List<String>
 
-    @Query("DELETE FROM watched WHERE contentId = :contentId")
-    suspend fun clear(contentId: String)
+    @Query("DELETE FROM watched WHERE profileId = :profileId AND contentId = :contentId")
+    suspend fun clear(profileId: Long, contentId: String)
+
+    @Query("DELETE FROM watched WHERE profileId = :profileId")
+    suspend fun clearProfile(profileId: Long)
+
 }
 
 @Dao

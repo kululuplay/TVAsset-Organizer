@@ -68,6 +68,7 @@
     <string name="cast">Casten</string>
     <string name="cast_unavailable">Geen castapparaat beschikbaar.</string>
     <string name="cast_started">Casten gestart.</string>
+    <string name="error_playback_ownership_uncertain">Het sluiten van de afspeelverbinding kon niet worden bevestigd. Beëindig de Cast-sessie of start de app opnieuw.</string>
 
     <!-- In-app-update -->
     <string name="about_checking">Controleren op updates…</string>

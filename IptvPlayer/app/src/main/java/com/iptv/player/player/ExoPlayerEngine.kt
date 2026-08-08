@@ -37,10 +37,12 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
+import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -58,6 +60,7 @@ import com.iptv.player.R
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.PlaybackLog
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 
 @OptIn(markerClass = [UnstableApi::class])
@@ -76,10 +79,13 @@ class ExoPlayerEngine(
 ) : PlayerEngine {
 
     override val engineName: String = "ExoPlayer"
+    override val supportsPreciseSourceErrors: Boolean = true
 
     private var player: ExoPlayer? = null
     private var playerView: PlayerView? = null
     private var listener: PlayerListener? = null
+    private var preferredAudioLanguage: String? = null
+    private var subtitlePreference: LiveSubtitlePreference = LiveSubtitlePreference.Auto
 
     private val handler = Handler(Looper.getMainLooper())
     // Per-stream health flags so each detection fires at most once.
@@ -109,26 +115,17 @@ class ExoPlayerEngine(
         onHealthyFrame = {
             reportVerifiedVideoOutput()
         },
+        onSamplingUnavailable = {
+            if (firstFrameRendered && !videoFailureReported && !videoOutputReported) {
+                PlaybackLog.log(
+                    context,
+                    engineName,
+                    "PixelCopy capability unavailable -> accept Media3 rendered-frame signal",
+                )
+                reportVerifiedVideoOutput()
+            }
+        },
     )
-
-    // PixelCopy can be unavailable on protected/quirky surfaces. In that case
-    // preserve the legacy first-frame behaviour after a short grace period. A
-    // successfully classified green sample disables this escape hatch.
-    private val surfaceValidationFallbackRunnable = Runnable {
-        if (
-            firstFrameRendered &&
-            !videoFailureReported &&
-            !videoOutputReported &&
-            !surfaceFrameHealth.hasClassifiedFrame()
-        ) {
-            PlaybackLog.log(
-                context,
-                engineName,
-                "PixelCopy unavailable -> accept Media3 rendered-frame signal",
-            )
-            reportVerifiedVideoOutput()
-        }
-    }
 
     // A successful first copy that caught a transient green/black surface followed
     // by PixelCopy errors used to leave TV playback covered forever: the short
@@ -227,12 +224,7 @@ class ExoPlayerEngine(
                     if (firstFrameRendered) {
                         surfaceFrameHealth.onOutputTransition()
                         if (!videoOutputReported) {
-                            handler.removeCallbacks(surfaceValidationFallbackRunnable)
                             handler.removeCallbacks(surfaceValidationDeadlineRunnable)
-                            handler.postDelayed(
-                                surfaceValidationFallbackRunnable,
-                                PIXEL_VALIDATION_FALLBACK_MS,
-                            )
                             handler.postDelayed(
                                 surfaceValidationDeadlineRunnable,
                                 PIXEL_VALIDATION_DEADLINE_MS,
@@ -311,12 +303,7 @@ class ExoPlayerEngine(
                     surfaceFrameHealth.start {
                         findVideoSurface(playerView?.videoSurfaceView ?: playerView)
                     }
-                    handler.removeCallbacks(surfaceValidationFallbackRunnable)
                     handler.removeCallbacks(surfaceValidationDeadlineRunnable)
-                    handler.postDelayed(
-                        surfaceValidationFallbackRunnable,
-                        PIXEL_VALIDATION_FALLBACK_MS,
-                    )
                     handler.postDelayed(
                         surfaceValidationDeadlineRunnable,
                         PIXEL_VALIDATION_DEADLINE_MS,
@@ -353,7 +340,14 @@ class ExoPlayerEngine(
                     ExoPlaybackFailureClassifier.Failure.DECODE ->
                         reportDecodeFailure(error.errorCodeName)
                     ExoPlaybackFailureClassifier.Failure.ERROR ->
-                        listener?.onError(error.errorCodeName)
+                        if (isSourceOrManifestFailure(error.errorCode)) {
+                            listener?.onSourceFailure(
+                                error.errorCodeName,
+                                findHttpStatus(error),
+                            )
+                        } else {
+                            listener?.onError(error.errorCodeName)
+                        }
                 }
             }
         })
@@ -456,6 +450,7 @@ class ExoPlayerEngine(
 
         player = exo
         playerView = view
+        applyPreferredTrackLanguages()
     }
 
     /**
@@ -624,6 +619,28 @@ class ExoPlayerEngine(
         listener?.onAudioUnavailable()
     }
 
+    private fun isSourceOrManifestFailure(errorCode: Int): Boolean = when (errorCode) {
+        PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+        PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
+        PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED -> true
+        else -> false
+    }
+
+    private fun findHttpStatus(error: Throwable): Int? {
+        var cause: Throwable? = error
+        while (cause != null) {
+            if (cause is HttpDataSource.InvalidResponseCodeException) {
+                return cause.responseCode
+            }
+            cause = cause.cause
+        }
+        return null
+    }
+
     private fun reportDecodeFailure(detail: String) {
         if (videoFailureReported) return
         videoFailureReported = true
@@ -631,7 +648,6 @@ class ExoPlayerEngine(
         droppedFrameHealth.reset()
         cancelTrackSupportCheck()
         cancelNoFrameCheck()
-        handler.removeCallbacks(surfaceValidationFallbackRunnable)
         handler.removeCallbacks(surfaceValidationDeadlineRunnable)
         handler.removeCallbacks(videoProgressRunnable)
         PlaybackLog.log(context, engineName, "$detail -> decoder compatibility fallback")
@@ -681,7 +697,6 @@ class ExoPlayerEngine(
         droppedFrameHealth.reset()
         cancelTrackSupportCheck()
         cancelNoFrameCheck()
-        handler.removeCallbacks(surfaceValidationFallbackRunnable)
         handler.removeCallbacks(surfaceValidationDeadlineRunnable)
         handler.removeCallbacks(videoProgressRunnable)
         PlaybackLog.log(context, engineName, "$detail -> compatibility fallback")
@@ -691,7 +706,6 @@ class ExoPlayerEngine(
     private fun reportVerifiedVideoOutput() {
         if (videoFailureReported || videoOutputReported) return
         videoOutputReported = true
-        handler.removeCallbacks(surfaceValidationFallbackRunnable)
         handler.removeCallbacks(surfaceValidationDeadlineRunnable)
         PlaybackLog.log(context, engineName, "healthy SurfaceView frame confirmed")
         // The controller uses onPlaying as its engine-success signal. For TV that
@@ -823,6 +837,103 @@ class ExoPlayerEngine(
         )
     }
 
+    override fun audioTracks(): List<PlayerTrack> = tracksOfType(C.TRACK_TYPE_AUDIO)
+
+    override fun subtitleTracks(): List<PlayerTrack> = tracksOfType(C.TRACK_TYPE_TEXT)
+
+    private fun tracksOfType(type: Int): List<PlayerTrack> {
+        val tracks = player?.currentTracks ?: return emptyList()
+        return buildList {
+            tracks.groups.forEachIndexed { groupIndex, group ->
+                if (group.type != type) return@forEachIndexed
+                repeat(group.length) { trackIndex ->
+                    val format = group.getTrackFormat(trackIndex)
+                    val language = TrackLanguage.normalize(format.language ?: format.label)
+                    val label = format.label
+                        ?: format.language
+                        ?: language?.uppercase(Locale.ROOT)
+                        ?: "Track ${trackIndex + 1}"
+                    add(
+                        PlayerTrack(
+                            id = "$type:$groupIndex:$trackIndex",
+                            label = label,
+                            language = language,
+                            selected = group.isTrackSelected(trackIndex),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    override fun selectAudioTrack(id: String): Boolean =
+        selectTrack(C.TRACK_TYPE_AUDIO, id)
+
+    override fun selectSubtitleTrack(id: String?): Boolean {
+        val exo = player ?: return false
+        if (id == null) {
+            exo.trackSelectionParameters = exo.trackSelectionParameters
+                .buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                .build()
+            return true
+        }
+        return selectTrack(C.TRACK_TYPE_TEXT, id)
+    }
+
+    private fun selectTrack(type: Int, id: String): Boolean {
+        val exo = player ?: return false
+        val parts = id.split(':')
+        if (parts.size != 3 || parts[0].toIntOrNull() != type) return false
+        val groupIndex = parts[1].toIntOrNull() ?: return false
+        val trackIndex = parts[2].toIntOrNull() ?: return false
+        val group = exo.currentTracks.groups.getOrNull(groupIndex) ?: return false
+        if (group.type != type || trackIndex !in 0 until group.length) return false
+        exo.trackSelectionParameters = exo.trackSelectionParameters
+            .buildUpon()
+            .clearOverridesOfType(type)
+            .setTrackTypeDisabled(type, false)
+            .addOverride(
+                TrackSelectionOverride(group.mediaTrackGroup, listOf(trackIndex)),
+            )
+            .build()
+        return true
+    }
+
+    override fun setPreferredTrackLanguages(audio: String?, subtitle: String?) {
+        preferredAudioLanguage = TrackLanguage.normalize(audio)
+        LiveSubtitlePreference.Language.from(subtitle)?.let { subtitlePreference = it }
+        applyPreferredTrackLanguages()
+    }
+
+    override fun setSubtitlePreference(preference: LiveSubtitlePreference): Boolean {
+        subtitlePreference = preference
+        applyPreferredTrackLanguages()
+        return player != null
+    }
+
+    private fun applyPreferredTrackLanguages() {
+        val exo = player ?: return
+        var builder = exo.trackSelectionParameters
+            .buildUpon()
+            .setPreferredAudioLanguage(preferredAudioLanguage)
+        builder = when (val preference = subtitlePreference) {
+            LiveSubtitlePreference.Auto -> builder
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setPreferredTextLanguage(null)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            LiveSubtitlePreference.Off -> builder
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setPreferredTextLanguage(null)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            is LiveSubtitlePreference.Language -> builder
+                .setPreferredTextLanguage(preference.code)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+        }
+        exo.trackSelectionParameters = builder.build()
+    }
+
     private fun codecLabel(mime: String?): String? = when (mime) {
         null -> null
         MimeTypes.VIDEO_H264 -> "H.264"
@@ -843,7 +954,6 @@ class ExoPlayerEngine(
         private const val NO_FRAME_TIMEOUT_MS = 8000L
         private const val VIDEO_HEALTH_POLL_MS = 2000L
         private const val VIDEO_FRAME_STALL_MS = 7000L
-        private const val PIXEL_VALIDATION_FALLBACK_MS = 1_800L
         private const val PIXEL_VALIDATION_DEADLINE_MS = 9_000L
     }
 }

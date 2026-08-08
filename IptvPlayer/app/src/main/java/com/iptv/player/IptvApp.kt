@@ -15,6 +15,7 @@ import android.view.View
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import com.iptv.player.data.ServiceLocator
+import com.iptv.player.playback.android.PlaybackQoeRuntime
 import com.iptv.player.ui.player.PlayerActivity
 import com.iptv.player.ui.player.VodPlayerActivity
 import com.iptv.player.ui.screensaver.ScreensaverActivity
@@ -26,6 +27,7 @@ import com.iptv.player.util.CrashReporter
 import com.iptv.player.util.HeartbeatReporter
 import com.iptv.player.util.Logger
 import com.iptv.player.util.PlaybackRouteMemory
+import com.iptv.player.util.LiveTransportMemory
 import com.iptv.player.util.RequestReporter
 import com.iptv.player.util.ResolvedRequestCenter
 import com.iptv.player.util.StabilityTelemetry
@@ -65,9 +67,15 @@ class IptvApp : Application() {
         // next beat (set up before we record the abnormal-exit check below).
         StabilityTelemetry.init(this)
 
+        // Build the privacy-safe device/codec capability fingerprint off the main
+        // thread. StabilityTelemetry must be ready first because completed QoE
+        // sessions are persisted through its bounded disk spool.
+        PlaybackQoeRuntime.init(this)
+
         // Load the per-channel decode-route memory (Tier 2 self-healing) so the
         // player can start a channel on the engine/stage it last played stably on.
         PlaybackRouteMemory.init(this)
+        LiveTransportMemory.init(this)
 
         // Sample the pending-crash flag BEFORE the uploader runs — uploadPendingIfAny
         // clears the marker asynchronously, which would otherwise race the abnormal-

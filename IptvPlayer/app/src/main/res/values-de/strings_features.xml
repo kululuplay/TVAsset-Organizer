@@ -68,6 +68,7 @@
     <string name="cast">Übertragen</string>
     <string name="cast_unavailable">Kein Übertragungsgerät verfügbar.</string>
     <string name="cast_started">Übertragung gestartet.</string>
+    <string name="error_playback_ownership_uncertain">Die Wiedergabeverbindung konnte nicht sicher beendet werden. Beenden Sie die Cast-Sitzung oder starten Sie die App neu.</string>
 
     <!-- In-App-Update -->
     <string name="about_checking">Suche nach Updates…</string>
