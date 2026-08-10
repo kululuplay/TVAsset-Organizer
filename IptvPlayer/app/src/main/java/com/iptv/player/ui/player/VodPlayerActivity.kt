@@ -51,6 +51,7 @@ import com.iptv.player.player.vod.Media3VodEngine
 import com.iptv.player.player.vod.Media3VodEngineConfig
 import com.iptv.player.player.vod.VodAspectMode
 import com.iptv.player.player.vod.VodBufferConfig
+import com.iptv.player.player.vod.VodConnectionLifecyclePolicy
 import com.iptv.player.player.vod.VodEngine
 import com.iptv.player.player.vod.VodPlaybackCoordinator
 import com.iptv.player.player.vod.VodRouteKey
@@ -276,6 +277,8 @@ class VodPlayerActivity : BaseActivity() {
     @Volatile private var foreground = false
     private val eventSession = AtomicLong(0L)
     private val playbackOpsSeq = AtomicLong(0L)
+    /** Cancels a Media3 start that is still waiting behind an older VLC teardown. */
+    private val providerStartSeq = AtomicLong(0L)
     private val nativeCommandsInFlight = AtomicInteger(0)
     private val stablePlaybackRunnable = Runnable {
         playbackErrorAttempts = 0
@@ -647,6 +650,9 @@ class VodPlayerActivity : BaseActivity() {
             onTimeout = {
                 if (nativeOwner === owner && !owner.abandoned.get()) {
                     if (recoverAsPaused) pauseAfterBackgroundRestore = true
+                    ProviderConnectionSafety.block(
+                        ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
+                    )
                     quarantineOwner(owner, "$label timed out")
                     if (
                         recoverOnFailure &&
@@ -910,8 +916,8 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     /** Native cleanup after ownership has been exclusively claimed by VlcOps. */
-    private fun cleanupOwnerOnCurrentWorker(owner: NativePlayerOwner) {
-        if (!owner.cleanupClaimed.compareAndSet(false, true)) return
+    private fun cleanupOwnerOnCurrentWorker(owner: NativePlayerOwner): List<Throwable> {
+        if (!owner.cleanupClaimed.compareAndSet(false, true)) return emptyList()
         val failures = VlcOps.runAllBestEffort(
             { owner.mediaPlayer.setEventListener(null) },
             { owner.mediaPlayer.stop() },
@@ -927,6 +933,7 @@ class VodPlayerActivity : BaseActivity() {
             )
         }
         removeOwnerLayoutOnMain(owner)
+        return failures
     }
 
     /**
@@ -1001,6 +1008,9 @@ class VodPlayerActivity : BaseActivity() {
         VlcOps.postBounded(
             timeoutMs = NATIVE_RELEASE_TIMEOUT_MS,
             onTimeout = {
+                ProviderConnectionSafety.block(
+                    ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
+                )
                 PlaybackLog.log(
                     this,
                     "VOD",
@@ -2239,6 +2249,36 @@ class VodPlayerActivity : BaseActivity() {
         }
     }
 
+    /**
+     * Media3 opens its HTTP source directly from the main thread, outside the
+     * shared VLC queue. Trampoline its start through that queue so a previous VOD
+     * Activity's blocking VLC stop/release has definitely completed before this
+     * item consumes a one-connection subscription slot.
+     */
+    private fun prepareMedia3AfterProviderDrain(positionMs: Long) {
+        val request = providerStartSeq.incrementAndGet()
+        setBuffering(true)
+        VlcOps.post {
+            handler.post media3Start@{
+                if (
+                    providerStartSeq.get() != request ||
+                    !foreground ||
+                    isFinishing ||
+                    isDestroyed ||
+                    !isMedia3Route()
+                ) {
+                    return@media3Start
+                }
+                if (!ProviderConnectionSafety.newConnectionAllowed) {
+                    setBuffering(false)
+                    showTerminalError(R.string.error_playback_ownership_uncertain)
+                    return@media3Start
+                }
+                prepareMedia3Playback(positionMs)
+            }
+        }
+    }
+
     private fun preparePlayback(positionMs: Long) {
         if (!ProviderConnectionSafety.newConnectionAllowed) {
             showTerminalError(R.string.error_playback_ownership_uncertain)
@@ -2288,7 +2328,7 @@ class VodPlayerActivity : BaseActivity() {
             return
         }
         if (isMedia3Route()) {
-            prepareMedia3Playback(positionMs)
+            prepareMedia3AfterProviderDrain(positionMs)
             return
         }
         val owner = nativeOwner ?: return
@@ -2375,6 +2415,9 @@ class VodPlayerActivity : BaseActivity() {
                 ) {
                     // Never touch the timed-out handles here. The abandoned
                     // operation owns their eventual cleanup on its retired worker.
+                    ProviderConnectionSafety.block(
+                        ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
+                    )
                     quarantineOwner(owner, "native prepare timed out")
                     handlePlaybackError()
                 }
@@ -2726,6 +2769,9 @@ class VodPlayerActivity : BaseActivity() {
                     !isFinishing &&
                     !isDestroyed
                 ) {
+                    ProviderConnectionSafety.block(
+                        ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
+                    )
                     quarantineOwner(retiringOwner, "native rebuild cleanup timed out")
                     recoveryInProgress = false
                     handlePlaybackError()
@@ -3498,6 +3544,18 @@ class VodPlayerActivity : BaseActivity() {
         }
         val stoppingOwner = nativeOwner
         val ownerBusy = stoppingOwner?.activeOperation?.get() != null
+        val connectionMayBeOpen =
+            playbackRequested && !resumeChoicePending && !playbackEnded
+        val media3Teardown = VodConnectionLifecyclePolicy.onStop(
+            isFinishing = isFinishing,
+            engineExists = isMedia3Route() && media3VodEngine != null,
+            connectionMayBeOpen = connectionMayBeOpen,
+        )
+        val vlcTeardown = VodConnectionLifecyclePolicy.onStop(
+            isFinishing = isFinishing,
+            engineExists = stoppingOwner != null,
+            connectionMayBeOpen = connectionMayBeOpen,
+        )
         backgroundResumePosition =
             if (ownerBusy) bestResumePosition(null)
             else bestResumePosition(activePositionMs())
@@ -3546,16 +3604,24 @@ class VodPlayerActivity : BaseActivity() {
         // Close the subscription connection in the background. Incrementing the
         // sequence also cancels a queued prepare that has not opened yet.
         playbackOpsSeq.incrementAndGet()
-        if (isMedia3Route() && playbackRequested && !playbackEnded) {
-            media3VodEngine?.stop()
-            media3Generation = VodEngine.NO_GENERATION
+        providerStartSeq.incrementAndGet()
+        when (media3Teardown) {
+            VodConnectionLifecyclePolicy.Teardown.RELEASE -> {
+                media3VodEngine?.setListener(null)
+                media3VodEngine?.release()
+                media3VodEngine = null
+                media3Generation = VodEngine.NO_GENERATION
+            }
+            VodConnectionLifecyclePolicy.Teardown.STOP -> {
+                media3VodEngine?.stop()
+                media3Generation = VodEngine.NO_GENERATION
+            }
+            VodConnectionLifecyclePolicy.Teardown.NONE -> Unit
         }
         if (
             !ownerBusy &&
             stoppingOwner != null &&
-            playbackRequested &&
-            !resumeChoicePending &&
-            !playbackEnded
+            vlcTeardown != VodConnectionLifecyclePolicy.Teardown.NONE
         ) {
             val ownerOperation = beginOwnerOperation(stoppingOwner)
             if (ownerOperation == null) {
@@ -3573,18 +3639,33 @@ class VodPlayerActivity : BaseActivity() {
             nativeCommandsInFlight.incrementAndGet()
             ownerOperation.onAbandoned.set(::finishNativeStop)
             VlcOps.postBounded(
-                timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
+                timeoutMs = if (
+                    vlcTeardown == VodConnectionLifecyclePolicy.Teardown.RELEASE
+                ) {
+                    NATIVE_RELEASE_TIMEOUT_MS
+                } else {
+                    NATIVE_OPERATION_TIMEOUT_MS
+                },
                 onTimeout = {
                     finishNativeStop()
+                    ProviderConnectionSafety.block(
+                        ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
+                    )
                     quarantineOwner(stoppingOwner, "background native stop timed out")
                 },
             ) {
                 var stopFailure: Throwable? = null
                 try {
-                    val failures = VlcOps.runAllBestEffort(
-                        { stoppingOwner.mediaPlayer.setEventListener(null) },
-                        { stoppingOwner.mediaPlayer.stop() },
-                    )
+                    val failures = when (vlcTeardown) {
+                        VodConnectionLifecyclePolicy.Teardown.RELEASE ->
+                            cleanupOwnerOnCurrentWorker(stoppingOwner)
+                        VodConnectionLifecyclePolicy.Teardown.STOP ->
+                            VlcOps.runAllBestEffort(
+                                { stoppingOwner.mediaPlayer.setEventListener(null) },
+                                { stoppingOwner.mediaPlayer.stop() },
+                            )
+                        VodConnectionLifecyclePolicy.Teardown.NONE -> emptyList()
+                    }
                     stopFailure = failures.firstOrNull()
                     failures.forEach { failure ->
                         PlaybackLog.log(
@@ -3602,6 +3683,9 @@ class VodPlayerActivity : BaseActivity() {
                 if (stopFailure != null) {
                     handler.post {
                         if (nativeOwner === stoppingOwner) {
+                            ProviderConnectionSafety.block(
+                                ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
+                            )
                             quarantineOwner(stoppingOwner, "background native stop failed")
                             if (foreground && !isFinishing && !isDestroyed) {
                                 try {
@@ -3647,6 +3731,7 @@ class VodPlayerActivity : BaseActivity() {
         handler.removeCallbacksAndMessages(null)
         foreground = false
         playbackOpsSeq.incrementAndGet()
+        providerStartSeq.incrementAndGet()
         val destroyingOwner = nativeOwner
         if (destroyingOwner != null) {
             val ownerOperation = retireIdleOwnerOnMain(destroyingOwner)
@@ -3660,6 +3745,9 @@ class VodPlayerActivity : BaseActivity() {
             VlcOps.postBounded(
                 timeoutMs = NATIVE_RELEASE_TIMEOUT_MS,
                 onTimeout = {
+                    ProviderConnectionSafety.block(
+                        ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
+                    )
                     quarantineOwner(destroyingOwner, "destroy native release timed out")
                 },
             ) {
