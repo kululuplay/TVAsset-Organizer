@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_eyebrow">MISE À JOUR DU LOGICIEL KULULU</string>
+    <string name="update_version_ready">La version %1$s est prête pour votre téléviseur.</string>
+    <string name="update_whats_new">NOUVEAUTÉS</string>
+    <string name="update_notes_fallback">Cette mise à jour comprend des améliorations générales et des corrections de bugs.</string>
+    <string name="update_secure_delivery">Téléchargement sécurisé • Vérifié avant l’installation</string>
+</resources>

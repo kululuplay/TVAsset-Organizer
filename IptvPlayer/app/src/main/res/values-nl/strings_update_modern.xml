@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_eyebrow">KULULU-SOFTWAREUPDATE</string>
+    <string name="update_version_ready">Versie %1$s staat klaar voor uw tv.</string>
+    <string name="update_whats_new">WAT IS ER NIEUW</string>
+    <string name="update_notes_fallback">Deze update bevat algemene verbeteringen en bugfixes.</string>
+    <string name="update_secure_delivery">Veilige download • Gecontroleerd vóór installatie</string>
+</resources>

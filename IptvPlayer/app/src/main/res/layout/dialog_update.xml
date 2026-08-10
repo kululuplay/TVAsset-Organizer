@@ -1,93 +1,155 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modern launch-time "update available" prompt. Brand badge + version chip,
-     optional release notes, and two CTAs: remind later (secondary) and update
-     now (primary). All buttons are D-pad focusable for TV. -->
+<!-- Compact premium update prompt. Release notes are sanitized and bounded by
+     code before this TV-first, D-pad-safe surface renders them. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="520dp"
+    android:id="@+id/updateRoot"
+    android:layout_width="680dp"
     android:layout_height="wrap_content"
+    android:background="@drawable/bg_update_dialog_modern"
+    android:clipChildren="false"
+    android:clipToPadding="false"
     android:orientation="vertical"
-    android:background="@drawable/bg_dialog"
-    android:gravity="center_horizontal"
-    android:padding="@dimen/space_l">
+    android:padding="24dp">
 
-    <ImageView
-        android:layout_width="72dp"
-        android:layout_height="72dp"
-        android:background="@drawable/bg_logo_badge"
-        android:padding="20dp"
-        android:src="@drawable/ic_update"
-        android:contentDescription="@null"
-        app:tint="@color/text_primary" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:background="@drawable/bg_onboarding_step_icon"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
+            android:padding="17dp"
+            android:src="@drawable/ic_update" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_m"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:letterSpacing="0.1"
+                android:maxLines="1"
+                android:text="@string/update_eyebrow"
+                android:textAllCaps="true"
+                android:textColor="@color/brand_pink"
+                android:textSize="@dimen/text_small"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/updateTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/update_available_title"
+                android:textColor="@color/text_primary"
+                android:textSize="26sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/updateMessage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:maxLines="2"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_caption" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/updateVersion"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_m"
+            android:background="@drawable/bg_update_version_chip"
+            android:gravity="center"
+            android:maxLines="1"
+            android:minHeight="38dp"
+            android:paddingStart="@dimen/space_m"
+            android:paddingEnd="@dimen/space_m"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_caption"
+            android:textStyle="bold" />
+    </LinearLayout>
 
     <TextView
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_m"
-        android:text="@string/update_available_title"
-        android:textColor="@color/text_primary"
-        android:textSize="@dimen/text_title"
-        android:textStyle="bold"
-        android:gravity="center" />
-
-    <TextView
-        android:id="@+id/updateVersion"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_s"
-        android:background="@drawable/bg_pill_dark"
-        android:paddingHorizontal="@dimen/space_m"
-        android:paddingVertical="6dp"
+        android:layout_marginTop="@dimen/space_l"
+        android:background="@drawable/bg_update_trust_strip"
+        android:drawableStart="@drawable/ic_lock"
+        android:drawablePadding="@dimen/space_s"
+        android:gravity="center_vertical"
+        android:minHeight="46dp"
+        android:paddingStart="@dimen/space_m"
+        android:paddingEnd="@dimen/space_m"
+        android:text="@string/update_secure_delivery"
         android:textColor="@color/text_primary"
         android:textSize="@dimen/text_caption"
         android:textStyle="bold" />
 
     <TextView
-        android:id="@+id/updateMessage"
+        android:id="@+id/updateNotesHeading"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_m"
-        android:text="@string/update_available_message"
-        android:textColor="@color/text_secondary"
-        android:textSize="@dimen/text_body"
-        android:gravity="center" />
+        android:layout_marginTop="@dimen/space_l"
+        android:text="@string/update_whats_new"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_caption"
+        android:textStyle="bold" />
 
     <ScrollView
         android:id="@+id/updateNotesScroll"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_m"
-        android:maxHeight="160dp"
+        android:layout_height="150dp"
+        android:layout_marginTop="@dimen/space_s"
+        android:background="@drawable/bg_update_notes_panel"
         android:fadeScrollbars="false"
-        android:visibility="gone">
+        android:focusable="true"
+        android:focusableInTouchMode="false"
+        android:nextFocusDown="@id/updateNowButton"
+        android:padding="@dimen/space_m"
+        android:scrollbarStyle="insideInset"
+        android:scrollbars="vertical">
 
         <TextView
             android:id="@+id/updateNotes"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/text_muted"
-            android:textSize="@dimen/text_caption"
-            android:lineSpacingMultiplier="1.15" />
+            android:lineSpacingExtra="3dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_caption" />
     </ScrollView>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/space_l"
-        android:orientation="horizontal"
-        android:gravity="center">
+        android:clipChildren="false"
+        android:gravity="center"
+        android:orientation="horizontal">
 
         <TextView
             android:id="@+id/updateLaterButton"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:layout_height="54dp"
             android:layout_marginEnd="@dimen/space_m"
+            android:layout_weight="1"
             android:background="@drawable/bg_button"
             android:focusable="true"
             android:gravity="center"
-            android:paddingHorizontal="@dimen/space_l"
-            android:paddingVertical="@dimen/space_m"
+            android:nextFocusUp="@id/updateNotesScroll"
+            android:paddingStart="@dimen/space_l"
+            android:paddingEnd="@dimen/space_l"
+            android:stateListAnimator="@animator/control_focus"
             android:text="@string/update_remind_later"
             android:textColor="@color/text_primary"
             android:textSize="@dimen/text_body" />
@@ -95,15 +157,17 @@
         <TextView
             android:id="@+id/updateNowButton"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="54dp"
             android:layout_weight="1"
             android:background="@drawable/bg_button_primary"
             android:drawableStart="@drawable/ic_update"
             android:drawablePadding="@dimen/space_s"
             android:focusable="true"
             android:gravity="center"
-            android:paddingHorizontal="@dimen/space_l"
-            android:paddingVertical="@dimen/space_m"
+            android:nextFocusUp="@id/updateNotesScroll"
+            android:paddingStart="@dimen/space_l"
+            android:paddingEnd="@dimen/space_l"
+            android:stateListAnimator="@animator/control_focus"
             android:text="@string/about_update_now"
             android:textColor="@color/text_primary"
             android:textSize="@dimen/text_body"

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="error_missing_credentials">أدخل اسم المستخدم وكلمة المرور.</string>
+    <string name="error_access_denied">ليست لديك صلاحية الوصول إلى هذه الخدمة.</string>
+    <string name="error_account_disabled">تم تعطيل حسابك. تواصل مع مزود الخدمة.</string>
+    <string name="error_service_not_found">تعذر العثور على خدمة تسجيل الدخول.</string>
+    <string name="error_request_timeout">لم يستجب الخادم في الوقت المحدد.</string>
+    <string name="error_too_many_requests">عدد محاولات تسجيل الدخول كبير جدًا. انتظر قليلًا ثم حاول مجددًا.</string>
+    <string name="error_server_unavailable">الخدمة غير متاحة مؤقتًا. يرجى المحاولة لاحقًا.</string>
+    <string name="error_secure_connection_failed">تعذر إنشاء اتصال آمن. تحقق من تاريخ الجهاز ووقته.</string>
+
+    <string name="onboarding_secure_badge">اتصال آمن</string>
+    <string name="onboarding_tv_ready">مصمم للتلفزيون وجهاز التحكم</string>
+
+    <string name="login_eyebrow">مرحبًا بعودتك</string>
+    <string name="login_hero_title">ترفيهك جاهز متى شئت</string>
+    <string name="login_hero_body">استمتع بوصول آمن وسهل إلى البث المباشر والأفلام والمسلسلات.</string>
+    <string name="login_feature_live_title">البث التلفزيوني المباشر</string>
+    <string name="login_feature_live_body">شاهد قنواتك بتنقل سريع وسلس.</string>
+    <string name="login_feature_vod_title">الأفلام والمسلسلات</string>
+    <string name="login_feature_vod_body">تابع المشاهدة من حيث توقفت في مكتبتك.</string>
+    <string name="login_feature_profiles_title">ملفات شخصية</string>
+    <string name="login_feature_profiles_body">نظّم المفضلة وسجل المشاهدة لكل مستخدم.</string>
+    <string name="login_secure_endpoint">اتصال آمن مع Kululu</string>
+    <string name="login_field_username">اسم المستخدم</string>
+    <string name="login_field_password">كلمة المرور</string>
+    <string name="login_show_password">إظهار كلمة المرور</string>
+    <string name="login_hide_password">إخفاء كلمة المرور</string>
+    <string name="login_error_heading">تعذر تسجيل الدخول</string>
+    <string name="login_error_code_http">رمز الخطأ: HTTP %1$d</string>
+    <string name="login_error_help_input">أدخل اسم المستخدم وكلمة المرور بالكامل.</string>
+    <string name="login_error_help_credentials">تحقق من اسم المستخدم وكلمة المرور، ثم حاول مجددًا.</string>
+    <string name="login_error_help_access">حسابك غير مخول لاستخدام هذه الخدمة. تواصل مع مزود الخدمة.</string>
+    <string name="login_error_help_subscription">جدد اشتراكك أو تواصل مع مزود الخدمة.</string>
+    <string name="login_error_help_service">خدمة تسجيل الدخول غير متاحة على هذا العنوان. تواصل مع الدعم إذا استمرت المشكلة.</string>
+    <string name="login_error_help_timeout">تحقق من اتصالك ثم حاول مجددًا.</string>
+    <string name="login_error_help_rate_limit">انتظر قليلًا قبل المحاولة مجددًا.</string>
+    <string name="login_error_help_server">تواجه الخدمة مشكلة مؤقتة. حاول مجددًا بعد قليل.</string>
+    <string name="login_error_help_tls">تحقق من تاريخ الجهاز ووقته، ثم حدّث التطبيق أو النظام عند الحاجة.</string>
+    <string name="login_error_help_network">تأكد من اتصال هذا الجهاز بالإنترنت.</string>
+    <string name="login_error_help_account_in_use">أوقف التشغيل على جهازك الآخر، ثم حاول مجددًا.</string>
+    <string name="login_error_help_generic">حاول مجددًا. إذا استمرت المشكلة، فتواصل مع الدعم.</string>
+    <string name="login_security_note">يتم تشفير بيانات تسجيل الدخول وإرسالها عبر اتصال آمن فقط.</string>
+
+    <string name="wizard_intro_eyebrow">مرحبًا بك في KULULU</string>
+    <string name="wizard_intro_title">طريقة أفضل للمشاهدة</string>
+    <string name="wizard_intro_body">اضبط اللغة والاتصال في بضع خطوات بسيطة.</string>
+    <string name="wizard_step_welcome_label">مرحبًا</string>
+    <string name="wizard_step_language_label">اللغة</string>
+    <string name="wizard_step_connect_label">الاتصال</string>
+    <string name="wizard_eyebrow_welcome">الخطوة 1 · الترحيب</string>
+    <string name="wizard_eyebrow_language">الخطوة 2 · اللغة</string>
+    <string name="wizard_eyebrow_connect">الخطوة 3 · الاتصال</string>
+    <string name="wizard_welcome_helper">تجربة تلفزيونية متقنة مصممة لجهاز التحكم ولجميع أفراد العائلة.</string>
+    <string name="wizard_connect_helper">أصبح كل شيء جاهزًا. انتقل إلى تسجيل الدخول الآمن لربط حسابك.</string>
+    <string name="wizard_connect_secure_title">آمن بشكل افتراضي</string>
+    <string name="wizard_connect_secure_body">يستخدم تسجيل الدخول اتصال HTTPS مشفرًا.</string>
+    <string name="wizard_connect_private_title">خصوصية حسابك محفوظة</string>
+    <string name="wizard_connect_private_body">تظل بيانات تسجيل الدخول محمية على هذا الجهاز ولا تظهر أبدًا في معلومات التشخيص.</string>
+    <string name="wizard_cta_start">ابدأ الآن</string>
+    <string name="wizard_cta_confirm_language">تأكيد اللغة</string>
+    <string name="wizard_cta_open_login">المتابعة إلى تسجيل الدخول</string>
+    <string name="wizard_language_selected">تم اختيار اللغة</string>
+    <string name="wizard_error_save_language">تعذر حفظ تفضيل اللغة. يرجى المحاولة مجددًا.</string>
+    <string name="wizard_error_finish">تعذر إكمال الإعداد. يرجى المحاولة مجددًا.</string>
+    <string name="wizard_status_saving">جارٍ حفظ اللغة…</string>
+    <string name="wizard_status_finishing">جارٍ إكمال الإعداد…</string>
+</resources>

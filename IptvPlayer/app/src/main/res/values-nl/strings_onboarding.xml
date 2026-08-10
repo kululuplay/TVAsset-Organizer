@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="error_missing_credentials">Voer je gebruikersnaam en wachtwoord in.</string>
+    <string name="error_access_denied">Je hebt geen toestemming voor toegang tot deze dienst.</string>
+    <string name="error_account_disabled">Je account is uitgeschakeld. Neem contact op met je provider.</string>
+    <string name="error_service_not_found">De aanmeldservice is niet gevonden.</string>
+    <string name="error_request_timeout">De server heeft niet op tijd gereageerd.</string>
+    <string name="error_too_many_requests">Te veel aanmeldpogingen. Wacht even en probeer het opnieuw.</string>
+    <string name="error_server_unavailable">De dienst is tijdelijk niet beschikbaar. Probeer het later opnieuw.</string>
+    <string name="error_secure_connection_failed">Er kon geen beveiligde verbinding worden gemaakt. Controleer de datum en tijd van je apparaat.</string>
+
+    <string name="onboarding_secure_badge">Beveiligde verbinding</string>
+    <string name="onboarding_tv_ready">Ontworpen voor tv en afstandsbediening</string>
+
+    <string name="login_eyebrow">WELKOM TERUG</string>
+    <string name="login_hero_title">Jouw entertainment, klaar wanneer jij dat bent</string>
+    <string name="login_hero_body">Geniet van veilige, moeiteloze toegang tot live-tv, films en series.</string>
+    <string name="login_feature_live_title">Live-tv</string>
+    <string name="login_feature_live_body">Bekijk je zenders met snelle en vloeiende navigatie.</string>
+    <string name="login_feature_vod_title">Films en series</string>
+    <string name="login_feature_vod_body">Ga in je hele bibliotheek verder waar je was gebleven.</string>
+    <string name="login_feature_profiles_title">Persoonlijke profielen</string>
+    <string name="login_feature_profiles_body">Houd favorieten en kijkgeschiedenis voor iedereen overzichtelijk.</string>
+    <string name="login_secure_endpoint">Veilig verbonden met Kululu</string>
+    <string name="login_field_username">Gebruikersnaam</string>
+    <string name="login_field_password">Wachtwoord</string>
+    <string name="login_show_password">Wachtwoord tonen</string>
+    <string name="login_hide_password">Wachtwoord verbergen</string>
+    <string name="login_error_heading">Aanmelden is niet gelukt</string>
+    <string name="login_error_code_http">Foutcode: HTTP %1$d</string>
+    <string name="login_error_help_input">Voer zowel je gebruikersnaam als je wachtwoord in.</string>
+    <string name="login_error_help_credentials">Controleer je gebruikersnaam en wachtwoord en probeer het opnieuw.</string>
+    <string name="login_error_help_access">Je account is niet gemachtigd voor deze dienst. Neem contact op met je provider.</string>
+    <string name="login_error_help_subscription">Verleng je abonnement of neem contact op met je provider.</string>
+    <string name="login_error_help_service">De aanmeldservice is niet beschikbaar op dit adres. Neem contact op met ondersteuning als het probleem aanhoudt.</string>
+    <string name="login_error_help_timeout">Controleer je verbinding en probeer het opnieuw.</string>
+    <string name="login_error_help_rate_limit">Wacht even voordat je het opnieuw probeert.</string>
+    <string name="login_error_help_server">De dienst heeft een tijdelijk probleem. Probeer het over enkele ogenblikken opnieuw.</string>
+    <string name="login_error_help_tls">Controleer de datum en tijd van je apparaat en werk indien nodig de app of het systeem bij.</string>
+    <string name="login_error_help_network">Zorg dat dit apparaat met internet is verbonden.</string>
+    <string name="login_error_help_account_in_use">Stop het afspelen op je andere apparaat en probeer het opnieuw.</string>
+    <string name="login_error_help_generic">Probeer het opnieuw. Neem contact op met ondersteuning als het probleem aanhoudt.</string>
+    <string name="login_security_note">Je inloggegevens worden versleuteld en alleen via een beveiligde verbinding verzonden.</string>
+
+    <string name="wizard_intro_eyebrow">WELKOM BIJ KULULU</string>
+    <string name="wizard_intro_title">Een betere manier om te kijken</string>
+    <string name="wizard_intro_body">Stel je taal en verbinding in een paar eenvoudige stappen in.</string>
+    <string name="wizard_step_welcome_label">Welkom</string>
+    <string name="wizard_step_language_label">Taal</string>
+    <string name="wizard_step_connect_label">Verbinden</string>
+    <string name="wizard_eyebrow_welcome">STAP 1 · WELKOM</string>
+    <string name="wizard_eyebrow_language">STAP 2 · TAAL</string>
+    <string name="wizard_eyebrow_connect">STAP 3 · VERBINDEN</string>
+    <string name="wizard_welcome_helper">Een hoogwaardige tv-ervaring, ontworpen voor je afstandsbediening en het hele gezin.</string>
+    <string name="wizard_connect_helper">Alles is klaar. Ga verder naar veilig aanmelden om je account te koppelen.</string>
+    <string name="wizard_connect_secure_title">Standaard beveiligd</string>
+    <string name="wizard_connect_secure_body">Je aanmelding gebruikt een versleutelde HTTPS-verbinding.</string>
+    <string name="wizard_connect_private_title">Je account blijft privé</string>
+    <string name="wizard_connect_private_body">Je inloggegevens zijn beveiligd op dit apparaat en worden nooit in diagnostische gegevens weergegeven.</string>
+    <string name="wizard_cta_start">Aan de slag</string>
+    <string name="wizard_cta_confirm_language">Taal bevestigen</string>
+    <string name="wizard_cta_open_login">Doorgaan naar aanmelden</string>
+    <string name="wizard_language_selected">Taal geselecteerd</string>
+    <string name="wizard_error_save_language">De taalvoorkeur kon niet worden opgeslagen. Probeer het opnieuw.</string>
+    <string name="wizard_error_finish">De configuratie kon niet worden voltooid. Probeer het opnieuw.</string>
+    <string name="wizard_status_saving">Taal opslaan…</string>
+    <string name="wizard_status_finishing">Configuratie voltooien…</string>
+</resources>

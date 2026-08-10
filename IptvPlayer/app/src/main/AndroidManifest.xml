@@ -67,7 +67,8 @@
         <activity
             android:name=".ui.login.LoginActivity"
             android:exported="false"
-            android:screenOrientation="landscape" />
+            android:screenOrientation="landscape"
+            android:windowSoftInputMode="adjustResize" />
 
         <!-- Post-login launcher dashboard. -->
         <activity
