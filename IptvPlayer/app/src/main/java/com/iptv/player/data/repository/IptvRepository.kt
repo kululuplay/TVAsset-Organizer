@@ -63,6 +63,7 @@ import com.iptv.player.data.remote.XtreamApi
 import com.iptv.player.data.remote.XtreamUrlBuilder
 import com.iptv.player.security.SecureValueCodec
 import com.iptv.player.util.AppError
+import com.iptv.player.util.HttpAppErrorPolicy
 import com.iptv.player.util.Logger
 import com.iptv.player.util.KululuEndpoint
 import com.iptv.player.util.Outcome
@@ -84,6 +85,8 @@ import okhttp3.Request
 import retrofit2.HttpException
 import retrofit2.Retrofit
 import java.io.IOException
+import java.net.SocketTimeoutException
+import javax.net.ssl.SSLException
 import java.net.InetAddress
 import java.util.Locale
 
@@ -413,8 +416,10 @@ class IptvRepository(
                     val info = api.authenticate(config.username, config.password).userInfo
                         ?: return@withContext Outcome.Failure(AppError.CANNOT_CONNECT)
                     when {
-                        info.auth == 0 || info.status.equals("Disabled", true) ->
-                            Outcome.Failure(AppError.BAD_CREDENTIALS)
+                        info.auth == 0 -> Outcome.Failure(AppError.BAD_CREDENTIALS)
+                        info.status.equals("Disabled", true) ||
+                            info.status.equals("Banned", true) ->
+                            Outcome.Failure(AppError.ACCOUNT_DISABLED)
                         info.status.equals("Expired", true) ->
                             Outcome.Failure(AppError.SUBSCRIPTION_EXPIRED)
                         else -> Outcome.Success(Unit)
@@ -427,13 +432,16 @@ class IptvRepository(
                         .build()
                     httpClient.newCall(request).execute().use { resp ->
                         if (resp.isSuccessful) Outcome.Success(Unit)
-                        else Outcome.Failure(AppError.CANNOT_CONNECT)
+                        else Outcome.Failure(
+                            HttpAppErrorPolicy.fromStatus(resp.code),
+                            httpStatus = resp.code.takeIf { it in 400..599 },
+                        )
                     }
                 }
             }
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
-            Outcome.Failure(e.toAppError())
+            e.toOutcomeFailure()
         }
     }
 
@@ -474,7 +482,7 @@ class IptvRepository(
             Outcome.Success(ordered.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
-            Outcome.Failure(e.toAppError())
+            e.toOutcomeFailure()
         }
     }
 
@@ -646,7 +654,7 @@ class IptvRepository(
             Outcome.Success(categories.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
-            Outcome.Failure(e.toAppError())
+            e.toOutcomeFailure()
         }
     }
 
@@ -759,7 +767,7 @@ class IptvRepository(
             Outcome.Success(if (force) newCount else items.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
-            Outcome.Failure(e.toAppError())
+            e.toOutcomeFailure()
         }
     }
 
@@ -992,7 +1000,7 @@ class IptvRepository(
             Outcome.Success(categories.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
-            Outcome.Failure(e.toAppError())
+            e.toOutcomeFailure()
         }
     }
 
@@ -1090,7 +1098,7 @@ class IptvRepository(
             Outcome.Success(if (force) newCount else items.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
-            Outcome.Failure(e.toAppError())
+            e.toOutcomeFailure()
         }
     }
 
@@ -1296,7 +1304,7 @@ class IptvRepository(
             }
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
-            Outcome.Failure(e.toAppError())
+            e.toOutcomeFailure()
         }
     }
 
@@ -2008,21 +2016,51 @@ class IptvRepository(
         return retrofitBuilder.baseUrl(base).build().create(XtreamApi::class.java)
     }
 
+    private fun Throwable.toOutcomeFailure(): Outcome.Failure {
+        val httpStatus = causeChain()
+            .filterIsInstance<HttpException>()
+            .firstOrNull()
+            ?.code()
+            ?.takeIf { it in 400..599 }
+        return Outcome.Failure(
+            error = toAppError(),
+            httpStatus = httpStatus,
+        )
+    }
+
     private fun Throwable.toAppError(): AppError {
-        val mapped = when (this) {
-            is HttpException -> when (code()) {
-                401, 403 -> AppError.BAD_CREDENTIALS
-                else -> AppError.CANNOT_CONNECT
-            }
-            is IOException -> AppError.CANNOT_CONNECT
+        val causes = causeChain().toList()
+        val mapped = when {
+            causes.any { it is HttpException } -> HttpAppErrorPolicy.fromStatus(
+                causes.filterIsInstance<HttpException>().first().code(),
+            )
+            causes.any { it is SocketTimeoutException } -> AppError.REQUEST_TIMEOUT
+            causes.any { it is SSLException } -> AppError.SECURE_CONNECTION_FAILED
+            causes.any { it is IOException } -> AppError.CANNOT_CONNECT
             // OutOfMemoryError (huge playlists/accounts on low-RAM TV boxes) and other
             // non-Exception Throwables must surface as a friendly error, not crash the app.
-            is OutOfMemoryError -> AppError.EMPTY_PLAYLIST
+            causes.any { it is OutOfMemoryError } -> AppError.EMPTY_PLAYLIST
             else -> AppError.UNKNOWN
         }
         // Record the underlying cause so field logs explain provider failures that
         // the user only sees as a friendly message.
         Logger.w("IptvRepository", "Operation failed -> $mapped", this)
         return mapped
+    }
+
+    /** Bounded cause traversal keeps wrapped Retrofit/OkHttp transport failures useful. */
+    private fun Throwable.causeChain(): Sequence<Throwable> = sequence {
+        var current: Throwable? = this@causeChain
+        repeat(MAX_CAUSE_DEPTH) {
+            val value = current ?: return@sequence
+            yield(value)
+            val next = value.cause
+            if (next === value) return@sequence
+            current = next
+        }
+    }
+
+    private companion object {
+        const val MAX_CAUSE_DEPTH = 8
     }
 }

@@ -1,180 +1,558 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Cinematic split login. Left: Kululu IPTV brand hero (logo, tagline,
-     feature highlights). Right: frosted glass sign-in card asking only for
-     username + password; the server is fixed (https://kululu.live) and the
-     app connects automatically. All controls are focusable and D-pad friendly. -->
+<!--
+  TV-first sign-in experience.
+  The cinematic horizontal split stays intentionally lightweight: all depth is
+  built from XML shapes so low-powered Android TV sticks do not pay for blur,
+  video, or bitmap effects. The functional card scrolls when the IME, large
+  fonts, or long translations reduce the available landscape height.
+-->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_login_aurora">
+    android:background="@drawable/bg_login_aurora"
+    android:clipChildren="false"
+    android:clipToPadding="false">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="horizontal"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:gravity="center_vertical"
-        android:paddingHorizontal="@dimen/safe_area_h"
-        android:paddingVertical="@dimen/safe_area_v">
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/safe_area_h"
+        android:paddingTop="@dimen/safe_area_v"
+        android:paddingEnd="@dimen/safe_area_h"
+        android:paddingBottom="@dimen/safe_area_v">
 
-        <!-- ===== Brand hero ===== -->
+        <!-- Brand story: deliberately non-interactive so D-pad focus starts in the form. -->
         <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1.05"
-            android:orientation="vertical"
-            android:layout_marginEnd="@dimen/space_xl">
-
-            <ImageView
-                android:layout_width="84dp"
-                android:layout_height="84dp"
-                android:background="@drawable/bg_logo_badge"
-                android:padding="16dp"
-                android:src="@drawable/ic_kululu_logo"
-                android:contentDescription="@string/app_name" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/app_name"
-                android:textColor="@color/text_primary"
-                android:textSize="48sp"
-                android:textStyle="bold"
-                android:letterSpacing="-0.02"
-                android:layout_marginTop="@dimen/space_l" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/app_tagline"
-                android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_body"
-                android:layout_marginTop="@dimen/space_s" />
-
-            <!-- Feature highlights -->
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:layout_marginTop="@dimen/space_xl">
-
-                <TextView
-                    style="@style/Widget.Iptv.Feature"
-                    android:text="@string/feature_live" />
-
-                <TextView
-                    style="@style/Widget.Iptv.Feature"
-                    android:layout_marginTop="@dimen/space_m"
-                    android:text="@string/feature_vod" />
-
-                <TextView
-                    style="@style/Widget.Iptv.Feature"
-                    android:layout_marginTop="@dimen/space_m"
-                    android:text="@string/feature_multi" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- ===== Sign-in card ===== -->
-        <ScrollView
+            android:id="@+id/brandHero"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:fillViewport="true">
+            android:layout_marginEnd="@dimen/space_l"
+            android:layout_weight="1.08"
+            android:background="@drawable/bg_onboarding_hero_panel"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:gravity="center_vertical"
+            android:orientation="vertical"
+            android:padding="24dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="0dp"
-                android:gravity="center"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="58dp"
+                    android:layout_height="58dp"
+                    android:background="@drawable/bg_logo_badge"
+                    android:contentDescription="@null"
+                    android:importantForAccessibility="no"
+                    android:padding="12dp"
+                    android:src="@drawable/ic_kululu_logo" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/space_m"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="@string/app_name"
+                    android:textColor="@color/text_primary"
+                    android:textSize="24sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/space_s"
+                    android:background="@drawable/bg_onboarding_chip"
+                    android:drawableStart="@drawable/ic_lock"
+                    android:drawablePadding="6dp"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:minHeight="36dp"
+                    android:paddingStart="10dp"
+                    android:paddingTop="6dp"
+                    android:paddingEnd="10dp"
+                    android:paddingBottom="6dp"
+                    android:text="@string/onboarding_secure_badge"
+                    android:textColor="@color/text_primary"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_l"
+                android:letterSpacing="0.08"
+                android:maxLines="1"
+                android:text="@string/login_eyebrow"
+                android:textAllCaps="true"
+                android:textColor="@color/brand_pink"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:lineSpacingExtra="1dp"
+                android:maxLines="3"
+                android:text="@string/login_hero_title"
+                android:textColor="@color/text_primary"
+                android:textSize="31sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_s"
+                android:lineSpacingExtra="2dp"
+                android:maxLines="3"
+                android:text="@string/login_hero_body"
+                android:textColor="@color/text_secondary"
+                android:textSize="15sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_l"
                 android:orientation="vertical">
 
-                <!-- Width follows the column (match_parent) so the card can never
-                     overflow and get clipped at the screen edge on a real TV. -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:background="@drawable/bg_onboarding_feature"
+                    android:gravity="center_vertical"
+                    android:minHeight="58dp"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingTop="9dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="9dp">
+
+                    <ImageView
+                        android:layout_width="26dp"
+                        android:layout_height="26dp"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_tv"
+                        app:tint="@color/brand_pink" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:text="@string/login_feature_live_title"
+                            android:textColor="@color/text_primary"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:ellipsize="end"
+                            android:maxLines="2"
+                            android:text="@string/login_feature_live_body"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_s"
+                    android:background="@drawable/bg_onboarding_feature"
+                    android:gravity="center_vertical"
+                    android:minHeight="58dp"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingTop="9dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="9dp">
+
+                    <ImageView
+                        android:layout_width="26dp"
+                        android:layout_height="26dp"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_movie"
+                        app:tint="@color/brand_pink" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:text="@string/login_feature_vod_title"
+                            android:textColor="@color/text_primary"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:ellipsize="end"
+                            android:maxLines="2"
+                            android:text="@string/login_feature_vod_body"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_s"
+                    android:background="@drawable/bg_onboarding_feature"
+                    android:gravity="center_vertical"
+                    android:minHeight="58dp"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingTop="9dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="9dp">
+
+                    <ImageView
+                        android:layout_width="26dp"
+                        android:layout_height="26dp"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_account"
+                        app:tint="@color/brand_pink" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:text="@string/login_feature_profiles_title"
+                            android:textColor="@color/text_primary"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:ellipsize="end"
+                            android:maxLines="2"
+                            android:text="@string/login_feature_profiles_body"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Authentication card: scrollable for IME, accessibility fonts, and translations. -->
+        <ScrollView
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.92"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:focusable="false"
+            android:overScrollMode="never"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:gravity="center"
+                android:minHeight="0dp"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:id="@+id/loginCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_onboarding_card"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
                     android:orientation="vertical"
-                    android:background="@drawable/bg_glass_card"
-                    android:padding="@dimen/space_xl">
+                    android:padding="24dp">
 
                     <TextView
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/login_title"
-                        android:textColor="@color/text_primary"
-                        android:textSize="@dimen/text_title"
+                        android:letterSpacing="0.08"
+                        android:maxLines="1"
+                        android:text="@string/login_eyebrow"
+                        android:textAllCaps="true"
+                        android:textColor="@color/brand_pink"
+                        android:textSize="12sp"
                         android:textStyle="bold" />
 
                     <TextView
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:maxLines="2"
+                        android:text="@string/login_title"
+                        android:textColor="@color/text_primary"
+                        android:textSize="25sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:maxLines="2"
                         android:text="@string/login_subtitle"
                         android:textColor="@color/text_secondary"
-                        android:textSize="@dimen/text_caption"
-                        android:layout_marginTop="@dimen/space_xs"
-                        android:layout_marginBottom="@dimen/space_l" />
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_m"
+                        android:background="@drawable/bg_onboarding_chip"
+                        android:drawableStart="@drawable/ic_lock"
+                        android:drawablePadding="7dp"
+                        android:gravity="center_vertical"
+                        android:maxLines="2"
+                        android:minHeight="38dp"
+                        android:paddingStart="11dp"
+                        android:paddingTop="7dp"
+                        android:paddingEnd="11dp"
+                        android:paddingBottom="7dp"
+                        android:text="@string/login_secure_endpoint"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_l"
+                        android:labelFor="@id/inputUsername"
+                        android:text="@string/login_field_username"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
 
                     <EditText
                         android:id="@+id/inputUsername"
                         style="@style/Widget.Iptv.Input"
-                        android:background="@drawable/bg_input_modern"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="@string/hint_username"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/bg_input_modern"
+                        android:importantForAutofill="no"
                         android:imeOptions="actionNext"
-                        android:inputType="textVisiblePassword"
-                        android:layout_marginBottom="@dimen/space_s"
+                        android:inputType="text|textNoSuggestions"
                         android:maxLines="1"
+                        android:minHeight="54dp"
                         android:nextFocusDown="@id/inputPassword"
+                        android:nextFocusForward="@id/inputPassword"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
                         android:singleLine="true"
-                        android:importantForAutofill="no" />
-
-                    <EditText
-                        android:id="@+id/inputPassword"
-                        style="@style/Widget.Iptv.Input"
-                        android:background="@drawable/bg_input_modern"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="@string/hint_password"
-                        android:imeOptions="actionDone"
-                        android:inputType="textPassword"
-                        android:maxLines="1"
-                        android:nextFocusUp="@id/inputUsername"
-                        android:nextFocusDown="@id/btnConnect"
-                        android:singleLine="true"
-                        android:importantForAutofill="no" />
+                        android:textDirection="ltr" />
 
                     <TextView
-                        android:id="@+id/loginError"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:labelFor="@id/inputPassword"
+                        android:text="@string/login_field_password"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <!-- Keep the credential field LTR so the trailing TV action remains
+                         physically on the right and matches the explicit D-pad graph. -->
+                    <FrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        android:layoutDirection="ltr">
+
+                        <EditText
+                            android:id="@+id/inputPassword"
+                            style="@style/Widget.Iptv.Input"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_input_modern"
+                            android:importantForAutofill="no"
+                            android:imeOptions="actionDone"
+                            android:inputType="textPassword"
+                            android:maxLines="1"
+                            android:minHeight="54dp"
+                            android:nextFocusDown="@id/btnConnect"
+                            android:nextFocusForward="@id/passwordToggle"
+                            android:nextFocusRight="@id/passwordToggle"
+                            android:nextFocusUp="@id/inputUsername"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="168dp"
+                            android:singleLine="true"
+                            android:textDirection="ltr" />
+
+                        <TextView
+                            android:id="@+id/passwordToggle"
+                            android:layout_width="152dp"
+                            android:layout_height="42dp"
+                            android:layout_gravity="end|center_vertical"
+                            android:layout_marginEnd="6dp"
+                            android:background="@drawable/bg_onboarding_inline_action"
+                            android:clickable="true"
+                            android:contentDescription="@string/login_show_password"
+                            android:focusable="true"
+                            android:focusableInTouchMode="false"
+                            android:gravity="center"
+                            android:nextFocusDown="@id/btnConnect"
+                            android:nextFocusLeft="@id/inputPassword"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"
+                            android:stateListAnimator="@animator/control_focus"
+                            android:text="@string/login_show_password"
+                            android:textAllCaps="false"
+                            android:textColor="@color/text_primary"
+                            android:textDirection="locale"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:id="@+id/loginErrorCard"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_m"
                         android:accessibilityLiveRegion="polite"
-                        android:drawableStart="@drawable/ic_feedback"
-                        android:drawablePadding="@dimen/space_s"
-                        android:gravity="center_vertical"
-                        android:textColor="@color/danger"
-                        android:textSize="@dimen/text_caption"
-                        android:visibility="gone" />
+                        android:background="@drawable/bg_onboarding_error"
+                        android:importantForAccessibility="yes"
+                        android:orientation="vertical"
+                        android:padding="12dp"
+                        android:visibility="gone">
 
-                    <Button
-                        android:id="@+id/btnConnect"
-                        style="@style/Widget.Iptv.Button"
-                        android:background="@drawable/bg_button_primary"
-                        android:textColor="@color/text_primary"
-                        android:textStyle="bold"
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:id="@+id/loginErrorCode"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_onboarding_error_code"
+                                android:gravity="center"
+                                android:maxLines="1"
+                                android:minHeight="28dp"
+                                android:minWidth="64dp"
+                                android:paddingStart="9dp"
+                                android:paddingEnd="9dp"
+                                android:textColor="@color/text_primary"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/loginErrorTitle"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="10dp"
+                                android:layout_weight="1"
+                                android:maxLines="2"
+                                android:text="@string/login_error_heading"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/loginErrorHelp"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="7dp"
+                            android:maxLines="3"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+
+                    <!-- Fixed-height CTA shell keeps the card stable while loading. -->
+                    <FrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="56dp"
+                        android:layout_marginTop="@dimen/space_l"
+                        android:clipChildren="false"
+                        android:clipToPadding="false">
+
+                        <Button
+                            android:id="@+id/btnConnect"
+                            style="@style/Widget.Iptv.Button"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="@drawable/bg_button_primary"
+                            android:nextFocusUp="@id/inputPassword"
+                            android:paddingStart="56dp"
+                            android:paddingEnd="56dp"
+                            android:text="@string/action_connect"
+                            android:textAllCaps="false"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold" />
+
+                        <ProgressBar
+                            android:id="@+id/progress"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:layout_gravity="end|center_vertical"
+                            android:layout_marginEnd="18dp"
+                            android:importantForAccessibility="no"
+                            android:indeterminateTint="@color/text_primary"
+                            android:visibility="gone" />
+                    </FrameLayout>
+
+                    <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/action_connect"
-                        android:layout_marginTop="@dimen/space_l"
-                        android:nextFocusUp="@id/inputPassword" />
-
-                    <ProgressBar
-                        android:id="@+id/progress"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center_horizontal"
-                        android:layout_marginTop="@dimen/space_m"
-                        android:visibility="gone" />
+                        android:layout_marginTop="12dp"
+                        android:drawableStart="@drawable/ic_lock"
+                        android:drawablePadding="7dp"
+                        android:gravity="center_vertical"
+                        android:lineSpacingExtra="1dp"
+                        android:maxLines="2"
+                        android:text="@string/login_security_note"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
                 </LinearLayout>
             </LinearLayout>
         </ScrollView>

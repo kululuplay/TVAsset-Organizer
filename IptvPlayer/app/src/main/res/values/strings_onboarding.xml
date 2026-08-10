@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="error_missing_credentials">Enter your username and password.</string>
+    <string name="error_access_denied">You do not have permission to access this service.</string>
+    <string name="error_account_disabled">Your account has been disabled. Contact your provider.</string>
+    <string name="error_service_not_found">The login service could not be found.</string>
+    <string name="error_request_timeout">The server did not respond in time.</string>
+    <string name="error_too_many_requests">Too many login attempts. Please wait and try again.</string>
+    <string name="error_server_unavailable">The service is temporarily unavailable. Please try again later.</string>
+    <string name="error_secure_connection_failed">A secure connection could not be established. Check your device date and time.</string>
+
+    <string name="onboarding_secure_badge">Secure connection</string>
+    <string name="onboarding_tv_ready">Built for TV &amp; remote</string>
+
+    <string name="login_eyebrow">WELCOME BACK</string>
+    <string name="login_hero_title">Your entertainment, ready when you are</string>
+    <string name="login_hero_body">Enjoy secure, effortless access to live TV, movies, and series.</string>
+    <string name="login_feature_live_title">Live TV</string>
+    <string name="login_feature_live_body">Watch your channels with fast, fluid navigation.</string>
+    <string name="login_feature_vod_title">Movies &amp; series</string>
+    <string name="login_feature_vod_body">Pick up where you left off across your library.</string>
+    <string name="login_feature_profiles_title">Personal profiles</string>
+    <string name="login_feature_profiles_body">Keep favorites and watch history organized for everyone.</string>
+    <string name="login_secure_endpoint">Securely connected to Kululu</string>
+    <string name="login_field_username">Username</string>
+    <string name="login_field_password">Password</string>
+    <string name="login_show_password">Show password</string>
+    <string name="login_hide_password">Hide password</string>
+    <string name="login_error_heading">We couldn\'t sign you in</string>
+    <string name="login_error_code_http">Error code: HTTP %1$d</string>
+    <string name="login_error_help_input">Enter both your username and password.</string>
+    <string name="login_error_help_credentials">Check your username and password, then try again.</string>
+    <string name="login_error_help_access">Your account is not authorized for this service. Contact your provider.</string>
+    <string name="login_error_help_subscription">Renew your subscription or contact your provider.</string>
+    <string name="login_error_help_service">The login service is unavailable at this address. Contact support if the issue continues.</string>
+    <string name="login_error_help_timeout">Check your connection and try again.</string>
+    <string name="login_error_help_rate_limit">Wait a moment before trying again.</string>
+    <string name="login_error_help_server">The service is having a temporary problem. Try again shortly.</string>
+    <string name="login_error_help_tls">Check your device date and time, then update the app or system if needed.</string>
+    <string name="login_error_help_network">Make sure this device is connected to the internet.</string>
+    <string name="login_error_help_account_in_use">Stop playback on your other device, then try again.</string>
+    <string name="login_error_help_generic">Try again. If the problem continues, contact support.</string>
+    <string name="login_security_note">Your credentials are encrypted and sent only over a secure connection.</string>
+
+    <string name="wizard_intro_eyebrow">WELCOME TO KULULU</string>
+    <string name="wizard_intro_title">A better way to watch</string>
+    <string name="wizard_intro_body">Set up your language and connection in a few simple steps.</string>
+    <string name="wizard_step_welcome_label">Welcome</string>
+    <string name="wizard_step_language_label">Language</string>
+    <string name="wizard_step_connect_label">Connect</string>
+    <string name="wizard_eyebrow_welcome">STEP 1 · WELCOME</string>
+    <string name="wizard_eyebrow_language">STEP 2 · LANGUAGE</string>
+    <string name="wizard_eyebrow_connect">STEP 3 · CONNECT</string>
+    <string name="wizard_welcome_helper">A polished TV experience designed for your remote and the whole family.</string>
+    <string name="wizard_connect_helper">You\'re all set. Continue to secure sign-in to connect your account.</string>
+    <string name="wizard_connect_secure_title">Secure by default</string>
+    <string name="wizard_connect_secure_body">Your sign-in uses an encrypted HTTPS connection.</string>
+    <string name="wizard_connect_private_title">Your account stays private</string>
+    <string name="wizard_connect_private_body">Credentials are protected on this device and never shown in diagnostics.</string>
+    <string name="wizard_cta_start">Get started</string>
+    <string name="wizard_cta_confirm_language">Confirm language</string>
+    <string name="wizard_cta_open_login">Continue to sign in</string>
+    <string name="wizard_language_selected">Language selected</string>
+    <string name="wizard_error_save_language">Language preference couldn\'t be saved. Please try again.</string>
+    <string name="wizard_error_finish">Setup couldn\'t be completed. Please try again.</string>
+    <string name="wizard_status_saving">Saving language…</string>
+    <string name="wizard_status_finishing">Finishing setup…</string>
+</resources>

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="error_missing_credentials">Saisissez votre nom d\'utilisateur et votre mot de passe.</string>
+    <string name="error_access_denied">Vous n\'êtes pas autorisé à accéder à ce service.</string>
+    <string name="error_account_disabled">Votre compte a été désactivé. Contactez votre fournisseur.</string>
+    <string name="error_service_not_found">Le service de connexion est introuvable.</string>
+    <string name="error_request_timeout">Le serveur n\'a pas répondu à temps.</string>
+    <string name="error_too_many_requests">Trop de tentatives de connexion. Patientez, puis réessayez.</string>
+    <string name="error_server_unavailable">Le service est temporairement indisponible. Veuillez réessayer plus tard.</string>
+    <string name="error_secure_connection_failed">Impossible d\'établir une connexion sécurisée. Vérifiez la date et l\'heure de votre appareil.</string>
+
+    <string name="onboarding_secure_badge">Connexion sécurisée</string>
+    <string name="onboarding_tv_ready">Conçu pour la TV et la télécommande</string>
+
+    <string name="login_eyebrow">HEUREUX DE VOUS REVOIR</string>
+    <string name="login_hero_title">Vos divertissements, prêts quand vous l\'êtes</string>
+    <string name="login_hero_body">Accédez facilement et en toute sécurité à la TV en direct, aux films et aux séries.</string>
+    <string name="login_feature_live_title">TV en direct</string>
+    <string name="login_feature_live_body">Regardez vos chaînes avec une navigation rapide et fluide.</string>
+    <string name="login_feature_vod_title">Films et séries</string>
+    <string name="login_feature_vod_body">Reprenez facilement là où vous vous étiez arrêté dans votre catalogue.</string>
+    <string name="login_feature_profiles_title">Profils personnels</string>
+    <string name="login_feature_profiles_body">Organisez les favoris et l\'historique de visionnage de chaque utilisateur.</string>
+    <string name="login_secure_endpoint">Connexion sécurisée à Kululu</string>
+    <string name="login_field_username">Nom d\'utilisateur</string>
+    <string name="login_field_password">Mot de passe</string>
+    <string name="login_show_password">Afficher le mot de passe</string>
+    <string name="login_hide_password">Masquer le mot de passe</string>
+    <string name="login_error_heading">Connexion impossible</string>
+    <string name="login_error_code_http">Code d\'erreur : HTTP %1$d</string>
+    <string name="login_error_help_input">Saisissez votre nom d\'utilisateur et votre mot de passe.</string>
+    <string name="login_error_help_credentials">Vérifiez votre nom d\'utilisateur et votre mot de passe, puis réessayez.</string>
+    <string name="login_error_help_access">Votre compte n\'est pas autorisé à utiliser ce service. Contactez votre fournisseur.</string>
+    <string name="login_error_help_subscription">Renouvelez votre abonnement ou contactez votre fournisseur.</string>
+    <string name="login_error_help_service">Le service de connexion n\'est pas disponible à cette adresse. Contactez l\'assistance si le problème persiste.</string>
+    <string name="login_error_help_timeout">Vérifiez votre connexion, puis réessayez.</string>
+    <string name="login_error_help_rate_limit">Patientez un instant avant de réessayer.</string>
+    <string name="login_error_help_server">Le service rencontre un problème temporaire. Réessayez dans quelques instants.</string>
+    <string name="login_error_help_tls">Vérifiez la date et l\'heure de votre appareil, puis mettez à jour l\'application ou le système si nécessaire.</string>
+    <string name="login_error_help_network">Assurez-vous que cet appareil est connecté à Internet.</string>
+    <string name="login_error_help_account_in_use">Arrêtez la lecture sur votre autre appareil, puis réessayez.</string>
+    <string name="login_error_help_generic">Réessayez. Si le problème persiste, contactez l\'assistance.</string>
+    <string name="login_security_note">Vos identifiants sont chiffrés et transmis uniquement via une connexion sécurisée.</string>
+
+    <string name="wizard_intro_eyebrow">BIENVENUE SUR KULULU</string>
+    <string name="wizard_intro_title">Une meilleure façon de regarder</string>
+    <string name="wizard_intro_body">Configurez votre langue et votre connexion en quelques étapes simples.</string>
+    <string name="wizard_step_welcome_label">Bienvenue</string>
+    <string name="wizard_step_language_label">Langue</string>
+    <string name="wizard_step_connect_label">Connexion</string>
+    <string name="wizard_eyebrow_welcome">ÉTAPE 1 · BIENVENUE</string>
+    <string name="wizard_eyebrow_language">ÉTAPE 2 · LANGUE</string>
+    <string name="wizard_eyebrow_connect">ÉTAPE 3 · CONNEXION</string>
+    <string name="wizard_welcome_helper">Une expérience TV soignée, pensée pour votre télécommande et toute la famille.</string>
+    <string name="wizard_connect_helper">Tout est prêt. Poursuivez vers la connexion sécurisée pour associer votre compte.</string>
+    <string name="wizard_connect_secure_title">Sécurisé par défaut</string>
+    <string name="wizard_connect_secure_body">Votre connexion utilise une liaison HTTPS chiffrée.</string>
+    <string name="wizard_connect_private_title">Votre compte reste privé</string>
+    <string name="wizard_connect_private_body">Vos identifiants sont protégés sur cet appareil et ne figurent jamais dans les diagnostics.</string>
+    <string name="wizard_cta_start">Commencer</string>
+    <string name="wizard_cta_confirm_language">Confirmer la langue</string>
+    <string name="wizard_cta_open_login">Continuer vers la connexion</string>
+    <string name="wizard_language_selected">Langue sélectionnée</string>
+    <string name="wizard_error_save_language">La préférence de langue n\'a pas pu être enregistrée. Veuillez réessayer.</string>
+    <string name="wizard_error_finish">La configuration n\'a pas pu être terminée. Veuillez réessayer.</string>
+    <string name="wizard_status_saving">Enregistrement de la langue…</string>
+    <string name="wizard_status_finishing">Finalisation de la configuration…</string>
+</resources>

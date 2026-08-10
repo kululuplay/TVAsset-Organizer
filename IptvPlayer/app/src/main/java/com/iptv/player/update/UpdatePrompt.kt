@@ -14,6 +14,7 @@ import android.view.View
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
 import androidx.lifecycle.lifecycleScope
 import com.iptv.player.BuildConfig
 import com.iptv.player.R
@@ -73,21 +74,26 @@ object UpdatePrompt {
         view.findViewById<TextView>(R.id.updateVersion).text =
             activity.getString(R.string.update_version_tag, info.versionName)
         view.findViewById<TextView>(R.id.updateMessage).text =
-            activity.getString(R.string.update_available_message, info.versionName)
+            activity.getString(R.string.update_version_ready, info.versionName)
 
         val notesView = view.findViewById<TextView>(R.id.updateNotes)
         val notesScroll = view.findViewById<View>(R.id.updateNotesScroll)
-        val notes = info.notes?.trim()
-        if (!notes.isNullOrEmpty()) {
-            notesView.text = notes
-            notesScroll.visibility = View.VISIBLE
-        }
+        notesView.text = info.notes?.trim()
+            ?: activity.getString(R.string.update_notes_fallback)
+        notesScroll.visibility = View.VISIBLE
+        ViewCompat.setAccessibilityHeading(view.findViewById(R.id.updateTitle), true)
+        ViewCompat.setAccessibilityHeading(view.findViewById(R.id.updateNotesHeading), true)
+        ViewCompat.setAccessibilityPaneTitle(
+            view,
+            activity.getString(R.string.update_available_title),
+        )
 
         val dialog = AlertDialog.Builder(activity, R.style.ThemeOverlay_Iptv_Dialog)
             .setView(view)
             .create()
 
         val updateNow = view.findViewById<View>(R.id.updateNowButton)
+        val updateLater = view.findViewById<View>(R.id.updateLaterButton)
         updateNow.setOnClickListener {
             dialog.dismiss()
             activity.startActivity(
@@ -95,11 +101,25 @@ object UpdatePrompt {
                     .putExtra(AboutActivity.EXTRA_AUTO_CHECK, true)
             )
         }
-        view.findViewById<View>(R.id.updateLaterButton).setOnClickListener {
+        updateLater.setOnClickListener {
             dialog.dismiss()
         }
 
+        if (activity.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL) {
+            updateLater.nextFocusLeftId = updateNow.id
+            updateNow.nextFocusRightId = updateLater.id
+        } else {
+            updateLater.nextFocusRightId = updateNow.id
+            updateNow.nextFocusLeftId = updateLater.id
+        }
+
         dialog.show()
+        view.apply {
+            alpha = 0f
+            scaleX = 0.97f
+            scaleY = 0.97f
+            animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(180L).start()
+        }
         updateNow.requestFocus()
     }
 }

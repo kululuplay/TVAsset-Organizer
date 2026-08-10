@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="error_missing_credentials">Kullanıcı adınızı ve şifrenizi girin.</string>
+    <string name="error_access_denied">Bu hizmete erişim yetkiniz yok.</string>
+    <string name="error_account_disabled">Hesabınız devre dışı bırakılmış. Sağlayıcınızla iletişime geçin.</string>
+    <string name="error_service_not_found">Giriş hizmeti bulunamadı.</string>
+    <string name="error_request_timeout">Sunucu zamanında yanıt vermedi.</string>
+    <string name="error_too_many_requests">Çok fazla giriş denemesi yapıldı. Lütfen bekleyip tekrar deneyin.</string>
+    <string name="error_server_unavailable">Hizmet geçici olarak kullanılamıyor. Lütfen daha sonra tekrar deneyin.</string>
+    <string name="error_secure_connection_failed">Güvenli bağlantı kurulamadı. Cihazınızın tarih ve saatini kontrol edin.</string>
+
+    <string name="onboarding_secure_badge">Güvenli bağlantı</string>
+    <string name="onboarding_tv_ready">TV ve kumanda için tasarlandı</string>
+
+    <string name="login_eyebrow">TEKRAR HOŞ GELDİNİZ</string>
+    <string name="login_hero_title">Eğlence dünyanız, dilediğiniz an hazır</string>
+    <string name="login_hero_body">Canlı yayınlarınıza, film ve dizilerinize güvenli ve zahmetsizce ulaşın.</string>
+    <string name="login_feature_live_title">Canlı TV</string>
+    <string name="login_feature_live_body">Kanallarınızı hızlı ve akıcı bir deneyimle izleyin.</string>
+    <string name="login_feature_vod_title">Film ve diziler</string>
+    <string name="login_feature_vod_body">Kaldığınız yerden devam edin, tüm arşivinizi kolayca keşfedin.</string>
+    <string name="login_feature_profiles_title">Kişisel profiller</string>
+    <string name="login_feature_profiles_body">Favorileri ve izleme geçmişini herkes için düzenli tutun.</string>
+    <string name="login_secure_endpoint">Kululu’ya güvenli bağlantı</string>
+    <string name="login_field_username">Kullanıcı adı</string>
+    <string name="login_field_password">Şifre</string>
+    <string name="login_show_password">Şifreyi göster</string>
+    <string name="login_hide_password">Şifreyi gizle</string>
+    <string name="login_error_heading">Oturum açılamadı</string>
+    <string name="login_error_code_http">Hata kodu: HTTP %1$d</string>
+    <string name="login_error_help_input">Kullanıcı adınızı ve şifrenizi eksiksiz girin.</string>
+    <string name="login_error_help_credentials">Kullanıcı adınızı ve şifrenizi kontrol edip tekrar deneyin.</string>
+    <string name="login_error_help_access">Hesabınızın bu hizmet için erişim yetkisi yok. Sağlayıcınızla iletişime geçin.</string>
+    <string name="login_error_help_subscription">Aboneliğinizi yenileyin veya sağlayıcınızla iletişime geçin.</string>
+    <string name="login_error_help_service">Giriş hizmetine bu adresten ulaşılamıyor. Sorun devam ederse destek ekibiyle iletişime geçin.</string>
+    <string name="login_error_help_timeout">Bağlantınızı kontrol edip tekrar deneyin.</string>
+    <string name="login_error_help_rate_limit">Tekrar denemeden önce kısa bir süre bekleyin.</string>
+    <string name="login_error_help_server">Hizmette geçici bir sorun var. Lütfen kısa süre sonra tekrar deneyin.</string>
+    <string name="login_error_help_tls">Cihazınızın tarih ve saatini kontrol edin; gerekirse uygulamayı veya sistemi güncelleyin.</string>
+    <string name="login_error_help_network">Bu cihazın internete bağlı olduğundan emin olun.</string>
+    <string name="login_error_help_account_in_use">Diğer cihazınızdaki oynatmayı durdurup tekrar deneyin.</string>
+    <string name="login_error_help_generic">Tekrar deneyin. Sorun devam ederse destek ekibiyle iletişime geçin.</string>
+    <string name="login_security_note">Giriş bilgileriniz şifrelenir ve yalnızca güvenli bağlantı üzerinden gönderilir.</string>
+
+    <string name="wizard_intro_eyebrow">KULULU’YA HOŞ GELDİNİZ</string>
+    <string name="wizard_intro_title">İzlemenin daha iyi yolu</string>
+    <string name="wizard_intro_body">Dilinizi ve bağlantınızı birkaç kolay adımda ayarlayın.</string>
+    <string name="wizard_step_welcome_label">Karşılama</string>
+    <string name="wizard_step_language_label">Dil</string>
+    <string name="wizard_step_connect_label">Bağlantı</string>
+    <string name="wizard_eyebrow_welcome">1. ADIM · KARŞILAMA</string>
+    <string name="wizard_eyebrow_language">2. ADIM · DİL</string>
+    <string name="wizard_eyebrow_connect">3. ADIM · BAĞLANTI</string>
+    <string name="wizard_welcome_helper">Kumandanız ve tüm aileniz için tasarlanmış özenli bir TV deneyimi.</string>
+    <string name="wizard_connect_helper">Her şey hazır. Hesabınızı bağlamak için güvenli giriş ekranına geçin.</string>
+    <string name="wizard_connect_secure_title">Varsayılan olarak güvenli</string>
+    <string name="wizard_connect_secure_body">Oturum açma işleminiz şifreli HTTPS bağlantısı kullanır.</string>
+    <string name="wizard_connect_private_title">Hesabınız size özel kalır</string>
+    <string name="wizard_connect_private_body">Giriş bilgileriniz bu cihazda korunur ve tanılama kayıtlarında gösterilmez.</string>
+    <string name="wizard_cta_start">Başlayın</string>
+    <string name="wizard_cta_confirm_language">Dili onayla</string>
+    <string name="wizard_cta_open_login">Giriş ekranına geç</string>
+    <string name="wizard_language_selected">Dil seçildi</string>
+    <string name="wizard_error_save_language">Dil tercihi kaydedilemedi. Lütfen tekrar deneyin.</string>
+    <string name="wizard_error_finish">Kurulum tamamlanamadı. Lütfen tekrar deneyin.</string>
+    <string name="wizard_status_saving">Dil kaydediliyor…</string>
+    <string name="wizard_status_finishing">Kurulum tamamlanıyor…</string>
+</resources>

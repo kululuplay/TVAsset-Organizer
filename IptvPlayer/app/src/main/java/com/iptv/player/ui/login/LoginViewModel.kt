@@ -23,7 +23,10 @@ class LoginViewModel : ViewModel() {
         data object Idle : State()
         data object Loading : State()
         data object Success : State()
-        data class Error(val error: AppError) : State()
+        data class Error(
+            val error: AppError,
+            val httpStatus: Int? = null,
+        ) : State()
     }
 
     private val repo = ServiceLocator.repository
@@ -34,7 +37,7 @@ class LoginViewModel : ViewModel() {
 
     fun loginXtream(serverUrl: String, username: String, password: String) {
         if (serverUrl.isBlank() || username.isBlank() || password.isBlank()) {
-            _state.value = State.Error(AppError.BAD_CREDENTIALS)
+            _state.value = State.Error(AppError.MISSING_CREDENTIALS)
             return
         }
         val config = SourceConfig(
@@ -61,6 +64,7 @@ class LoginViewModel : ViewModel() {
     }
 
     private fun submit(config: SourceConfig) {
+        if (_state.value is State.Loading) return
         _state.value = State.Loading
         viewModelScope.launch {
             // Final safety net: nothing here may escape and crash the app. The repo
@@ -69,7 +73,10 @@ class LoginViewModel : ViewModel() {
             // here so the user always sees an error instead of the app closing.
             try {
                 when (val test = repo.testSource(config)) {
-                    is Outcome.Failure -> _state.value = State.Error(test.error)
+                    is Outcome.Failure -> _state.value = State.Error(
+                        error = test.error,
+                        httpStatus = test.httpStatus,
+                    )
                     is Outcome.Success -> {
                         settings.saveSource(config)
                         // Mirror the logged-in account into the Profiles list (reusing an
@@ -92,6 +99,6 @@ class LoginViewModel : ViewModel() {
     private fun normalizeUrl(url: String): String {
         val trimmed = url.trim()
         return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) trimmed
-        else "http://$trimmed"
+        else "https://$trimmed"
     }
 }

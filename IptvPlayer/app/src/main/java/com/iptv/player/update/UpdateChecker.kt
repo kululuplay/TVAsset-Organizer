@@ -82,17 +82,10 @@ class UpdateChecker(private val httpClient: OkHttpClient) {
                     versionName = tag.removePrefix("v").removePrefix("V"),
                     apkUrl = apkUrl?.takeIf { it.isNotBlank() },
                     releaseUrl = json.optString("html_url"),
-                    // The CI publishes a generic "Automated build from commit
-                    // <sha>." body; that is noise to end users, so it is hidden
-                    // from the update popup. Only genuine, human-written notes are
-                    // shown. (Filtering here instead of in the workflow keeps the
-                    // .github/workflows file untouched — pushing a workflow change
-                    // requires an OAuth token with the `workflow` scope.)
-                    notes = json.optString("body")
-                        .takeIf { it.isNotBlank() }
-                        ?.takeUnless {
-                            it.trim().startsWith("Automated build from commit", ignoreCase = true)
-                        }
+                    // Keep CI metadata, commit ids, URLs and raw Markdown out of
+                    // the customer-facing TV prompt. A localized fallback is used
+                    // when no safe human-written lines remain.
+                    notes = ReleaseNotesPolicy.customerFacing(json.optString("body"))
                 )
 
                 if (isNewer(info.versionName, currentVersionName)) {

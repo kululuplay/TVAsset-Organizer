@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="error_missing_credentials">Geben Sie Ihren Benutzernamen und Ihr Passwort ein.</string>
+    <string name="error_access_denied">Sie sind nicht berechtigt, auf diesen Dienst zuzugreifen.</string>
+    <string name="error_account_disabled">Ihr Konto wurde deaktiviert. Wenden Sie sich an Ihren Anbieter.</string>
+    <string name="error_service_not_found">Der Anmeldedienst wurde nicht gefunden.</string>
+    <string name="error_request_timeout">Der Server hat nicht rechtzeitig geantwortet.</string>
+    <string name="error_too_many_requests">Zu viele Anmeldeversuche. Bitte warten Sie und versuchen Sie es erneut.</string>
+    <string name="error_server_unavailable">Der Dienst ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut.</string>
+    <string name="error_secure_connection_failed">Es konnte keine sichere Verbindung hergestellt werden. Prüfen Sie Datum und Uhrzeit des Geräts.</string>
+
+    <string name="onboarding_secure_badge">Sichere Verbindung</string>
+    <string name="onboarding_tv_ready">Für TV &amp; Fernbedienung entwickelt</string>
+
+    <string name="login_eyebrow">WILLKOMMEN ZURÜCK</string>
+    <string name="login_hero_title">Ihre Unterhaltung – bereit, wenn Sie es sind</string>
+    <string name="login_hero_body">Genießen Sie sicheren und mühelosen Zugriff auf Live-TV, Filme und Serien.</string>
+    <string name="login_feature_live_title">Live-TV</string>
+    <string name="login_feature_live_body">Sehen Sie Ihre Sender mit schneller, flüssiger Navigation.</string>
+    <string name="login_feature_vod_title">Filme &amp; Serien</string>
+    <string name="login_feature_vod_body">Setzen Sie Ihre Wiedergabe in der gesamten Mediathek nahtlos fort.</string>
+    <string name="login_feature_profiles_title">Persönliche Profile</string>
+    <string name="login_feature_profiles_body">Verwalten Sie Favoriten und Wiedergabeverlauf übersichtlich für alle.</string>
+    <string name="login_secure_endpoint">Sicher mit Kululu verbunden</string>
+    <string name="login_field_username">Benutzername</string>
+    <string name="login_field_password">Passwort</string>
+    <string name="login_show_password">Passwort anzeigen</string>
+    <string name="login_hide_password">Passwort ausblenden</string>
+    <string name="login_error_heading">Anmeldung nicht möglich</string>
+    <string name="login_error_code_http">Fehlercode: HTTP %1$d</string>
+    <string name="login_error_help_input">Geben Sie Ihren Benutzernamen und Ihr Passwort vollständig ein.</string>
+    <string name="login_error_help_credentials">Prüfen Sie Ihren Benutzernamen und Ihr Passwort und versuchen Sie es erneut.</string>
+    <string name="login_error_help_access">Ihr Konto ist für diesen Dienst nicht freigeschaltet. Wenden Sie sich an Ihren Anbieter.</string>
+    <string name="login_error_help_subscription">Verlängern Sie Ihr Abonnement oder wenden Sie sich an Ihren Anbieter.</string>
+    <string name="login_error_help_service">Der Anmeldedienst ist unter dieser Adresse nicht verfügbar. Wenden Sie sich an den Support, wenn das Problem weiterhin besteht.</string>
+    <string name="login_error_help_timeout">Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.</string>
+    <string name="login_error_help_rate_limit">Warten Sie einen Moment, bevor Sie es erneut versuchen.</string>
+    <string name="login_error_help_server">Beim Dienst liegt ein vorübergehendes Problem vor. Versuchen Sie es in Kürze erneut.</string>
+    <string name="login_error_help_tls">Prüfen Sie Datum und Uhrzeit des Geräts und aktualisieren Sie bei Bedarf die App oder das System.</string>
+    <string name="login_error_help_network">Stellen Sie sicher, dass dieses Gerät mit dem Internet verbunden ist.</string>
+    <string name="login_error_help_account_in_use">Beenden Sie die Wiedergabe auf Ihrem anderen Gerät und versuchen Sie es erneut.</string>
+    <string name="login_error_help_generic">Versuchen Sie es erneut. Wenden Sie sich an den Support, wenn das Problem weiterhin besteht.</string>
+    <string name="login_security_note">Ihre Zugangsdaten werden verschlüsselt und nur über eine sichere Verbindung übertragen.</string>
+
+    <string name="wizard_intro_eyebrow">WILLKOMMEN BEI KULULU</string>
+    <string name="wizard_intro_title">Fernsehen auf die bessere Art</string>
+    <string name="wizard_intro_body">Richten Sie Sprache und Verbindung in wenigen einfachen Schritten ein.</string>
+    <string name="wizard_step_welcome_label">Willkommen</string>
+    <string name="wizard_step_language_label">Sprache</string>
+    <string name="wizard_step_connect_label">Verbinden</string>
+    <string name="wizard_eyebrow_welcome">SCHRITT 1 · WILLKOMMEN</string>
+    <string name="wizard_eyebrow_language">SCHRITT 2 · SPRACHE</string>
+    <string name="wizard_eyebrow_connect">SCHRITT 3 · VERBINDEN</string>
+    <string name="wizard_welcome_helper">Ein hochwertiges TV-Erlebnis für Ihre Fernbedienung und die ganze Familie.</string>
+    <string name="wizard_connect_helper">Alles ist bereit. Fahren Sie mit der sicheren Anmeldung fort, um Ihr Konto zu verbinden.</string>
+    <string name="wizard_connect_secure_title">Standardmäßig sicher</string>
+    <string name="wizard_connect_secure_body">Ihre Anmeldung erfolgt über eine verschlüsselte HTTPS-Verbindung.</string>
+    <string name="wizard_connect_private_title">Ihr Konto bleibt privat</string>
+    <string name="wizard_connect_private_body">Ihre Zugangsdaten sind auf diesem Gerät geschützt und werden nie in Diagnosedaten angezeigt.</string>
+    <string name="wizard_cta_start">Jetzt starten</string>
+    <string name="wizard_cta_confirm_language">Sprache bestätigen</string>
+    <string name="wizard_cta_open_login">Weiter zur Anmeldung</string>
+    <string name="wizard_language_selected">Sprache ausgewählt</string>
+    <string name="wizard_error_save_language">Die Spracheinstellung konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.</string>
+    <string name="wizard_error_finish">Die Einrichtung konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut.</string>
+    <string name="wizard_status_saving">Sprache wird gespeichert…</string>
+    <string name="wizard_status_finishing">Einrichtung wird abgeschlossen…</string>
+</resources>

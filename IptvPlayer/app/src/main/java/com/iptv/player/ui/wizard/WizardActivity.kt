@@ -1,22 +1,19 @@
 /*
  * WizardActivity.kt
- * First-run setup wizard. Three steps on a single, cinematic split screen:
- *   0) Welcome
- *   1) Language pick (writes settings.setLanguageTag) — a two-column grid of
- *      native language names, the same six the app ships translations for.
- *   2) Connect prompt
- * On finish it marks settings.setWizardDone(true) and opens LoginActivity.
- * Fully D-pad driven; reuses the wizard_* strings and the brand button styles.
+ * Premium three-step, TV-first onboarding. The UI intentionally uses only
+ * lightweight XML surfaces and short animations so low-power sticks remain
+ * responsive. Dynamic language choices receive an explicit D-pad focus graph.
  */
 package com.iptv.player.ui.wizard
 
 import android.animation.AnimatorInflater
 import android.content.Intent
 import android.os.Bundle
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.widget.CheckedTextView
 import android.widget.GridLayout
-import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.iptv.player.R
@@ -32,10 +29,13 @@ class WizardActivity : BaseActivity() {
 
     private lateinit var binding: ActivityWizardBinding
 
+    private val languageOptions = mutableListOf<CheckedTextView>()
     private val totalSteps = 3
     private var step = 0
-    private var selectedLanguage: String = ""
+    private var selectedLanguage = ""
     private var savingLanguage = false
+    private var finishingWizard = false
+    private var renderedOnce = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,11 +48,11 @@ class WizardActivity : BaseActivity() {
             ?: ServiceLocator.settings.languageTagBlocking()
 
         buildLanguageOptions()
-
         binding.btnBack.setOnClickListener { goBack() }
         binding.btnNext.setOnClickListener { goNext() }
 
-        render()
+        render(animate = false)
+        animateEntrance()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -63,188 +63,322 @@ class WizardActivity : BaseActivity() {
 
     private fun buildLanguageOptions() {
         binding.languageGroup.removeAllViews()
-        // "System default" spans the full row, then each supported language sits
-        // in a tidy two-column grid (en | tr, de | fr, nl | ar).
-        addLanguageRow("", getString(R.string.wizard_language_system), span = 2)
+        languageOptions.clear()
+        addLanguageOption("", getString(R.string.wizard_language_system), span = 2)
         LocaleManager.SUPPORTED.forEach { tag ->
-            addLanguageRow(tag, LocaleManager.displayName(tag))
+            addLanguageOption(tag, LocaleManager.displayName(tag))
         }
+        updateLanguageSelection()
+        linkLanguageFocusGraph()
     }
 
-    private fun addLanguageRow(tag: String, label: String, span: Int = 1) {
-        val chip = TextView(this).apply {
+    private fun addLanguageOption(tag: String, label: String, span: Int = 1) {
+        val option = CheckedTextView(this).apply {
+            id = View.generateViewId()
             text = label
             setTextColor(ContextCompat.getColor(this@WizardActivity, R.color.text_primary))
-            textSize = resources.getDimension(R.dimen.text_body) /
-                resources.displayMetrics.scaledDensity
-            gravity = Gravity.CENTER
-            setBackgroundResource(R.drawable.bg_card_selectable)
+            setTextSize(
+                TypedValue.COMPLEX_UNIT_PX,
+                resources.getDimension(R.dimen.text_caption),
+            )
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundResource(R.drawable.bg_wizard_language_option)
+            setCheckMarkDrawable(null)
+            isClickable = true
             isFocusable = true
             isFocusableInTouchMode = false
+            minHeight = resources.getDimensionPixelSize(R.dimen.wizard_chip_min_height)
             stateListAnimator = AnimatorInflater.loadStateListAnimator(
                 this@WizardActivity,
                 R.animator.control_focus,
             )
-            minHeight = resources.getDimensionPixelSize(R.dimen.wizard_chip_min_height)
-            val pad = resources.getDimensionPixelSize(R.dimen.space_m)
-            setPadding(pad, pad, pad, pad)
+            val horizontal = resources.getDimensionPixelSize(R.dimen.space_m)
+            val vertical = resources.getDimensionPixelSize(R.dimen.space_s)
+            setPaddingRelative(horizontal, vertical, horizontal, vertical)
             setOnClickListener {
+                if (savingLanguage || finishingWizard) return@setOnClickListener
                 selectedLanguage = tag
-                highlightLanguage()
-                // On TV the natural gesture is "focus a language, press OK" — so
-                // picking a language confirms it and advances immediately rather
-                // than forcing the user to D-pad down to a separate Next button.
-                goNext()
+                updateLanguageSelection()
+                hideWizardError()
             }
         }
-        // Width 0 + a column weight lets the cells share the row evenly; a
-        // span-2 weight makes the "System default" chip stretch full width.
-        val lp = GridLayout.LayoutParams().apply {
+        option.layoutParams = GridLayout.LayoutParams().apply {
             width = 0
             height = GridLayout.LayoutParams.WRAP_CONTENT
             columnSpec = GridLayout.spec(GridLayout.UNDEFINED, span, span.toFloat())
             rowSpec = GridLayout.spec(GridLayout.UNDEFINED)
-            val m = resources.getDimensionPixelSize(R.dimen.space_xs)
-            setMargins(m, m, m, m)
+            val margin = resources.getDimensionPixelSize(R.dimen.space_xs)
+            setMargins(margin, margin, margin, margin)
         }
-        chip.layoutParams = lp
-        chip.tag = tag
-        binding.languageGroup.addView(chip)
+        option.tag = tag
+        languageOptions += option
+        binding.languageGroup.addView(option)
     }
 
-    private fun highlightLanguage() {
-        for (i in 0 until binding.languageGroup.childCount) {
-            val child = binding.languageGroup.getChildAt(i)
-            child.isSelected = (child.tag as? String) == selectedLanguage
-        }
-    }
-
-    /** Lights the dot for the current step and stretches it into a pill. */
-    private fun renderDots() {
-        val dots = listOf(binding.dot0, binding.dot1, binding.dot2)
-        dots.forEachIndexed { i, dot ->
-            dot.isSelected = i == step
-            val lp = dot.layoutParams
-            lp.width = resources.getDimensionPixelSize(
-                if (i == step) R.dimen.wizard_dot_active else R.dimen.wizard_dot_inactive
+    private fun updateLanguageSelection() {
+        languageOptions.forEach { option ->
+            val selected = (option.tag as? String) == selectedLanguage
+            option.isChecked = selected
+            option.isSelected = selected
+            option.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                0,
+                0,
+                if (selected) R.drawable.ic_check else 0,
+                0,
             )
-            dot.layoutParams = lp
+            option.compoundDrawablePadding = resources.getDimensionPixelSize(R.dimen.space_s)
+            option.contentDescription = if (selected) {
+                "${getString(R.string.wizard_language_selected)}: ${option.text}"
+            } else {
+                option.text
+            }
         }
     }
 
-    private fun render() {
-        renderDots()
-        binding.stepCounter.text = getString(
-            R.string.wizard_step_indicator,
-            step + 1,
-            totalSteps,
-        )
+    /** Explicit navigation prevents OEM focus-search differences and handles RTL. */
+    private fun linkLanguageFocusGraph() {
+        if (languageOptions.size < EXPECTED_LANGUAGE_OPTION_COUNT) return
+        val system = languageOptions[0]
+        system.nextFocusDownId = languageOptions[1].id
+
+        val rows = listOf(1 to 2, 3 to 4, 5 to 6)
+        rows.forEachIndexed { rowIndex, (firstIndex, secondIndex) ->
+            val first = languageOptions[firstIndex]
+            val second = languageOptions[secondIndex]
+            val upperFirst = if (rowIndex == 0) system else languageOptions[firstIndex - 2]
+            val upperSecond = if (rowIndex == 0) system else languageOptions[secondIndex - 2]
+            first.nextFocusUpId = upperFirst.id
+            second.nextFocusUpId = upperSecond.id
+            if (rowIndex == rows.lastIndex) {
+                first.nextFocusDownId = binding.btnBack.id
+                second.nextFocusDownId = binding.btnNext.id
+            } else {
+                first.nextFocusDownId = languageOptions[firstIndex + 2].id
+                second.nextFocusDownId = languageOptions[secondIndex + 2].id
+            }
+            linkPhysicalHorizontal(first, second)
+        }
+
+        binding.btnBack.nextFocusUpId = languageOptions[5].id
+        binding.btnNext.nextFocusUpId = languageOptions[6].id
+        val rtl = resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
+        if (rtl) {
+            binding.btnBack.nextFocusLeftId = binding.btnNext.id
+            binding.btnNext.nextFocusRightId = binding.btnBack.id
+        } else {
+            binding.btnBack.nextFocusRightId = binding.btnNext.id
+            binding.btnNext.nextFocusLeftId = binding.btnBack.id
+        }
+    }
+
+    private fun linkPhysicalHorizontal(first: View, second: View) {
+        if (resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL) {
+            first.nextFocusLeftId = second.id
+            second.nextFocusRightId = first.id
+        } else {
+            first.nextFocusRightId = second.id
+            second.nextFocusLeftId = first.id
+        }
+    }
+
+    private fun renderProgress() {
+        listOf(binding.dot0, binding.dot1, binding.dot2).forEachIndexed { index, dot ->
+            dot.isSelected = index == step
+            dot.layoutParams = dot.layoutParams.apply {
+                width = resources.getDimensionPixelSize(
+                    if (index == step) {
+                        R.dimen.wizard_dot_active
+                    } else {
+                        R.dimen.wizard_dot_inactive
+                    },
+                )
+            }
+        }
+        listOf(binding.railStep0, binding.railStep1, binding.railStep2)
+            .forEachIndexed { index, rail -> rail.isSelected = index == step }
+    }
+
+    private fun render(animate: Boolean = renderedOnce) {
+        hideWizardError()
+        binding.wizardStatus.visibility = View.GONE
+        renderProgress()
+        binding.stepCounter.text = getString(R.string.wizard_step_indicator, step + 1, totalSteps)
+        binding.welcomeHighlights.visibility = View.GONE
         binding.languageScroll.visibility = View.GONE
-        binding.btnBack.visibility = if (step == 0) View.INVISIBLE else View.VISIBLE
+        binding.connectSummary.visibility = View.GONE
+        binding.btnBack.visibility = if (step == 0) View.GONE else View.VISIBLE
 
         when (step) {
-            0 -> {
+            STEP_WELCOME -> {
+                binding.stepIcon.setImageResource(R.drawable.ic_tv)
+                binding.stepEyebrow.setText(R.string.wizard_eyebrow_welcome)
                 binding.stepTitle.setText(R.string.wizard_welcome_title)
                 binding.stepSubtitle.setText(R.string.wizard_welcome_subtitle)
-                binding.btnNext.setText(R.string.wizard_next)
+                binding.welcomeHighlights.visibility = View.VISIBLE
+                binding.btnNext.setText(R.string.wizard_cta_start)
                 binding.btnNext.requestFocus()
             }
-            1 -> {
+            STEP_LANGUAGE -> {
+                binding.stepIcon.setImageResource(R.drawable.ic_globe)
+                binding.stepEyebrow.setText(R.string.wizard_eyebrow_language)
                 binding.stepTitle.setText(R.string.wizard_step_language)
                 binding.stepSubtitle.setText(R.string.wizard_language_subtitle)
                 binding.languageScroll.visibility = View.VISIBLE
-                binding.btnNext.setText(R.string.wizard_next)
-                highlightLanguage()
-                val selected = (0 until binding.languageGroup.childCount)
-                    .map(binding.languageGroup::getChildAt)
-                    .firstOrNull { (it.tag as? String) == selectedLanguage }
-                (selected ?: binding.languageGroup.getChildAt(0))?.requestFocus()
+                binding.btnNext.setText(R.string.wizard_cta_confirm_language)
+                updateLanguageSelection()
+                linkLanguageFocusGraph()
+                (languageOptions.firstOrNull {
+                    (it.tag as? String) == selectedLanguage
+                } ?: languageOptions.firstOrNull())?.requestFocus()
             }
-            2 -> {
+            STEP_CONNECT -> {
+                binding.stepIcon.setImageResource(R.drawable.ic_lock)
+                binding.stepEyebrow.setText(R.string.wizard_eyebrow_connect)
                 binding.stepTitle.setText(R.string.wizard_connect_title)
-                binding.stepSubtitle.setText(R.string.wizard_connect_message)
-                binding.btnNext.setText(R.string.wizard_finish)
+                binding.stepSubtitle.setText(R.string.wizard_connect_helper)
+                binding.connectSummary.visibility = View.VISIBLE
+                binding.btnNext.setText(R.string.wizard_cta_open_login)
                 binding.btnNext.requestFocus()
             }
+        }
+
+        if (animate) animateStepChange()
+        if (renderedOnce) {
+            binding.stepTitle.post {
+                binding.stepTitle.announceForAccessibility(binding.stepTitle.text)
+            }
+        }
+        renderedOnce = true
+    }
+
+    private fun animateEntrance() {
+        val distance = resources.displayMetrics.density * 24f
+        val direction = if (
+            resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
+        ) -1f else 1f
+        binding.wizardHero.apply {
+            alpha = 0f
+            translationX = -distance * direction
+            animate().alpha(1f).translationX(0f).setDuration(280L).start()
+        }
+        binding.wizardCard.apply {
+            alpha = 0f
+            translationX = distance * direction
+            animate().alpha(1f).translationX(0f).setStartDelay(60L).setDuration(300L).start()
+        }
+    }
+
+    private fun animateStepChange() {
+        val distance = resources.displayMetrics.density * 12f
+        binding.stepContent.animate().cancel()
+        binding.stepContent.apply {
+            alpha = 0.62f
+            translationX = distance
+            animate().alpha(1f).translationX(0f).setDuration(190L).start()
         }
     }
 
     private fun goNext() {
-        if (step == 1) {
-            persistLanguageAndAdvance()
-            return
-        }
-        if (step < totalSteps - 1) {
-            step++
-            render()
-        } else {
-            finishWizard()
-        }
-    }
-
-    /**
-     * Persists the locale before leaving the language step. Starting/recreating
-     * the next screen before this suspend write completed made the old language
-     * appear until a second launch. When the locale changed, recreate at step 3
-     * so even the final wizard page immediately uses the selected language.
-     */
-    private fun persistLanguageAndAdvance() {
-        if (savingLanguage) return
-        savingLanguage = true
-        setNavigationEnabled(false)
-        lifecycleScope.launch {
-            val changed =
-                ServiceLocator.settings.languageTagBlocking() != selectedLanguage
-            try {
-                ServiceLocator.settings.setLanguageTag(selectedLanguage)
-            } catch (ce: CancellationException) {
-                throw ce
-            } catch (t: Throwable) {
-                savingLanguage = false
-                setNavigationEnabled(true)
-                return@launch
-            }
-            step = (step + 1).coerceAtMost(totalSteps - 1)
-            if (changed) {
-                recreate()
-            } else {
-                savingLanguage = false
-                setNavigationEnabled(true)
+        if (savingLanguage || finishingWizard) return
+        when (step) {
+            STEP_LANGUAGE -> persistLanguageAndAdvance()
+            STEP_CONNECT -> finishWizard()
+            else -> {
+                step = (step + 1).coerceAtMost(totalSteps - 1)
                 render()
             }
         }
     }
 
-    private fun setNavigationEnabled(enabled: Boolean) {
-        binding.btnBack.isEnabled = enabled
-        binding.btnNext.isEnabled = enabled
-        for (i in 0 until binding.languageGroup.childCount) {
-            binding.languageGroup.getChildAt(i).isEnabled = enabled
-        }
-    }
-
-    private fun goBack() {
-        if (step > 0) {
-            step--
-            render()
+    private fun persistLanguageAndAdvance() {
+        if (savingLanguage || finishingWizard) return
+        savingLanguage = true
+        setWorking(true, R.string.wizard_status_saving)
+        lifecycleScope.launch {
+            val changed = ServiceLocator.settings.languageTagBlocking() != selectedLanguage
+            try {
+                ServiceLocator.settings.setLanguageTag(selectedLanguage)
+                step = STEP_CONNECT
+                if (changed) {
+                    recreate()
+                } else {
+                    savingLanguage = false
+                    setWorking(false)
+                    render()
+                }
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (_: Throwable) {
+                savingLanguage = false
+                setWorking(false)
+                showWizardError(R.string.wizard_error_save_language)
+            }
         }
     }
 
     private fun finishWizard() {
+        if (savingLanguage || finishingWizard) return
+        finishingWizard = true
+        setWorking(true, R.string.wizard_status_finishing)
         lifecycleScope.launch {
-            ServiceLocator.settings.setWizardDone(true)
-            startActivity(Intent(this@WizardActivity, LoginActivity::class.java))
-            finish()
+            try {
+                ServiceLocator.settings.setWizardDone(true)
+                if (!isFinishing) {
+                    startActivity(Intent(this@WizardActivity, LoginActivity::class.java))
+                    finish()
+                }
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (_: Throwable) {
+                finishingWizard = false
+                setWorking(false)
+                showWizardError(R.string.wizard_error_finish)
+            }
         }
     }
 
+    private fun setWorking(working: Boolean, statusText: Int? = null) {
+        binding.wizardStatus.visibility = if (working) View.VISIBLE else View.GONE
+        statusText?.let(binding.wizardStatusText::setText)
+        binding.btnBack.isClickable = !working
+        binding.btnNext.isClickable = !working
+        binding.btnBack.alpha = if (working) 0.72f else 1f
+        binding.btnNext.alpha = if (working) 0.78f else 1f
+        languageOptions.forEach {
+            it.isClickable = !working
+            it.alpha = if (working) 0.72f else 1f
+        }
+    }
+
+    private fun showWizardError(messageRes: Int) {
+        binding.wizardInlineError.setText(messageRes)
+        binding.wizardInlineError.visibility = View.VISIBLE
+        binding.wizardInlineError.announceForAccessibility(binding.wizardInlineError.text)
+        binding.btnNext.requestFocus()
+    }
+
+    private fun hideWizardError() {
+        binding.wizardInlineError.visibility = View.GONE
+    }
+
+    private fun goBack() {
+        if (savingLanguage || finishingWizard || step == STEP_WELCOME) return
+        step--
+        render()
+    }
+
+    @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (savingLanguage) return
-        if (step > 0) goBack() else super.onBackPressed()
+        if (savingLanguage || finishingWizard) return
+        if (step > STEP_WELCOME) goBack() else super.onBackPressed()
     }
 
     companion object {
         private const val STATE_STEP = "wizard_step"
         private const val STATE_LANGUAGE = "wizard_language"
+        private const val STEP_WELCOME = 0
+        private const val STEP_LANGUAGE = 1
+        private const val STEP_CONNECT = 2
+        private const val EXPECTED_LANGUAGE_OPTION_COUNT = 7
     }
 }

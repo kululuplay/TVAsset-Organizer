@@ -164,7 +164,6 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.value }}
           name: Kululu IPTV v${{ steps.version.outputs.value }}
-          body: Automated signed build from commit ${{ github.sha }}.
           make_latest: true
           files: IptvPlayer/release-assets/*.apk
           fail_on_unmatched_files: true
