@@ -32,6 +32,10 @@ data class UpdateInfo(
     val versionName: String,
     /** Direct .apk asset URL, or null when the release has no APK attached. */
     val apkUrl: String?,
+    /** Canonical asset size reported by GitHub, or -1 when unavailable. */
+    val apkSize: Long,
+    /** Canonical lowercase SHA-256 reported by GitHub, or null when unavailable. */
+    val apkSha256: String?,
     val releaseUrl: String,
     val notes: String?
 )
@@ -71,16 +75,22 @@ class UpdateChecker(private val httpClient: OkHttpClient) {
                 val json = candidate.first
                 val tag = candidate.second
 
-                val apkUrl = json.optJSONArray("assets")?.let { assets ->
+                val apkAsset = json.optJSONArray("assets")?.let { assets ->
                     (0 until assets.length())
                         .map { assets.getJSONObject(it) }
                         .firstOrNull { it.optString("name").endsWith(".apk", ignoreCase = true) }
-                        ?.optString("browser_download_url")
                 }
 
                 val info = UpdateInfo(
                     versionName = tag.removePrefix("v").removePrefix("V"),
-                    apkUrl = apkUrl?.takeIf { it.isNotBlank() },
+                    apkUrl = apkAsset?.optString("browser_download_url")
+                        ?.takeIf { it.isNotBlank() },
+                    apkSize = apkAsset?.optLong("size", -1L)
+                        ?.takeIf { it > 0L }
+                        ?: -1L,
+                    apkSha256 = ApkIntegrityPolicy.normalizeSha256(
+                        apkAsset?.optString("digest"),
+                    ),
                     releaseUrl = json.optString("html_url"),
                     // Keep CI metadata, commit ids, URLs and raw Markdown out of
                     // the customer-facing TV prompt. A localized fallback is used

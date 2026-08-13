@@ -78,6 +78,7 @@
     <string name="about_install_permission">Güncellemek için bu kaynaktan uygulama yüklemeye izin verin.</string>
     <string name="about_update_file_missing">İndirilen güncelleme dosyası bulunamadı. Lütfen yeniden indirin.</string>
     <string name="about_update_file_incomplete">Güncelleme eksik indirildi. Lütfen tekrar deneyin.</string>
+    <string name="about_update_checksum_mismatch">Güncellemenin bütünlük kontrolü başarısız oldu. Tekrar deneyin veya farklı bir ağ kullanın. (APK-DIGEST)</string>
     <string name="about_update_storage_low">Güncellemeyi kurmak için yeterli boş alan yok. En az 250 MB alan açıp tekrar deneyin.</string>
     <string name="about_update_invalid_apk">İndirilen dosya geçerli bir Android güncelleme paketi değil.</string>
     <string name="about_update_wrong_package">İndirilen APK farklı bir uygulamaya ait.</string>
