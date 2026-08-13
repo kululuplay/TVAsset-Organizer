@@ -79,6 +79,7 @@
     <string name="about_install_permission">Allow installing apps from this source to update.</string>
     <string name="about_update_file_missing">The downloaded update file is missing. Please download it again.</string>
     <string name="about_update_file_incomplete">The update was not downloaded completely. Please try again.</string>
+    <string name="about_update_checksum_mismatch">The update failed the integrity check. Try again or use a different network. (APK-DIGEST)</string>
     <string name="about_update_storage_low">There is not enough free storage to install the update. Free at least 250 MB and try again.</string>
     <string name="about_update_invalid_apk">The downloaded file is not a valid Android update package.</string>
     <string name="about_update_wrong_package">The downloaded APK belongs to a different application.</string>

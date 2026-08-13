@@ -51,6 +51,7 @@ class AboutActivity : BaseActivity() {
     private var downloadJob: Job? = null
     private var activeCall: Call? = null
     private var downloadExpectedBytes: Long = -1L
+    private var downloadExpectedSha256: String? = null
 
     /**
      * Set when we arrived from the launch-time prompt (EXTRA_AUTO_CHECK). It makes
@@ -167,7 +168,7 @@ class AboutActivity : BaseActivity() {
             ApkInstaller.openInstallPermissionSettings(this)
             return
         }
-        downloadApk(apkUrl)
+        downloadApk(info)
     }
 
     /**
@@ -176,7 +177,7 @@ class AboutActivity : BaseActivity() {
      * updates hop back to the main thread. The active call + job are cancelled in
      * [cancelDownload] / onDestroy, and any partial file is deleted.
      */
-    private fun downloadApk(apkUrl: String) {
+    private fun downloadApk(info: UpdateInfo) {
         val dir = getExternalFilesDir(null)
         if (dir == null) {
             binding.aboutUpdateStatus.visibility = View.VISIBLE
@@ -205,20 +206,23 @@ class AboutActivity : BaseActivity() {
         showProgress(0L, -1L, 0.0)
 
         val outFile = File(dir, "update-${System.currentTimeMillis()}.apk")
-        downloadExpectedBytes = -1L
+        downloadExpectedBytes = info.apkSize
+        downloadExpectedSha256 = info.apkSha256
 
         downloadJob = lifecycleScope.launch {
             val ok = withContext(Dispatchers.IO) {
                 var success = false
                 try {
-                    val request = Request.Builder().url(apkUrl).build()
+                    val request = Request.Builder().url(info.apkUrl.orEmpty()).build()
                     val call = ServiceLocator.httpClient.newCall(request)
                     activeCall = call
                     call.execute().use { resp ->
                         if (!resp.isSuccessful) return@use
                         val body = resp.body ?: return@use
-                        val total = body.contentLength()
-                        downloadExpectedBytes = total
+                        val responseBytes = body.contentLength()
+                        val total = downloadExpectedBytes.takeIf { it > 0L }
+                            ?: responseBytes
+                        if (downloadExpectedBytes <= 0L) downloadExpectedBytes = responseBytes
                         body.byteStream().use { input ->
                             FileOutputStream(outFile).use { output ->
                                 val buffer = ByteArray(64 * 1024)
@@ -249,11 +253,10 @@ class AboutActivity : BaseActivity() {
                                     }
                                 }
                                 output.flush()
-                                if (total > 0L && downloaded != total) {
-                                    throw java.io.IOException(
-                                        "Incomplete APK: expected=$total actual=$downloaded",
-                                    )
-                                }
+                                // A clean EOF can still be a proxy-truncated or
+                                // substituted response. Keep it for the validator,
+                                // which reports the precise size/checksum failure
+                                // and then removes the rejected file.
                             }
                         }
                         success = true
@@ -356,7 +359,7 @@ class AboutActivity : BaseActivity() {
         }
     }
 
-    private fun onDownloadComplete() {
+    private suspend fun onDownloadComplete() {
         val target = downloadFile
         if (target == null || !target.exists()) {
             binding.updateProgressCard.visibility = View.GONE
@@ -373,11 +376,15 @@ class AboutActivity : BaseActivity() {
             return
         }
 
-        when (val validation = ApkInstallValidator.validate(
-            context = this,
-            file = target,
-            expectedSize = downloadExpectedBytes,
-        )) {
+        val validation = withContext(Dispatchers.IO) {
+            ApkInstallValidator.validate(
+                context = this@AboutActivity,
+                file = target,
+                expectedSize = downloadExpectedBytes,
+                expectedSha256 = downloadExpectedSha256,
+            )
+        }
+        when (validation) {
             ApkValidationResult.Valid -> Unit
             is ApkValidationResult.Invalid -> {
                 runCatching { target.delete() }
@@ -412,6 +419,7 @@ class AboutActivity : BaseActivity() {
         val message = when (failure) {
             ApkValidationFailure.MISSING -> R.string.about_update_file_missing
             ApkValidationFailure.INCOMPLETE -> R.string.about_update_file_incomplete
+            ApkValidationFailure.CHECKSUM_MISMATCH -> R.string.about_update_checksum_mismatch
             ApkValidationFailure.INSUFFICIENT_STORAGE -> R.string.about_update_storage_low
             ApkValidationFailure.INVALID_APK -> R.string.about_update_invalid_apk
             ApkValidationFailure.WRONG_PACKAGE -> R.string.about_update_wrong_package

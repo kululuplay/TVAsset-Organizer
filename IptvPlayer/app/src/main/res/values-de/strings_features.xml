@@ -77,6 +77,7 @@
     <string name="about_install_permission">Zum Aktualisieren Installation aus dieser Quelle erlauben.</string>
     <string name="about_update_file_missing">Die heruntergeladene Update-Datei fehlt. Bitte erneut herunterladen.</string>
     <string name="about_update_file_incomplete">Das Update wurde nicht vollständig heruntergeladen. Bitte erneut versuchen.</string>
+    <string name="about_update_checksum_mismatch">Die Integritätsprüfung des Updates ist fehlgeschlagen. Erneut versuchen oder ein anderes Netzwerk verwenden. (APK-DIGEST)</string>
     <string name="about_update_storage_low">Nicht genügend freier Speicher für die Installation. Mindestens 250 MB freigeben und erneut versuchen.</string>
     <string name="about_update_invalid_apk">Die heruntergeladene Datei ist kein gültiges Android-Updatepaket.</string>
     <string name="about_update_wrong_package">Die heruntergeladene APK gehört zu einer anderen Anwendung.</string>

@@ -44,6 +44,44 @@ class ApkInstallPolicyTest {
         )
     }
 
+    @Test
+    fun `verified official digest tolerates missing OEM signer metadata`() {
+        assertNull(
+            evaluate(
+                archiveSigners = emptySet(),
+                installedSigners = emptySet(),
+                artifactDigestVerified = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `missing signer metadata without a verified digest is rejected`() {
+        assertEquals(
+            ApkValidationFailure.INVALID_APK,
+            evaluate(archiveSigners = emptySet()),
+        )
+    }
+
+    @Test
+    fun `verified digest never overrides a real signer mismatch`() {
+        assertEquals(
+            ApkValidationFailure.SIGNATURE_MISMATCH,
+            evaluate(
+                archiveSigners = setOf("different-cert"),
+                artifactDigestVerified = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `GitHub sha256 digest is normalized safely`() {
+        val hex = "ab".repeat(32)
+        assertEquals(hex, ApkIntegrityPolicy.normalizeSha256("sha256:$hex"))
+        assertEquals(hex, ApkIntegrityPolicy.normalizeSha256(hex.uppercase()))
+        assertNull(ApkIntegrityPolicy.normalizeSha256("sha256:not-a-digest"))
+    }
+
     private fun evaluate(
         fileSize: Long = 100,
         expectedSize: Long = 100,
@@ -53,6 +91,7 @@ class ApkInstallPolicyTest {
         installedVersion: Long = 117,
         archiveSigners: Set<String> = signer,
         installedSigners: Set<String> = signer,
+        artifactDigestVerified: Boolean = false,
     ) = ApkInstallPolicy.evaluate(
         fileSize,
         expectedSize,
@@ -62,5 +101,6 @@ class ApkInstallPolicyTest {
         installedVersion,
         archiveSigners,
         installedSigners,
+        artifactDigestVerified,
     )
 }

@@ -11,6 +11,7 @@ import java.security.MessageDigest
 enum class ApkValidationFailure {
     MISSING,
     INCOMPLETE,
+    CHECKSUM_MISMATCH,
     INSUFFICIENT_STORAGE,
     INVALID_APK,
     WRONG_PACKAGE,
@@ -34,6 +35,7 @@ internal object ApkInstallPolicy {
         installedVersionCode: Long,
         archiveSigners: Set<String>,
         installedSigners: Set<String>,
+        artifactDigestVerified: Boolean = false,
     ): ApkValidationFailure? = when {
         fileSize <= 0L -> ApkValidationFailure.MISSING
         expectedSize > 0L && fileSize != expectedSize -> ApkValidationFailure.INCOMPLETE
@@ -41,10 +43,23 @@ internal object ApkInstallPolicy {
             ApkValidationFailure.INSUFFICIENT_STORAGE
         !packageMatches -> ApkValidationFailure.WRONG_PACKAGE
         archiveVersionCode <= installedVersionCode -> ApkValidationFailure.NOT_NEWER
-        archiveSigners.isEmpty() || installedSigners.isEmpty() ->
+        archiveSigners.isNotEmpty() && installedSigners.isNotEmpty() &&
+            archiveSigners != installedSigners -> ApkValidationFailure.SIGNATURE_MISMATCH
+        (archiveSigners.isEmpty() || installedSigners.isEmpty()) &&
+            !artifactDigestVerified ->
             ApkValidationFailure.INVALID_APK
-        archiveSigners != installedSigners -> ApkValidationFailure.SIGNATURE_MISMATCH
         else -> null
+    }
+}
+
+/** Normalizes the digest format returned by the GitHub Releases API. */
+internal object ApkIntegrityPolicy {
+    private val sha256 = Regex("^[0-9a-f]{64}$")
+
+    fun normalizeSha256(raw: String?): String? {
+        val value = raw?.trim()?.lowercase().orEmpty()
+        val hex = if (value.startsWith("sha256:")) value.substringAfter(':') else value
+        return hex.takeIf { sha256.matches(it) }
     }
 }
 
@@ -55,6 +70,7 @@ object ApkInstallValidator {
         context: Context,
         file: File,
         expectedSize: Long = -1L,
+        expectedSha256: String? = null,
     ): ApkValidationResult {
         if (!file.isFile || file.length() <= 0L) {
             return ApkValidationResult.Invalid(ApkValidationFailure.MISSING)
@@ -63,12 +79,24 @@ object ApkInstallValidator {
             return ApkValidationResult.Invalid(ApkValidationFailure.INCOMPLETE)
         }
 
+        val digestVerified = if (!expectedSha256.isNullOrBlank()) {
+            val expected = ApkIntegrityPolicy.normalizeSha256(expectedSha256)
+                ?: return ApkValidationResult.Invalid(ApkValidationFailure.CHECKSUM_MISMATCH)
+            val actual = runCatching { file.sha256() }.getOrNull()
+                ?: return ApkValidationResult.Invalid(ApkValidationFailure.CHECKSUM_MISMATCH)
+            if (actual != expected) {
+                return ApkValidationResult.Invalid(ApkValidationFailure.CHECKSUM_MISMATCH)
+            }
+            true
+        } else {
+            false
+        }
+
         val packageManager = context.packageManager
         val archive = packageInfo(packageManager, file.absolutePath)
             ?: return ApkValidationResult.Invalid(ApkValidationFailure.INVALID_APK)
-        val installed = runCatching {
-            installedPackageInfo(packageManager, context.packageName)
-        }.getOrNull() ?: return ApkValidationResult.Invalid(ApkValidationFailure.INVALID_APK)
+        val installed = installedPackageInfo(packageManager, context.packageName)
+            ?: return ApkValidationResult.Invalid(ApkValidationFailure.INVALID_APK)
 
         val failure = ApkInstallPolicy.evaluate(
             fileSize = file.length(),
@@ -81,6 +109,7 @@ object ApkInstallValidator {
             installedVersionCode = installed.versionCodeCompat(),
             archiveSigners = archive.signerDigests(),
             installedSigners = installed.signerDigests(),
+            artifactDigestVerified = digestVerified,
         )
         return if (failure == null) {
             ApkValidationResult.Valid
@@ -90,21 +119,46 @@ object ApkInstallValidator {
     }
 
     @Suppress("DEPRECATION")
-    private fun packageInfo(packageManager: PackageManager, path: String): PackageInfo? =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            packageManager.getPackageArchiveInfo(path, PackageManager.GET_SIGNING_CERTIFICATES)
+    private fun packageInfo(packageManager: PackageManager, path: String): PackageInfo? {
+        val modern = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            runCatching {
+                packageManager.getPackageArchiveInfo(
+                    path,
+                    PackageManager.GET_SIGNING_CERTIFICATES,
+                )
+            }.getOrNull()
         } else {
-            packageManager.getPackageArchiveInfo(path, PackageManager.GET_SIGNATURES)
+            null
         }
+        if (modern != null && modern.signerDigests().isNotEmpty()) return modern
+
+        val legacy = runCatching {
+            packageManager.getPackageArchiveInfo(path, PackageManager.GET_SIGNATURES)
+        }.getOrNull()
+        return legacy ?: modern
+    }
 
     @Suppress("DEPRECATION")
     private fun installedPackageInfo(
         packageManager: PackageManager,
         packageName: String,
-    ): PackageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
-    } else {
-        packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
+    ): PackageInfo? {
+        val modern = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            runCatching {
+                packageManager.getPackageInfo(
+                    packageName,
+                    PackageManager.GET_SIGNING_CERTIFICATES,
+                )
+            }.getOrNull()
+        } else {
+            null
+        }
+        if (modern != null && modern.signerDigests().isNotEmpty()) return modern
+
+        val legacy = runCatching {
+            packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
+        }.getOrNull()
+        return legacy ?: modern
     }
 
     @Suppress("DEPRECATION")
@@ -114,15 +168,27 @@ object ApkInstallValidator {
 
     @Suppress("DEPRECATION")
     private fun PackageInfo.signerDigests(): Set<String> {
-        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            signingInfo?.apkContentsSigners.orEmpty()
-        } else {
-            this.signatures.orEmpty()
-        }
+        val modernSignatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            runCatching { signingInfo?.apkContentsSigners.orEmpty() }.getOrDefault(emptyArray())
+        } else emptyArray()
+        val signatures = modernSignatures.takeIf { it.isNotEmpty() }
+            ?: this.signatures.orEmpty()
         return signatures.mapTo(linkedSetOf()) { signature ->
             MessageDigest.getInstance("SHA-256")
                 .digest(signature.toByteArray())
                 .joinToString("") { byte -> "%02x".format(byte) }
         }
+    }
+
+    private fun File.sha256(): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        inputStream().buffered().use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            var read: Int
+            while (input.read(buffer).also { read = it } != -1) {
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { byte -> "%02x".format(byte) }
     }
 }
