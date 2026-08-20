@@ -31,6 +31,13 @@ Signer #1 certificate SHA-256 digest: aa:aa:aa:aa:aa:aa:aa:aa:aa:aa:aa:aa:aa:aa:
         with self.assertRaisesRegex(VerificationError, "scheme v2"):
             parse_apksigner(output.replace("v2 scheme", "v9 scheme"))
 
+    def test_accepts_build_tools_certificate_line_prefixes_and_suffixes(self):
+        output = """Verified using v1 scheme (JAR signing): true
+Verified using v2 scheme (APK Signature Scheme v2): true
+INFO  Signer #1 certificate SHA-256 digest: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA (verified)
+"""
+        self.assertEqual(parse_apksigner(output), frozenset({"aa" * 32}))
+
     def test_accepts_signed_monotonic_upgrade(self):
         verify_upgrade(
             self.identity(code=123),
