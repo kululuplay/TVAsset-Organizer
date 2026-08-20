@@ -53,14 +53,25 @@ class VodPlaybackRoutingPolicyTest {
     }
 
     @Test
-    fun `source failures never switch decoder engines`() {
-        assertNull(
+    fun `source failure compatibility route switches engine not decoder`() {
+        assertEquals(
+            Route.VLC_HARDWARE,
             VodPlaybackRoutingPolicy.nextRoute(
                 PlayerMode.AUTO,
                 DecoderMode.AUTO,
                 Route.EXO,
                 Failure.SOURCE,
                 setOf(Route.EXO),
+            ),
+        )
+        assertEquals(
+            Route.EXO,
+            VodPlaybackRoutingPolicy.nextRoute(
+                PlayerMode.AUTO,
+                DecoderMode.AUTO,
+                Route.VLC_SOFTWARE,
+                Failure.SOURCE,
+                setOf(Route.VLC_SOFTWARE),
             ),
         )
     }
@@ -151,6 +162,96 @@ class VodPlaybackRoutingPolicyTest {
                 current = Route.EXO,
                 failure = mapped,
                 tried = setOf(Route.EXO),
+            ),
+        )
+    }
+
+    @Test
+    fun `VLC error uses native counters for decoder and output classification`() {
+        val output = VodPlaybackRoutingPolicy.classifyVlcEncounteredError(
+            evidence = VodPlaybackRoutingPolicy.VlcErrorEvidence(
+                playbackStarted = false,
+                voutSeen = true,
+                decodedVideo = 8,
+                displayedPictures = 0,
+                readBytes = 4096,
+                videoCodec = "hvc1",
+            ),
+            phase = PlaybackFailure.Phase.STARTUP,
+        )
+        assertEquals(PlaybackFailure.Code.VIDEO_OUTPUT_FAILED, output.code)
+
+        val hevcDecoder = VodPlaybackRoutingPolicy.classifyVlcEncounteredError(
+            evidence = VodPlaybackRoutingPolicy.VlcErrorEvidence(
+                playbackStarted = false,
+                voutSeen = false,
+                decodedVideo = 0,
+                displayedPictures = 0,
+                readBytes = 8192,
+                videoCodec = "HEVC",
+            ),
+            phase = PlaybackFailure.Phase.STARTUP,
+        )
+        assertEquals(PlaybackFailure.Code.DECODER_RUNTIME_FAILED, hevcDecoder.code)
+
+        val noEvidence = VodPlaybackRoutingPolicy.classifyVlcEncounteredError(
+            evidence = VodPlaybackRoutingPolicy.VlcErrorEvidence(
+                playbackStarted = false,
+                voutSeen = false,
+                decodedVideo = null,
+                displayedPictures = null,
+                readBytes = null,
+                videoCodec = null,
+            ),
+            phase = PlaybackFailure.Phase.STARTUP,
+        )
+        assertEquals(PlaybackFailure.Code.CONNECTION_FAILED, noEvidence.code)
+    }
+
+    @Test
+    fun `customer errors preserve useful HTTP and playback support codes`() {
+        val range = VodPlaybackRoutingPolicy.customerError(
+            PlaybackFailure(
+                category = PlaybackFailure.Category.SOURCE,
+                code = PlaybackFailure.Code.HTTP_CLIENT_ERROR,
+                httpStatus = 416,
+            ),
+        )
+        assertEquals(VodPlaybackRoutingPolicy.CustomerMessage.RANGE_REJECTED, range.message)
+        assertEquals("HTTP-416", range.supportCode)
+
+        val decoder = VodPlaybackRoutingPolicy.customerError(
+            PlaybackFailure(
+                category = PlaybackFailure.Category.DECODER,
+                code = PlaybackFailure.Code.DECODER_INIT_FAILED,
+                component = PlaybackFailure.Component.VIDEO,
+            ),
+        )
+        assertEquals("VOD-DECODER", decoder.supportCode)
+    }
+
+    @Test
+    fun `redirect policy accepts only HTTP to HTTPS upgrades`() {
+        assertEquals(
+            "https://cdn.example.test/movie.mp4",
+            VodHttpRedirectPolicy.httpsUpgradeTarget(
+                originalUrl = "http://panel.example.test/movie.mp4",
+                status = 302,
+                location = "https://cdn.example.test/movie.mp4",
+            ),
+        )
+        assertNull(
+            VodHttpRedirectPolicy.httpsUpgradeTarget(
+                originalUrl = "https://panel.example.test/movie.mp4",
+                status = 302,
+                location = "http://cdn.example.test/movie.mp4",
+            ),
+        )
+        assertNull(
+            VodHttpRedirectPolicy.httpsUpgradeTarget(
+                originalUrl = "http://panel.example.test/movie.mp4",
+                status = 302,
+                location = "http://cdn.example.test/movie.mp4",
             ),
         )
     }

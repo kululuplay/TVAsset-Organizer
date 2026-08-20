@@ -43,7 +43,9 @@ data class XtreamLiveStream(
     // 1 when the channel supports catch-up / timeshift.
     @SerializedName("tv_archive") val tvArchive: Int?,
     // How many days of archive the server keeps for this channel.
-    @SerializedName("tv_archive_duration") val tvArchiveDuration: Int?
+    @SerializedName("tv_archive_duration") val tvArchiveDuration: Int?,
+    /** Provider/CDN playback URL when the panel exposes one explicitly. */
+    @SerializedName("direct_source") val directSource: String? = null
 )
 
 // ---- VOD ----------------------------------------------------------------
@@ -58,7 +60,8 @@ data class XtreamVodStream(
     @SerializedName("year") val year: String?,
     @SerializedName("container_extension") val containerExtension: String?,
     // Unix timestamp (seconds, as string) when the movie was added to the catalog.
-    @SerializedName("added") val added: String?
+    @SerializedName("added") val added: String?,
+    @SerializedName("direct_source") val directSource: String? = null
 )
 
 data class XtreamVodInfo(
@@ -81,7 +84,8 @@ data class XtreamVodDetail(
 
 data class XtreamMovieData(
     @SerializedName("stream_id") val streamId: String?,
-    @SerializedName("container_extension") val containerExtension: String?
+    @SerializedName("container_extension") val containerExtension: String?,
+    @SerializedName("direct_source") val directSource: String? = null
 )
 
 // ---- Series -------------------------------------------------------------
@@ -129,13 +133,16 @@ data class XtreamEpisode(
     @SerializedName("season") val season: Int?,
     @SerializedName("title") val title: String?,
     @SerializedName("container_extension") val containerExtension: String?,
-    @SerializedName("info") val info: XtreamEpisodeInfo?
+    @SerializedName("info") val info: XtreamEpisodeInfo?,
+    @SerializedName("direct_source") val directSource: String? = null
 )
 
 data class XtreamEpisodeInfo(
     @SerializedName("plot") val plot: String?,
     @SerializedName("duration_secs") val durationSecs: Int?,
-    @SerializedName("movie_image") val movieImage: String?
+    @SerializedName("movie_image") val movieImage: String?,
+    // A few Xtream forks nest direct_source under episode.info.
+    @SerializedName("direct_source") val directSource: String? = null
 )
 
 // ---- EPG ----------------------------------------------------------------

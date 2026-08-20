@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="vod_error_message_with_support_code">%1$s\n\nSupportcode: %2$s</string>
+    <string name="vod_error_authorization">De IPTV-sessie kon niet worden geautoriseerd. Meld u opnieuw aan of controleer uw abonnement.</string>
+    <string name="vod_error_access_denied">De provider heeft afspelen geweigerd. Controleer uw abonnement en limiet voor actieve verbindingen.</string>
+    <string name="vod_error_content_unavailable">Deze film of aflevering is momenteel niet beschikbaar bij de provider.</string>
+    <string name="vod_error_range_rejected">De provider heeft de opgeslagen positie geweigerd. Opnieuw proberen start vanaf het begin.</string>
+    <string name="vod_error_rate_limited">De provider ontving te veel aanvragen. Wacht even en probeer het opnieuw.</string>
+    <string name="vod_error_server_unavailable">De IPTV-provider is tijdelijk niet beschikbaar. Probeer het zo opnieuw.</string>
+    <string name="vod_error_timeout">De provider reageerde niet op tijd. Controleer de verbinding en probeer opnieuw.</string>
+    <string name="vod_error_tls">Er kon geen beveiligde verbinding met de IPTV-provider worden gemaakt.</string>
+    <string name="vod_error_dns">Het adres van de IPTV-provider is niet bereikbaar. Controleer netwerk- of DNS-instellingen.</string>
+    <string name="vod_error_decoder">Dit apparaat kon de video niet decoderen. Probeer de softwaredecoder of neem contact op met support.</string>
+    <string name="vod_error_video_output">De video is gedecodeerd maar kon niet correct op dit apparaat worden weergegeven.</string>
+    <string name="vod_error_source">De stream van de provider kon niet worden geopend. Controleer de verbinding en probeer opnieuw.</string>
+</resources>

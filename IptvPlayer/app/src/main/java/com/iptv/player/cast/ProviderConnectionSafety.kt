@@ -7,28 +7,53 @@ package com.iptv.player.cast
  * result can mean the receiver is already fetching media. Opening another local
  * player in either state can violate a one-connection IPTV subscription. Remote
  * uncertainty is cleared by a definitive Cast session end; an unconfirmed native
- * stop deliberately requires a process restart because no safe completion proof
- * remains after the native operation is quarantined.
+ * stop remains blocked until the exact retired worker proves that cleanup ended.
  */
 internal object ProviderConnectionSafety {
 
     enum class Uncertainty { REMOTE_LOAD_RESULT, LOCAL_NATIVE_STOP }
 
-    @Volatile
-    private var uncertainty: Uncertainty? = null
+    @Volatile private var remoteUncertain = false
+    @Volatile private var legacyLocalNativeStopUncertain = false
+    private var nextLocalToken = 1L
+    private val localNativeStopTokens = linkedSetOf<Long>()
 
     val newConnectionAllowed: Boolean
-        get() = uncertainty == null
+        @Synchronized get() =
+            !remoteUncertain &&
+                !legacyLocalNativeStopUncertain &&
+                localNativeStopTokens.isEmpty()
 
     @Synchronized
     fun block(reason: Uncertainty) {
-        if (uncertainty == Uncertainty.LOCAL_NATIVE_STOP) return
-        uncertainty = reason
+        when (reason) {
+            Uncertainty.REMOTE_LOAD_RESULT -> remoteUncertain = true
+            // Legacy callers intentionally have no proof callback. Keep their
+            // uncertainty independent from tokenized owners until process restart.
+            Uncertainty.LOCAL_NATIVE_STOP -> legacyLocalNativeStopUncertain = true
+        }
+    }
+
+    /** Register one timed-out native owner whose provider socket may still be open. */
+    @Synchronized
+    fun beginLocalNativeStopUncertainty(): Long {
+        val token = nextLocalToken++
+        localNativeStopTokens += token
+        return token
+    }
+
+    /**
+     * Called only by the retired worker after stop/release returned without an
+     * error. A counter prevents one old completion from clearing a newer timeout.
+     */
+    @Synchronized
+    fun resolveDefinitiveLocalStop(token: Long) {
+        if (token > 0L) localNativeStopTokens.remove(token)
     }
 
     @Synchronized
     fun resolveDefinitiveCastEnd() {
-        if (uncertainty == Uncertainty.REMOTE_LOAD_RESULT) uncertainty = null
+        remoteUncertain = false
     }
 
     /**
@@ -49,10 +74,19 @@ internal object ProviderConnectionSafety {
         else -> null
     }
 
-    internal fun currentUncertainty(): Uncertainty? = uncertainty
+    @Synchronized
+    internal fun currentUncertainty(): Uncertainty? = when {
+        legacyLocalNativeStopUncertain || localNativeStopTokens.isNotEmpty() ->
+            Uncertainty.LOCAL_NATIVE_STOP
+        remoteUncertain -> Uncertainty.REMOTE_LOAD_RESULT
+        else -> null
+    }
 
     @Synchronized
     internal fun resetForTests() {
-        uncertainty = null
+        remoteUncertain = false
+        legacyLocalNativeStopUncertain = false
+        nextLocalToken = 1L
+        localNativeStopTokens.clear()
     }
 }

@@ -38,8 +38,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import com.iptv.player.cast.ProviderConnectionSafety
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.PlaybackLog
+import com.iptv.player.util.PlaybackRemotePolicy
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
@@ -83,6 +85,7 @@ class VlcPlayerEngine(
     // quarantined. The retired worker remains their sole owner until that call
     // unwinds; no fresh worker may touch/release the same native objects.
     private val nativeHandlesAbandoned = AtomicBoolean(false)
+    private val providerUncertaintyToken = AtomicLong(0L)
     // A non-null stats object is not sufficient: affected libVLC/device builds
     // expose a stats object whose video counters remain permanently zero. Only
     // a real video counter signal makes stats authoritative for output health.
@@ -698,6 +701,20 @@ class VlcPlayerEngine(
         healthHandler.removeCallbacks(voutCompatibilityRunnable)
         PlaybackLog.log(context, engineName, detail)
         if (
+            PlaybackRemotePolicy.snapshot().disablePixelCopyValidation &&
+            hasFrameEvidence
+        ) {
+            surfaceFrameHealth.reset()
+            surfaceHealthyObserved = true
+            PlaybackLog.log(
+                context,
+                engineName,
+                "remote policy -> accept libVLC displayed-picture signal",
+            )
+            maybeReportVideoOutput()
+            return
+        }
+        if (
             shouldTrustVlcNativeFrame(
                 forceSoftware = forceSoftware,
                 hasDisplayedPictureEvidence = hasFrameEvidence,
@@ -943,6 +960,7 @@ class VlcPlayerEngine(
                 VlcOps.postBounded(
                     timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
                     onTimeout = {
+                        markProviderConnectionUncertain()
                         nativeHandlesAbandoned.set(true)
                         deferredPlay = null
                         invalidateEventSession()
@@ -1029,6 +1047,7 @@ class VlcPlayerEngine(
         VlcOps.postBounded(
             timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
             onTimeout = {
+                markProviderConnectionUncertain()
                 val firstAbandon =
                     nativeHandlesAbandoned.compareAndSet(false, true)
                 deferredPlay = null
@@ -1198,6 +1217,7 @@ class VlcPlayerEngine(
         VlcOps.postBounded(
             timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
             onTimeout = {
+                markProviderConnectionUncertain()
                 val firstAbandon =
                     nativeHandlesAbandoned.compareAndSet(false, true)
                 deferredPlay = null
@@ -1300,6 +1320,22 @@ class VlcPlayerEngine(
             "quarantined native handles released after $detail " +
                 "(failures=${failures.size})",
         )
+        if (failures.isEmpty()) {
+            resolveProviderConnectionUncertainty()
+        }
+    }
+
+    private fun markProviderConnectionUncertain() {
+        if (providerUncertaintyToken.get() != 0L) return
+        val token = ProviderConnectionSafety.beginLocalNativeStopUncertainty()
+        if (!providerUncertaintyToken.compareAndSet(0L, token)) {
+            ProviderConnectionSafety.resolveDefinitiveLocalStop(token)
+        }
+    }
+
+    private fun resolveProviderConnectionUncertainty() {
+        val token = providerUncertaintyToken.getAndSet(0L)
+        if (token != 0L) ProviderConnectionSafety.resolveDefinitiveLocalStop(token)
     }
 
     /**
@@ -1376,6 +1412,7 @@ class VlcPlayerEngine(
         VlcOps.postBounded(
             timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
             onTimeout = {
+                markProviderConnectionUncertain()
                 nativeHandlesAbandoned.set(true)
                 deferredPlay = null
                 invalidateEventSession()
@@ -1405,6 +1442,7 @@ class VlcPlayerEngine(
         VlcOps.postBounded(
             timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
             onTimeout = {
+                markProviderConnectionUncertain()
                 nativeHandlesAbandoned.set(true)
                 deferredPlay = null
                 invalidateEventSession()
@@ -1458,6 +1496,7 @@ class VlcPlayerEngine(
         VlcOps.postBounded(
             timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
             onTimeout = {
+                markProviderConnectionUncertain()
                 nativeHandlesAbandoned.set(true)
                 invalidateEventSession()
                 PlaybackLog.log(context, engineName, "native stop timed out")
@@ -1549,6 +1588,7 @@ class VlcPlayerEngine(
             VlcOps.postBounded(
                 timeoutMs = NATIVE_RELEASE_TIMEOUT_MS,
                 onTimeout = {
+                    markProviderConnectionUncertain()
                     // Android cannot cancel a thread blocked in vendor JNI.
                     // Quarantine this owner before the fresh worker can run, and
                     // remove only its Android view on main. The retired worker
@@ -1582,6 +1622,9 @@ class VlcPlayerEngine(
                         engineName,
                         "release cleanup failed: ${failure.javaClass.simpleName}",
                     )
+                }
+                if (releaseOperationTimedOut.get() && failures.isEmpty()) {
+                    resolveProviderConnectionUncertainty()
                 }
                 if (!releaseOperationTimedOut.get()) {
                     // Keep the shared VlcOps FIFO occupied until main has removed

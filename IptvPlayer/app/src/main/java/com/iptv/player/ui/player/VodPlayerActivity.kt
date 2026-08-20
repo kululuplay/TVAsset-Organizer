@@ -72,6 +72,7 @@ import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NowPlaying
 import com.iptv.player.util.PlaybackLog
 import com.iptv.player.util.PlaybackRouteMemory
+import com.iptv.player.util.PlaybackRemotePolicy
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -104,6 +105,7 @@ class VodPlayerActivity : BaseActivity() {
         val cleanupScheduled = AtomicBoolean(false)
         val cleanupClaimed = AtomicBoolean(false)
         val activeOperation = AtomicReference<OwnerOperation?>(null)
+        val providerUncertaintyToken = AtomicLong(0L)
     }
 
     private class OwnerOperation(
@@ -650,9 +652,7 @@ class VodPlayerActivity : BaseActivity() {
             onTimeout = {
                 if (nativeOwner === owner && !owner.abandoned.get()) {
                     if (recoverAsPaused) pauseAfterBackgroundRestore = true
-                    ProviderConnectionSafety.block(
-                        ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
-                    )
+                    markOwnerConnectionUncertain(owner)
                     quarantineOwner(owner, "$label timed out")
                     if (
                         recoverOnFailure &&
@@ -797,6 +797,7 @@ class VodPlayerActivity : BaseActivity() {
 
     private fun startSurfaceValidation() {
         if (surfaceValidationStarted || !foreground || !playbackStarted) return
+        if (PlaybackRemotePolicy.snapshot().disablePixelCopyValidation) return
         surfaceValidationStarted = true
         surfaceFrameHealth.start { findVideoSurface(videoLayout) }
     }
@@ -815,6 +816,31 @@ class VodPlayerActivity : BaseActivity() {
             isFinishing ||
             isDestroyed
         ) {
+            return
+        }
+        val snapshot = currentVlcSnapshot()
+        val nativeVideoAndInputEvidence =
+            decodedVideoSeen &&
+                (
+                    (snapshot?.decodedVideo ?: 0) > 0 ||
+                        (snapshot?.readBytes ?: 0) > 0
+                    )
+        if (!surfaceOutputConfirmed && nativeVideoAndInputEvidence) {
+            // Startup PixelCopy cannot see protected hardware underlays on many
+            // TV SoCs. Native decoded/input counters win until PixelCopy has first
+            // demonstrated that this surface is actually sampleable and healthy.
+            surfaceOutputConfirmed = true
+            PlaybackQoeRuntime.markFirstFrame(qoeSessionId)
+            PlaybackLog.log(this, "VOD", "$detail ignored before first healthy pixel sample")
+            surfaceFrameHealth.reset()
+            return
+        }
+        if (!nativeVideoAndInputEvidence) {
+            // PixelCopy can capture the empty SurfaceView layer while a protected
+            // hardware underlay is still warming up. Without libVLC vout plus
+            // decoded/input counters this is inconclusive and must never fail VOD.
+            PlaybackLog.log(this, "VOD", "$detail ignored without native evidence")
+            resetSurfaceValidation()
             return
         }
         PlaybackLog.log(this, "VOD", "$detail -> bounded decoder recovery")
@@ -933,7 +959,21 @@ class VodPlayerActivity : BaseActivity() {
             )
         }
         removeOwnerLayoutOnMain(owner)
+        if (failures.isEmpty()) resolveOwnerConnectionUncertainty(owner)
         return failures
+    }
+
+    private fun markOwnerConnectionUncertain(owner: NativePlayerOwner) {
+        if (owner.providerUncertaintyToken.get() != 0L) return
+        val token = ProviderConnectionSafety.beginLocalNativeStopUncertainty()
+        if (!owner.providerUncertaintyToken.compareAndSet(0L, token)) {
+            ProviderConnectionSafety.resolveDefinitiveLocalStop(token)
+        }
+    }
+
+    private fun resolveOwnerConnectionUncertainty(owner: NativePlayerOwner) {
+        val token = owner.providerUncertaintyToken.getAndSet(0L)
+        if (token != 0L) ProviderConnectionSafety.resolveDefinitiveLocalStop(token)
     }
 
     /**
@@ -1008,9 +1048,7 @@ class VodPlayerActivity : BaseActivity() {
         VlcOps.postBounded(
             timeoutMs = NATIVE_RELEASE_TIMEOUT_MS,
             onTimeout = {
-                ProviderConnectionSafety.block(
-                    ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
-                )
+                markOwnerConnectionUncertain(owner)
                 PlaybackLog.log(
                     this,
                     "VOD",
@@ -1468,6 +1506,7 @@ class VodPlayerActivity : BaseActivity() {
 
     private fun showTerminalError(
         messageRes: Int = R.string.error_cannot_play_content,
+        supportCode: String? = null,
     ) {
         handler.removeCallbacks(startupTimeoutRunnable)
         handler.removeCallbacks(hideControlsRunnable)
@@ -1476,7 +1515,15 @@ class VodPlayerActivity : BaseActivity() {
         handler.removeCallbacks(uhdCheckRunnable)
         resetSurfaceValidation()
         setBuffering(false)
-        binding.errorMessage.setText(messageRes)
+        binding.errorMessage.text = if (supportCode == null) {
+            getString(messageRes)
+        } else {
+            getString(
+                R.string.vod_error_message_with_support_code,
+                getString(messageRes),
+                supportCode,
+            )
+        }
         binding.errorOverlay.visibility = View.VISIBLE
         // The overlay is declared before the chrome so normal playback controls
         // can render efficiently. Terminal state must become the topmost focus
@@ -1485,6 +1532,39 @@ class VodPlayerActivity : BaseActivity() {
         setPlayerChromeFocusable(false)
         setControlsVisible(true)
         binding.retryButton.requestFocus()
+    }
+
+    private fun showTerminalError(failure: PlaybackFailure) {
+        val customerError = VodPlaybackRoutingPolicy.customerError(failure)
+        val messageRes = when (customerError.message) {
+            VodPlaybackRoutingPolicy.CustomerMessage.AUTHORIZATION ->
+                R.string.vod_error_authorization
+            VodPlaybackRoutingPolicy.CustomerMessage.ACCESS_DENIED ->
+                R.string.vod_error_access_denied
+            VodPlaybackRoutingPolicy.CustomerMessage.CONTENT_UNAVAILABLE ->
+                R.string.vod_error_content_unavailable
+            VodPlaybackRoutingPolicy.CustomerMessage.RANGE_REJECTED ->
+                R.string.vod_error_range_rejected
+            VodPlaybackRoutingPolicy.CustomerMessage.RATE_LIMITED ->
+                R.string.vod_error_rate_limited
+            VodPlaybackRoutingPolicy.CustomerMessage.SERVER_UNAVAILABLE ->
+                R.string.vod_error_server_unavailable
+            VodPlaybackRoutingPolicy.CustomerMessage.TIMEOUT ->
+                R.string.vod_error_timeout
+            VodPlaybackRoutingPolicy.CustomerMessage.TLS ->
+                R.string.vod_error_tls
+            VodPlaybackRoutingPolicy.CustomerMessage.DNS ->
+                R.string.vod_error_dns
+            VodPlaybackRoutingPolicy.CustomerMessage.DECODER ->
+                R.string.vod_error_decoder
+            VodPlaybackRoutingPolicy.CustomerMessage.VIDEO_OUTPUT ->
+                R.string.vod_error_video_output
+            VodPlaybackRoutingPolicy.CustomerMessage.SOURCE ->
+                R.string.vod_error_source
+            VodPlaybackRoutingPolicy.CustomerMessage.GENERIC ->
+                R.string.error_cannot_play_content
+        }
+        showTerminalError(messageRes, customerError.supportCode)
     }
 
     private fun setPlayerChromeFocusable(enabled: Boolean) {
@@ -1514,7 +1594,14 @@ class VodPlayerActivity : BaseActivity() {
             showTerminalError(R.string.error_playback_ownership_uncertain)
             return
         }
-        val resumeAt = bestResumePosition()
+        // HTTP 416 means the provider rejected the requested byte/time range.
+        // A user retry should clear the stale resume offset instead of repeating
+        // the exact same invalid Range request forever.
+        val resumeAt = if (vodCoordinator.state.terminalFailure?.httpStatus == 416) {
+            0L
+        } else {
+            bestResumePosition()
+        }
         binding.errorOverlay.visibility = View.GONE
         setPlayerChromeFocusable(true)
         binding.playPauseButton.requestFocus()
@@ -1673,6 +1760,7 @@ class VodPlayerActivity : BaseActivity() {
 
     private fun resetRoutingForCurrentItem() {
         val url = streamUrl.orEmpty()
+        val remotePolicy = PlaybackRemotePolicy.snapshot()
         vodRouteKey = VodRouteKey.create(
             activeProfileId = activeProfileId,
             contentId = resumeId,
@@ -1695,6 +1783,7 @@ class VodPlayerActivity : BaseActivity() {
                         VodPlaybackRoutingPolicy.ContentHint.VLC_COMPATIBILITY
                     },
                     rememberedRoute = rememberedRoute,
+                    allowSourceEngineFallback = remotePolicy.allowSourceEngineFallback,
                 ),
             ),
         )
@@ -1721,6 +1810,7 @@ class VodPlayerActivity : BaseActivity() {
     private fun buildMedia3Player() {
         check(nativeOwner == null) { "Cannot build Media3 over an active VLC owner" }
         media3VodEngine?.release()
+        val remotePolicy = PlaybackRemotePolicy.snapshot()
         val engine = Media3VodEngine(
             context = this,
             config = Media3VodEngineConfig(
@@ -1730,6 +1820,9 @@ class VodPlayerActivity : BaseActivity() {
                     playbackBufferMs = bufferMode.exoPlaybackMs,
                     rebufferMs = bufferMode.exoRebufferMs,
                 ),
+                connectTimeoutMs = remotePolicy.vodConnectTimeoutMs,
+                readTimeoutMs = remotePolicy.vodReadTimeoutMs,
+                enablePixelCopyValidation = !remotePolicy.disablePixelCopyValidation,
                 preferredAudioLanguage = TrackLanguage.normalize(preferredAudioTrack),
                 preferredSubtitleLanguage = if (preferredSubtitleTrack == TRACK_DISABLED) {
                     null
@@ -2415,9 +2508,7 @@ class VodPlayerActivity : BaseActivity() {
                 ) {
                     // Never touch the timed-out handles here. The abandoned
                     // operation owns their eventual cleanup on its retired worker.
-                    ProviderConnectionSafety.block(
-                        ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
-                    )
+                    markOwnerConnectionUncertain(owner)
                     quarantineOwner(owner, "native prepare timed out")
                     handlePlaybackError()
                 }
@@ -2528,13 +2619,17 @@ class VodPlayerActivity : BaseActivity() {
                 PlaybackFailure.Phase.PLAYBACK,
             )
         } else {
-            // Raw libVLC does not expose a reliable HTTP/decoder cause in its
-            // EncounteredError event. Treat it as a transient source failure; a
-            // green/blank/stalled decoded surface enters through the typed branch
-            // above and may safely change decoder/engine.
-            PlaybackFailureClassifier.classify(
-                FailureSignal.Network(FailureSignal.NetworkKind.CONNECT),
-                if (playbackStarted) {
+            val snapshot = currentVlcSnapshot()
+            VodPlaybackRoutingPolicy.classifyVlcEncounteredError(
+                evidence = VodPlaybackRoutingPolicy.VlcErrorEvidence(
+                    playbackStarted = playbackStarted,
+                    voutSeen = decodedVideoSeen,
+                    decodedVideo = snapshot?.decodedVideo,
+                    displayedPictures = snapshot?.displayedPictures,
+                    readBytes = snapshot?.readBytes,
+                    videoCodec = snapshot?.streamInfo?.codec,
+                ),
+                phase = if (playbackStarted) {
                     PlaybackFailure.Phase.PLAYBACK
                 } else {
                     PlaybackFailure.Phase.STARTUP
@@ -2627,7 +2722,7 @@ class VodPlayerActivity : BaseActivity() {
             }
             playbackSession.setPlaying(false, resumeAt)
             finishQoe(PlaybackEndReason.FATAL_FAILURE)
-            showTerminalError()
+            showTerminalError(failure)
         } else {
             recoveryInProgress = false
         }
@@ -2769,9 +2864,7 @@ class VodPlayerActivity : BaseActivity() {
                     !isFinishing &&
                     !isDestroyed
                 ) {
-                    ProviderConnectionSafety.block(
-                        ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
-                    )
+                    markOwnerConnectionUncertain(retiringOwner)
                     quarantineOwner(retiringOwner, "native rebuild cleanup timed out")
                     recoveryInProgress = false
                     handlePlaybackError()
@@ -3648,9 +3741,7 @@ class VodPlayerActivity : BaseActivity() {
                 },
                 onTimeout = {
                     finishNativeStop()
-                    ProviderConnectionSafety.block(
-                        ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
-                    )
+                    markOwnerConnectionUncertain(stoppingOwner)
                     quarantineOwner(stoppingOwner, "background native stop timed out")
                 },
             ) {
@@ -3745,9 +3836,7 @@ class VodPlayerActivity : BaseActivity() {
             VlcOps.postBounded(
                 timeoutMs = NATIVE_RELEASE_TIMEOUT_MS,
                 onTimeout = {
-                    ProviderConnectionSafety.block(
-                        ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
-                    )
+                    markOwnerConnectionUncertain(destroyingOwner)
                     quarantineOwner(destroyingOwner, "destroy native release timed out")
                 },
             ) {

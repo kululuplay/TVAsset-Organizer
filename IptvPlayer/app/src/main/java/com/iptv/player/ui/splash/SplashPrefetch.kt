@@ -15,6 +15,7 @@ import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.SourceConfig
 import com.iptv.player.util.Logger
 import com.iptv.player.util.NewContentNotifier
+import com.iptv.player.util.Outcome
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -98,13 +99,19 @@ object SplashPrefetch {
                     // A recently completed guide is already usable, so avoid
                     // repeating that CPU/network/storage work on every cold start.
                     Logger.d(TAG, "EPG cache is fresh; cold-start refresh skipped")
+                    Outcome.Success(0)
                 }
             }
             stage(Stage.LIBRARY) {
                 // Both movies and series are lazy per-category, so only the cheap
                 // category lists are fetched here — never the whole catalog.
-                repo.refreshSeriesCategories(config)
-                repo.refreshVodCategories(config)
+                val series = repo.refreshSeriesCategories(config)
+                val vod = repo.refreshVodCategories(config)
+                when {
+                    series is Outcome.Failure -> series
+                    vod is Outcome.Failure -> vod
+                    else -> Outcome.Success(0)
+                }
             }
         } finally {
             // All essential stages attempted — release the splash regardless.
@@ -128,11 +135,22 @@ object SplashPrefetch {
     }
 
     /** Sets the visible stage, then runs [block], isolating non-cancellation failures. */
-    private suspend fun stage(stage: Stage, block: suspend () -> Unit) {
+    private suspend fun stage(stage: Stage, block: suspend () -> Outcome<*>) {
         _stage.value = stage
         // Essential stage failed (portal or network down): flag it so the
         // Dashboard can surface the outage and auto-resync on reconnect.
-        if (!runCatchingCancellable(block)) _essentialFailed.value = true
+        val succeeded = try {
+            block() is Outcome.Success<*>
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: OutOfMemoryError) {
+            Logger.e(TAG, "Prefetch ran out of memory", e)
+            throw e
+        } catch (e: Exception) {
+            Logger.w(TAG, "Prefetch stage failed (ignored): ${e.message}")
+            false
+        }
+        if (!succeeded) _essentialFailed.value = true
     }
 
     /** Runs [block]; false when it failed with an ordinary (ignored) exception. */

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="vod_error_message_with_support_code">%1$s\n\nCode d’assistance : %2$s</string>
+    <string name="vod_error_authorization">La session IPTV n’a pas pu être autorisée. Reconnectez-vous ou vérifiez votre abonnement.</string>
+    <string name="vod_error_access_denied">Le fournisseur a refusé la lecture. Vérifiez votre abonnement et la limite de connexions actives.</string>
+    <string name="vod_error_content_unavailable">Ce film ou cet épisode est actuellement indisponible chez le fournisseur.</string>
+    <string name="vod_error_range_rejected">Le fournisseur a refusé la position enregistrée. Une nouvelle tentative reprendra au début.</string>
+    <string name="vod_error_rate_limited">Le fournisseur a reçu trop de demandes. Patientez brièvement puis réessayez.</string>
+    <string name="vod_error_server_unavailable">Le fournisseur IPTV est temporairement indisponible. Réessayez dans quelques instants.</string>
+    <string name="vod_error_timeout">Le fournisseur n’a pas répondu à temps. Vérifiez la connexion puis réessayez.</string>
+    <string name="vod_error_tls">Impossible d’établir une connexion sécurisée avec le fournisseur IPTV.</string>
+    <string name="vod_error_dns">L’adresse du fournisseur IPTV est inaccessible. Vérifiez le réseau ou les réglages DNS.</string>
+    <string name="vod_error_decoder">Cet appareil n’a pas pu décoder la vidéo. Essayez le décodeur logiciel ou contactez l’assistance.</string>
+    <string name="vod_error_video_output">La vidéo a été décodée mais ne peut pas être affichée correctement sur cet appareil.</string>
+    <string name="vod_error_source">Le flux du fournisseur n’a pas pu être ouvert. Vérifiez la connexion puis réessayez.</string>
+</resources>

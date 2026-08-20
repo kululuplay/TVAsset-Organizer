@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "main": "crash-receiver/server.js",
   "scripts": {
-    "start": "node crash-receiver/server.js"
+    "start": "node crash-receiver/server.js",
+    "test": "npm run test:server",
+    "test:server": "node --test crash-receiver/*.test.js"
   },
   "keywords": [],
   "author": "",

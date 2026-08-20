@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="vod_error_message_with_support_code">%1$s\n\nSupport-Code: %2$s</string>
+    <string name="vod_error_authorization">Die IPTV-Sitzung konnte nicht autorisiert werden. Melden Sie sich erneut an oder prüfen Sie Ihr Abo.</string>
+    <string name="vod_error_access_denied">Der Anbieter hat die Wiedergabe abgelehnt. Prüfen Sie Ihr Abo und das Limit aktiver Verbindungen.</string>
+    <string name="vod_error_content_unavailable">Dieser Film oder diese Episode ist beim Anbieter derzeit nicht verfügbar.</string>
+    <string name="vod_error_range_rejected">Der Anbieter hat die gespeicherte Position abgelehnt. Beim Wiederholen wird von vorn gestartet.</string>
+    <string name="vod_error_rate_limited">Der Anbieter hat zu viele Anfragen erhalten. Warten Sie kurz und versuchen Sie es erneut.</string>
+    <string name="vod_error_server_unavailable">Der IPTV-Anbieter ist vorübergehend nicht verfügbar. Versuchen Sie es gleich erneut.</string>
+    <string name="vod_error_timeout">Der Anbieter hat nicht rechtzeitig geantwortet. Prüfen Sie die Verbindung und versuchen Sie es erneut.</string>
+    <string name="vod_error_tls">Es konnte keine sichere Verbindung zum IPTV-Anbieter hergestellt werden.</string>
+    <string name="vod_error_dns">Die Adresse des IPTV-Anbieters ist nicht erreichbar. Prüfen Sie Netzwerk oder DNS.</string>
+    <string name="vod_error_decoder">Dieses Gerät konnte das Video nicht decodieren. Versuchen Sie den Software-Decoder oder kontaktieren Sie den Support.</string>
+    <string name="vod_error_video_output">Das Video wurde decodiert, konnte auf diesem Gerät aber nicht korrekt angezeigt werden.</string>
+    <string name="vod_error_source">Der Stream des Anbieters konnte nicht geöffnet werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.</string>
+</resources>

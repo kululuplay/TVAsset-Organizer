@@ -27,10 +27,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: "17"
@@ -40,14 +42,20 @@ jobs:
             IptvPlayer/gradle/wrapper/gradle-wrapper.properties
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
 
       - name: Scan current tree for secrets
         working-directory: .
         run: python3 scripts/scan_secrets.py
 
       - name: Verify Gradle wrapper
-        uses: gradle/actions/wrapper-validation@v4
+        uses: gradle/actions/wrapper-validation@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Test telemetry receiver and release verifier
+        working-directory: .
+        run: |
+          npm test
+          python3 scripts/test_verify_android_upgrade.py
 
       - name: Test, lint and assemble debug
         run: |
@@ -59,7 +67,7 @@ jobs:
             --stacktrace
 
       - name: Upload debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: iptv-player-debug
           path: IptvPlayer/app/build/outputs/apk/debug/*.apk
@@ -67,7 +75,7 @@ jobs:
 
       - name: Upload lint report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: android-lint
           path: IptvPlayer/app/build/reports/lint-results-debug.html
@@ -77,7 +85,8 @@ jobs:
     name: Signed release
     needs: verify
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' &&
+       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
       (github.event_name == 'push' &&
        (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
     runs-on: ubuntu-latest
@@ -93,10 +102,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Verify release commit belongs to the default branch
+        working-directory: .
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" "origin/${GITHUB_REF_NAME}"
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: "17"
@@ -106,7 +123,7 @@ jobs:
             IptvPlayer/gradle/wrapper/gradle-wrapper.properties
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
 
       - name: Validate release secrets
         run: |
@@ -133,43 +150,97 @@ jobs:
       - name: Read version
         id: version
         run: |
-          value=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
-          if [ -z "$value" ]; then
-            echo "::error::Could not read versionName"
+          name=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
+          code=$(sed -n 's/.*versionCode = \([0-9][0-9]*\).*/\1/p' app/build.gradle.kts | head -n 1)
+          package=$(sed -n 's/.*applicationId = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
+          if [ -z "$name" ] || [ -z "$code" ] || [ -z "$package" ]; then
+            echo "::error::Could not read applicationId/versionCode/versionName"
             exit 1
           fi
-          echo "value=$value" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "package=$package" >> "$GITHUB_OUTPUT"
+
+      - name: Locate immutable release baseline
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current_tag="v${{ steps.version.outputs.name }}"
+          if gh release view "$current_tag" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "baseline_tag=$current_tag" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            # This repository already has production releases. A network/API
+            # failure must fail closed instead of silently skipping the signing
+            # certificate and monotonic-version comparison.
+            latest_tag=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name)
+            echo "baseline_tag=$latest_tag" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download previous signed APK
+        id: baseline
+        if: steps.existing.outputs.baseline_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          destination="$RUNNER_TEMP/previous-release"
+          mkdir -p "$destination"
+          gh release download "${{ steps.existing.outputs.baseline_tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern '*.apk' \
+            --dir "$destination"
+          mapfile -t apks < <(find "$destination" -maxdepth 1 -type f -name '*.apk' | sort)
+          if [ "${#apks[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one APK in baseline release; found ${#apks[@]}"
+            exit 1
+          fi
+          echo "apk=${apks[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify signed APK and static upgrade compatibility
+        run: |
+          build_tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
+          aapt="$build_tools/aapt"
+          apksigner="$build_tools/apksigner"
+          if [ ! -x "$aapt" ] || [ ! -x "$apksigner" ]; then
+            echo "::error::aapt/apksigner not found in Android build-tools"
+            exit 1
+          fi
+          args=(
+            --new-apk app/build/outputs/apk/release/app-release.apk
+            --expected-package "${{ steps.version.outputs.package }}"
+            --expected-version-code "${{ steps.version.outputs.code }}"
+            --expected-version-name "${{ steps.version.outputs.name }}"
+            --aapt "$aapt"
+            --apksigner "$apksigner"
+          )
+          if [ -n "${{ steps.baseline.outputs.apk }}" ]; then
+            args+=(--previous-apk "${{ steps.baseline.outputs.apk }}")
+          fi
+          if [ "${{ steps.existing.outputs.exists }}" = "true" ]; then
+            args+=(--allow-same-version)
+          fi
+          python3 ../scripts/verify_android_upgrade.py "${args[@]}"
 
       - name: Stage release APK
         run: |
           mkdir -p release-assets
           cp app/build/outputs/apk/release/app-release.apk \
-            "release-assets/KululuIPTV-v${{ steps.version.outputs.value }}.apk"
-
-      - name: Check immutable release tag
-        id: existing
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="v${{ steps.version.outputs.value }}"
-          if gh release view "$tag" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
+            "release-assets/KululuIPTV-v${{ steps.version.outputs.name }}.apk"
 
       - name: Publish GitHub release
         if: steps.existing.outputs.exists == 'false'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
-          tag_name: v${{ steps.version.outputs.value }}
-          name: Kululu IPTV v${{ steps.version.outputs.value }}
+          tag_name: v${{ steps.version.outputs.name }}
+          name: Kululu IPTV v${{ steps.version.outputs.name }}
           make_latest: true
           files: IptvPlayer/release-assets/*.apk
           fail_on_unmatched_files: true
 
       - name: Upload signed APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: iptv-player-release
           path: IptvPlayer/release-assets/*.apk

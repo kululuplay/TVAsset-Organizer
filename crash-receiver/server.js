@@ -37,6 +37,10 @@
 const express = require("express");
 const { Pool } = require("pg");
 const crypto = require("crypto");
+const {
+  parsePlaybackPolicy,
+  persistTelemetryEvents,
+} = require("./telemetry-store");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -94,6 +98,11 @@ const intEnv = (name, def) => {
 const RETENTION_DEVICE_DAYS = intEnv("RETENTION_DEVICE_DAYS", 90);
 const RETENTION_CRASH_DAYS = intEnv("RETENTION_CRASH_DAYS", 60);
 const RETENTION_LOG_DAYS = intEnv("RETENTION_LOG_DAYS", 30);
+
+// Optional server-side kill switches/timeouts. The parser is deliberately a
+// closed schema: malformed JSON, unknown keys and out-of-range values can never
+// reach a device. Restart the service after changing the environment value.
+const PLAYBACK_POLICY = parsePlaybackPolicy(process.env.PLAYBACK_POLICY_JSON);
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -244,9 +253,24 @@ async function initDb() {
       now_playing_kind TEXT,
       engine TEXT,
       stage TEXT,
-      details TEXT
+      details TEXT,
+      event_id UUID,
+      payload JSONB
     );
   `);
+  // Safe, online-compatible migration for existing deployments. Historical rows
+  // remain valid with NULL IDs/payloads; new clients gain idempotency and retain
+  // the closed playback_qoe JSON schema.
+  await pool.query(
+    `ALTER TABLE telemetry_events ADD COLUMN IF NOT EXISTS event_id UUID;`,
+  );
+  await pool.query(
+    `ALTER TABLE telemetry_events ADD COLUMN IF NOT EXISTS payload JSONB;`,
+  );
+  await pool.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_telemetry_event_id
+       ON telemetry_events(event_id) WHERE event_id IS NOT NULL;`,
+  );
   await pool.query(
     `CREATE INDEX IF NOT EXISTS idx_telemetry_received ON telemetry_events(received_at DESC);`,
   );
@@ -569,53 +593,19 @@ app.post("/api/heartbeat", async (req, res) => {
     // the heartbeat or delay the announcement response. Capped to bound a bad
     // client. Device metadata is taken from THIS beat (the app omits it per event).
     const events = Array.isArray(b.events) ? b.events.slice(0, 50) : [];
+    let ackedEventIds = [];
     if (events.length) {
       try {
-        const values = [];
-        const tuples = [];
-        let p = 1;
-        for (const ev of events) {
-          if (!ev || typeof ev !== "object") continue;
-          const type = clip(ev.type, 40);
-          if (!type) continue;
-          const occurredAt =
-            ev.t != null && Number.isFinite(Number(ev.t))
-              ? new Date(Number(ev.t))
-              : null;
-          tuples.push(
-            `($${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++})`,
-          );
-          values.push(
-            occurredAt,
-            deviceId,
-            clip(b.appVersion),
-            toInt(b.versionCode),
-            clip(b.manufacturer),
-            clip(b.model),
-            clip(b.device),
-            clip(b.androidVersion),
-            toInt(b.apiLevel),
-            type,
-            clip(ev.sev, 16),
-            clip(ev.ch, 200),
-            clip(ev.kind, 40),
-            clip(ev.engine, 24),
-            clip(ev.stage, 24),
-            // ANR details carry a clipped main-thread stack (~8KB app-side); keep it
-            // usable. Other event details stay tightly clipped.
-            clip(ev.detail, type === "anr" ? 8192 : 500),
-          );
-        }
-        if (tuples.length) {
-          await pool.query(
-            `INSERT INTO telemetry_events
-              (occurred_at, device_id, app_version, version_code, manufacturer,
-               model, device, android_version, api_level, type, severity,
-               now_playing, now_playing_kind, engine, stage, details)
-             VALUES ${tuples.join(",")}`,
-            values,
-          );
-        }
+        ackedEventIds = await persistTelemetryEvents(pool, events, {
+          deviceId,
+          appVersion: b.appVersion,
+          versionCode: b.versionCode,
+          manufacturer: b.manufacturer,
+          model: b.model,
+          device: b.device,
+          androidVersion: b.androidVersion,
+          apiLevel: b.apiLevel,
+        });
       } catch (e) {
         console.error("telemetry_events insert failed", e);
       }
@@ -624,6 +614,7 @@ app.post("/api/heartbeat", async (req, res) => {
     // storm) and lost events; record ONE synthetic marker so the burst is visible
     // even though the individual events are gone. Isolated + best-effort.
     const eventsDropped = toInt(b.eventsDropped);
+    let eventsDroppedAccepted = false;
     if (eventsDropped > 0) {
       try {
         await pool.query(
@@ -645,6 +636,7 @@ app.post("/api/heartbeat", async (req, res) => {
             `${eventsDropped} olay taştı (spool overflow)`,
           ],
         );
+        eventsDroppedAccepted = true;
       } catch (e) {
         console.error("events_dropped insert failed", e);
       }
@@ -668,7 +660,20 @@ app.post("/api/heartbeat", async (req, res) => {
     } catch (e) {
       console.error("resolved-requests lookup failed", e);
     }
-    const payload = { announcement: pickAnnouncement(deviceId, uname) };
+    const payload = {
+      announcement: pickAnnouncement(deviceId, uname),
+      // ACK only IDs confirmed present after the insert. An empty list is
+      // intentional on DB failure, so new clients retain and retry their spool.
+      ackedEventIds,
+      eventsDroppedAccepted,
+    };
+    if (PLAYBACK_POLICY) {
+      const { ttlSeconds, ...values } = PLAYBACK_POLICY;
+      payload.playbackPolicy = {
+        ...values,
+        expiresAtEpochMs: Date.now() + ttlSeconds * 1000,
+      };
+    }
     if (resolvedRequests.length) payload.resolvedRequests = resolvedRequests;
     res.status(200).json(payload);
     // Resolve location after responding so the heartbeat stays fast.

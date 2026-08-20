@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="vod_error_message_with_support_code">%1$s\n\nDestek kodu: %2$s</string>
+    <string name="vod_error_authorization">IPTV oturumu yetkilendirilemedi. Yeniden giriş yapın veya aboneliğinizi kontrol edin.</string>
+    <string name="vod_error_access_denied">Sağlayıcı oynatmaya izin vermedi. Aboneliğinizi ve aktif bağlantı sınırını kontrol edin.</string>
+    <string name="vod_error_content_unavailable">Bu film veya bölüm şu anda sağlayıcıda kullanılamıyor.</string>
+    <string name="vod_error_range_rejected">Sağlayıcı kayıtlı izleme konumunu reddetti. Yeniden deneme baştan başlayacak.</string>
+    <string name="vod_error_rate_limited">Sağlayıcıya çok fazla istek ulaştı. Kısa süre bekleyip yeniden deneyin.</string>
+    <string name="vod_error_server_unavailable">IPTV sağlayıcısı geçici olarak kullanılamıyor. Kısa süre sonra yeniden deneyin.</string>
+    <string name="vod_error_timeout">Sağlayıcı zamanında yanıt vermedi. Bağlantıyı kontrol edip yeniden deneyin.</string>
+    <string name="vod_error_tls">IPTV sağlayıcısıyla güvenli bağlantı kurulamadı.</string>
+    <string name="vod_error_dns">IPTV sağlayıcısının adresine ulaşılamadı. Ağ veya DNS ayarlarını kontrol edin.</string>
+    <string name="vod_error_decoder">Bu cihaz videoyu çözemedi. Yazılım decoder seçeneğini deneyin veya destekle iletişime geçin.</string>
+    <string name="vod_error_video_output">Video çözüldü ancak bu cihazda doğru şekilde görüntülenemedi.</string>
+    <string name="vod_error_source">Sağlayıcı yayını açılamadı. Bağlantıyı kontrol edip yeniden deneyin.</string>
+</resources>
