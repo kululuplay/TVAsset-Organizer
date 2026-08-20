@@ -18,8 +18,8 @@ PACKAGE_RE = re.compile(
     re.MULTILINE,
 )
 CERT_RE = re.compile(
-    r"^Signer\s+#\d+\s+certificate\s+SHA-256\s+digest:\s*([0-9a-f:]+)\s*$",
-    re.IGNORECASE | re.MULTILINE,
+    r"certificate\s+SHA-256\s+digest\s*:\s*([0-9a-f:]{64,})",
+    re.IGNORECASE,
 )
 SCHEME_RE_TEMPLATE = r"^Verified using v{scheme} scheme[^:]*:\s*true\s*$"
 
