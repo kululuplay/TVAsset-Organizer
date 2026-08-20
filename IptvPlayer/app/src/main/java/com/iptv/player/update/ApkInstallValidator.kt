@@ -30,26 +30,47 @@ internal object ApkInstallPolicy {
         fileSize: Long,
         expectedSize: Long,
         availableBytes: Long,
-        packageMatches: Boolean,
-        archiveVersionCode: Long,
-        installedVersionCode: Long,
-        archiveSigners: Set<String>,
-        installedSigners: Set<String>,
+        packageMatches: Boolean?,
+        archiveVersionCode: Long?,
+        installedVersionCode: Long?,
+        archiveSigners: Set<String>?,
+        installedSigners: Set<String>?,
         artifactDigestVerified: Boolean = false,
     ): ApkValidationFailure? = when {
         fileSize <= 0L -> ApkValidationFailure.MISSING
         expectedSize > 0L && fileSize != expectedSize -> ApkValidationFailure.INCOMPLETE
         availableBytes >= 0L && availableBytes < fileSize * 2L ->
             ApkValidationFailure.INSUFFICIENT_STORAGE
-        !packageMatches -> ApkValidationFailure.WRONG_PACKAGE
-        archiveVersionCode <= installedVersionCode -> ApkValidationFailure.NOT_NEWER
-        archiveSigners.isNotEmpty() && installedSigners.isNotEmpty() &&
+        packageMatches == false -> ApkValidationFailure.WRONG_PACKAGE
+        archiveVersionCode != null && installedVersionCode != null &&
+            archiveVersionCode <= installedVersionCode -> ApkValidationFailure.NOT_NEWER
+        !archiveSigners.isNullOrEmpty() && !installedSigners.isNullOrEmpty() &&
             archiveSigners != installedSigners -> ApkValidationFailure.SIGNATURE_MISMATCH
-        (archiveSigners.isEmpty() || installedSigners.isEmpty()) &&
-            !artifactDigestVerified ->
+        !artifactDigestVerified && (
+            packageMatches == null ||
+                archiveVersionCode == null ||
+                installedVersionCode == null ||
+                archiveSigners.isNullOrEmpty() ||
+                installedSigners.isNullOrEmpty()
+            ) ->
             ApkValidationFailure.INVALID_APK
         else -> null
     }
+}
+
+/**
+ * Android 9/10 archive parsing only collects certificates when the legacy
+ * GET_SIGNATURES bit is present, even when GET_SIGNING_CERTIFICATES is also
+ * supported. Keep both bits on API 28+ for TV/OEM compatibility.
+ */
+internal object ApkPackageInfoQueryPolicy {
+    @Suppress("DEPRECATION")
+    fun signingFlags(sdkInt: Int): Int =
+        if (sdkInt >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES
+        } else {
+            PackageManager.GET_SIGNATURES
+        }
 }
 
 /** Normalizes the digest format returned by the GitHub Releases API. */
@@ -94,9 +115,7 @@ object ApkInstallValidator {
 
         val packageManager = context.packageManager
         val archive = packageInfo(packageManager, file.absolutePath)
-            ?: return ApkValidationResult.Invalid(ApkValidationFailure.INVALID_APK)
         val installed = installedPackageInfo(packageManager, context.packageName)
-            ?: return ApkValidationResult.Invalid(ApkValidationFailure.INVALID_APK)
 
         val failure = ApkInstallPolicy.evaluate(
             fileSize = file.length(),
@@ -104,11 +123,11 @@ object ApkInstallValidator {
             availableBytes = runCatching {
                 StatFs(file.parentFile?.absolutePath ?: file.absolutePath).availableBytes
             }.getOrDefault(-1L),
-            packageMatches = archive.packageName == context.packageName,
-            archiveVersionCode = archive.versionCodeCompat(),
-            installedVersionCode = installed.versionCodeCompat(),
-            archiveSigners = archive.signerDigests(),
-            installedSigners = installed.signerDigests(),
+            packageMatches = archive?.packageName?.let { it == context.packageName },
+            archiveVersionCode = archive?.versionCodeCompat(),
+            installedVersionCode = installed?.versionCodeCompat(),
+            archiveSigners = archive?.signerDigests(),
+            installedSigners = installed?.signerDigests(),
             artifactDigestVerified = digestVerified,
         )
         return if (failure == null) {
@@ -120,22 +139,18 @@ object ApkInstallValidator {
 
     @Suppress("DEPRECATION")
     private fun packageInfo(packageManager: PackageManager, path: String): PackageInfo? {
-        val modern = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            runCatching {
-                packageManager.getPackageArchiveInfo(
-                    path,
-                    PackageManager.GET_SIGNING_CERTIFICATES,
-                )
-            }.getOrNull()
-        } else {
-            null
-        }
-        if (modern != null && modern.signerDigests().isNotEmpty()) return modern
+        val primary = runCatching {
+            packageManager.getPackageArchiveInfo(
+                path,
+                ApkPackageInfoQueryPolicy.signingFlags(Build.VERSION.SDK_INT),
+            )
+        }.getOrNull()
+        if (primary != null && primary.signerDigests().isNotEmpty()) return primary
 
         val legacy = runCatching {
             packageManager.getPackageArchiveInfo(path, PackageManager.GET_SIGNATURES)
         }.getOrNull()
-        return legacy ?: modern
+        return legacy ?: primary
     }
 
     @Suppress("DEPRECATION")
@@ -143,22 +158,18 @@ object ApkInstallValidator {
         packageManager: PackageManager,
         packageName: String,
     ): PackageInfo? {
-        val modern = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            runCatching {
-                packageManager.getPackageInfo(
-                    packageName,
-                    PackageManager.GET_SIGNING_CERTIFICATES,
-                )
-            }.getOrNull()
-        } else {
-            null
-        }
-        if (modern != null && modern.signerDigests().isNotEmpty()) return modern
+        val primary = runCatching {
+            packageManager.getPackageInfo(
+                packageName,
+                ApkPackageInfoQueryPolicy.signingFlags(Build.VERSION.SDK_INT),
+            )
+        }.getOrNull()
+        if (primary != null && primary.signerDigests().isNotEmpty()) return primary
 
         val legacy = runCatching {
             packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
         }.getOrNull()
-        return legacy ?: modern
+        return legacy ?: primary
     }
 
     @Suppress("DEPRECATION")
@@ -169,7 +180,15 @@ object ApkInstallValidator {
     @Suppress("DEPRECATION")
     private fun PackageInfo.signerDigests(): Set<String> {
         val modernSignatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            runCatching { signingInfo?.apkContentsSigners.orEmpty() }.getOrDefault(emptyArray())
+            runCatching {
+                signingInfo?.let { info ->
+                    if (info.hasMultipleSigners()) {
+                        info.apkContentsSigners
+                    } else {
+                        info.signingCertificateHistory
+                    }
+                }.orEmpty()
+            }.getOrDefault(emptyArray())
         } else emptyArray()
         val signatures = modernSignatures.takeIf { it.isNotEmpty() }
             ?: this.signatures.orEmpty()

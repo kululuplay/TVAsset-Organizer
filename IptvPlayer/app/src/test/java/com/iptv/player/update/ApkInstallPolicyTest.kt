@@ -1,7 +1,9 @@
 package com.iptv.player.update
 
+import android.content.pm.PackageManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ApkInstallPolicyTest {
@@ -56,6 +58,28 @@ class ApkInstallPolicyTest {
     }
 
     @Test
+    fun `verified official digest tolerates unavailable OEM package metadata`() {
+        assertNull(
+            evaluate(
+                packageMatches = null,
+                archiveVersion = null,
+                installedVersion = null,
+                archiveSigners = null,
+                installedSigners = null,
+                artifactDigestVerified = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `unavailable package metadata without verified digest is rejected`() {
+        assertEquals(
+            ApkValidationFailure.INVALID_APK,
+            evaluate(packageMatches = null),
+        )
+    }
+
+    @Test
     fun `missing signer metadata without a verified digest is rejected`() {
         assertEquals(
             ApkValidationFailure.INVALID_APK,
@@ -82,15 +106,33 @@ class ApkInstallPolicyTest {
         assertNull(ApkIntegrityPolicy.normalizeSha256("sha256:not-a-digest"))
     }
 
+    @Suppress("DEPRECATION")
+    @Test
+    fun `API 28 plus signing query includes legacy and modern flags`() {
+        val flags = ApkPackageInfoQueryPolicy.signingFlags(28)
+
+        assertTrue(flags and PackageManager.GET_SIGNATURES != 0)
+        assertTrue(flags and PackageManager.GET_SIGNING_CERTIFICATES != 0)
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun `pre API 28 signing query uses legacy flag`() {
+        assertEquals(
+            PackageManager.GET_SIGNATURES,
+            ApkPackageInfoQueryPolicy.signingFlags(27),
+        )
+    }
+
     private fun evaluate(
         fileSize: Long = 100,
         expectedSize: Long = 100,
         availableBytes: Long = 1_000,
-        packageMatches: Boolean = true,
-        archiveVersion: Long = 118,
-        installedVersion: Long = 117,
-        archiveSigners: Set<String> = signer,
-        installedSigners: Set<String> = signer,
+        packageMatches: Boolean? = true,
+        archiveVersion: Long? = 118,
+        installedVersion: Long? = 117,
+        archiveSigners: Set<String>? = signer,
+        installedSigners: Set<String>? = signer,
         artifactDigestVerified: Boolean = false,
     ) = ApkInstallPolicy.evaluate(
         fileSize,
