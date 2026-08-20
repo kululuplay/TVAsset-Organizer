@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="vod_error_message_with_support_code">%1$s\n\nرمز الدعم: %2$s</string>
+    <string name="vod_error_authorization">تعذر تفويض جلسة IPTV. سجّل الدخول مجددًا أو تحقق من اشتراكك.</string>
+    <string name="vod_error_access_denied">رفض المزوّد التشغيل. تحقق من اشتراكك وحد الاتصالات النشطة.</string>
+    <string name="vod_error_content_unavailable">هذا الفيلم أو الحلقة غير متاح حاليًا لدى المزوّد.</string>
+    <string name="vod_error_range_rejected">رفض المزوّد موضع المشاهدة المحفوظ. ستبدأ إعادة المحاولة من البداية.</string>
+    <string name="vod_error_rate_limited">وصلت طلبات كثيرة إلى المزوّد. انتظر قليلًا ثم أعد المحاولة.</string>
+    <string name="vod_error_server_unavailable">مزوّد IPTV غير متاح مؤقتًا. أعد المحاولة بعد قليل.</string>
+    <string name="vod_error_timeout">تأخر رد المزوّد. تحقق من الاتصال ثم أعد المحاولة.</string>
+    <string name="vod_error_tls">تعذر إنشاء اتصال آمن مع مزوّد IPTV.</string>
+    <string name="vod_error_dns">تعذر الوصول إلى عنوان مزوّد IPTV. تحقق من الشبكة أو إعدادات DNS.</string>
+    <string name="vod_error_decoder">تعذر على هذا الجهاز فك ترميز الفيديو. جرّب وحدة فك الترميز البرمجية أو تواصل مع الدعم.</string>
+    <string name="vod_error_video_output">تم فك ترميز الفيديو ولكن تعذر عرضه بصورة صحيحة على هذا الجهاز.</string>
+    <string name="vod_error_source">تعذر فتح بث المزوّد. تحقق من الاتصال ثم أعد المحاولة.</string>
+</resources>

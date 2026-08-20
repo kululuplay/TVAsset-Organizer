@@ -24,6 +24,8 @@ internal class VodPlaybackCoordinator(
         val contentHint: VodPlaybackRoutingPolicy.ContentHint,
         /** Stable local suggestion; only AUTO/AUTO may override the base route. */
         val rememberedRoute: Route? = null,
+        /** Remote safety switch for the one bounded source-engine compatibility try. */
+        val allowSourceEngineFallback: Boolean = true,
     )
 
     enum class Phase {
@@ -41,6 +43,7 @@ internal class VodPlaybackCoordinator(
         val route: Route? = null,
         val triedRoutes: Set<Route> = emptySet(),
         val sourceRetryCounts: Map<Route, Int> = emptyMap(),
+        val sourceEngineFallbackAttempted: Boolean = false,
         val terminalFailure: PlaybackFailure? = null,
     )
 
@@ -219,10 +222,15 @@ internal class VodPlaybackCoordinator(
             val routingFailure = VodPlaybackRoutingPolicy.routeFailure(failure)
 
             if (routingFailure == VodPlaybackRoutingPolicy.Failure.SOURCE) {
+                if (failure.retryAdvice == PlaybackFailure.RetryAdvice.DO_NOT_RETRY) {
+                    return terminal(state, failure)
+                }
+                // The alternate engine is a one-shot compatibility probe. It is
+                // not retried again, keeping the provider connection ladder small.
+                if (state.sourceEngineFallbackAttempted) return terminal(state, failure)
                 val retries = state.sourceRetryCounts[route] ?: 0
                 if (
-                    retries < MAX_SOURCE_RETRIES_PER_ROUTE &&
-                    failure.retryAdvice != PlaybackFailure.RetryAdvice.DO_NOT_RETRY
+                    retries < MAX_SOURCE_RETRIES_PER_ROUTE
                 ) {
                     return startAttempt(
                         state = state.copy(
@@ -233,7 +241,23 @@ internal class VodPlaybackCoordinator(
                         stopReason = StopReason.SOURCE_RETRY,
                     )
                 }
-                return terminal(state, failure)
+                if (!selection.allowSourceEngineFallback) return terminal(state, failure)
+                val nextRoute = VodPlaybackRoutingPolicy.nextRoute(
+                    mode = selection.playerMode,
+                    decoderMode = selection.decoderMode,
+                    current = route,
+                    failure = routingFailure,
+                    tried = state.triedRoutes,
+                ) ?: return terminal(state, failure)
+                return startAttempt(
+                    state = state.copy(
+                        triedRoutes = state.triedRoutes + nextRoute,
+                        sourceEngineFallbackAttempted = true,
+                    ),
+                    route = nextRoute,
+                    startReason = StartReason.ROUTE_FALLBACK,
+                    stopReason = StopReason.ROUTE_FALLBACK,
+                )
             }
 
             val nextRoute = VodPlaybackRoutingPolicy.nextRoute(

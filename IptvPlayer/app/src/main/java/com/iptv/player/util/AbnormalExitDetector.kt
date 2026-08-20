@@ -16,7 +16,32 @@
  */
 package com.iptv.player.util
 
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.content.Context
+import android.os.Build
+import androidx.annotation.RequiresApi
+
+internal object ExitReasonPolicy {
+    data class Result(val type: String, val severity: String)
+
+    fun classify(reason: Int?): Result = when (reason) {
+        ApplicationExitInfo.REASON_CRASH_NATIVE -> Result("native_crash", "fatal")
+        ApplicationExitInfo.REASON_SIGNALED -> Result("signaled_exit", "warning")
+        ApplicationExitInfo.REASON_ANR -> Result("os_anr", "fatal")
+        ApplicationExitInfo.REASON_LOW_MEMORY -> Result("low_memory_exit", "warning")
+        ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE ->
+            Result("resource_exit", "warning")
+        else -> Result("suspected_abnormal_exit", "fatal")
+    }
+}
+
+private data class ExitSnapshot(
+    val reason: Int,
+    val status: Int,
+    val pss: Long,
+    val rss: Long,
+)
 
 object AbnormalExitDetector {
 
@@ -74,13 +99,47 @@ object AbnormalExitDetector {
             // Conservative: only when a playback was active, not cleanly closed, and
             // the last run left no Java crash (that path is already reported).
             if (recent && !clean && !channel.isNullOrBlank() && !hadPendingCrash) {
+                val exit = latestExit(context, ts)
+                val classified = ExitReasonPolicy.classify(exit?.reason)
                 StabilityTelemetry.record(
-                    type = "suspected_abnormal_exit",
+                    type = classified.type,
                     channel = channel,
-                    severity = "fatal",
-                    detail = "last alive ${ageMs / 1000}s ago",
+                    severity = classified.severity,
+                    detail = buildString {
+                        append("last alive ${ageMs / 1000}s ago")
+                        exit?.let {
+                            append(" reason=${it.reason}")
+                            append(" status=${it.status}")
+                            append(" pssKb=${it.pss}")
+                            append(" rssKb=${it.rss}")
+                        }
+                    },
                 )
             }
         }
     }
+
+    private fun latestExit(context: Context, aliveTimestampMs: Long): ExitSnapshot? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+        return latestExitApi30(context, aliveTimestampMs)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun latestExitApi30(context: Context, aliveTimestampMs: Long): ExitSnapshot? {
+        return runCatching {
+            val activityManager = context.getSystemService(ActivityManager::class.java)
+            activityManager.getHistoricalProcessExitReasons(context.packageName, 0, 4)
+                .firstOrNull { it.timestamp >= aliveTimestampMs - EXIT_REASON_CLOCK_SLOP_MS }
+                ?.let { info ->
+                    ExitSnapshot(
+                        reason = info.reason,
+                        status = info.status,
+                        pss = info.pss,
+                        rss = info.rss,
+                    )
+                }
+        }.getOrNull()
+    }
+
+    private const val EXIT_REASON_CLOCK_SLOP_MS = 60_000L
 }

@@ -27,6 +27,7 @@ import com.iptv.player.util.CrashReporter
 import com.iptv.player.util.HeartbeatReporter
 import com.iptv.player.util.Logger
 import com.iptv.player.util.PlaybackRouteMemory
+import com.iptv.player.util.PlaybackRemotePolicy
 import com.iptv.player.util.LiveTransportMemory
 import com.iptv.player.util.RequestReporter
 import com.iptv.player.util.ResolvedRequestCenter
@@ -66,6 +67,7 @@ class IptvApp : Application() {
         // Load any stability events spooled by a previous run so they ship on the
         // next beat (set up before we record the abnormal-exit check below).
         StabilityTelemetry.init(this)
+        PlaybackRemotePolicy.init(this)
 
         // Build the privacy-safe device/codec capability fingerprint off the main
         // thread. StabilityTelemetry must be ready first because completed QoE

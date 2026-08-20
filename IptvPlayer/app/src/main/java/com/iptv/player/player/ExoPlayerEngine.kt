@@ -60,6 +60,7 @@ import com.iptv.player.R
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.PlaybackLog
+import com.iptv.player.util.PlaybackRemotePolicy
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 
@@ -94,6 +95,7 @@ class ExoPlayerEngine(
     private var videoOutputReported = false
     private var audioReported = false
     private val lastVideoFrameAtMs = AtomicLong(0L)
+    private var lastHealthPositionMs = -1L
     private var readyForPlayback = false
     private var streamGeneration = 0L
     private var activeMediaId: String? = null
@@ -146,23 +148,36 @@ class ExoPlayerEngine(
     private val videoProgressRunnable = object : Runnable {
         override fun run() {
             val p = player ?: return
-            if (
-                !videoFailureReported &&
-                firstFrameRendered &&
-                p.playWhenReady &&
-                p.playbackState == Player.STATE_READY &&
-                p.videoFormat != null
-            ) {
-                val lastFrame = lastVideoFrameAtMs.get()
-                if (
-                    lastFrame > 0L &&
-                    SystemClock.elapsedRealtime() - lastFrame >= VIDEO_FRAME_STALL_MS
-                ) {
+            val position = p.currentPosition.coerceAtLeast(0L)
+            val clockAdvance = if (lastHealthPositionMs >= 0L) {
+                (position - lastHealthPositionMs).coerceAtLeast(0L)
+            } else {
+                0L
+            }
+            lastHealthPositionMs = position
+            val lastFrame = lastVideoFrameAtMs.get()
+            val decision = LiveVideoLivenessPolicy.classify(
+                evidence = LiveVideoLivenessPolicy.Evidence(
+                    playbackReady =
+                        !videoFailureReported &&
+                            firstFrameRendered &&
+                            p.playWhenReady &&
+                            p.playbackState == Player.STATE_READY &&
+                            p.videoFormat != null,
+                    inputBuffering = p.isLoading || p.playbackState == Player.STATE_BUFFERING,
+                    mediaClockAdvanceMs = clockAdvance,
+                    lastFrameAgeMs = lastFrame.takeIf { it > 0L }?.let {
+                        SystemClock.elapsedRealtime() - it
+                    },
+                ),
+                frameTimeoutMs = VIDEO_FRAME_STALL_MS,
+                minimumClockAdvanceMs = VIDEO_CLOCK_EVIDENCE_MS,
+            )
+            if (decision == LiveVideoLivenessPolicy.Decision.VIDEO_STALL) {
                     reportVideoInvalid(
                         "decoder stopped producing video frames for ${VIDEO_FRAME_STALL_MS}ms",
                     )
                     return
-                }
             }
             handler.postDelayed(this, VIDEO_HEALTH_POLL_MS)
         }
@@ -299,6 +314,15 @@ class ExoPlayerEngine(
                 droppedFrameHealth.onFirstFrame(nowMs)
                 cancelNoFrameCheck()
                 PlaybackLog.log(context, engineName, "onRenderedFirstFrame")
+                if (PlaybackRemotePolicy.snapshot().disablePixelCopyValidation) {
+                    PlaybackLog.log(
+                        context,
+                        engineName,
+                        "remote policy -> accept Media3 rendered-frame signal",
+                    )
+                    reportVerifiedVideoOutput()
+                    return
+                }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     surfaceFrameHealth.start {
                         findVideoSurface(playerView?.videoSurfaceView ?: playerView)
@@ -783,6 +807,7 @@ class ExoPlayerEngine(
         trackSupportCheckRunnable = null
         noFrameCheckRunnable = null
         lastVideoFrameAtMs.set(0L)
+        lastHealthPositionMs = -1L
         return checkNotNull(activeMediaId)
     }
 
@@ -954,6 +979,7 @@ class ExoPlayerEngine(
         private const val NO_FRAME_TIMEOUT_MS = 8000L
         private const val VIDEO_HEALTH_POLL_MS = 2000L
         private const val VIDEO_FRAME_STALL_MS = 7000L
+        private const val VIDEO_CLOCK_EVIDENCE_MS = 500L
         private const val PIXEL_VALIDATION_DEADLINE_MS = 9_000L
     }
 }

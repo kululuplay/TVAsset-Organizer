@@ -27,8 +27,7 @@ import com.iptv.player.playback.core.PlaybackQoeRecord
 import org.json.JSONObject
 import java.io.File
 import java.util.ArrayDeque
-import java.util.Collections
-import java.util.IdentityHashMap
+import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -40,6 +39,11 @@ object StabilityTelemetry {
     private const val MAX_EVENTS = 50
     private const val MAX_DETAIL = 300
     private const val MAX_CHANNEL = 200
+    private const val EVENT_ID = "event_id"
+
+    private val EVENT_ID_PATTERN = Regex(
+        "[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
+    )
 
     private val lock = Any()
     private val events = ArrayDeque<JSONObject>(MAX_EVENTS)
@@ -58,11 +62,17 @@ object StabilityTelemetry {
         io.execute {
             runCatching {
                 if (!f.exists()) return@execute
+                var migratedLegacyEvent = false
                 f.readLines().forEach { line ->
                     if (line.isBlank()) return@forEach
                     val obj = runCatching { JSONObject(line) }.getOrNull() ?: return@forEach
+                    if (ensureEventId(obj)) migratedLegacyEvent = true
                     synchronized(lock) { if (events.size < MAX_EVENTS) events.addLast(obj) }
                 }
+                // Older app versions wrote events without an ID. Persist the IDs
+                // assigned during load before the first heartbeat so retries remain
+                // idempotent even if the process is killed while uploading.
+                if (migratedLegacyEvent) persistAsync()
             }
         }
     }
@@ -83,6 +93,7 @@ object StabilityTelemetry {
     ) {
         runCatching {
             val ev = JSONObject().apply {
+                put(EVENT_ID, UUID.randomUUID().toString())
                 put("t", System.currentTimeMillis())
                 put("type", type)
                 channel?.takeIf { it.isNotBlank() }?.let { put("ch", clip(it, MAX_CHANNEL)) }
@@ -111,6 +122,9 @@ object StabilityTelemetry {
     fun recordQoe(record: PlaybackQoeRecord) {
         runCatching {
             val event = JSONObject().apply {
+                // A playback session closes at most once; reusing its opaque UUID
+                // gives the aggregate a stable identity across process/network retry.
+                put(EVENT_ID, record.session.id.value)
                 put("t", System.currentTimeMillis())
                 put("type", "playback_qoe")
                 record.toSafeFields().forEach { (key, value) -> put(key, value) }
@@ -129,10 +143,20 @@ object StabilityTelemetry {
     /**
      * Up to [max] oldest events to attach to a heartbeat, WITHOUT removing them
      * (a failed upload keeps them). Pass the returned list back to
-     * [confirmUploaded] only after a successful POST.
+     * [confirmUploadedIds] only after the server explicitly acknowledges them.
      */
-    fun snapshot(max: Int): List<JSONObject> =
-        synchronized(lock) { if (events.isEmpty()) emptyList() else events.take(max) }
+    fun snapshot(max: Int): List<JSONObject> {
+        var migratedLegacyEvent = false
+        val result = synchronized(lock) {
+            if (events.isEmpty()) {
+                emptyList()
+            } else {
+                events.take(max).onEach { if (ensureEventId(it)) migratedLegacyEvent = true }
+            }
+        }
+        if (migratedLegacyEvent) persistAsync()
+        return result
+    }
 
     /** Count of events dropped to ring overflow that hasn't been reported yet. */
     fun snapshotDropped(): Int = dropped.get()
@@ -147,16 +171,29 @@ object StabilityTelemetry {
         }
     }
 
-    /** Remove the previously-snapshotted events after a successful upload (by identity). */
-    fun confirmUploaded(uploaded: List<JSONObject>) {
-        if (uploaded.isEmpty()) return
+    /** Remove only IDs the server confirmed are durably present for this device. */
+    fun confirmUploadedIds(ackedIds: Set<String>) {
+        if (ackedIds.isEmpty()) return
         synchronized(lock) {
-            val ids = Collections.newSetFromMap(IdentityHashMap<JSONObject, Boolean>())
-            ids.addAll(uploaded)
             val it = events.iterator()
-            while (it.hasNext()) if (ids.contains(it.next())) it.remove()
+            while (it.hasNext()) {
+                val id = it.next().optString(EVENT_ID)
+                if (id in ackedIds) it.remove()
+            }
         }
         persistAsync()
+    }
+
+    /** Add/replace an invalid legacy ID. Returns true when the object changed. */
+    private fun ensureEventId(event: JSONObject): Boolean {
+        val current = event.optString(EVENT_ID).lowercase()
+        if (EVENT_ID_PATTERN.matches(current)) {
+            val changed = event.optString(EVENT_ID) != current
+            if (changed) event.put(EVENT_ID, current)
+            return changed
+        }
+        event.put(EVENT_ID, UUID.randomUUID().toString())
+        return true
     }
 
     private fun persistAsync() {

@@ -1,6 +1,7 @@
 package com.iptv.player.player.vod
 
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -20,7 +21,10 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.HttpDataSource
+import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlaybackException
@@ -38,6 +42,7 @@ import com.iptv.player.playback.core.FailureSignal
 import com.iptv.player.playback.core.PlaybackFailure
 import com.iptv.player.playback.core.PlaybackFailureClassifier
 import com.iptv.player.player.SurfaceFrameHealthMonitor
+import com.iptv.player.player.VodHttpRedirectPolicy
 import com.iptv.player.util.AppInfo
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
@@ -61,7 +66,11 @@ data class VodBufferConfig(
 data class Media3VodEngineConfig(
     val buffer: VodBufferConfig = VodBufferConfig(),
     val userAgent: String = AppInfo.USER_AGENT,
-    val allowCrossProtocolRedirects: Boolean = false,
+    val connectTimeoutMs: Int = 15_000,
+    val readTimeoutMs: Int = 20_000,
+    /** Allows only an HTTP -> HTTPS upgrade; HTTPS -> HTTP remains blocked. */
+    val allowHttpToHttpsRedirects: Boolean = true,
+    val enablePixelCopyValidation: Boolean = true,
     val preferredAudioLanguage: String? = null,
     val preferredSubtitleLanguage: String? = null,
     /** False forces device-side PCM; true permits HDMI encoded passthrough. */
@@ -72,6 +81,12 @@ data class Media3VodEngineConfig(
         require(userAgent.length <= 200) { "userAgent must be at most 200 characters" }
         require('\r' !in userAgent && '\n' !in userAgent) {
             "userAgent must not contain control-line characters"
+        }
+        require(connectTimeoutMs in 1_000..120_000) {
+            "connectTimeoutMs must be in 1000..120000"
+        }
+        require(readTimeoutMs in 1_000..120_000) {
+            "readTimeoutMs must be in 1000..120000"
         }
     }
 }
@@ -121,8 +136,8 @@ class Media3VodEngine(
     }
     private val surfaceFrameHealth = SurfaceFrameHealthMonitor(
         handler = mainHandler,
-        onSolidGreen = { reportInvalidVideoOutput() },
-        onPersistentBlank = { reportInvalidVideoOutput() },
+        onSolidGreen = { reportInvalidVideoOutputWithNativeEvidence() },
+        onPersistentBlank = { reportInvalidVideoOutputWithNativeEvidence() },
         onHealthyFrame = { reportVerifiedFirstFrame() },
         onSamplingUnavailable = {
             // Protected/vendor surfaces cannot be sampled. Only after the bounded
@@ -139,7 +154,10 @@ class Media3VodEngine(
             verifiedFirstFrameGeneration != generation &&
             reportedFailureGeneration != generation
         ) {
-            reportInvalidVideoOutput()
+            // A PixelCopy callback can hang forever on protected/vendor output.
+            // The native rendered-frame callback remains valid evidence, so the
+            // sampling deadline is capability fallback rather than output failure.
+            reportVerifiedFirstFrame()
         }
     }
 
@@ -436,9 +454,12 @@ class Media3VodEngine(
                 buffer.rebufferMs,
             )
             .build()
-        val httpFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent(config.userAgent)
-            .setAllowCrossProtocolRedirects(config.allowCrossProtocolRedirects)
+        val httpFactory: DataSource.Factory = UpgradeOnlyHttpDataSourceFactory(
+            userAgent = config.userAgent,
+            connectTimeoutMs = config.connectTimeoutMs,
+            readTimeoutMs = config.readTimeoutMs,
+            allowHttpToHttpsRedirects = config.allowHttpToHttpsRedirects,
+        )
         val mediaSourceFactory = DefaultMediaSourceFactory(httpFactory)
         val selector = DefaultTrackSelector(context).apply {
             setParameters(buildUponParameters().setTunnelingEnabled(false))
@@ -633,6 +654,30 @@ class Media3VodEngine(
                 retryAdvice = PlaybackFailure.RetryAdvice.TRY_ALTERNATE_ENGINE,
             ),
         )
+    }
+
+    /** Pixel colour is actionable only when the backend also submitted video frames. */
+    private fun reportInvalidVideoOutputWithNativeEvidence() {
+        val token = generation
+        val mediaId = activeMediaId ?: return
+        if (!surfaceFrameHealth.hasHealthyFrame()) {
+            // A protected/vendor hardware underlay can remain black to PixelCopy
+            // even while the viewer sees valid video. Startup colour alone is
+            // therefore advisory until this surface produced one healthy sample.
+            reportVerifiedFirstFrame()
+            return
+        }
+        val nativeVideoEvidence =
+            renderedFirstFrameGeneration == token &&
+                videoFrameHeartbeatGeneration.get() == token &&
+                videoFrameSequence.get() > 0L &&
+                player?.currentMediaItem?.mediaId == mediaId
+        if (nativeVideoEvidence) {
+            reportInvalidVideoOutput()
+        } else {
+            // Sampling an empty/recreated surface is inconclusive, not terminal.
+            reportVerifiedFirstFrame()
+        }
     }
 
     private fun reportFailureOnce(
@@ -865,7 +910,10 @@ class Media3VodEngine(
             lastVideoFrameAtMs.set(SystemClock.elapsedRealtime())
             videoFrameSequence.incrementAndGet()
             renderedFirstFrameGeneration = token
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            if (
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.N ||
+                !config.enablePixelCopyValidation
+            ) {
                 // PixelCopy is unavailable before API 24; the native callback is
                 // the only usable readiness signal on those supported devices.
                 reportVerifiedFirstFrame()
@@ -915,5 +963,84 @@ class Media3VodEngine(
         private val AUDIO_OUTPUT_ERROR_RANGE = 5_000..5_999
         private val DRM_ERROR_RANGE = 6_000..6_999
         private val VIDEO_OUTPUT_ERROR_RANGE = 7_000..7_999
+    }
+}
+
+/**
+ * DefaultHttpDataSource follows same-protocol redirects itself. Cross-protocol
+ * following stays disabled; when an HTTP response explicitly upgrades to HTTPS,
+ * this wrapper reopens exactly once at the secure target. A later downgrade is
+ * rejected by the fresh delegate and never requested automatically.
+ */
+@OptIn(markerClass = [UnstableApi::class])
+private class UpgradeOnlyHttpDataSourceFactory(
+    private val userAgent: String,
+    private val connectTimeoutMs: Int,
+    private val readTimeoutMs: Int,
+    private val allowHttpToHttpsRedirects: Boolean,
+) : DataSource.Factory {
+    override fun createDataSource(): DataSource = UpgradeOnlyHttpDataSource(
+        sourceFactory = {
+            DefaultHttpDataSource.Factory()
+                .setUserAgent(userAgent)
+                .setConnectTimeoutMs(connectTimeoutMs)
+                .setReadTimeoutMs(readTimeoutMs)
+                .setAllowCrossProtocolRedirects(false)
+                .createDataSource()
+        },
+        allowHttpToHttpsRedirects = allowHttpToHttpsRedirects,
+    )
+}
+
+@OptIn(markerClass = [UnstableApi::class])
+private class UpgradeOnlyHttpDataSource(
+    private val sourceFactory: () -> HttpDataSource,
+    private val allowHttpToHttpsRedirects: Boolean,
+) : DataSource {
+    private val transferListeners = ArrayList<TransferListener>()
+    private var source: HttpDataSource = newSource()
+
+    override fun addTransferListener(transferListener: TransferListener) {
+        transferListeners += transferListener
+        source.addTransferListener(transferListener)
+    }
+
+    override fun open(dataSpec: DataSpec): Long {
+        return try {
+            source.open(dataSpec)
+        } catch (error: HttpDataSource.InvalidResponseCodeException) {
+            val location = error.headerFields.entries
+                .firstOrNull { (name, _) -> name.equals("Location", ignoreCase = true) }
+                ?.value
+                ?.firstOrNull()
+            val target = if (allowHttpToHttpsRedirects) {
+                VodHttpRedirectPolicy.httpsUpgradeTarget(
+                    originalUrl = dataSpec.uri.toString(),
+                    status = error.responseCode,
+                    location = location,
+                )
+            } else {
+                null
+            } ?: throw error
+
+            runCatching { source.close() }
+            source = newSource()
+            source.open(dataSpec.withUri(Uri.parse(target)))
+        }
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+        source.read(buffer, offset, length)
+
+    override fun getUri(): Uri? = source.uri
+
+    override fun getResponseHeaders(): Map<String, List<String>> = source.responseHeaders
+
+    override fun close() {
+        source.close()
+    }
+
+    private fun newSource(): HttpDataSource = sourceFactory().also { next ->
+        transferListeners.forEach(next::addTransferListener)
     }
 }

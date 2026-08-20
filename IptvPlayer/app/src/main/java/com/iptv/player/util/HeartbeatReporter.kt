@@ -116,16 +116,34 @@ object HeartbeatReporter {
             .build()
         ServiceLocator.httpClient.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) return
-            // The beat landed: drop the events we just shipped (older servers simply
-            // ignore the unknown field, so this stays backward compatible).
-            if (pendingEvents.isNotEmpty()) StabilityTelemetry.confirmUploaded(pendingEvents)
-            if (droppedBefore > 0) StabilityTelemetry.confirmDropped(droppedBefore)
             // Newer servers return 200 with {announcement:{id,message}|null}; older
             // ones return 204 (no body). Parse defensively so neither breaks the loop.
             val text = runCatching { resp.body?.string() }.getOrNull()
             if (text.isNullOrBlank()) return
+            val root = runCatching { JSONObject(text) }.getOrNull() ?: return
+
+            // Success of the heartbeat itself is not proof that every telemetry
+            // row was stored. Remove only IDs explicitly acknowledged by the new
+            // server protocol, intersected with this exact batch. Older servers
+            // omit the field, so events remain bounded on disk and retry later.
+            val sentIds = pendingEvents.mapNotNull { event ->
+                event.optString("event_id").takeIf { it.isNotBlank() }
+            }.toSet()
+            val ackedIds = buildSet {
+                val acked = root.optJSONArray("ackedEventIds") ?: return@buildSet
+                for (i in 0 until acked.length()) {
+                    acked.optString(i).takeIf { it in sentIds }?.let(::add)
+                }
+            }
+            if (ackedIds.isNotEmpty()) StabilityTelemetry.confirmUploadedIds(ackedIds)
+            if (droppedBefore > 0 && root.optBoolean("eventsDroppedAccepted", false)) {
+                StabilityTelemetry.confirmDropped(droppedBefore)
+            }
+
             runCatching {
-                val root = JSONObject(text)
+                root.optJSONObject("playbackPolicy")?.let { policy ->
+                    PlaybackRemotePolicy.apply(context, policy)
+                }
                 val obj = root.optJSONObject("announcement")
                 if (obj == null) {
                     AnnouncementCenter.clear()

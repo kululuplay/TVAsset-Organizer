@@ -21,7 +21,7 @@ class ProviderConnectionSafetyTest {
     }
 
     @Test
-    fun `unconfirmed native stop remains blocked for process lifetime`() {
+    fun `unconfirmed native stop is not cleared by Cast end`() {
         ProviderConnectionSafety.resetForTests()
         ProviderConnectionSafety.block(
             ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
@@ -34,6 +34,43 @@ class ProviderConnectionSafetyTest {
             ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
             ProviderConnectionSafety.currentUncertainty(),
         )
+    }
+
+    @Test
+    fun `retired native worker completion releases its uncertainty`() {
+        ProviderConnectionSafety.resetForTests()
+        val token = ProviderConnectionSafety.beginLocalNativeStopUncertainty()
+        assertFalse(ProviderConnectionSafety.newConnectionAllowed)
+
+        ProviderConnectionSafety.resolveDefinitiveLocalStop(token)
+
+        assertTrue(ProviderConnectionSafety.newConnectionAllowed)
+    }
+
+    @Test
+    fun `one native completion cannot clear a second timed out owner`() {
+        ProviderConnectionSafety.resetForTests()
+        val first = ProviderConnectionSafety.beginLocalNativeStopUncertainty()
+        ProviderConnectionSafety.beginLocalNativeStopUncertainty()
+
+        ProviderConnectionSafety.resolveDefinitiveLocalStop(first)
+
+        assertFalse(ProviderConnectionSafety.newConnectionAllowed)
+        assertEquals(
+            ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
+            ProviderConnectionSafety.currentUncertainty(),
+        )
+    }
+
+    @Test
+    fun `token completion never clears a legacy unresolved owner`() {
+        ProviderConnectionSafety.resetForTests()
+        ProviderConnectionSafety.block(ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP)
+        val token = ProviderConnectionSafety.beginLocalNativeStopUncertainty()
+
+        ProviderConnectionSafety.resolveDefinitiveLocalStop(token)
+
+        assertFalse(ProviderConnectionSafety.newConnectionAllowed)
     }
 
     @Test

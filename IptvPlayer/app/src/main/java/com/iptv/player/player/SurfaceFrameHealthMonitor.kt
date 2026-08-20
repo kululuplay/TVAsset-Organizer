@@ -40,6 +40,7 @@ internal class SurfaceFrameHealthMonitor(
     private var surfaceProvider: (() -> SurfaceView?)? = null
 
     fun hasClassifiedFrame(): Boolean = synchronized(lock) { classifiedFrame }
+    fun hasHealthyFrame(): Boolean = synchronized(lock) { recoveryGate.hasHealthyFrame }
     fun isSamplingUnavailable(): Boolean = synchronized(lock) { samplingUnavailable }
 
     fun reset() {

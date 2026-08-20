@@ -95,7 +95,7 @@ class VodPlaybackCoordinatorTest {
     }
 
     @Test
-    fun `source failure retries the same route only once`() {
+    fun `source failure retries same route then probes one alternate engine`() {
         val coordinator = VodPlaybackCoordinator()
         val first = start(coordinator)
 
@@ -107,9 +107,21 @@ class VodPlaybackCoordinatorTest {
         assertEquals(VodPlaybackCoordinator.StartReason.SOURCE_RETRY, retryStart.reason)
         assertEquals(first.generation + 1L, retryStart.generation)
 
-        val terminal = coordinator.dispatch(
+        val fallback = coordinator.dispatch(
             VodPlaybackCoordinator.Event.Failed(
                 retryStart.generation,
+                retryableSourceFailure(),
+            ),
+        )
+        val fallbackStart = fallback
+            .filterIsInstance<VodPlaybackCoordinator.Action.Start>()
+            .single()
+        assertEquals(Route.VLC_HARDWARE, fallbackStart.route)
+        assertEquals(VodPlaybackCoordinator.StartReason.ROUTE_FALLBACK, fallbackStart.reason)
+
+        val terminal = coordinator.dispatch(
+            VodPlaybackCoordinator.Event.Failed(
+                fallbackStart.generation,
                 retryableSourceFailure(),
             ),
         )
@@ -119,6 +131,25 @@ class VodPlaybackCoordinatorTest {
             VodPlaybackCoordinator.Phase.TERMINAL_FAILURE,
             coordinator.state.phase,
         )
+    }
+
+    @Test
+    fun `remote switch can stop source recovery after same route retry`() {
+        val coordinator = VodPlaybackCoordinator()
+        val first = start(
+            coordinator,
+            selection(PlayerMode.AUTO).copy(allowSourceEngineFallback = false),
+        )
+        val retry = coordinator.dispatch(
+            VodPlaybackCoordinator.Event.Failed(first.generation, retryableSourceFailure()),
+        ).filterIsInstance<VodPlaybackCoordinator.Action.Start>().single()
+
+        val terminal = coordinator.dispatch(
+            VodPlaybackCoordinator.Event.Failed(retry.generation, retryableSourceFailure()),
+        )
+
+        assertTrue(terminal.none { it is VodPlaybackCoordinator.Action.Start })
+        assertEquals(VodPlaybackCoordinator.Phase.TERMINAL_FAILURE, coordinator.state.phase)
     }
 
     @Test

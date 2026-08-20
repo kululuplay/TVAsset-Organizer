@@ -21,6 +21,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.ViewGroup
+import com.iptv.player.cast.ProviderConnectionSafety
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
@@ -599,6 +600,24 @@ class PlayerController(
 
         val create = Runnable {
             if (generation != startGeneration) return@Runnable
+            if (!ProviderConnectionSafety.newConnectionAllowed) {
+                PlaybackLog.log(
+                    context,
+                    "Controller",
+                    "provider connection ownership uncertain -> fail closed",
+                )
+                callback.onPlaybackFailure(
+                    PlaybackFailure(
+                        category = PlaybackFailure.Category.RESOURCE,
+                        code = PlaybackFailure.Code.RESOURCE_EXHAUSTED,
+                        phase = PlaybackFailure.Phase.SHUTDOWN,
+                        component = PlaybackFailure.Component.TRANSPORT,
+                        retryAdvice = PlaybackFailure.RetryAdvice.DO_NOT_RETRY,
+                    ),
+                )
+                callback.onFatalError()
+                return@Runnable
+            }
             var candidate: PlayerEngine? = null
             try {
                 val newEngine: PlayerEngine =
