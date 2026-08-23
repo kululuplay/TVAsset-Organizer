@@ -74,6 +74,10 @@ const RETRY_ADVICE = new Set([
   "DO_NOT_RETRY",
   "UNKNOWN",
 ]);
+const AUDIO_CODECS = new Set(["AC3", "E_AC3", "AAC", "MPEG_AUDIO", "OTHER", "UNKNOWN"]);
+const AUDIO_DECODERS = new Set(["HARDWARE", "SOFTWARE", "UNKNOWN"]);
+const AUDIO_SINK_EVENTS = new Set(["CLOCK_STALL", "UNDERRUN", "SINK_ERROR", "CODEC_ERROR"]);
+const AUDIO_OUTPUT_MODES = new Set(["PCM", "PASSTHROUGH"]);
 
 function clip(value, max) {
   if (value == null) return null;
@@ -227,6 +231,26 @@ function sanitizePlaybackQoe(source) {
     tokenList(source.failure_retry_advice, RETRY_ADVICE),
   );
   putIf(payload, "failure_http_statuses", httpStatusList(source.failure_http_statuses));
+  putIf(
+    payload,
+    "audio_failure_codecs",
+    tokenList(source.audio_failure_codecs, AUDIO_CODECS),
+  );
+  putIf(
+    payload,
+    "audio_failure_decoders",
+    tokenList(source.audio_failure_decoders, AUDIO_DECODERS),
+  );
+  putIf(
+    payload,
+    "audio_failure_sink_events",
+    tokenList(source.audio_failure_sink_events, AUDIO_SINK_EVENTS),
+  );
+  putIf(
+    payload,
+    "audio_failure_output_modes",
+    tokenList(source.audio_failure_output_modes, AUDIO_OUTPUT_MODES),
+  );
   if (typeof source.final === "boolean") payload.final = source.final;
   return payload;
 }

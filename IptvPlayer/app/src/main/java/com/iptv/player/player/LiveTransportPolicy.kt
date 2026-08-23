@@ -6,7 +6,14 @@ import java.net.URI
 /** Pure, bounded TS/HLS source recovery policy. */
 internal object LiveTransportPolicy {
 
-    enum class Failure { SOURCE_STARTUP, MANIFEST, DECODE, OTHER }
+    enum class Failure {
+        SOURCE_STARTUP,
+        MANIFEST,
+        /** A previously-playing stream stopped advancing on the same socket. */
+        PLAYBACK_STALL,
+        DECODE,
+        OTHER,
+    }
 
     data class Alternative(
         val url: String,
@@ -26,7 +33,11 @@ internal object LiveTransportPolicy {
         alreadyTried: Boolean,
     ): Alternative? {
         if (alreadyTried) return null
-        if (failure != Failure.SOURCE_STARTUP && failure != Failure.MANIFEST) return null
+        if (
+            failure != Failure.SOURCE_STARTUP &&
+            failure != Failure.MANIFEST &&
+            failure != Failure.PLAYBACK_STALL
+        ) return null
         if (httpStatus == 401 || httpStatus == 403 || httpStatus == 404) return null
         val format = currentFormat ?: LiveStreamUrl.detectFormat(currentUrl) ?: return null
         val alternateFormat = when (format) {

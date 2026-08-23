@@ -42,10 +42,14 @@ import com.iptv.player.playback.android.PlaybackQoeRuntime
 import com.iptv.player.playback.core.PlaybackEndReason
 import com.iptv.player.playback.core.PlaybackEngineKind
 import com.iptv.player.playback.core.PlaybackFailure
+import com.iptv.player.playback.core.PlaybackResourceGovernor
+import com.iptv.player.playback.core.PlaybackResourceToken
 import com.iptv.player.playback.core.PlaybackSessionId
+import com.iptv.player.player.LiveLoadingOverlayPolicy
 import com.iptv.player.player.LivePlaybackQoePolicy
 import com.iptv.player.player.LiveSubtitlePreference
 import com.iptv.player.player.PlayerController
+import com.iptv.player.player.VlcOps
 import com.iptv.player.player.TvPlaybackSession
 import com.iptv.player.ui.catchup.CatchupActivity
 import com.iptv.player.ui.common.BaseActivity
@@ -157,6 +161,8 @@ class HomeActivity : BaseActivity() {
 
     /** Explicit playback state keeps rapid/double OK presses deterministic. */
     private var previewState = LivePreviewPressPolicy.Phase.IDLE
+    private val previewLoadingPolicy = LiveLoadingOverlayPolicy()
+    private var playbackResourceToken: PlaybackResourceToken? = null
 
     /**
      * Fullscreen is a layout state of this Activity, not a second player screen.
@@ -1802,6 +1808,10 @@ class HomeActivity : BaseActivity() {
             return
         }
 
+        if (playbackResourceToken == null) {
+            playbackResourceToken = PlaybackResourceGovernor.begin("live-preview")
+        }
+
         if (previewingChannel?.id != channel.id) {
             finishPreviewQoe(PlaybackEndReason.REPLACED)
             resolvedPreviewStreamFormat = null
@@ -1833,8 +1843,7 @@ class HomeActivity : BaseActivity() {
                 }
         }
         previewState = LivePreviewPressPolicy.Phase.STARTING
-        previewHasRenderedFrame = false
-        previewEngineName = null
+        previewLoadingPolicy.requireFreshFrame()
         pendingFullscreenChannelId =
             if (enterFullscreenWhenReady || inlineFullscreen) channel.id else null
         binding.previewLoading.visibility = View.VISIBLE
@@ -1922,9 +1931,6 @@ class HomeActivity : BaseActivity() {
         previewStreamSubmitted = true
     }
 
-    private var previewHasRenderedFrame = false
-    private var previewEngineName: String? = null
-
     private fun markPreviewReady() {
         cancelAutoRetry(resetAttempts = true)
         previewState = LivePreviewPressPolicy.Phase.READY
@@ -1943,6 +1949,7 @@ class HomeActivity : BaseActivity() {
     private fun buildPreviewCallback() = object : PlayerController.Callback {
         override fun onBuffering() {
             if (castOwnsPreviewPlayback || castLoadPending) return
+            previewLoadingPolicy.onBuffering()
             cancelAutoRetry(resetAttempts = false)
             previewState = LivePreviewPressPolicy.Phase.STARTING
             binding.previewLoading.visibility = View.VISIBLE
@@ -1955,10 +1962,10 @@ class HomeActivity : BaseActivity() {
         }
         override fun onPlaying(engineName: String) {
             if (castOwnsPreviewPlayback || castLoadPending) return
-            if (previewEngineName != null && previewEngineName != engineName) {
-                previewHasRenderedFrame = false
-            }
-            previewEngineName = engineName
+            val canHideLoading = previewLoadingPolicy.shouldHideOnPlaying(
+                engineName = engineName,
+                expectsVideo = !radioMode,
+            )
             PlaybackQoeRuntime.markEngine(
                 previewQoeSessionId,
                 LivePlaybackQoePolicy.engine(engineName),
@@ -1969,13 +1976,14 @@ class HomeActivity : BaseActivity() {
                 localPreviewPlaybackRequested = true
                 playbackSession.setPlaying(true)
             }
-            // Audio-only radio has no video-frame callback. For TV, retain the logo
-            // and buffering cover until a real decoded frame reaches the SurfaceView.
-            if (radioMode) {
-                PlaybackQoeRuntime.markFirstFrame(previewQoeSessionId)
-                showPreviewIdentityPlaceholder()
-                markPreviewReady()
-            } else if (previewHasRenderedFrame) {
+            // Initial TV startup still waits for a freshly verified frame. After
+            // an ordinary rebuffer, the already-verified surface may become ready
+            // from Playing even when the backend has no second first-frame event.
+            if (canHideLoading) {
+                if (radioMode) {
+                    PlaybackQoeRuntime.markFirstFrame(previewQoeSessionId)
+                    showPreviewIdentityPlaceholder()
+                }
                 markPreviewReady()
             }
         }
@@ -1983,8 +1991,7 @@ class HomeActivity : BaseActivity() {
             if (castOwnsPreviewPlayback || castLoadPending) return
             cancelAutoRetry(resetAttempts = false)
             previewState = LivePreviewPressPolicy.Phase.STARTING
-            previewHasRenderedFrame = false
-            previewEngineName = null
+            previewLoadingPolicy.requireFreshFrame()
             binding.previewPlaybackCover.visibility = View.VISIBLE
             if (!radioMode) showPreviewIdentityPlaceholder()
             binding.previewLoading.visibility = View.VISIBLE
@@ -1994,7 +2001,7 @@ class HomeActivity : BaseActivity() {
         }
         override fun onVideoResumed() {
             if (castOwnsPreviewPlayback || castLoadPending) return
-            previewHasRenderedFrame = true
+            previewLoadingPolicy.onVideoResumed()
             binding.infoLogo.visibility = View.GONE
             PlaybackQoeRuntime.markFirstFrame(previewQoeSessionId)
             PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, false)
@@ -2002,6 +2009,7 @@ class HomeActivity : BaseActivity() {
         }
         override fun onEngineChanged(engineName: String) {
             if (castOwnsPreviewPlayback || castLoadPending) return
+            previewLoadingPolicy.onEngineChanged(engineName)
             PlaybackQoeRuntime.markEngine(
                 previewQoeSessionId,
                 LivePlaybackQoePolicy.engine(engineName),
@@ -2042,8 +2050,7 @@ class HomeActivity : BaseActivity() {
             if (castOwnsPreviewPlayback || castLoadPending) return
             cancelAutoRetry(resetAttempts = false)
             previewState = LivePreviewPressPolicy.Phase.STARTING
-            previewHasRenderedFrame = false
-            previewEngineName = null
+            previewLoadingPolicy.requireFreshFrame()
             binding.previewPlaybackCover.visibility = View.VISIBLE
             if (!radioMode) showPreviewIdentityPlaceholder()
             binding.previewLoading.visibility = View.VISIBLE
@@ -2075,8 +2082,7 @@ class HomeActivity : BaseActivity() {
             ) return
             autoRetryAttempt++
             previewState = LivePreviewPressPolicy.Phase.STARTING
-            previewHasRenderedFrame = false
-            previewEngineName = null
+            previewLoadingPolicy.requireFreshFrame()
             binding.previewLoading.visibility = View.VISIBLE
             binding.previewStatus.setText(R.string.buffering)
             val channel = previewingChannel ?: return
@@ -2219,8 +2225,7 @@ class HomeActivity : BaseActivity() {
         resolvedPreviewStreamFormat = null
         previewStreamSubmitted = false
         previewState = LivePreviewPressPolicy.Phase.STARTING
-        previewHasRenderedFrame = false
-        previewEngineName = null
+        previewLoadingPolicy.requireFreshFrame()
         binding.previewPlaybackCover.visibility = View.VISIBLE
         binding.previewLoading.visibility = View.VISIBLE
         binding.previewStatus.setText(R.string.buffering)
@@ -2245,8 +2250,7 @@ class HomeActivity : BaseActivity() {
         resolvedPreviewStreamFormat = null
         previewStreamSubmitted = false
         previewState = LivePreviewPressPolicy.Phase.STARTING
-        previewHasRenderedFrame = false
-        previewEngineName = null
+        previewLoadingPolicy.requireFreshFrame()
         binding.previewPlaybackCover.visibility = View.VISIBLE
         binding.previewLoading.visibility = View.VISIBLE
         binding.previewStatus.setText(R.string.buffering)
@@ -2959,6 +2963,8 @@ class HomeActivity : BaseActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        PlaybackResourceGovernor.end(playbackResourceToken)
+        playbackResourceToken = null
         sleepTimer.release()
         castController.detach()
         finishPreviewQoe(PlaybackEndReason.APP_SHUTDOWN)
@@ -2992,13 +2998,25 @@ class HomeActivity : BaseActivity() {
             playbackSession.setPlaying(false)
             playbackSession.abandonAudioFocus()
         }
-        previewController?.release()
+        val retiringController = previewController
+        retiringController?.release()
         previewController = null
+        val resourceToken = playbackResourceToken
+        playbackResourceToken = null
+        if (retiringController == null) {
+            PlaybackResourceGovernor.end(resourceToken)
+        } else {
+            // PlayerController queues any blocking VLC teardown on the shared FIFO.
+            // Release the background-work gate only after that queue reaches this
+            // marker; Exo/no-VLC paths pass it immediately.
+            VlcOps.post {
+                runOnUiThread { PlaybackResourceGovernor.end(resourceToken) }
+            }
+        }
         previewingChannel = null
         NowPlaying.clear(this)
         previewState = LivePreviewPressPolicy.Phase.IDLE
-        previewHasRenderedFrame = false
-        previewEngineName = null
+        previewLoadingPolicy.requireFreshFrame()
         previewStreamSubmitted = false
         resolvedPreviewStreamFormat = null
         pendingFullscreenChannelId = null

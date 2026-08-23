@@ -33,7 +33,10 @@ import com.iptv.player.playback.android.PlaybackQoeRuntime
 import com.iptv.player.playback.core.PlaybackEndReason
 import com.iptv.player.playback.core.PlaybackEngineKind
 import com.iptv.player.playback.core.PlaybackFailure
+import com.iptv.player.playback.core.PlaybackResourceGovernor
+import com.iptv.player.playback.core.PlaybackResourceToken
 import com.iptv.player.playback.core.PlaybackSessionId
+import com.iptv.player.player.LiveLoadingOverlayPolicy
 import com.iptv.player.player.LivePlaybackQoePolicy
 import com.iptv.player.player.LiveStreamUrl
 import com.iptv.player.player.LiveSubtitlePreference
@@ -120,6 +123,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     /** Opaque, URL/title-free QoE session for the current fullscreen channel. */
     private var qoeSessionId: PlaybackSessionId? = null
+    private val loadingOverlayPolicy = LiveLoadingOverlayPolicy()
+    private var playbackResourceToken: PlaybackResourceToken? = null
 
     /** Diagnostics overlay state (toggled via the menu / INFO key). */
     private val statsHandler = Handler(Looper.getMainLooper())
@@ -372,7 +377,11 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     }
 
     private fun startChannel(channel: Channel) {
+        if (playbackResourceToken == null) {
+            playbackResourceToken = PlaybackResourceGovernor.begin("live-player")
+        }
         finishQoeSession(PlaybackEndReason.REPLACED)
+        loadingOverlayPolicy.requireFreshFrame()
         currentChannel = channel
         resolvedStreamFormat = null
         localStreamSubmitted = false
@@ -387,11 +396,15 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             // the paused local controller is restarted on this latest channel
             // only after the Cast session really ends.
             castController.reloadCurrentMedia()
+            PlaybackResourceGovernor.end(playbackResourceToken)
+            playbackResourceToken = null
             showOverlay(channel)
             return
         }
         if (castLoadPending) {
             castController.reloadCurrentMedia()
+            PlaybackResourceGovernor.end(playbackResourceToken)
+            playbackResourceToken = null
             showOverlay(channel)
             return
         }
@@ -402,10 +415,14 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             // channel/format state is ready; the two-phase callbacks quiesce local
             // playback before the receiver opens the provider URL.
             castController.reloadCurrentMedia()
+            PlaybackResourceGovernor.end(playbackResourceToken)
+            playbackResourceToken = null
             showOverlay(channel)
             return
         }
         if (!prepareLocalPlaybackRequest()) {
+            PlaybackResourceGovernor.end(playbackResourceToken)
+            playbackResourceToken = null
             showOverlay(channel)
             return
         }
@@ -774,6 +791,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     override fun onBuffering() {
         if (castOwnsPlayback || castLoadPending) return
+        loadingOverlayPolicy.onBuffering()
         // A playback attempt is underway (auto retry, manual retry or a zap) —
         // stop any pending countdown but keep the attempt count: only a real
         // success (onPlaying/onVideoResumed) forgives past failures, otherwise
@@ -788,6 +806,10 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     override fun onPlaying(engineName: String) {
         if (castOwnsPlayback || castLoadPending) return
+        val canHideLoading = loadingOverlayPolicy.shouldHideOnPlaying(
+            engineName = engineName,
+            expectsVideo = !viewModel.radioMode,
+        )
         cancelAutoRetry(resetAttempts = true)
         binding.errorOverlay.visibility = View.GONE
         PlaybackQoeRuntime.markEngine(qoeSessionId, LivePlaybackQoePolicy.engine(engineName))
@@ -797,11 +819,11 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             localPlaybackRequested = true
             playbackSession.setPlaying(true)
         }
-        // Audio/cache readiness can arrive while the decoder surface is still
-        // green. TV remains covered until onVideoResumed() confirms fresh pixels;
-        // radio has no video frame and may become ready here.
-        if (viewModel.radioMode) {
-            PlaybackQoeRuntime.markFirstFrame(qoeSessionId)
+        // Cold starts/restarts remain covered until a fresh verified frame. A
+        // normal rebuffer on an already-verified surface may clear from Playing,
+        // because many backends do not emit a second first-frame callback.
+        if (canHideLoading) {
+            if (viewModel.radioMode) PlaybackQoeRuntime.markFirstFrame(qoeSessionId)
             binding.playbackCover.visibility = View.GONE
             binding.bufferingIndicator.visibility = View.GONE
         }
@@ -809,6 +831,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     override fun onPlaybackRestarting() {
         if (castOwnsPlayback || castLoadPending) return
+        loadingOverlayPolicy.requireFreshFrame()
         cancelAutoRetry(resetAttempts = false)
         binding.errorOverlay.visibility = View.GONE
         binding.playbackCover.visibility = View.VISIBLE
@@ -819,6 +842,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     override fun onVideoResumed() {
         if (castOwnsPlayback || castLoadPending) return
+        loadingOverlayPolicy.onVideoResumed()
         // First real frame on the (re)attached surface — clear the hand-off cover
         // and any reconnect indicator the moment playback genuinely resumes.
         cancelAutoRetry(resetAttempts = true)
@@ -835,6 +859,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     override fun onEngineChanged(engineName: String) {
         if (castOwnsPlayback || castLoadPending) return
+        loadingOverlayPolicy.onEngineChanged(engineName)
         PlaybackQoeRuntime.markEngine(qoeSessionId, LivePlaybackQoePolicy.engine(engineName))
     }
 
@@ -855,6 +880,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     override fun onRetrying(attempt: Int) {
         if (castOwnsPlayback || castLoadPending) return
+        loadingOverlayPolicy.requireFreshFrame()
         // Non-blocking "stream not responding, retrying…" indicator over the
         // picture while the controller re-opens the same channel. Cleared
         // automatically by onPlaying / onVideoResumed once playback resumes.
@@ -971,7 +997,14 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             !::controller.isInitialized ||
             !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         ) return
-        if (!prepareLocalPlaybackRequest()) return
+        if (playbackResourceToken == null) {
+            playbackResourceToken = PlaybackResourceGovernor.begin("live-player")
+        }
+        if (!prepareLocalPlaybackRequest()) {
+            PlaybackResourceGovernor.end(playbackResourceToken)
+            playbackResourceToken = null
+            return
+        }
         if (!localStreamSubmitted) {
             currentChannel?.let(::startChannel)
             return
@@ -980,11 +1013,18 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         controller.resume()
     }
 
-    private fun pauseLocalPlayback(abandonFocus: Boolean) {
+    private fun pauseLocalPlayback(
+        abandonFocus: Boolean,
+        onQuiesced: () -> Unit = {},
+    ) {
         localPlaybackRequested = false
         PlaybackQoeRuntime.setRebuffering(qoeSessionId, false)
         playbackSession.setPlaying(false)
-        if (::controller.isInitialized) controller.pause()
+        if (::controller.isInitialized) {
+            controller.quiesce { onQuiesced() }
+        } else {
+            onQuiesced()
+        }
         if (abandonFocus) playbackSession.abandonAudioFocus()
     }
 
@@ -1091,6 +1131,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     // ---- Lifecycle ------------------------------------------------------
 
     override fun onStop() {
+        val resourceToken = playbackResourceToken
+        playbackResourceToken = null
         playbackSession.setActive(false)
         // Never carry a half-press across background/foreground. Some Bluetooth
         // remotes lose the UP event while an Activity is stopping.
@@ -1105,14 +1147,18 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         if (!castOwnsPlayback) {
             finishQoeSession(PlaybackEndReason.BACKGROUND)
             if (!castLoadPending) {
-                pauseLocalPlayback(abandonFocus = true)
+                pauseLocalPlayback(abandonFocus = true) {
+                    PlaybackResourceGovernor.end(resourceToken)
+                }
             } else {
                 playbackSession.setPlaying(false)
                 playbackSession.abandonAudioFocus()
+                PlaybackResourceGovernor.end(resourceToken)
             }
         } else {
             playbackSession.setPlaying(false)
             playbackSession.abandonAudioFocus()
+            PlaybackResourceGovernor.end(resourceToken)
         }
         NowPlaying.clear(this)
     }
@@ -1135,6 +1181,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     override fun onDestroy() {
         super.onDestroy()
+        PlaybackResourceGovernor.end(playbackResourceToken)
+        playbackResourceToken = null
         epgJob?.cancel()
         sleepTimer.release()
         castController.detach()

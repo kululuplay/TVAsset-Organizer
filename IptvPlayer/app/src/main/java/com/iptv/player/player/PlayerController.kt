@@ -26,6 +26,8 @@ import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.model.StreamFormat
+import com.iptv.player.playback.android.PlaybackQoeRuntime
+import com.iptv.player.playback.core.AudioFailureEvidence
 import com.iptv.player.playback.core.FailureSignal
 import com.iptv.player.playback.core.PlaybackFailure
 import com.iptv.player.playback.core.PlaybackFailureClassifier
@@ -273,12 +275,18 @@ class PlayerController(
     // One controlled hardware revisit is allowed even when that stage was tried
     // before software; the corrected hardware health gate then owns recovery.
     private var softwareSlowHardwareRetryUsed = false
+    // A proven AC-3/Media3 sink stall gets exactly one compatibility rescue per
+    // channel. The target VLC path decodes to PCM stereo when passthrough is off.
+    private var ac3PcmFallbackUsed = false
     // Generic errors before any playback may be transport noise once, but repeated
     // unconfirmed failures mean the preferred engine cannot start this stream.
     // Preserve this across same-stage reconnects and route after the second one.
     private var unconfirmedStartFailures = 0
     private var adaptiveRebuffers = 0
     private var adaptiveBufferingActive = false
+    private val devicePlaybackProfile by lazy {
+        PlaybackQoeRuntime.devicePlaybackProfile()
+    }
     private val lowRamDevice: Boolean = runCatching {
         val manager = context.applicationContext
             .getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
@@ -422,6 +430,7 @@ class PlayerController(
         stableHandler.removeCallbacksAndMessages(null)
         quickDecodeFailures = 0
         softwareSlowHardwareRetryUsed = false
+        ac3PcmFallbackUsed = false
         unconfirmedStartFailures = 0
         adaptiveRebuffers = 0
         adaptiveBufferingActive = false
@@ -826,6 +835,10 @@ class PlayerController(
         override fun onAudioUnavailable() =
             post { if (source === engine) handleEngineFailure(Reason.AUDIO) }
 
+        override fun onAudioStall(evidence: AudioFailureEvidence) = post {
+            if (source === engine) handleAudioStall(evidence)
+        }
+
         override fun onVideoInvalid() =
             post { if (source === engine) handleEngineFailure(Reason.VIDEO) }
 
@@ -847,6 +860,60 @@ class PlayerController(
 
     private fun notifyPlaybackFailure(failure: PlaybackFailure) {
         callback.onPlaybackFailure(failure)
+    }
+
+    /**
+     * Route a proven Media3 AC-3 sink/clock stall once to VLC's PCM-stereo path.
+     * startStage -> startEngine -> releaseEngine retires the old provider socket
+     * before creating VLC, preserving the single-connection subscription limit.
+     */
+    private fun handleAudioStall(evidence: AudioFailureEvidence) {
+        if (suspended) {
+            recoveryNeededOnResume = true
+            return
+        }
+        notifyPlaybackFailure(
+            PlaybackFailureClassifier.classify(
+                FailureSignal.AudioStall(evidence),
+                PlaybackFailure.Phase.PLAYBACK,
+            ),
+        )
+        PlaybackRouteMemory.forget(currentRouteKey, stage.name)
+
+        val target = LiveAudioStallPolicy.fallbackStage(
+            current = stage,
+            outputMode = evidence.outputMode,
+            alreadyUsed = ac3PcmFallbackUsed,
+            triedStages = triedStages,
+            bypassVlcHardware = bypassVlcHardware,
+        )
+        if (target == null) {
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "AC3 PCM rescue unavailable/already used -> bounded fatal",
+            )
+            recordStability("audio_stall", "fatal", "bounded PCM rescue exhausted")
+            resetReconnect()
+            cancelWatchdog()
+            callback.onFatalError()
+            return
+        }
+
+        ac3PcmFallbackUsed = true
+        resetReconnect()
+        cancelWatchdog()
+        PlaybackLog.log(
+            context,
+            "Controller",
+            "AC3 audio stall -> one bounded ${target.name} PCM stereo rescue",
+        )
+        recordStability(
+            "audio_fallback",
+            "warn",
+            "EXO AC3 ${evidence.sinkEvent.name} -> ${target.name} PCM",
+        )
+        startStage(target)
     }
 
     /** Translate engine/routing evidence without retaining native text or URLs. */
@@ -1109,6 +1176,9 @@ class PlayerController(
                     ),
                 )
                 cancelWatchdog()
+                if (tryTransportFallback(LiveTransportPolicy.Failure.PLAYBACK_STALL)) {
+                    return@postDelayed
+                }
                 engageReconnect()
                 return@postDelayed
             }
@@ -1430,12 +1500,15 @@ class PlayerController(
     /** The stage to advance to, or null when no more paths are available. */
     private fun nextStage(current: Stage, reason: Reason): Stage? {
         val streamInfo = engine?.getStreamInfo()
+        val softwareCodecUnavailable =
+            !devicePlaybackProfile.allowSoftwareHevcRescue &&
+                isHevcCodec(streamInfo?.codec)
         val unavailableAwareTriedStages =
             triedStages + VlcHardwareDevicePolicy.unavailableStages(
                 bypassVlcHardware = bypassVlcHardware,
                 width = streamInfo?.width ?: 0,
                 height = streamInfo?.height ?: 0,
-            )
+            ) + if (softwareCodecUnavailable) setOf(Stage.VLC_SW) else emptySet()
         return PlaybackRoutingPolicy.nextStage(
             mode = mode,
             decoderMode = decoderMode,
@@ -1453,6 +1526,15 @@ class PlayerController(
 
     /** Current video stream info for the diagnostics overlay, or null. */
     fun streamInfo(): StreamInfo? = engine?.getStreamInfo()
+
+    private fun isHevcCodec(codec: String?): Boolean {
+        val normalized = codec?.trim()?.lowercase().orEmpty()
+        return normalized.contains("hevc") ||
+            normalized.contains("h265") ||
+            normalized.contains("h.265") ||
+            normalized.contains("hev1") ||
+            normalized.contains("hvc1")
+    }
 
     fun pause() {
         quiesce { }

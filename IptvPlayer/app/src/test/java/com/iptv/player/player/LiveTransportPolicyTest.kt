@@ -59,6 +59,27 @@ class LiveTransportPolicyTest {
     }
 
     @Test
+    fun `mid stream stall may try the alternate transport once`() {
+        val result = LiveTransportPolicy.alternate(
+            currentUrl = "https://kululu.live/stream/12.ts?token=x",
+            currentFormat = StreamFormat.TS,
+            failure = LiveTransportPolicy.Failure.PLAYBACK_STALL,
+            alreadyTried = false,
+        )
+
+        assertEquals(StreamFormat.HLS, result?.format)
+        assertEquals("https://kululu.live/stream/12.m3u8?token=x", result?.url)
+        assertNull(
+            LiveTransportPolicy.alternate(
+                currentUrl = result!!.url,
+                currentFormat = result.format,
+                failure = LiveTransportPolicy.Failure.PLAYBACK_STALL,
+                alreadyTried = true,
+            ),
+        )
+    }
+
+    @Test
     fun `codec errors and non rewriteable urls stay untouched`() {
         assertNull(
             LiveTransportPolicy.alternate(

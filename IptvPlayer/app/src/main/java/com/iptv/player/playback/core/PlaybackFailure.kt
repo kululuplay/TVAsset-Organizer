@@ -22,6 +22,8 @@ data class PlaybackFailure(
     val component: Component = Component.UNKNOWN,
     val retryAdvice: RetryAdvice = RetryAdvice.UNKNOWN,
     val httpStatus: Int? = null,
+    /** Closed, credential-free evidence present only for a proven audio-path fault. */
+    val audioEvidence: AudioFailureEvidence? = null,
 ) {
     init {
         require(httpStatus == null || httpStatus in 400..599) {
@@ -32,6 +34,9 @@ data class PlaybackFailure(
         }
         require(code !in HTTP_CODES || httpStatus != null) {
             "HTTP failure codes must include the numeric status"
+        }
+        require(audioEvidence == null || component == Component.AUDIO) {
+            "Audio evidence can only accompany an AUDIO component failure"
         }
     }
 
@@ -71,6 +76,7 @@ data class PlaybackFailure(
         DECODER_RUNTIME_FAILED,
         DECODER_RESOURCES_RECLAIMED,
         AUDIO_SINK_FAILED,
+        AUDIO_STALL,
         VIDEO_OUTPUT_FAILED,
         DRM_PROVISIONING_FAILED,
         DRM_LICENSE_FAILED,
@@ -132,6 +138,28 @@ data class PlaybackFailure(
     }
 }
 
+/**
+ * Privacy-reviewed audio evidence suitable for the bounded QoE payload.
+ *
+ * Raw MIME strings, decoder names and exception messages deliberately cannot be
+ * represented here. Media3 adapters reduce them to these closed enums before the
+ * evidence leaves the engine boundary.
+ */
+data class AudioFailureEvidence(
+    val codec: Codec,
+    val decoder: Decoder,
+    val sinkEvent: SinkEvent,
+    val outputMode: OutputMode,
+) {
+    enum class Codec { AC3, E_AC3, AAC, MPEG_AUDIO, OTHER, UNKNOWN }
+
+    enum class Decoder { HARDWARE, SOFTWARE, UNKNOWN }
+
+    enum class SinkEvent { CLOCK_STALL, UNDERRUN, SINK_ERROR, CODEC_ERROR }
+
+    enum class OutputMode { PCM, PASSTHROUGH }
+}
+
 /** Media-library-free signals accepted by [PlaybackFailureClassifier]. */
 sealed interface FailureSignal {
     data class Http(val status: Int) : FailureSignal {
@@ -164,6 +192,8 @@ sealed interface FailureSignal {
             ) { "Output failures must identify VIDEO or AUDIO" }
         }
     }
+
+    data class AudioStall(val evidence: AudioFailureEvidence) : FailureSignal
 
     data class Drm(val kind: DrmKind) : FailureSignal
 
@@ -227,6 +257,7 @@ object PlaybackFailureClassifier {
         is FailureSignal.Source -> classifySource(signal.kind, phase)
         is FailureSignal.Decoder -> classifyDecoder(signal, phase)
         is FailureSignal.Output -> classifyOutput(signal.component, phase)
+        is FailureSignal.AudioStall -> classifyAudioStall(signal.evidence, phase)
         is FailureSignal.Drm -> classifyDrm(signal.kind, phase)
         is FailureSignal.Timeout -> classifyTimeout(signal.kind, phase)
         is FailureSignal.Resource -> classifyResource(signal.kind, phase)
@@ -417,6 +448,18 @@ object PlaybackFailureClassifier {
         phase = phase,
         component = component,
         retryAdvice = PlaybackFailure.RetryAdvice.TRY_ALTERNATE_ENGINE,
+    )
+
+    private fun classifyAudioStall(
+        evidence: AudioFailureEvidence,
+        phase: PlaybackFailure.Phase,
+    ): PlaybackFailure = PlaybackFailure(
+        category = PlaybackFailure.Category.OUTPUT,
+        code = PlaybackFailure.Code.AUDIO_STALL,
+        phase = phase,
+        component = PlaybackFailure.Component.AUDIO,
+        retryAdvice = PlaybackFailure.RetryAdvice.TRY_ALTERNATE_ENGINE,
+        audioEvidence = evidence,
     )
 
     private fun classifyDrm(

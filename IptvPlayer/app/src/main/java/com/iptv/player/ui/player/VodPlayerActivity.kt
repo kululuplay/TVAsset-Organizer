@@ -58,6 +58,8 @@ import com.iptv.player.player.vod.VodRouteKey
 import com.iptv.player.player.vod.VodTrack
 import com.iptv.player.playback.core.FailureSignal
 import com.iptv.player.playback.core.PlaybackFailure
+import com.iptv.player.playback.core.PlaybackResourceGovernor
+import com.iptv.player.playback.core.PlaybackResourceToken
 import com.iptv.player.playback.core.PlaybackFailureClassifier
 import com.iptv.player.playback.android.PlaybackQoeRuntime
 import com.iptv.player.playback.core.PlaybackContentKind
@@ -228,6 +230,7 @@ class VodPlayerActivity : BaseActivity() {
     private var decoderMode = DecoderMode.AUTO
     private var playerMode = PlayerMode.AUTO
     private var bufferMode = BufferMode.NORMAL
+    private var playbackResourceToken: PlaybackResourceToken? = null
     private var allowPassthrough = false
 
     /** Active hybrid VOD backend. Exactly one of this engine or [nativeOwner] owns output. */
@@ -2420,6 +2423,9 @@ class VodPlayerActivity : BaseActivity() {
             resumeAfterBackground = true
             return
         }
+        if (playbackResourceToken == null) {
+            playbackResourceToken = PlaybackResourceGovernor.begin("vod-player")
+        }
         if (isMedia3Route()) {
             prepareMedia3AfterProviderDrain(positionMs)
             return
@@ -3631,6 +3637,9 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     override fun onStop() {
+        val resourceToken = playbackResourceToken
+        playbackResourceToken = null
+        var resourceReleaseDeferred = false
         playbackSession.setActive(false)
         if (binding.nextEpisodeOverlay.visibility == View.VISIBLE) {
             dismissNextEpisodePrompt(restoreFocus = false)
@@ -3720,9 +3729,11 @@ class VodPlayerActivity : BaseActivity() {
             if (ownerOperation == null) {
                 quarantineOwner(stoppingOwner, "background stop could not claim owner")
                 NowPlaying.clear(this)
+                PlaybackResourceGovernor.end(resourceToken)
                 super.onStop()
                 return
             }
+            resourceReleaseDeferred = true
             val nativeStopFinished = AtomicBoolean(false)
             fun finishNativeStop() {
                 if (nativeStopFinished.compareAndSet(false, true)) {
@@ -3743,6 +3754,10 @@ class VodPlayerActivity : BaseActivity() {
                     finishNativeStop()
                     markOwnerConnectionUncertain(stoppingOwner)
                     quarantineOwner(stoppingOwner, "background native stop timed out")
+                    // A vendor JNI call may never return. Exact-token end keeps
+                    // non-playback work from being blocked for the process lifetime;
+                    // the eventual worker finally is an idempotent no-op here.
+                    PlaybackResourceGovernor.end(resourceToken)
                 },
             ) {
                 var stopFailure: Throwable? = null
@@ -3770,6 +3785,7 @@ class VodPlayerActivity : BaseActivity() {
                     finishNativeStop()
                     ownerOperation.onAbandoned.set(null)
                     finishOwnerOperationOnWorker(ownerOperation)
+                    PlaybackResourceGovernor.end(resourceToken)
                 }
                 if (stopFailure != null) {
                     handler.post {
@@ -3798,10 +3814,15 @@ class VodPlayerActivity : BaseActivity() {
             }
         }
         NowPlaying.clear(this)
+        if (!resourceReleaseDeferred) {
+            PlaybackResourceGovernor.end(resourceToken)
+        }
         super.onStop()
     }
 
     override fun onDestroy() {
+        PlaybackResourceGovernor.end(playbackResourceToken)
+        playbackResourceToken = null
         if (binding.nextEpisodeOverlay.visibility == View.VISIBLE) {
             dismissNextEpisodePrompt(restoreFocus = false)
         }

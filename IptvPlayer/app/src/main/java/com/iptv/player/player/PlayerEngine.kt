@@ -7,6 +7,7 @@
 package com.iptv.player.player
 
 import android.view.ViewGroup
+import com.iptv.player.playback.core.AudioFailureEvidence
 
 interface PlayerEngine {
 
@@ -190,6 +191,13 @@ interface PlayerListener {
      * back to libVLC, which decodes these in software to PCM.
      */
     fun onAudioUnavailable() {}
+
+    /**
+     * A proven, codec-specific audio-path stall after media progress. Evidence is
+     * reduced to closed enums at the engine boundary; raw decoder names, URLs and
+     * exception messages never reach controller/QoE telemetry.
+     */
+    fun onAudioStall(evidence: AudioFailureEvidence) {}
 
     /**
      * Video is reporting "playing" but the surface is a green/blank/invalid frame
