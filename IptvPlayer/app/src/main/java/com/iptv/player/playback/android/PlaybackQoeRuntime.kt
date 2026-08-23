@@ -9,6 +9,7 @@ import com.iptv.player.playback.core.PlaybackQoeRecorder
 import com.iptv.player.playback.core.PlaybackSession
 import com.iptv.player.playback.core.PlaybackSessionId
 import com.iptv.player.playback.core.PlaybackTransportKind
+import com.iptv.player.playback.core.DevicePlaybackProfile
 import com.iptv.player.util.StabilityTelemetry
 import java.util.concurrent.Executors
 
@@ -34,13 +35,18 @@ object PlaybackQoeRuntime {
             // and application startup must never fail because of telemetry.
             runCatching {
                 collector.execute {
-                    capabilityFingerprint = runCatching {
-                        AndroidDeviceCapabilityCollector.collect(app).fingerprint()
+                    val snapshot = runCatching {
+                        AndroidDevicePlaybackProfileCache.loadOrCollect(app)
                     }.getOrNull()
+                    capabilityFingerprint = snapshot?.capabilityFingerprint
                 }
             }
         }
     }
+
+    /** Last cached profile; safe conservative fallback until the background load completes. */
+    fun devicePlaybackProfile(): DevicePlaybackProfile =
+        AndroidDevicePlaybackProfileCache.currentProfile()
 
     fun start(
         kind: PlaybackContentKind,

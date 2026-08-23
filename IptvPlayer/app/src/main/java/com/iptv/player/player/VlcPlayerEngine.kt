@@ -207,6 +207,32 @@ class VlcPlayerEngine(
                             hasFrameEvidence = true,
                         )
                     }
+                    // A few TV/libVLC combinations (notably some AC-3 live TS
+                    // routes) emit Buffering below 100 and never follow it with
+                    // another Playing/Vout event even though decoded pictures are
+                    // visibly advancing again. The surface must already have been
+                    // verified for THIS media session before native picture
+                    // progress may clear buffering; a zap/restart resets
+                    // videoOutputReported, and the concrete-player identity is
+                    // rechecked to reject a retired player's health sample.
+                    if (
+                        mediaPlayer === mp &&
+                        !playbackFailureReported.get() &&
+                        shouldSignalVlcFrameProgressResumed(
+                            surfaceWasVerified = videoOutputReported,
+                            bufferingActive = bufferingActive.get(),
+                            displayedFrameAdvanced = decision.displayedFrameAdvanced,
+                        ) &&
+                        bufferingActive.compareAndSet(true, false)
+                    ) {
+                        playingObserved.set(true)
+                        PlaybackLog.log(
+                            context,
+                            engineName,
+                            "displayedPictures advancing -> buffering resumed",
+                        )
+                        listener?.onPlaying()
+                    }
                     when {
                         decision.videoFrozen && forceSoftware ->
                             reportSoftwareTooSlow("software video output froze while input/time advanced")

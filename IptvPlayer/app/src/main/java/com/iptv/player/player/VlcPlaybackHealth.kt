@@ -22,6 +22,7 @@ internal class VlcPlaybackHealth {
 
     data class Decision(
         val firstDisplayedFrame: Boolean = false,
+        val displayedFrameAdvanced: Boolean = false,
         val videoFrozen: Boolean = false,
     )
 
@@ -50,7 +51,10 @@ internal class VlcPlaybackHealth {
 
         if (before == null) {
             lastDisplayedProgressAtMs = nowMs
-            return Decision(firstDisplayedFrame = firstFrame)
+            return Decision(
+                firstDisplayedFrame = firstFrame,
+                displayedFrameAdvanced = firstFrame,
+            )
         }
 
         val displayedDelta = positiveDelta(sample.displayedPictures, before.displayedPictures)
@@ -71,7 +75,10 @@ internal class VlcPlaybackHealth {
         // deadline until libVLC reports active playback again.
         if (!videoActivelyPlaying) {
             lastDisplayedProgressAtMs = nowMs
-            return Decision(firstDisplayedFrame = firstFrame)
+            return Decision(
+                firstDisplayedFrame = firstFrame,
+                displayedFrameAdvanced = firstFrame || displayedDelta > 0L,
+            )
         }
 
         val frozen = !failureReported &&
@@ -88,6 +95,7 @@ internal class VlcPlaybackHealth {
         if (frozen) failureReported = true
         return Decision(
             firstDisplayedFrame = firstFrame,
+            displayedFrameAdvanced = firstFrame || displayedDelta > 0L,
             videoFrozen = frozen,
         )
     }

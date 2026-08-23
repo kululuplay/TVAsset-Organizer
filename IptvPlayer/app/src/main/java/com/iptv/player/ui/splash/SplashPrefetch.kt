@@ -13,11 +13,16 @@ package com.iptv.player.ui.splash
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.SourceConfig
+import com.iptv.player.playback.core.IdleWorkResult
+import com.iptv.player.playback.core.PlaybackResourceGovernor
 import com.iptv.player.util.Logger
 import com.iptv.player.util.NewContentNotifier
 import com.iptv.player.util.Outcome
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -58,6 +63,8 @@ object SplashPrefetch {
 
     @Volatile
     private var job: Job? = null
+    private var activeConfig: SourceConfig? = null
+    private var runGeneration = 0L
 
     /**
      * Starts the prefetch if it isn't already running. Idempotent and race-safe —
@@ -66,14 +73,38 @@ object SplashPrefetch {
      */
     fun start(config: SourceConfig) {
         synchronized(lock) {
-            if (job?.isActive == true) return
-            _stage.value = Stage.STARTING
-            _essentialDone.value = false
-            _essentialFailed.value = false
-            // Fresh launch — clear any leftover "new content" tallies so the
-            // notices reflect only what this launch's refresh discovers.
-            NewContentNotifier.reset()
-            job = ServiceLocator.appScope.launch { run(config) }
+            if (job?.isActive == true && activeConfig == config) return
+            val previous = job
+            val generation = ++runGeneration
+            activeConfig = config
+            job = ServiceLocator.appScope.launch {
+                previous?.cancelAndJoin()
+                if (generation != synchronized(lock) { runGeneration }) return@launch
+                _stage.value = Stage.STARTING
+                _essentialDone.value = false
+                _essentialFailed.value = false
+                NewContentNotifier.reset()
+                try {
+                    run(config)
+                } finally {
+                    synchronized(lock) {
+                        if (generation == runGeneration) {
+                            job = null
+                            activeConfig = null
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Cancels deferred work immediately when the account/source is cleared. */
+    fun cancel() {
+        synchronized(lock) {
+            runGeneration++
+            job?.cancel()
+            job = null
+            activeConfig = null
         }
     }
 
@@ -86,13 +117,38 @@ object SplashPrefetch {
      */
     private suspend fun run(config: SourceConfig) {
         val repo = ServiceLocator.repository
+        var epgDeferredForPlayback = false
+        var libraryDeferredForPlayback = false
         try {
-            stage(Stage.LIVE) { repo.refreshLive(config) }
+            stage(Stage.LIVE) {
+                when (
+                    val result = PlaybackResourceGovernor.runWhileIdle {
+                        repo.refreshLive(config)
+                    }
+                ) {
+                    is IdleWorkResult.Completed -> result.value
+                    IdleWorkResult.InterruptedByPlayback -> {
+                        Logger.d(TAG, "Live refresh interrupted to prioritize playback")
+                        Outcome.Success(0)
+                    }
+                }
+            }
             stage(Stage.EPG) {
                 val nowMs = System.currentTimeMillis()
                 val lastUpdatedAtMs = ServiceLocator.settings.getEpgUpdatedAt()
                 if (shouldRefreshEpg(lastUpdatedAtMs, nowMs)) {
-                    repo.refreshEpg(config)
+                    when (
+                        val result = PlaybackResourceGovernor.runWhileIdle {
+                            repo.refreshEpg(config)
+                        }
+                    ) {
+                        is IdleWorkResult.Completed -> result.value
+                        IdleWorkResult.InterruptedByPlayback -> {
+                            epgDeferredForPlayback = true
+                            Logger.d(TAG, "EPG refresh deferred while playback is active")
+                            Outcome.Success(0)
+                        }
+                    }
                 } else {
                     // XMLTV parse + Room upserts occupied this weak Fire TV for
                     // about 12 seconds while its first live stream was opening.
@@ -103,14 +159,25 @@ object SplashPrefetch {
                 }
             }
             stage(Stage.LIBRARY) {
-                // Both movies and series are lazy per-category, so only the cheap
-                // category lists are fetched here — never the whole catalog.
-                val series = repo.refreshSeriesCategories(config)
-                val vod = repo.refreshVodCategories(config)
-                when {
-                    series is Outcome.Failure -> series
-                    vod is Outcome.Failure -> vod
-                    else -> Outcome.Success(0)
+                when (
+                    val result = PlaybackResourceGovernor.runWhileIdle {
+                        // Both movies and series are lazy per-category, so only the
+                        // category lists are fetched here — never the whole catalog.
+                        val series = repo.refreshSeriesCategories(config)
+                        val vod = repo.refreshVodCategories(config)
+                        when {
+                            series is Outcome.Failure -> series
+                            vod is Outcome.Failure -> vod
+                            else -> Outcome.Success(0)
+                        }
+                    }
+                ) {
+                    is IdleWorkResult.Completed -> result.value
+                    IdleWorkResult.InterruptedByPlayback -> {
+                        libraryDeferredForPlayback = true
+                        Logger.d(TAG, "Library refresh deferred while playback is active")
+                        Outcome.Success(0)
+                    }
                 }
             }
         } finally {
@@ -118,19 +185,29 @@ object SplashPrefetch {
             _essentialDone.value = true
         }
 
+        if (epgDeferredForPlayback) {
+            runNonessentialWhenIdle { repo.refreshEpg(config) }
+        }
+        if (libraryDeferredForPlayback) {
+            runNonessentialWhenIdle {
+                repo.refreshSeriesCategories(config)
+                repo.refreshVodCategories(config)
+            }
+        }
+
         // Re-sync the movie/series categories the user has already opened so newly
         // added titles show up on every app launch. Runs in the background after
         // the splash has already proceeded, force-refreshing via upsert so cached
         // items never flicker — only genuinely new content is added. Done before the
         // warm-up below so the first category isn't fetched twice in one run.
-        runCatchingCancellable { repo.refreshLoadedVodCategories(config) }
-        runCatchingCancellable { repo.refreshLoadedSeriesCategories(config) }
+        runNonessentialWhenIdle { repo.refreshLoadedVodCategories(config) }
+        runNonessentialWhenIdle { repo.refreshLoadedSeriesCategories(config) }
 
         // Best-effort: warm "Recently added" for both rails without pulling the
         // whole catalog (one category each). Not forced, so a category already
         // refreshed by the loaded-sweep above is skipped here (no duplicate fetch).
-        runCatchingCancellable { repo.prefetchFirstVodCategory(config) }
-        runCatchingCancellable { repo.prefetchFirstSeriesCategory(config) }
+        runNonessentialWhenIdle { repo.prefetchFirstVodCategory(config) }
+        runNonessentialWhenIdle { repo.prefetchFirstSeriesCategory(config) }
         _stage.value = Stage.READY
     }
 
@@ -172,6 +249,28 @@ object SplashPrefetch {
             // Best-effort prefetch: ignore ordinary failures and move on.
             Logger.w(TAG, "Prefetch stage failed (ignored): ${e.message}")
             false
+        }
+    }
+
+    /**
+     * Post-splash catalog warming must never compete with playback. If playback
+     * starts midway, cooperative cancellation stops the fetch/transaction and the
+     * same idempotent upsert is retried once the last player owner becomes idle.
+     */
+    private suspend fun runNonessentialWhenIdle(block: suspend () -> Unit): Boolean {
+        while (true) {
+            currentCoroutineContext().ensureActive()
+            when (
+                val result = PlaybackResourceGovernor.runWhileIdle {
+                    runCatchingCancellable(block)
+                }
+            ) {
+                is IdleWorkResult.Completed -> return result.value
+                IdleWorkResult.InterruptedByPlayback -> {
+                    Logger.d(TAG, "Post-splash prefetch deferred until playback is idle")
+                    PlaybackResourceGovernor.awaitIdle()
+                }
+            }
         }
     }
 

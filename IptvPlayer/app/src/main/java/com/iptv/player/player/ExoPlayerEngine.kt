@@ -58,10 +58,13 @@ import androidx.media3.exoplayer.video.VideoFrameMetadataListener
 import androidx.media3.ui.PlayerView
 import com.iptv.player.R
 import com.iptv.player.data.model.BufferMode
+import com.iptv.player.playback.android.PlaybackQoeRuntime
+import com.iptv.player.playback.core.AudioFailureEvidence
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.PlaybackLog
 import com.iptv.player.util.PlaybackRemotePolicy
 import java.util.Locale
+import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicLong
 
 @OptIn(markerClass = [UnstableApi::class])
@@ -94,6 +97,17 @@ class ExoPlayerEngine(
     private var videoFailureReported = false
     private var videoOutputReported = false
     private var audioReported = false
+    private var audioCodec = AudioFailureEvidence.Codec.UNKNOWN
+    private var audioDecoder = AudioFailureEvidence.Decoder.UNKNOWN
+    private var audioDecoderInitialized = false
+    private var audioClockStarted = false
+    private val audioUnderrunTimesMs = ArrayDeque<Long>()
+    private var audioBufferingSinceMs = 0L
+    private var audioBufferingHadMediaProgress = false
+    private var audioBufferingVideoBaselineMs = 0L
+    private var audioBufferingDurationBaselineMs = 0L
+    private var audioUnderrunVideoBaselineMs = 0L
+    private var audioStallCheckRunnable: Runnable? = null
     private val lastVideoFrameAtMs = AtomicLong(0L)
     private var lastHealthPositionMs = -1L
     private var readyForPlayback = false
@@ -204,8 +218,21 @@ class ExoPlayerEngine(
 
         // Explicitly disable video tunneling — it commonly causes green/black
         // frames on cheap Android TV sticks.
+        val deviceProfile = PlaybackQoeRuntime.devicePlaybackProfile()
         val trackSelector = DefaultTrackSelector(context).apply {
-            setParameters(buildUponParameters().setTunnelingEnabled(false))
+            val parameters = buildUponParameters()
+                .setTunnelingEnabled(false)
+                .apply {
+                    // These are adaptive preferences, not hard source rejection:
+                    // DefaultTrackSelector's exceed-video-constraints fallback
+                    // remains enabled, so a fixed/single-rendition channel still
+                    // plays when it is the only available track.
+                    deviceProfile.adaptiveMaxHeight?.let { maxHeight ->
+                        setMaxVideoSize(maxHeight * 16 / 9, maxHeight)
+                    }
+                    deviceProfile.adaptiveMaxFrameRate?.let(::setMaxVideoFrameRate)
+                }
+            setParameters(parameters)
         }
 
         val exo = ExoPlayer.Builder(context, buildRenderersFactory())
@@ -263,10 +290,12 @@ class ExoPlayerEngine(
                     Player.STATE_BUFFERING -> {
                         readyForPlayback = false
                         cancelNoFrameCheck()
+                        scheduleAudioClockStallCheck()
                         listener?.onBuffering()
                     }
                     Player.STATE_READY -> {
                         readyForPlayback = true
+                        cancelAudioClockStallCheck()
                         // Give video a fresh grace period after a long network
                         // rebuffer before judging the prior frame timestamp stale.
                         if (firstFrameRendered) {
@@ -285,11 +314,13 @@ class ExoPlayerEngine(
                     Player.STATE_ENDED -> {
                         readyForPlayback = false
                         cancelNoFrameCheck()
+                        cancelAudioClockStallCheck()
                         listener?.onEnded()
                     }
                     Player.STATE_IDLE -> {
                         readyForPlayback = false
                         cancelNoFrameCheck()
+                        cancelAudioClockStallCheck()
                     }
                 }
             }
@@ -313,6 +344,9 @@ class ExoPlayerEngine(
                 lastVideoFrameAtMs.set(nowMs)
                 droppedFrameHealth.onFirstFrame(nowMs)
                 cancelNoFrameCheck()
+                if (exo.playbackState == Player.STATE_BUFFERING) {
+                    scheduleAudioClockStallCheck()
+                }
                 PlaybackLog.log(context, engineName, "onRenderedFirstFrame")
                 if (PlaybackRemotePolicy.snapshot().disablePixelCopyValidation) {
                     PlaybackLog.log(
@@ -390,6 +424,104 @@ class ExoPlayerEngine(
         // any codec error distinguish interlaced field decoding from a surface
         // recreation from a decoder error.
         exo.addAnalyticsListener(object : AnalyticsListener {
+            override fun onAudioDecoderInitialized(
+                eventTime: AnalyticsListener.EventTime,
+                decoderName: String,
+                initializedTimestampMs: Long,
+                initializationDurationMs: Long,
+            ) {
+                if (!isCurrentEvent(eventTime)) return
+                audioDecoderInitialized = true
+                audioDecoder = LiveAudioStallPolicy.decoderForName(decoderName)
+                PlaybackLog.log(context, engineName, "audioDecoder=${audioDecoder.name}")
+                if (exo.playbackState == Player.STATE_BUFFERING) {
+                    scheduleAudioClockStallCheck()
+                }
+            }
+
+            override fun onAudioInputFormatChanged(
+                eventTime: AnalyticsListener.EventTime,
+                format: Format,
+                decoderReuseEvaluation: DecoderReuseEvaluation?,
+            ) {
+                if (!isCurrentEvent(eventTime)) return
+                val nextCodec = LiveAudioStallPolicy.codecForMime(format.sampleMimeType)
+                if (nextCodec != audioCodec) {
+                    audioCodec = nextCodec
+                    audioClockStarted = false
+                    audioUnderrunTimesMs.clear()
+                    cancelAudioClockStallCheck()
+                }
+                PlaybackLog.log(
+                    context,
+                    engineName,
+                    "audioFormat codec=${audioCodec.name} channels=${format.channelCount} " +
+                        "rate=${format.sampleRate} output=${audioOutputMode().name}",
+                )
+                if (exo.playbackState == Player.STATE_BUFFERING) {
+                    scheduleAudioClockStallCheck()
+                }
+            }
+
+            override fun onAudioPositionAdvancing(
+                eventTime: AnalyticsListener.EventTime,
+                playoutStartSystemTimeMs: Long,
+            ) {
+                if (!isCurrentEvent(eventTime)) return
+                audioClockStarted = true
+                cancelAudioClockStallCheck()
+                PlaybackLog.log(context, engineName, "audioClock=ADVANCING codec=${audioCodec.name}")
+            }
+
+            override fun onAudioUnderrun(
+                eventTime: AnalyticsListener.EventTime,
+                bufferSize: Int,
+                bufferSizeMs: Long,
+                elapsedSinceLastFeedMs: Long,
+            ) {
+                if (!isCurrentEvent(eventTime)) return
+                val nowMs = SystemClock.elapsedRealtime()
+                while (
+                    audioUnderrunTimesMs.isNotEmpty() &&
+                    nowMs - audioUnderrunTimesMs.first() > LiveAudioStallPolicy.UNDERRUN_WINDOW_MS
+                ) {
+                    audioUnderrunTimesMs.removeFirst()
+                }
+                if (audioUnderrunTimesMs.isEmpty()) {
+                    audioUnderrunVideoBaselineMs = lastVideoFrameAtMs.get()
+                }
+                audioUnderrunTimesMs.addLast(nowMs)
+                PlaybackLog.log(
+                    context,
+                    engineName,
+                    "audioSink=UNDERRUN codec=${audioCodec.name} " +
+                        "count=${audioUnderrunTimesMs.size} bufferMs=$bufferSizeMs",
+                )
+                evaluateAudioStall(
+                    sinkEvent = AudioFailureEvidence.SinkEvent.UNDERRUN,
+                    nowMs = nowMs,
+                    requireVideoProgressAfterMs = audioUnderrunVideoBaselineMs,
+                )
+            }
+
+            override fun onAudioSinkError(
+                eventTime: AnalyticsListener.EventTime,
+                audioSinkError: Exception,
+            ) {
+                if (!isCurrentEvent(eventTime)) return
+                PlaybackLog.log(context, engineName, "audioSink=SINK_ERROR codec=${audioCodec.name}")
+                evaluateAudioStall(AudioFailureEvidence.SinkEvent.SINK_ERROR)
+            }
+
+            override fun onAudioCodecError(
+                eventTime: AnalyticsListener.EventTime,
+                audioCodecError: Exception,
+            ) {
+                if (!isCurrentEvent(eventTime)) return
+                PlaybackLog.log(context, engineName, "audioSink=CODEC_ERROR codec=${audioCodec.name}")
+                evaluateAudioStall(AudioFailureEvidence.SinkEvent.CODEC_ERROR)
+            }
+
             override fun onVideoDecoderInitialized(
                 eventTime: AnalyticsListener.EventTime,
                 decoderName: String,
@@ -643,6 +775,116 @@ class ExoPlayerEngine(
         listener?.onAudioUnavailable()
     }
 
+    private fun audioOutputMode(): AudioFailureEvidence.OutputMode =
+        if (allowPassthrough) {
+            AudioFailureEvidence.OutputMode.PASSTHROUGH
+        } else {
+            AudioFailureEvidence.OutputMode.PCM
+        }
+
+    private fun evaluateAudioStall(
+        sinkEvent: AudioFailureEvidence.SinkEvent,
+        nowMs: Long = SystemClock.elapsedRealtime(),
+        bufferingDurationMs: Long = 0L,
+        requireVideoProgressAfterMs: Long? = null,
+        sourceProgressAfterIssue: Boolean = false,
+    ) {
+        if (audioReported) return
+        val lastVideoFrameMs = lastVideoFrameAtMs.get()
+        val evidence = LiveAudioStallPolicy.Evidence(
+            codec = audioCodec,
+            decoder = audioDecoder,
+            outputMode = audioOutputMode(),
+            mediaProgressObserved = firstFrameRendered || audioBufferingHadMediaProgress,
+            recentVideoProgress =
+                lastVideoFrameMs > 0L &&
+                    (requireVideoProgressAfterMs == null ||
+                        lastVideoFrameMs > requireVideoProgressAfterMs) &&
+                    nowMs - lastVideoFrameMs <= LiveAudioStallPolicy.RECENT_VIDEO_PROGRESS_MS,
+            sourceProgressAfterIssue = sourceProgressAfterIssue,
+            decoderInitialized = audioDecoderInitialized,
+            audioClockStarted = audioClockStarted,
+            underrunsInWindow = audioUnderrunTimesMs.size,
+            bufferingDurationMs = bufferingDurationMs,
+            sinkEvent = sinkEvent,
+        )
+        if (
+            LiveAudioStallPolicy.decide(evidence) !=
+            LiveAudioStallPolicy.Decision.FALLBACK_TO_VLC_PCM
+        ) {
+            return
+        }
+        reportAudioStall(
+            AudioFailureEvidence(
+                codec = evidence.codec,
+                decoder = evidence.decoder,
+                sinkEvent = sinkEvent,
+                outputMode = evidence.outputMode,
+            ),
+        )
+    }
+
+    private fun scheduleAudioClockStallCheck() {
+        if (
+            audioCodec != AudioFailureEvidence.Codec.AC3 ||
+            allowPassthrough ||
+            audioReported ||
+            !firstFrameRendered
+        ) {
+            return
+        }
+        if (audioBufferingSinceMs == 0L) {
+            audioBufferingSinceMs = SystemClock.elapsedRealtime()
+            audioBufferingHadMediaProgress = true
+            audioBufferingVideoBaselineMs = lastVideoFrameAtMs.get()
+            audioBufferingDurationBaselineMs = player?.totalBufferedDuration ?: 0L
+        }
+        audioStallCheckRunnable?.let(handler::removeCallbacks)
+        val generation = streamGeneration
+        val check = Runnable {
+            audioStallCheckRunnable = null
+            if (generation != streamGeneration || player?.playbackState != Player.STATE_BUFFERING) {
+                return@Runnable
+            }
+            val nowMs = SystemClock.elapsedRealtime()
+            val bufferedDurationNow = player?.totalBufferedDuration ?: 0L
+            evaluateAudioStall(
+                sinkEvent = AudioFailureEvidence.SinkEvent.CLOCK_STALL,
+                nowMs = nowMs,
+                bufferingDurationMs = (nowMs - audioBufferingSinceMs).coerceAtLeast(0L),
+                requireVideoProgressAfterMs = audioBufferingVideoBaselineMs,
+                sourceProgressAfterIssue =
+                    bufferedDurationNow >=
+                        audioBufferingDurationBaselineMs + MIN_BUFFER_PROGRESS_EVIDENCE_MS,
+            )
+        }
+        audioStallCheckRunnable = check
+        handler.postDelayed(check, LiveAudioStallPolicy.AUDIO_CLOCK_START_TIMEOUT_MS)
+    }
+
+    private fun cancelAudioClockStallCheck() {
+        audioStallCheckRunnable?.let(handler::removeCallbacks)
+        audioStallCheckRunnable = null
+        audioBufferingSinceMs = 0L
+        audioBufferingHadMediaProgress = false
+        audioBufferingVideoBaselineMs = 0L
+        audioBufferingDurationBaselineMs = 0L
+    }
+
+    private fun reportAudioStall(evidence: AudioFailureEvidence) {
+        if (audioReported) return
+        audioReported = true
+        cancelTrackSupportCheck()
+        cancelAudioClockStallCheck()
+        PlaybackLog.log(
+            context,
+            engineName,
+            "audio stall codec=${evidence.codec.name} decoder=${evidence.decoder.name} " +
+                "sink=${evidence.sinkEvent.name} output=${evidence.outputMode.name} -> VLC PCM",
+        )
+        listener?.onAudioStall(evidence)
+    }
+
     private fun isSourceOrManifestFailure(errorCode: Int): Boolean = when (errorCode) {
         PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
@@ -800,6 +1042,17 @@ class ExoPlayerEngine(
         videoFailureReported = false
         videoOutputReported = false
         audioReported = false
+        audioCodec = AudioFailureEvidence.Codec.UNKNOWN
+        audioDecoder = AudioFailureEvidence.Decoder.UNKNOWN
+        audioDecoderInitialized = false
+        audioClockStarted = false
+        audioUnderrunTimesMs.clear()
+        audioBufferingSinceMs = 0L
+        audioBufferingHadMediaProgress = false
+        audioBufferingVideoBaselineMs = 0L
+        audioBufferingDurationBaselineMs = 0L
+        audioUnderrunVideoBaselineMs = 0L
+        audioStallCheckRunnable = null
         readyForPlayback = false
         hardwareDecodeRequired = false
         lastSurfaceWidth = 0
@@ -980,6 +1233,7 @@ class ExoPlayerEngine(
         private const val VIDEO_HEALTH_POLL_MS = 2000L
         private const val VIDEO_FRAME_STALL_MS = 7000L
         private const val VIDEO_CLOCK_EVIDENCE_MS = 500L
+        private const val MIN_BUFFER_PROGRESS_EVIDENCE_MS = 250L
         private const val PIXEL_VALIDATION_DEADLINE_MS = 9_000L
     }
 }

@@ -111,6 +111,13 @@ data class PlaybackQoeRecord(
         put("failure_components", failures.joinToString(",") { it.component.name })
         put("failure_retry_advice", failures.joinToString(",") { it.retryAdvice.name })
         put("failure_http_statuses", failures.joinToString(",") { it.httpStatus?.toString().orEmpty() })
+        val audioEvidence = failures.mapNotNull(PlaybackFailure::audioEvidence)
+        if (audioEvidence.isNotEmpty()) {
+            put("audio_failure_codecs", audioEvidence.joinToString(",") { it.codec.name })
+            put("audio_failure_decoders", audioEvidence.joinToString(",") { it.decoder.name })
+            put("audio_failure_sink_events", audioEvidence.joinToString(",") { it.sinkEvent.name })
+            put("audio_failure_output_modes", audioEvidence.joinToString(",") { it.outputMode.name })
+        }
         put("discarded_failure_count", discardedFailureCount)
         put("final", isFinal)
     }

@@ -38,6 +38,7 @@ import androidx.media3.exoplayer.video.VideoFrameMetadataListener
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.iptv.player.R
+import com.iptv.player.playback.android.PlaybackQoeRuntime
 import com.iptv.player.playback.core.FailureSignal
 import com.iptv.player.playback.core.PlaybackFailure
 import com.iptv.player.playback.core.PlaybackFailureClassifier
@@ -461,8 +462,17 @@ class Media3VodEngine(
             allowHttpToHttpsRedirects = config.allowHttpToHttpsRedirects,
         )
         val mediaSourceFactory = DefaultMediaSourceFactory(httpFactory)
+        val deviceProfile = PlaybackQoeRuntime.devicePlaybackProfile()
         val selector = DefaultTrackSelector(context).apply {
-            setParameters(buildUponParameters().setTunnelingEnabled(false))
+            val parameters = buildUponParameters()
+                .setTunnelingEnabled(false)
+                .apply {
+                    deviceProfile.adaptiveMaxHeight?.let { maxHeight ->
+                        setMaxVideoSize(maxHeight * 16 / 9, maxHeight)
+                    }
+                    deviceProfile.adaptiveMaxFrameRate?.let(::setMaxVideoFrameRate)
+                }
+            setParameters(parameters)
         }
         val renderersFactory = buildRenderersFactory()
         val exo = ExoPlayer.Builder(context, renderersFactory)

@@ -24,8 +24,8 @@ android {
         applicationId = "com.iptv.player"
         minSdk = 21
         targetSdk = 34
-        versionCode = 123
-        versionName = "1.5.79"
+        versionCode = 124
+        versionName = "1.5.80"
 
         // Service credentials are injected by CI/local environment and never
         // committed. Blank values disable the optional integration gracefully.

@@ -9,6 +9,7 @@
 package com.iptv.player.update
 
 import android.content.Intent
+import android.view.ViewGroup
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.TextView
@@ -78,11 +79,13 @@ object UpdatePrompt {
 
         val notesView = view.findViewById<TextView>(R.id.updateNotes)
         val notesScroll = view.findViewById<View>(R.id.updateNotesScroll)
-        notesView.text = info.notes?.trim()
-            ?: activity.getString(R.string.update_notes_fallback)
+        // Launch-time update actions must remain visible on every TV. Detailed
+        // GitHub notes can be arbitrarily long and previously pushed both buttons
+        // below the viewport on low-height OEM launchers. The About screen remains
+        // the detailed update workspace; this prompt uses one localized summary.
+        notesView.setText(R.string.update_notes_fallback)
         notesScroll.visibility = View.VISIBLE
         ViewCompat.setAccessibilityHeading(view.findViewById(R.id.updateTitle), true)
-        ViewCompat.setAccessibilityHeading(view.findViewById(R.id.updateNotesHeading), true)
         ViewCompat.setAccessibilityPaneTitle(
             view,
             activity.getString(R.string.update_available_title),
@@ -114,6 +117,10 @@ object UpdatePrompt {
         }
 
         dialog.show()
+        val metrics = activity.resources.displayMetrics
+        val maxWidth = (560f * metrics.density).toInt()
+        val safeWidth = (metrics.widthPixels * 0.90f).toInt().coerceAtMost(maxWidth)
+        dialog.window?.setLayout(safeWidth, ViewGroup.LayoutParams.WRAP_CONTENT)
         view.apply {
             alpha = 0f
             scaleX = 0.97f

@@ -42,4 +42,29 @@ class VlcPlayerEnginePolicyTest {
             ),
         )
     }
+
+    @Test
+    fun `verified surface and advancing pictures prove buffering resumed`() {
+        assertTrue(
+            shouldSignalVlcFrameProgressResumed(
+                surfaceWasVerified = true,
+                bufferingActive = true,
+                displayedFrameAdvanced = true,
+            ),
+        )
+        assertFalse(
+            shouldSignalVlcFrameProgressResumed(
+                surfaceWasVerified = false,
+                bufferingActive = true,
+                displayedFrameAdvanced = true,
+            ),
+        )
+        assertFalse(
+            shouldSignalVlcFrameProgressResumed(
+                surfaceWasVerified = true,
+                bufferingActive = false,
+                displayedFrameAdvanced = true,
+            ),
+        )
+    }
 }

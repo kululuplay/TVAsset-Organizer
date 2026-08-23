@@ -11,8 +11,21 @@ class VlcPlaybackHealthTest {
         val health = VlcPlaybackHealth()
 
         assertFalse(health.evaluate(sample(displayed = 0), nowMs = 0).firstDisplayedFrame)
-        assertTrue(health.evaluate(sample(displayed = 1), nowMs = 1_500).firstDisplayedFrame)
+        val first = health.evaluate(sample(displayed = 1), nowMs = 1_500)
+        assertTrue(first.firstDisplayedFrame)
+        assertTrue(first.displayedFrameAdvanced)
         assertFalse(health.evaluate(sample(displayed = 40), nowMs = 3_000).firstDisplayedFrame)
+    }
+
+    @Test
+    fun `displayed frame progress is reported after initial output`() {
+        val health = VlcPlaybackHealth()
+        health.evaluate(sample(displayed = 10), nowMs = 0)
+
+        val progress = health.evaluate(sample(displayed = 11), nowMs = 1_500)
+
+        assertFalse(progress.firstDisplayedFrame)
+        assertTrue(progress.displayedFrameAdvanced)
     }
 
     @Test

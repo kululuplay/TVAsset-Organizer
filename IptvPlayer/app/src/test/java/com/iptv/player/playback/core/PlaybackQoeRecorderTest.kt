@@ -163,6 +163,34 @@ class PlaybackQoeRecorderTest {
     }
 
     @Test
+    fun `audio failure telemetry contains only closed enum evidence`() {
+        val recorder = PlaybackQoeRecorder(clock = FakeClock())
+        val id = PlaybackSessionId.random()
+        recorder.start(session(id))
+        recorder.recordFailure(
+            id,
+            PlaybackFailureClassifier.classify(
+                FailureSignal.AudioStall(
+                    AudioFailureEvidence(
+                        codec = AudioFailureEvidence.Codec.AC3,
+                        decoder = AudioFailureEvidence.Decoder.HARDWARE,
+                        sinkEvent = AudioFailureEvidence.SinkEvent.SINK_ERROR,
+                        outputMode = AudioFailureEvidence.OutputMode.PCM,
+                    ),
+                ),
+                PlaybackFailure.Phase.PLAYBACK,
+            ),
+        )
+
+        val fields = recorder.finish(id, PlaybackEndReason.FATAL_FAILURE, 2_000)!!.toSafeFields()
+        assertEquals("AC3", fields["audio_failure_codecs"])
+        assertEquals("HARDWARE", fields["audio_failure_decoders"])
+        assertEquals("SINK_ERROR", fields["audio_failure_sink_events"])
+        assertEquals("PCM", fields["audio_failure_output_modes"])
+        assertFalse(fields.values.joinToString().contains("http", ignoreCase = true))
+    }
+
+    @Test
     fun `late callbacks from a finished session are ignored`() {
         val recorder = PlaybackQoeRecorder(clock = FakeClock())
         val id = PlaybackSessionId.random()

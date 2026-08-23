@@ -85,4 +85,25 @@ class PlaybackFailureTest {
             )
         }
     }
+
+    @Test
+    fun `audio stall retains only closed privacy-safe evidence`() {
+        val evidence = AudioFailureEvidence(
+            codec = AudioFailureEvidence.Codec.AC3,
+            decoder = AudioFailureEvidence.Decoder.HARDWARE,
+            sinkEvent = AudioFailureEvidence.SinkEvent.UNDERRUN,
+            outputMode = AudioFailureEvidence.OutputMode.PCM,
+        )
+        val failure = PlaybackFailureClassifier.classify(
+            FailureSignal.AudioStall(evidence),
+            PlaybackFailure.Phase.PLAYBACK,
+        )
+
+        assertEquals(PlaybackFailure.Category.OUTPUT, failure.category)
+        assertEquals(PlaybackFailure.Code.AUDIO_STALL, failure.code)
+        assertEquals(PlaybackFailure.Component.AUDIO, failure.component)
+        assertEquals(PlaybackFailure.RetryAdvice.TRY_ALTERNATE_ENGINE, failure.retryAdvice)
+        assertEquals(evidence, failure.audioEvidence)
+        assertFalse(failure.toString().contains("url", ignoreCase = true))
+    }
 }

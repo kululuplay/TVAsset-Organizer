@@ -20,4 +20,15 @@ internal fun shouldTrustVlcNativeFrame(
     hasDisplayedPictureEvidence: Boolean,
 ): Boolean = forceSoftware && hasDisplayedPictureEvidence
 
+/**
+ * Some libVLC builds never emit Buffering(100) or a second Playing event after a
+ * cache top-up. Once the current surface was already verified, advancing native
+ * displayed-picture counters are stronger evidence that playback resumed.
+ */
+internal fun shouldSignalVlcFrameProgressResumed(
+    surfaceWasVerified: Boolean,
+    bufferingActive: Boolean,
+    displayedFrameAdvanced: Boolean,
+): Boolean = surfaceWasVerified && bufferingActive && displayedFrameAdvanced
+
 private const val VLC_BUFFERING_COMPLETE_PERCENT = 99.5f

@@ -126,10 +126,38 @@ test("every reviewed playback_qoe v1 field survives sanitization", () => {
     failure_components: "TRANSPORT",
     failure_retry_advice: "RETRY_SAME_ROUTE",
     failure_http_statuses: "503",
+    audio_failure_codecs: "AC3",
+    audio_failure_decoders: "HARDWARE",
+    audio_failure_sink_events: "UNDERRUN",
+    audio_failure_output_modes: "PCM",
     discarded_failure_count: 0,
     final: true,
   };
   assert.deepEqual(sanitizePlaybackQoe(source), source);
+});
+
+test("audio evidence accepts only reviewed enum values", () => {
+  const payload = sanitizePlaybackQoe({
+    schema: 1,
+    session_id: ID_1,
+    audio_failure_codecs: "AC3,E_AC3",
+    audio_failure_decoders: "HARDWARE,SOFTWARE",
+    audio_failure_sink_events: "SINK_ERROR,CLOCK_STALL",
+    audio_failure_output_modes: "PCM,PASSTHROUGH",
+  });
+  assert.equal(payload.audio_failure_codecs, "AC3,E_AC3");
+  assert.equal(payload.audio_failure_decoders, "HARDWARE,SOFTWARE");
+  assert.equal(payload.audio_failure_sink_events, "SINK_ERROR,CLOCK_STALL");
+  assert.equal(payload.audio_failure_output_modes, "PCM,PASSTHROUGH");
+
+  const rejected = sanitizePlaybackQoe({
+    schema: 1,
+    session_id: ID_1,
+    audio_failure_codecs: "https://user:secret@example.test",
+    audio_failure_decoders: "vendor.decoder.with.free.text",
+  });
+  assert.equal("audio_failure_codecs" in rejected, false);
+  assert.equal("audio_failure_decoders" in rejected, false);
 });
 
 test("legacy events remain insertable but are not falsely ackable", () => {

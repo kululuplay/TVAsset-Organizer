@@ -9,7 +9,6 @@ package com.iptv.player.work
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.iptv.player.data.ServiceLocator
 
 class SyncWorker(
     context: Context,
@@ -17,18 +16,17 @@ class SyncWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        // The worker may run in a fresh process, so make sure DI is ready.
-        ServiceLocator.init(applicationContext)
-        val settings = ServiceLocator.settings
-
-        if (!settings.isAutoSyncEnabled()) return Result.success()
-        val config = settings.getSourceConfig() ?: return Result.success()
-
-        return try {
-            val ok = ServiceLocator.repository.syncAll(config)
-            if (ok) Result.success() else Result.retry()
-        } catch (e: Exception) {
-            Result.retry()
+        return when (runPlaybackAwareSync(applicationContext)) {
+            BackgroundSyncOutcome.SUCCESS,
+            BackgroundSyncOutcome.DISABLED,
+            BackgroundSyncOutcome.ALREADY_RUNNING -> Result.success()
+            BackgroundSyncOutcome.RETRY -> Result.retry()
+            BackgroundSyncOutcome.DEFERRED_FOR_PLAYBACK -> {
+                // Periodic work succeeds so it keeps its normal cadence; a unique,
+                // persistent one-shot performs this missed run after playback.
+                SyncScheduler.deferUntilPlaybackIdle(applicationContext)
+                Result.success()
+            }
         }
     }
 

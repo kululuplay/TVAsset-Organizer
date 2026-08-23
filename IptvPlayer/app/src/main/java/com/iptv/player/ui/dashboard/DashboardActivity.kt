@@ -62,8 +62,12 @@ class DashboardActivity : BaseActivity() {
         wireFocusGraph()
 
         // Land on the Live hero so the remote has an obvious starting point.
+        // Do this unconditionally on first creation: before this posted callback
+        // runs, several TV launchers automatically focus the first focusable view
+        // in layout order (the refresh button), so checking currentFocus == null
+        // incorrectly preserves that OEM-selected focus.
         binding.tileLive.root.post {
-            if (currentFocus == null) binding.tileLive.root.requestFocus()
+            binding.tileLive.root.requestFocus()
         }
 
         // Subscription state takes priority: an expired account must always see
