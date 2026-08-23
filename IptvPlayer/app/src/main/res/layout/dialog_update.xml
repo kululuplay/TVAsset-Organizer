@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Compact premium update prompt. Release notes are sanitized and bounded by
-     code before this TV-first, D-pad-safe surface renders them. -->
+<!-- Compact TV-safe update prompt. The launch dialog deliberately shows only a
+     short localized summary so actions remain visible on low-height OEM screens. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/updateRoot"
-    android:layout_width="680dp"
+    android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@drawable/bg_update_dialog_modern"
     android:clipChildren="false"
     android:clipToPadding="false"
     android:orientation="vertical"
-    android:padding="24dp">
+    android:padding="18dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -18,12 +18,12 @@
         android:orientation="horizontal">
 
         <ImageView
-            android:layout_width="64dp"
-            android:layout_height="64dp"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
             android:background="@drawable/bg_onboarding_step_icon"
             android:contentDescription="@null"
             android:importantForAccessibility="no"
-            android:padding="17dp"
+            android:padding="14dp"
             android:src="@drawable/ic_update" />
 
         <LinearLayout
@@ -51,7 +51,7 @@
                 android:layout_marginTop="2dp"
                 android:text="@string/update_available_title"
                 android:textColor="@color/text_primary"
-                android:textSize="26sp"
+                android:textSize="23sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -83,12 +83,12 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_l"
+        android:layout_marginTop="12dp"
         android:background="@drawable/bg_update_trust_strip"
         android:drawableStart="@drawable/ic_lock"
         android:drawablePadding="@dimen/space_s"
         android:gravity="center_vertical"
-        android:minHeight="46dp"
+        android:minHeight="40dp"
         android:paddingStart="@dimen/space_m"
         android:paddingEnd="@dimen/space_m"
         android:text="@string/update_secure_delivery"
@@ -96,43 +96,30 @@
         android:textSize="@dimen/text_caption"
         android:textStyle="bold" />
 
-    <TextView
-        android:id="@+id/updateNotesHeading"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_l"
-        android:text="@string/update_whats_new"
-        android:textColor="@color/text_primary"
-        android:textSize="@dimen/text_caption"
-        android:textStyle="bold" />
-
-    <ScrollView
+    <FrameLayout
         android:id="@+id/updateNotesScroll"
         android:layout_width="match_parent"
-        android:layout_height="150dp"
-        android:layout_marginTop="@dimen/space_s"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
         android:background="@drawable/bg_update_notes_panel"
-        android:fadeScrollbars="false"
-        android:focusable="true"
+        android:focusable="false"
         android:focusableInTouchMode="false"
-        android:nextFocusDown="@id/updateNowButton"
-        android:padding="@dimen/space_m"
-        android:scrollbarStyle="insideInset"
-        android:scrollbars="vertical">
+        android:padding="12dp">
 
         <TextView
             android:id="@+id/updateNotes"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:lineSpacingExtra="3dp"
+            android:ellipsize="end"
+            android:maxLines="2"
             android:textColor="@color/text_secondary"
             android:textSize="@dimen/text_caption" />
-    </ScrollView>
+    </FrameLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_l"
+        android:layout_marginTop="16dp"
         android:clipChildren="false"
         android:gravity="center"
         android:orientation="horizontal">
@@ -140,13 +127,13 @@
         <TextView
             android:id="@+id/updateLaterButton"
             android:layout_width="0dp"
-            android:layout_height="54dp"
+            android:layout_height="50dp"
             android:layout_marginEnd="@dimen/space_m"
             android:layout_weight="1"
             android:background="@drawable/bg_button"
             android:focusable="true"
             android:gravity="center"
-            android:nextFocusUp="@id/updateNotesScroll"
+            android:nextFocusUp="@id/updateLaterButton"
             android:paddingStart="@dimen/space_l"
             android:paddingEnd="@dimen/space_l"
             android:stateListAnimator="@animator/control_focus"
@@ -157,14 +144,14 @@
         <TextView
             android:id="@+id/updateNowButton"
             android:layout_width="0dp"
-            android:layout_height="54dp"
+            android:layout_height="50dp"
             android:layout_weight="1"
             android:background="@drawable/bg_button_primary"
             android:drawableStart="@drawable/ic_update"
             android:drawablePadding="@dimen/space_s"
             android:focusable="true"
             android:gravity="center"
-            android:nextFocusUp="@id/updateNotesScroll"
+            android:nextFocusUp="@id/updateNowButton"
             android:paddingStart="@dimen/space_l"
             android:paddingEnd="@dimen/space_l"
             android:stateListAnimator="@animator/control_focus"
