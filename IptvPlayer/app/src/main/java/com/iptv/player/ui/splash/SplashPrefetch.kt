@@ -20,6 +20,9 @@ import com.iptv.player.util.NewContentNotifier
 import com.iptv.player.util.Outcome
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -60,6 +63,8 @@ object SplashPrefetch {
 
     @Volatile
     private var job: Job? = null
+    private var activeConfig: SourceConfig? = null
+    private var runGeneration = 0L
 
     /**
      * Starts the prefetch if it isn't already running. Idempotent and race-safe —
@@ -68,14 +73,38 @@ object SplashPrefetch {
      */
     fun start(config: SourceConfig) {
         synchronized(lock) {
-            if (job?.isActive == true) return
-            _stage.value = Stage.STARTING
-            _essentialDone.value = false
-            _essentialFailed.value = false
-            // Fresh launch — clear any leftover "new content" tallies so the
-            // notices reflect only what this launch's refresh discovers.
-            NewContentNotifier.reset()
-            job = ServiceLocator.appScope.launch { run(config) }
+            if (job?.isActive == true && activeConfig == config) return
+            val previous = job
+            val generation = ++runGeneration
+            activeConfig = config
+            job = ServiceLocator.appScope.launch {
+                previous?.cancelAndJoin()
+                if (generation != synchronized(lock) { runGeneration }) return@launch
+                _stage.value = Stage.STARTING
+                _essentialDone.value = false
+                _essentialFailed.value = false
+                NewContentNotifier.reset()
+                try {
+                    run(config)
+                } finally {
+                    synchronized(lock) {
+                        if (generation == runGeneration) {
+                            job = null
+                            activeConfig = null
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Cancels deferred work immediately when the account/source is cleared. */
+    fun cancel() {
+        synchronized(lock) {
+            runGeneration++
+            job?.cancel()
+            job = null
+            activeConfig = null
         }
     }
 
@@ -229,18 +258,18 @@ object SplashPrefetch {
      * same idempotent upsert is retried once the last player owner becomes idle.
      */
     private suspend fun runNonessentialWhenIdle(block: suspend () -> Unit): Boolean {
-        return when (
-            val result = PlaybackResourceGovernor.runWhileIdle {
-                runCatchingCancellable(block)
-            }
-        ) {
-            is IdleWorkResult.Completed -> result.value
-            IdleWorkResult.InterruptedByPlayback -> {
-                // Do not keep an application-scope job pinned to an old source
-                // while the user watches or signs into another panel. These warm
-                // caches are optional; periodic/manual sync will refresh them later.
-                Logger.d(TAG, "Post-splash prefetch skipped to prioritize playback")
-                false
+        while (true) {
+            currentCoroutineContext().ensureActive()
+            when (
+                val result = PlaybackResourceGovernor.runWhileIdle {
+                    runCatchingCancellable(block)
+                }
+            ) {
+                is IdleWorkResult.Completed -> return result.value
+                IdleWorkResult.InterruptedByPlayback -> {
+                    Logger.d(TAG, "Post-splash prefetch deferred until playback is idle")
+                    PlaybackResourceGovernor.awaitIdle()
+                }
             }
         }
     }

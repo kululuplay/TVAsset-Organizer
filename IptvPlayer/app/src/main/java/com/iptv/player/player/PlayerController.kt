@@ -284,9 +284,8 @@ class PlayerController(
     private var unconfirmedStartFailures = 0
     private var adaptiveRebuffers = 0
     private var adaptiveBufferingActive = false
-    private val devicePlaybackProfile by lazy {
-        PlaybackQoeRuntime.devicePlaybackProfile()
-    }
+    private val devicePlaybackProfile
+        get() = PlaybackQoeRuntime.devicePlaybackProfile()
     private val lowRamDevice: Boolean = runCatching {
         val manager = context.applicationContext
             .getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager

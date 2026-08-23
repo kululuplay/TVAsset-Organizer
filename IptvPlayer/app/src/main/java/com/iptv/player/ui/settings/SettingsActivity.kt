@@ -42,6 +42,7 @@ import com.iptv.player.ui.common.PinPromptDialog
 import com.iptv.player.ui.diagnostics.DiagnosticsActivity
 import com.iptv.player.ui.login.LoginActivity
 import com.iptv.player.ui.profiles.ProfilesActivity
+import com.iptv.player.ui.splash.SplashPrefetch
 import com.iptv.player.util.LocaleManager
 import com.iptv.player.util.Logger
 import com.iptv.player.util.PlaybackLog
@@ -1385,6 +1386,7 @@ class SettingsActivity : BaseActivity() {
             .setMessage(R.string.settings_logout_confirm)
             .setPositiveButton(R.string.settings_logout) { _, _ ->
                 lifecycleScope.launch {
+                    SplashPrefetch.cancel()
                     ServiceLocator.settings.clearSource()
                     val intent = Intent(this@SettingsActivity, LoginActivity::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
