@@ -20,9 +20,11 @@ internal object VodConnectionLifecyclePolicy {
         isFinishing: Boolean,
         engineExists: Boolean,
         connectionMayBeOpen: Boolean,
+        releaseOnBackground: Boolean = false,
     ): Teardown = when {
         !engineExists -> Teardown.NONE
         isFinishing -> Teardown.RELEASE
+        releaseOnBackground -> Teardown.RELEASE
         connectionMayBeOpen -> Teardown.STOP
         else -> Teardown.NONE
     }

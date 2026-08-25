@@ -39,6 +39,7 @@ import com.iptv.player.data.model.Program
 import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.databinding.ActivityHomeBinding
 import com.iptv.player.playback.android.PlaybackQoeRuntime
+import com.iptv.player.playback.android.PlaybackProcessRecovery
 import com.iptv.player.playback.core.PlaybackEndReason
 import com.iptv.player.playback.core.PlaybackEngineKind
 import com.iptv.player.playback.core.PlaybackFailure
@@ -150,6 +151,7 @@ class HomeActivity : BaseActivity() {
     private var localPreviewPlaybackRequested = false
     private var previewStreamSubmitted = false
     private var castOwnsPreviewPlayback = false
+    private var providerDrainPending = false
     private var castLoadPending = false
     private var suppressConnectedCastReloadOnce = false
     private var previewStreamFormat = StreamFormat.TS
@@ -2032,6 +2034,11 @@ class HomeActivity : BaseActivity() {
             if (castOwnsPreviewPlayback || castLoadPending) return
             PlaybackQoeRuntime.recordFailure(previewQoeSessionId, failure)
         }
+        override fun onLocalProcessRecoveryRequired(): Boolean =
+            PlaybackProcessRecovery.requestIfRequired(
+                this@HomeActivity,
+                reason = "preview_native_owner_unresolved",
+            )
         override fun onFatalError() {
             if (castOwnsPreviewPlayback || castLoadPending) return
             binding.previewPlaybackCover.visibility = View.VISIBLE
@@ -2110,9 +2117,18 @@ class HomeActivity : BaseActivity() {
 
     private fun preparePreviewPlaybackRequest(): Boolean {
         if (castOwnsPreviewPlayback || castLoadPending) return false
-        if (!ProviderConnectionSafety.newConnectionAllowed) {
+        val safety = ProviderConnectionSafety.snapshot()
+        if (!safety.newConnectionAllowed) {
             localPreviewPlaybackRequested = false
             playbackSession.setPlaying(false)
+            if (safety.canRecoverLocalProcess) {
+                PlaybackProcessRecovery.requestIfRequired(
+                    this,
+                    reason = "preview_start_unresolved_native_owner",
+                )
+            } else if (!safety.remoteUncertain && safety.localPendingCount > 0) {
+                deferPreviewUntilProviderDrain()
+            }
             return false
         }
         if (!playbackSession.requestAudioFocus()) {
@@ -2123,6 +2139,51 @@ class HomeActivity : BaseActivity() {
         localPreviewPlaybackRequested = true
         playbackSession.setPlaying(true)
         return true
+    }
+
+    private fun deferPreviewUntilProviderDrain() {
+        if (providerDrainPending) return
+        providerDrainPending = true
+        previewState = LivePreviewPressPolicy.Phase.STARTING
+        binding.previewLoading.visibility = View.VISIBLE
+        binding.previewStatus.setText(R.string.buffering)
+        binding.previewStatus.visibility = View.VISIBLE
+        VlcOps.post {
+            runOnUiThread {
+                providerDrainPending = false
+                if (
+                    isFinishing ||
+                    isDestroyed ||
+                    castOwnsPreviewPlayback ||
+                    castLoadPending ||
+                    previewingChannel == null ||
+                    !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+                ) {
+                    return@runOnUiThread
+                }
+                var afterDrain = ProviderConnectionSafety.snapshot()
+                if (
+                    !afterDrain.remoteUncertain &&
+                    afterDrain.localPendingCount > 0 &&
+                    !afterDrain.localProcessRecoveryRequired
+                ) {
+                    ProviderConnectionSafety.requireProcessRecoveryForPendingLocalStops()
+                    afterDrain = ProviderConnectionSafety.snapshot()
+                }
+                if (afterDrain.newConnectionAllowed) {
+                    resumePreviewPlayback()
+                } else if (afterDrain.canRecoverLocalProcess) {
+                    PlaybackProcessRecovery.requestIfRequired(
+                        this,
+                        reason = "preview_provider_drain_unresolved",
+                    )
+                } else {
+                    binding.previewLoading.visibility = View.GONE
+                    binding.previewStatus.setText(R.string.error_playback_ownership_uncertain)
+                    binding.previewStatus.visibility = View.VISIBLE
+                }
+            }
+        }
     }
 
     private fun resumePreviewPlayback() {

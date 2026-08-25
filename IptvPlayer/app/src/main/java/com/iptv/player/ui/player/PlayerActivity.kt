@@ -9,6 +9,7 @@
  */
 package com.iptv.player.ui.player
 
+import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -30,6 +31,8 @@ import com.iptv.player.data.model.NowNext
 import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.databinding.ActivityPlayerBinding
 import com.iptv.player.playback.android.PlaybackQoeRuntime
+import com.iptv.player.playback.android.PlaybackProcessRecovery
+import com.iptv.player.playback.android.PlaybackProcessRecoveryTargetProvider
 import com.iptv.player.playback.core.PlaybackEndReason
 import com.iptv.player.playback.core.PlaybackEngineKind
 import com.iptv.player.playback.core.PlaybackFailure
@@ -43,6 +46,7 @@ import com.iptv.player.player.LiveSubtitlePreference
 import com.iptv.player.player.PlayerController
 import com.iptv.player.player.StreamInfo
 import com.iptv.player.player.TvPlaybackSession
+import com.iptv.player.player.VlcOps
 import com.iptv.player.util.AutoRetryPolicy
 import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NowPlaying
@@ -56,7 +60,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-class PlayerActivity : BaseActivity(), PlayerController.Callback {
+class PlayerActivity : BaseActivity(), PlayerController.Callback,
+    PlaybackProcessRecoveryTargetProvider {
 
     /** Never cover an active live stream with the app idle screensaver. */
     protected override val idleScreensaverEnabledForScreen: Boolean
@@ -120,6 +125,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
     private var castLoadPending = false
     private var suppressConnectedCastReloadOnce = false
     private var pendingLocalRestartAfterCast = false
+    private var providerDrainPending = false
 
     /** Opaque, URL/title-free QoE session for the current fullscreen channel. */
     private var qoeSessionId: PlaybackSessionId? = null
@@ -962,9 +968,24 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
 
     private fun prepareLocalPlaybackRequest(): Boolean {
         if (castOwnsPlayback || castLoadPending) return false
-        if (!ProviderConnectionSafety.newConnectionAllowed) {
+        val safety = ProviderConnectionSafety.snapshot()
+        if (!safety.newConnectionAllowed) {
             localPlaybackRequested = false
             playbackSession.setPlaying(false)
+            if (safety.canRecoverLocalProcess) {
+                if (
+                    PlaybackProcessRecovery.requestIfRequired(
+                        this,
+                        reason = "live_start_unresolved_native_owner",
+                        resumeIntent = playbackProcessRecoveryIntent(),
+                    )
+                ) {
+                    return false
+                }
+            } else if (!safety.remoteUncertain && safety.localPendingCount > 0) {
+                deferLocalPlaybackUntilProviderDrain()
+                return false
+            }
             binding.playbackCover.visibility = View.VISIBLE
             binding.bufferingIndicator.visibility = View.GONE
             binding.errorMessage.setText(R.string.error_playback_ownership_uncertain)
@@ -988,6 +1009,55 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
         localPlaybackRequested = true
         playbackSession.setPlaying(true)
         return true
+    }
+
+    private fun deferLocalPlaybackUntilProviderDrain() {
+        if (providerDrainPending) return
+        providerDrainPending = true
+        binding.playbackCover.visibility = View.VISIBLE
+        binding.errorOverlay.visibility = View.GONE
+        binding.bufferingIndicator.visibility = View.VISIBLE
+        binding.bufferingLabel.setText(R.string.buffering)
+        VlcOps.post {
+            runOnUiThread {
+                providerDrainPending = false
+                if (
+                    isFinishing ||
+                    isDestroyed ||
+                    castOwnsPlayback ||
+                    castLoadPending ||
+                    !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+                ) {
+                    return@runOnUiThread
+                }
+                var afterDrain = ProviderConnectionSafety.snapshot()
+                if (
+                    !afterDrain.remoteUncertain &&
+                    afterDrain.localPendingCount > 0 &&
+                    !afterDrain.localProcessRecoveryRequired
+                ) {
+                    ProviderConnectionSafety.requireProcessRecoveryForPendingLocalStops()
+                    afterDrain = ProviderConnectionSafety.snapshot()
+                }
+                if (afterDrain.newConnectionAllowed) {
+                    resumeLocalPlayback()
+                } else if (
+                    afterDrain.canRecoverLocalProcess &&
+                    PlaybackProcessRecovery.requestIfRequired(
+                        this,
+                        reason = "live_provider_drain_unresolved",
+                        resumeIntent = playbackProcessRecoveryIntent(),
+                    )
+                ) {
+                    Unit
+                } else {
+                    binding.bufferingIndicator.visibility = View.GONE
+                    binding.errorMessage.setText(R.string.error_playback_ownership_uncertain)
+                    binding.errorOverlay.visibility = View.VISIBLE
+                    binding.retryButton.requestFocus()
+                }
+            }
+        }
     }
 
     private fun resumeLocalPlayback() {
@@ -1105,6 +1175,30 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback {
             startChannel(it)
         }
     }
+
+    override fun onLocalProcessRecoveryRequired(): Boolean {
+        cancelAutoRetry(resetAttempts = false)
+        return PlaybackProcessRecovery.requestIfRequired(
+            this,
+            reason = "live_native_owner_unresolved",
+            resumeIntent = playbackProcessRecoveryIntent(),
+        )
+    }
+
+    override fun playbackProcessRecoveryIntent(): Intent =
+        Intent(this, PlayerActivity::class.java).apply {
+            putExtra(
+                EXTRA_CHANNEL_ID,
+                currentChannel?.id ?: intent.getStringExtra(EXTRA_CHANNEL_ID),
+            )
+            putExtra(EXTRA_CATEGORY_ID, viewModel.categoryId)
+            putExtra(EXTRA_RADIO_MODE, viewModel.radioMode)
+            putExtra(
+                EXTRA_PARENTAL_AUTHORIZED,
+                currentChannel?.id?.let(unlockedAdultChannels::contains) == true,
+            )
+            putExtra(EXTRA_AUTHORIZED_CATEGORY_ID, unlockedAdultCategoryId)
+        }
 
     private fun beginQoeSessionIfNeeded(
         format: StreamFormat = resolvedStreamFormat ?: streamFormat,

@@ -60,6 +60,7 @@ class CastController(
     private var receiverPositionMs = 0L
     private var sessionSuspended = false
     private var ownershipUncertainty: ProviderConnectionSafety.Uncertainty? = null
+    private var remoteOwnerToken = 0L
 
     /** Most recent buffered-media position captured before the receiver disconnected. */
     val lastKnownPositionMs: Long
@@ -125,13 +126,15 @@ class CastController(
             // SDK session at all, the receiver has definitively ended and the new
             // screen may safely regain local ownership. An existing (even
             // disconnected/suspended) session remains blocked until onSessionEnded.
-            if (
-                ProviderConnectionSafety.currentUncertainty() ==
-                    ProviderConnectionSafety.Uncertainty.REMOTE_LOAD_RESULT &&
-                sessionManager.currentCastSession == null
-            ) {
+            val currentSession = sessionManager.currentCastSession
+            if (currentSession == null) {
                 ownershipUncertainty = null
                 ProviderConnectionSafety.resolveDefinitiveCastEnd()
+            } else {
+                val becameOwner = !castOwnsPlayback
+                castOwnsPlayback = true
+                ensureRemoteOwnershipToken()
+                if (becameOwner) runCatching { onCastStarted?.invoke() }
             }
         }
     }
@@ -145,7 +148,7 @@ class CastController(
             receiverOwnsPlayback = castOwnsPlayback,
         )?.let { reason ->
             ownershipUncertainty = reason
-            ProviderConnectionSafety.block(reason)
+            registerConnectionUncertainty(reason)
         }
         cancelPendingLoad(restoreLocal = false)
         sessionSuspended = false
@@ -188,7 +191,7 @@ class CastController(
     }
 
     private fun loadCurrent() {
-        if (!ProviderConnectionSafety.newConnectionAllowed) {
+        if (!connectionOperationAllowed()) {
             pendingLoad = null
             runCatching { onCastQuiesceFailed?.invoke() }
             toast(R.string.cast_unavailable)
@@ -207,7 +210,7 @@ class CastController(
     private fun advanceLoadState() {
         if (
             !attached ||
-            !ProviderConnectionSafety.newConnectionAllowed ||
+            !connectionOperationAllowed() ||
             sessionSuspended ||
             activity.isFinishing ||
             activity.isDestroyed
@@ -266,6 +269,10 @@ class CastController(
     }
 
     private fun submitReceiverLoad(request: PendingLoad) {
+        // Reserve remote ownership before the asynchronous request crosses the
+        // process boundary. A lost result can mean the receiver already opened
+        // the provider URL, so no local screen may use the gap.
+        ensureRemoteOwnershipToken()
         submittedLoadGeneration = request.generation
         val timeout = Runnable {
             if (submittedLoadGeneration != request.generation) return@Runnable
@@ -304,6 +311,7 @@ class CastController(
                     // end invalidates submittedLoadGeneration before this branch.
                     val receiverAccepted = loaded
                     if (receiverAccepted) {
+                        ensureRemoteOwnershipToken()
                         receiverPositionMs = request.media.startPositionMs.coerceAtLeast(0L)
                         val becameOwner = !castOwnsPlayback
                         localQuiescedForLoad = false
@@ -319,6 +327,7 @@ class CastController(
                     } else if (receiverAccepted) {
                         toast(R.string.cast_started)
                     } else if (!sessionSuspended && !castOwnsPlayback) {
+                        resolveRemoteOwnershipToken()
                         restoreQuiescedLocal()
                         toast(R.string.cast_unavailable)
                     } else if (!sessionSuspended) {
@@ -335,6 +344,7 @@ class CastController(
             if (pendingLoad != null) {
                 advanceLoadState()
             } else if (!sessionSuspended && !castOwnsPlayback) {
+                resolveRemoteOwnershipToken()
                 restoreQuiescedLocal()
                 toast(R.string.cast_unavailable)
             } else if (!sessionSuspended) {
@@ -348,6 +358,10 @@ class CastController(
     }
 
     private fun finishCastOwnership() {
+        // onSessionEnded is definitive remote proof even when a separate local
+        // native token currently has higher fail-closed priority.
+        ProviderConnectionSafety.resolveDefinitiveCastEnd()
+        resolveRemoteOwnershipToken()
         if (quiesceInFlight) {
             // The receiver session ended, but a vendor-local stop is still
             // unresolved. Do not race it by reopening the provider connection.
@@ -410,9 +424,58 @@ class CastController(
         // exposes an explicit blocked/error state instead.
         localQuiescedForLoad = false
         ownershipUncertainty = reason
-        ProviderConnectionSafety.block(reason)
+        registerConnectionUncertainty(reason)
         runCatching { onCastQuiesceFailed?.invoke() }
         toast(R.string.cast_unavailable)
+    }
+
+    /**
+     * The player engine owns exact LOCAL tokens. Do not layer an unresolvable
+     * process-wide bit over that token; only create an unowned recovery marker
+     * when a lifecycle race genuinely lost the engine's registration. Remote
+     * receiver ambiguity remains independently fail-closed until Cast ends.
+     */
+    private fun registerConnectionUncertainty(reason: ProviderConnectionSafety.Uncertainty) {
+        when (reason) {
+            ProviderConnectionSafety.Uncertainty.REMOTE_LOAD_RESULT -> {
+                val token = remoteOwnerToken
+                remoteOwnerToken = 0L
+                if (token != 0L) {
+                    ProviderConnectionSafety.transferRemoteOwnershipToUncertainty(token)
+                } else {
+                    ProviderConnectionSafety.block(reason)
+                }
+            }
+            ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP -> {
+                if (ProviderConnectionSafety.snapshot().localPendingCount == 0) {
+                    ProviderConnectionSafety.block(reason)
+                }
+            }
+        }
+    }
+
+    private fun ensureRemoteOwnershipToken() {
+        if (remoteOwnerToken == 0L) {
+            remoteOwnerToken = ProviderConnectionSafety.beginRemoteOwnership()
+        }
+    }
+
+    private fun resolveRemoteOwnershipToken() {
+        val token = remoteOwnerToken
+        remoteOwnerToken = 0L
+        if (token != 0L) {
+            ProviderConnectionSafety.resolveDefinitiveRemoteOwnership(token)
+        }
+    }
+
+    /** The active receiver may replace its own media, but no ambiguous/local owner may overlap. */
+    private fun connectionOperationAllowed(): Boolean {
+        val safety = ProviderConnectionSafety.snapshot()
+        if (safety.newConnectionAllowed) return true
+        return remoteOwnerToken != 0L &&
+            !safety.remoteUncertain &&
+            safety.localPendingCount == 0 &&
+            safety.activeRemoteOwnerCount == 1
     }
 
     private fun cancelPendingLoad(restoreLocal: Boolean) {
@@ -423,7 +486,12 @@ class CastController(
         quiesceInFlight = false
         clearQuiesceTimeout()
         clearReceiverLoadTimeout()
-        if (restoreLocal) restoreQuiescedLocal() else localQuiescedForLoad = false
+        if (restoreLocal) {
+            if (!castOwnsPlayback) resolveRemoteOwnershipToken()
+            restoreQuiescedLocal()
+        } else {
+            localQuiescedForLoad = false
+        }
     }
 
     private fun clearQuiesceTimeout() {

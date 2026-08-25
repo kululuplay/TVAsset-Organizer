@@ -82,6 +82,22 @@
             android:exported="false"
             android:screenOrientation="landscape" />
 
+        <!-- Rare native VLC deadlock recovery. This lightweight Activity lives
+             in a separate process so it can recycle only the poisoned main app
+             process and relaunch the exact playback Intent without a device reboot. -->
+        <activity
+            android:name=".ui.recovery.PlaybackProcessRecoveryActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:finishOnTaskLaunch="true"
+            android:noHistory="true"
+            android:persistableMode="persistNever"
+            android:process=":playback_recovery"
+            android:screenOrientation="landscape"
+            android:taskAffinity="${applicationId}.playback_recovery"
+            android:theme="@style/Theme.IptvPlayer.ProcessRecovery" />
+
         <activity
             android:name=".ui.home.HomeActivity"
             android:exported="false"
@@ -91,6 +107,7 @@
         <activity
             android:name=".ui.player.PlayerActivity"
             android:exported="false"
+            android:persistableMode="persistNever"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
             android:screenOrientation="landscape" />
 
@@ -98,6 +115,7 @@
         <activity
             android:name=".ui.player.VodPlayerActivity"
             android:exported="false"
+            android:persistableMode="persistNever"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
             android:screenOrientation="landscape" />
 

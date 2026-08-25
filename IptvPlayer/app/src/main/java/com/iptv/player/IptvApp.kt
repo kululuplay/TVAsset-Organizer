@@ -16,6 +16,8 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.playback.android.PlaybackQoeRuntime
+import com.iptv.player.playback.android.PlaybackProcessRecovery
+import com.iptv.player.playback.android.PlaybackProcessRecoveryTargetProvider
 import com.iptv.player.ui.player.PlayerActivity
 import com.iptv.player.ui.player.VodPlayerActivity
 import com.iptv.player.ui.screensaver.ScreensaverActivity
@@ -56,6 +58,11 @@ class IptvApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+
+        // The lightweight recovery Activity has its own short-lived process. It
+        // must not initialize repositories, workers, heartbeats or ANR watchdogs
+        // a second time while it is recycling the default playback process.
+        if (PlaybackProcessRecovery.isRecoveryProcess(this)) return
 
         // Start logging + crash capture first so any failure during the rest of
         // startup is recorded.
@@ -135,6 +142,19 @@ class IptvApp : Application() {
 
             override fun onActivityResumed(activity: Activity) {
                 currentActivityRef = WeakReference(activity)
+                // A background VLC JNI hang may have left the process alive but
+                // unable to prove socket closure. Recover before any foreground
+                // screen can open another provider connection.
+                val recoveryIntent =
+                    (activity as? PlaybackProcessRecoveryTargetProvider)
+                        ?.playbackProcessRecoveryIntent()
+                if (PlaybackProcessRecovery.requestIfRequired(
+                    activity,
+                    reason = "foreground_unresolved_native_owner",
+                    resumeIntent = recoveryIntent,
+                )) {
+                    return
+                }
                 maybeShowAnnouncement(activity)
                 maybeShowResolved(activity)
             }
