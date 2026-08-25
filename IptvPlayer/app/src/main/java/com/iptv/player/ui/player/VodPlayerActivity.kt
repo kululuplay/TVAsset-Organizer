@@ -14,6 +14,7 @@
 package com.iptv.player.ui.player
 
 import android.app.Dialog
+import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -44,6 +45,8 @@ import com.iptv.player.player.SurfaceFrameHealthMonitor
 import com.iptv.player.player.TrackLanguage
 import com.iptv.player.player.TvPlaybackSession
 import com.iptv.player.player.VlcOps
+import com.iptv.player.player.VlcNativeCleanup
+import com.iptv.player.player.VlcNativeCleanupResult
 import com.iptv.player.player.VodPlaybackRoutingPolicy
 import com.iptv.player.player.findVideoSurface
 import com.iptv.player.player.isVlcBuffering
@@ -62,6 +65,8 @@ import com.iptv.player.playback.core.PlaybackResourceGovernor
 import com.iptv.player.playback.core.PlaybackResourceToken
 import com.iptv.player.playback.core.PlaybackFailureClassifier
 import com.iptv.player.playback.android.PlaybackQoeRuntime
+import com.iptv.player.playback.android.PlaybackProcessRecovery
+import com.iptv.player.playback.android.PlaybackProcessRecoveryTargetProvider
 import com.iptv.player.playback.core.PlaybackContentKind
 import com.iptv.player.playback.core.PlaybackEndReason
 import com.iptv.player.playback.core.PlaybackEngineKind
@@ -90,7 +95,7 @@ import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.util.VLCVideoLayout
 
-class VodPlayerActivity : BaseActivity() {
+class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider {
 
     private enum class RecoveryEvidence {
         GENERIC,
@@ -106,6 +111,7 @@ class VodPlayerActivity : BaseActivity() {
         val abandoned = AtomicBoolean(false)
         val cleanupScheduled = AtomicBoolean(false)
         val cleanupClaimed = AtomicBoolean(false)
+        val ownershipDefinitivelyReleased = AtomicBoolean(false)
         val activeOperation = AtomicReference<OwnerOperation?>(null)
         val providerUncertaintyToken = AtomicLong(0L)
     }
@@ -155,6 +161,7 @@ class VodPlayerActivity : BaseActivity() {
         const val EXTRA_EPISODE = "extra_episode"
         // When true (e.g. launched from the rail) skip the prompt and resume directly.
         const val EXTRA_AUTO_RESUME = "extra_auto_resume"
+        private const val EXTRA_RECOVERY_POSITION_MS = "extra_recovery_position_ms"
         private const val SKIP_MS = 10_000L
         private const val SAVE_INTERVAL_MS = 10_000L
         // UHD/4K threshold (QHD 1440p+). AUTO's software fallback cannot keep up
@@ -217,6 +224,7 @@ class VodPlayerActivity : BaseActivity() {
     private var resumeId: String? = null
     private var resumeMeta: ResumeMeta? = null
     private var autoResume = false
+    private var processRecoveryPositionMs = 0L
     private var resumeSaveJob: Job? = null
     private var aspectSaveJob: Job? = null
     private var audioPreferenceJob: Job? = null
@@ -382,7 +390,14 @@ class VodPlayerActivity : BaseActivity() {
             },
             // Local ownership was already quiesced before loadMedia; success only
             // confirms that the receiver now owns the provider connection.
-            onCastStarted = { castLocalRestorePending = false },
+            onCastStarted = {
+                castLocalRestorePending = false
+                // attach() can discover a receiver session that predates this
+                // Activity. No local backend has opened yet, but the eventual
+                // session-end callback must still restore VOD automatically.
+                castHandoffStopped = true
+                resumeAfterBackground = false
+            },
             onCastEnded = {
                 castLocalRestorePending = true
                 resumeAfterCast()
@@ -655,7 +670,10 @@ class VodPlayerActivity : BaseActivity() {
             onTimeout = {
                 if (nativeOwner === owner && !owner.abandoned.get()) {
                     if (recoverAsPaused) pauseAfterBackgroundRestore = true
-                    markOwnerConnectionUncertain(owner)
+                    requireOwnerProcessRecovery(
+                        owner,
+                        markOwnerConnectionUncertain(owner),
+                    )
                     quarantineOwner(owner, "$label timed out")
                     if (
                         recoverOnFailure &&
@@ -945,15 +963,18 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     /** Native cleanup after ownership has been exclusively claimed by VlcOps. */
-    private fun cleanupOwnerOnCurrentWorker(owner: NativePlayerOwner): List<Throwable> {
-        if (!owner.cleanupClaimed.compareAndSet(false, true)) return emptyList()
-        val failures = VlcOps.runAllBestEffort(
-            { owner.mediaPlayer.setEventListener(null) },
-            { owner.mediaPlayer.stop() },
-            { owner.mediaPlayer.release() },
-            { owner.libVlc.release() },
+    private fun cleanupOwnerOnCurrentWorker(owner: NativePlayerOwner): VlcNativeCleanupResult {
+        if (!owner.cleanupClaimed.compareAndSet(false, true)) {
+            return VlcNativeCleanupResult.notClaimed()
+        }
+        val cleanupUncertaintyToken = markOwnerConnectionUncertain(owner)
+        val result = VlcNativeCleanup.runFull(
+            detachListener = { owner.mediaPlayer.setEventListener(null) },
+            stop = { owner.mediaPlayer.stop() },
+            releaseMediaPlayer = { owner.mediaPlayer.release() },
+            releaseLibVlc = { owner.libVlc.release() },
         )
-        failures.forEach { failure ->
+        result.failures.forEach { failure ->
             PlaybackLog.log(
                 this,
                 "VOD",
@@ -962,14 +983,39 @@ class VodPlayerActivity : BaseActivity() {
             )
         }
         removeOwnerLayoutOnMain(owner)
-        if (failures.isEmpty()) resolveOwnerConnectionUncertainty(owner)
-        return failures
+        if (result.ownershipDefinitivelyReleased) {
+            // Publish proof before clearing the exact token. A timeout callback
+            // that arrives just after cleanup must not quarantine this retired
+            // owner and mint a brand-new token with no remaining cleanup path.
+            owner.ownershipDefinitivelyReleased.set(true)
+            resolveOwnerConnectionUncertainty(owner)
+        } else {
+            requireOwnerProcessRecovery(owner, cleanupUncertaintyToken)
+        }
+        return result
     }
 
-    private fun markOwnerConnectionUncertain(owner: NativePlayerOwner) {
-        if (owner.providerUncertaintyToken.get() != 0L) return
-        val token = ProviderConnectionSafety.beginLocalNativeStopUncertainty()
-        if (!owner.providerUncertaintyToken.compareAndSet(0L, token)) {
+    private fun markOwnerConnectionUncertain(owner: NativePlayerOwner): Long {
+        while (true) {
+            if (owner.ownershipDefinitivelyReleased.get()) return 0L
+            val existing = owner.providerUncertaintyToken.get()
+            if (existing != 0L) return existing
+            val token = ProviderConnectionSafety.beginLocalNativeStopUncertainty()
+            if (owner.ownershipDefinitivelyReleased.get()) {
+                ProviderConnectionSafety.resolveDefinitiveLocalStop(token)
+                return 0L
+            }
+            if (owner.providerUncertaintyToken.compareAndSet(0L, token)) {
+                // Cleanup may publish proof immediately after the pre-CAS check.
+                if (
+                    owner.ownershipDefinitivelyReleased.get() &&
+                    owner.providerUncertaintyToken.compareAndSet(token, 0L)
+                ) {
+                    ProviderConnectionSafety.resolveDefinitiveLocalStop(token)
+                    return 0L
+                }
+                return token
+            }
             ProviderConnectionSafety.resolveDefinitiveLocalStop(token)
         }
     }
@@ -977,6 +1023,19 @@ class VodPlayerActivity : BaseActivity() {
     private fun resolveOwnerConnectionUncertainty(owner: NativePlayerOwner) {
         val token = owner.providerUncertaintyToken.getAndSet(0L)
         if (token != 0L) ProviderConnectionSafety.resolveDefinitiveLocalStop(token)
+    }
+
+    private fun requireOwnerProcessRecovery(
+        owner: NativePlayerOwner,
+        token: Long = owner.providerUncertaintyToken.get(),
+    ) {
+        if (token != 0L) {
+            ProviderConnectionSafety.requireLocalProcessRecovery(token)
+        } else if (!owner.ownershipDefinitivelyReleased.get()) {
+            ProviderConnectionSafety.block(
+                ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
+            )
+        }
     }
 
     /**
@@ -1013,6 +1072,21 @@ class VodPlayerActivity : BaseActivity() {
      * ever touching the timed-out MediaPlayer/LibVLC handles.
      */
     private fun quarantineOwner(owner: NativePlayerOwner, reason: String) {
+        // Quarantine means native ownership is no longer synchronously provable.
+        // Register the exact owner before clearing current fields so every caller
+        // (including future recovery paths) preserves the one-connection gate.
+        var quarantineToken = 0L
+        if (!owner.ownershipDefinitivelyReleased.get()) {
+            quarantineToken = markOwnerConnectionUncertain(owner)
+        }
+        // Close the false->mark race against cleanup publishing definitive proof.
+        if (
+            quarantineToken != 0L &&
+            owner.ownershipDefinitivelyReleased.get() &&
+            owner.providerUncertaintyToken.compareAndSet(quarantineToken, 0L)
+        ) {
+            ProviderConnectionSafety.resolveDefinitiveLocalStop(quarantineToken)
+        }
         val wasCurrent = nativeOwner === owner
         if (wasCurrent) invalidateEventSession()
         owner.abandoned.set(true)
@@ -1034,7 +1108,9 @@ class VodPlayerActivity : BaseActivity() {
             active.state.get() == OwnerOperation.STATE_BODY_FINISHED -> true
             else -> false
         }
-        if (needsSafeCleanup) scheduleQuarantinedOwnerCleanup(owner)
+        if (needsSafeCleanup && !owner.ownershipDefinitivelyReleased.get()) {
+            scheduleQuarantinedOwnerCleanup(owner)
+        }
     }
 
     /**
@@ -1048,10 +1124,11 @@ class VodPlayerActivity : BaseActivity() {
         ) {
             return
         }
+        val cleanupUncertaintyToken = markOwnerConnectionUncertain(owner)
         VlcOps.postBounded(
             timeoutMs = NATIVE_RELEASE_TIMEOUT_MS,
             onTimeout = {
-                markOwnerConnectionUncertain(owner)
+                requireOwnerProcessRecovery(owner, cleanupUncertaintyToken)
                 PlaybackLog.log(
                     this,
                     "VOD",
@@ -1094,7 +1171,14 @@ class VodPlayerActivity : BaseActivity() {
 
         streamUrl = intent.getStringExtra(EXTRA_STREAM_URL)
         resumeId = intent.getStringExtra(EXTRA_RESUME_ID)
-        autoResume = intent.getBooleanExtra(EXTRA_AUTO_RESUME, false)
+        processRecoveryPositionMs = intent.getLongExtra(EXTRA_RECOVERY_POSITION_MS, 0L)
+            .coerceAtLeast(0L)
+        autoResume =
+            intent.getBooleanExtra(EXTRA_AUTO_RESUME, false) ||
+                intent.getBooleanExtra(
+                    PlaybackProcessRecovery.EXTRA_RECOVERED_PLAYBACK,
+                    false,
+                )
         binding.titleText.text = intent.getStringExtra(EXTRA_TITLE).orEmpty()
 
         if (streamUrl.isNullOrBlank()) {
@@ -1591,10 +1675,103 @@ class VodPlayerActivity : BaseActivity() {
         }
     }
 
+    private fun requestVodProcessRecovery(reason: String): Boolean {
+        if (!playbackEnded) persistResume(durable = true)
+        return PlaybackProcessRecovery.requestIfRequired(
+            activity = this,
+            reason = reason,
+            resumeIntent = playbackProcessRecoveryIntent(),
+        )
+    }
+
+    /** Build from current fields, not the original Intent (auto-next may replace them). */
+    override fun playbackProcessRecoveryIntent(): Intent {
+        val meta = resumeMeta
+        val recoveryPosition = bestResumePosition(null)
+        return Intent(this, VodPlayerActivity::class.java).apply {
+            putExtra(EXTRA_STREAM_URL, streamUrl)
+            putExtra(EXTRA_TITLE, binding.titleText.text?.toString().orEmpty())
+            putExtra(EXTRA_RESUME_ID, resumeId)
+            putExtra(EXTRA_RESUME_TITLE, meta?.title)
+            putExtra(EXTRA_RESUME_TYPE, meta?.kind?.raw)
+            putExtra(EXTRA_POSTER_URL, meta?.posterUrl)
+            putExtra(EXTRA_VOD_ID, meta?.vodId)
+            putExtra(EXTRA_SERIES_ID, meta?.seriesId)
+            putExtra(EXTRA_SEASON, meta?.seasonNumber ?: 0)
+            putExtra(EXTRA_EPISODE, meta?.episodeNumber ?: 0)
+            putExtra(EXTRA_AUTO_RESUME, true)
+            putExtra(EXTRA_RECOVERY_POSITION_MS, recoveryPosition)
+        }
+    }
+
+    /**
+     * Wait for an ordinary prior-owner cleanup. If the shared queue drains while
+     * its exact token remains, only a controlled process recycle can prove every
+     * native socket closed.
+     */
+    private fun handleBlockedProviderStart(
+        reason: String,
+        afterDrain: () -> Unit,
+    ): Boolean {
+        val safety = ProviderConnectionSafety.snapshot()
+        if (safety.newConnectionAllowed) return false
+        if (safety.canRecoverLocalProcess) {
+            if (!requestVodProcessRecovery(reason)) {
+                showTerminalError(R.string.error_playback_ownership_uncertain)
+            }
+            return true
+        }
+        if (!safety.remoteUncertain && safety.localPendingCount > 0) {
+            val request = providerStartSeq.incrementAndGet()
+            setBuffering(true)
+            VlcOps.post {
+                handler.post providerDrained@{
+                    if (
+                        providerStartSeq.get() != request ||
+                        !foreground ||
+                        isFinishing ||
+                        isDestroyed
+                    ) {
+                        return@providerDrained
+                    }
+                    var after = ProviderConnectionSafety.snapshot()
+                    if (
+                        !after.remoteUncertain &&
+                        after.localPendingCount > 0 &&
+                        !after.localProcessRecoveryRequired
+                    ) {
+                        ProviderConnectionSafety.requireProcessRecoveryForPendingLocalStops()
+                        after = ProviderConnectionSafety.snapshot()
+                    }
+                    when {
+                        after.newConnectionAllowed -> afterDrain()
+                        after.canRecoverLocalProcess -> {
+                            if (!requestVodProcessRecovery("${reason}_after_drain")) {
+                                setBuffering(false)
+                                showTerminalError(R.string.error_playback_ownership_uncertain)
+                            }
+                        }
+                        else -> {
+                            setBuffering(false)
+                            showTerminalError(R.string.error_playback_ownership_uncertain)
+                        }
+                    }
+                }
+            }
+            return true
+        }
+        showTerminalError(R.string.error_playback_ownership_uncertain)
+        return true
+    }
+
     /** Retry is an explicit fresh attempt, so return to the configured decoder. */
     private fun retryFromConfiguredDecoder() {
-        if (!ProviderConnectionSafety.newConnectionAllowed) {
-            showTerminalError(R.string.error_playback_ownership_uncertain)
+        if (
+            handleBlockedProviderStart(
+                reason = "vod_retry_unresolved_native_owner",
+                afterDrain = ::retryFromConfiguredDecoder,
+            )
+        ) {
             return
         }
         // HTTP 416 means the provider rejected the requested byte/time range.
@@ -1742,15 +1919,15 @@ class VodPlayerActivity : BaseActivity() {
                 activeProfileId = settings.getActiveProfileId()
                 aspect = settings.aspectRatio.first()
                 resetRoutingForCurrentItem()
-                buildActivePlayer()
                 val saved = resumeId?.let {
                     repo.getResumeForProfile(activeProfileId, it)
                 } ?: 0L
+                val resumeTarget = maxOf(saved, processRecoveryPositionMs)
                 when {
-                    saved <= 0L -> preparePlayback(0L)
+                    resumeTarget <= 0L -> preparePlayback(0L)
                     // From the Continue Watching rail the user already chose to resume.
-                    autoResume -> preparePlayback(saved)
-                    else -> promptResume(saved)
+                    autoResume -> preparePlayback(resumeTarget)
+                    else -> promptResume(resumeTarget)
                 }
             } catch (ce: CancellationException) {
                 throw ce
@@ -2366,8 +2543,14 @@ class VodPlayerActivity : BaseActivity() {
                     return@media3Start
                 }
                 if (!ProviderConnectionSafety.newConnectionAllowed) {
-                    setBuffering(false)
-                    showTerminalError(R.string.error_playback_ownership_uncertain)
+                    if (
+                        handleBlockedProviderStart(
+                            reason = "vod_media3_start_unresolved_native_owner",
+                            afterDrain = { prepareMedia3AfterProviderDrain(positionMs) },
+                        )
+                    ) {
+                        return@media3Start
+                    }
                     return@media3Start
                 }
                 prepareMedia3Playback(positionMs)
@@ -2376,8 +2559,12 @@ class VodPlayerActivity : BaseActivity() {
     }
 
     private fun preparePlayback(positionMs: Long) {
-        if (!ProviderConnectionSafety.newConnectionAllowed) {
-            showTerminalError(R.string.error_playback_ownership_uncertain)
+        if (
+            handleBlockedProviderStart(
+                reason = "vod_start_unresolved_native_owner",
+                afterDrain = { preparePlayback(positionMs) },
+            )
+        ) {
             return
         }
         // Reusing a native player must still create a distinct media-event
@@ -2426,6 +2613,22 @@ class VodPlayerActivity : BaseActivity() {
         if (playbackResourceToken == null) {
             playbackResourceToken = PlaybackResourceGovernor.begin("vod-player")
         }
+        // Resource-safe background teardown may release an engine even while a
+        // resume dialog or terminal card was visible. Build a fresh backend only
+        // when the user actually chooses playback again.
+        if (!activeEngineExists()) {
+            try {
+                buildActivePlayer()
+            } catch (error: Throwable) {
+                PlaybackLog.log(
+                    this,
+                    "VOD",
+                    "fresh backend creation failed: ${error.javaClass.simpleName}",
+                )
+                showTerminalError()
+                return
+            }
+        }
         if (isMedia3Route()) {
             prepareMedia3AfterProviderDrain(positionMs)
             return
@@ -2434,19 +2637,11 @@ class VodPlayerActivity : BaseActivity() {
         val ownerOperation = beginOwnerOperation(owner)
         if (ownerOperation == null) {
             // A background stop/start or earlier native command still owns these
-            // handles. Quarantine them and continue with a completely fresh owner.
+            // handles. Quarantine with an exact token, then let the provider-drain
+            // gate build a fresh owner only after cleanup is proven or the process
+            // is safely recycled.
             quarantineOwner(owner, "prepare overlapped an active native operation")
-            try {
-                buildPlayer()
-                preparePlayback(positionMs)
-            } catch (error: Throwable) {
-                PlaybackLog.log(
-                    this,
-                    "VOD",
-                    "fresh owner prepare failed: ${error.javaClass.simpleName}",
-                )
-                showTerminalError()
-            }
+            preparePlayback(positionMs)
             return
         }
         val vlc = owner.libVlc
@@ -2514,13 +2709,17 @@ class VodPlayerActivity : BaseActivity() {
                 ) {
                     // Never touch the timed-out handles here. The abandoned
                     // operation owns their eventual cleanup on its retired worker.
-                    markOwnerConnectionUncertain(owner)
+                    requireOwnerProcessRecovery(
+                        owner,
+                        markOwnerConnectionUncertain(owner),
+                    )
                     quarantineOwner(owner, "native prepare timed out")
                     handlePlaybackError()
                 }
             },
         ) playbackCommand@{
             var startFailure: Throwable? = null
+            var providerBlocked = false
             try {
                 if (
                     playbackOpsSeq.get() != operation ||
@@ -2539,8 +2738,16 @@ class VodPlayerActivity : BaseActivity() {
                     !foreground ||
                     owner.abandoned.get()
                 ) return@playbackCommand
-                mp.media = media
-                mp.play()
+                if (!ProviderConnectionSafety.newConnectionAllowed) {
+                    providerBlocked = true
+                } else {
+                    mp.media = media
+                    if (!ProviderConnectionSafety.newConnectionAllowed) {
+                        providerBlocked = true
+                    } else {
+                        mp.play()
+                    }
+                }
             } catch (error: Throwable) {
                 startFailure = error
             } finally {
@@ -2548,6 +2755,20 @@ class VodPlayerActivity : BaseActivity() {
                 finishNativeCommand()
                 ownerOperation.onAbandoned.set(null)
                 finishOwnerOperationOnWorker(ownerOperation)
+            }
+            if (providerBlocked) {
+                runOnUiThread {
+                    if (
+                        nativeOwner === owner &&
+                        playbackOpsSeq.get() == operation &&
+                        foreground &&
+                        !isFinishing &&
+                        !isDestroyed
+                    ) {
+                        preparePlayback(positionMs)
+                    }
+                }
+                return@playbackCommand
             }
             if (startFailure != null) {
                 // All native work above has ended before main enters recovery.
@@ -2805,21 +3026,13 @@ class VodPlayerActivity : BaseActivity() {
             ) {
                 return
             }
-            try {
-                activeVodRoute = targetRoute
-                activeRouteStable = false
-                forceSoftware = targetRoute == VodPlaybackRoutingPolicy.Route.VLC_SOFTWARE
-                PlaybackQoeRuntime.markEngine(qoeSessionId, qoeEngine(targetRoute))
-                buildActivePlayer()
-                preparePlayback(resumeAt)
-            } catch (error: Throwable) {
-                PlaybackLog.log(
-                    this,
-                    "VOD",
-                    "player rebuild failed: ${error.javaClass.simpleName}",
-                )
-                showTerminalError()
-            }
+            activeVodRoute = targetRoute
+            activeRouteStable = false
+            forceSoftware = targetRoute == VodPlaybackRoutingPolicy.Route.VLC_SOFTWARE
+            PlaybackQoeRuntime.markEngine(qoeSessionId, qoeEngine(targetRoute))
+            // preparePlayback owns the provider gate and builds only after any
+            // prior exact owner token has drained.
+            preparePlayback(resumeAt)
         }
 
         val retiringMedia3 = media3VodEngine
@@ -2845,6 +3058,7 @@ class VodPlayerActivity : BaseActivity() {
             // Without it, a cross-engine fallback could open the same subscription
             // immediately while the prior operation was still within its liveness
             // bound. A true JNI timeout remains governed by VlcOps quarantine.
+            markOwnerConnectionUncertain(retiringOwner)
             quarantineOwner(retiringOwner, "rebuild overlapped an active operation")
             VlcOps.post {
                 runOnUiThread { continueWithFreshOwner() }
@@ -2860,6 +3074,7 @@ class VodPlayerActivity : BaseActivity() {
         }
         nativeCommandsInFlight.incrementAndGet()
         ownerOperation.onAbandoned.set(::finishNativeCleanup)
+        val rebuildUncertaintyToken = markOwnerConnectionUncertain(retiringOwner)
         VlcOps.postBounded(
             timeoutMs = NATIVE_RELEASE_TIMEOUT_MS,
             onTimeout = {
@@ -2870,7 +3085,7 @@ class VodPlayerActivity : BaseActivity() {
                     !isFinishing &&
                     !isDestroyed
                 ) {
-                    markOwnerConnectionUncertain(retiringOwner)
+                    requireOwnerProcessRecovery(retiringOwner, rebuildUncertaintyToken)
                     quarantineOwner(retiringOwner, "native rebuild cleanup timed out")
                     recoveryInProgress = false
                     handlePlaybackError()
@@ -3624,7 +3839,6 @@ class VodPlayerActivity : BaseActivity() {
         if (resumeAfterBackground && !resumeChoicePending) {
             resumeAfterBackground = false
             try {
-                if (!activeEngineExists()) buildActivePlayer()
                 preparePlayback(backgroundResumePosition)
             } catch (error: Throwable) {
                 PlaybackLog.log(this, "VOD", "foreground restore failed: ${error.javaClass.simpleName}")
@@ -3652,11 +3866,13 @@ class VodPlayerActivity : BaseActivity() {
             isFinishing = isFinishing,
             engineExists = isMedia3Route() && media3VodEngine != null,
             connectionMayBeOpen = connectionMayBeOpen,
+            releaseOnBackground = true,
         )
         val vlcTeardown = VodConnectionLifecyclePolicy.onStop(
             isFinishing = isFinishing,
             engineExists = stoppingOwner != null,
             connectionMayBeOpen = connectionMayBeOpen,
+            releaseOnBackground = true,
         )
         backgroundResumePosition =
             if (ownerBusy) bestResumePosition(null)
@@ -3669,6 +3885,10 @@ class VodPlayerActivity : BaseActivity() {
                     binding.bufferingOverlay.visibility == View.VISIBLE
             }
         if (ownerBusy && stoppingOwner != null) {
+            // The active worker may be inside vendor JNI when this screen leaves.
+            // Register its exact owner before clearing Activity fields; that same
+            // retired worker resolves the token after full native release.
+            markOwnerConnectionUncertain(stoppingOwner)
             quarantineOwner(stoppingOwner, "backgrounded during native operation")
         } else {
             invalidateEventSession()
@@ -3725,8 +3945,14 @@ class VodPlayerActivity : BaseActivity() {
             stoppingOwner != null &&
             vlcTeardown != VodConnectionLifecyclePolicy.Teardown.NONE
         ) {
-            val ownerOperation = beginOwnerOperation(stoppingOwner)
+            val ownerOperation =
+                if (vlcTeardown == VodConnectionLifecyclePolicy.Teardown.RELEASE) {
+                    retireIdleOwnerOnMain(stoppingOwner)
+                } else {
+                    beginOwnerOperation(stoppingOwner)
+                }
             if (ownerOperation == null) {
+                markOwnerConnectionUncertain(stoppingOwner)
                 quarantineOwner(stoppingOwner, "background stop could not claim owner")
                 NowPlaying.clear(this)
                 PlaybackResourceGovernor.end(resourceToken)
@@ -3742,6 +3968,7 @@ class VodPlayerActivity : BaseActivity() {
             }
             nativeCommandsInFlight.incrementAndGet()
             ownerOperation.onAbandoned.set(::finishNativeStop)
+            val stopUncertaintyToken = markOwnerConnectionUncertain(stoppingOwner)
             VlcOps.postBounded(
                 timeoutMs = if (
                     vlcTeardown == VodConnectionLifecyclePolicy.Teardown.RELEASE
@@ -3752,7 +3979,7 @@ class VodPlayerActivity : BaseActivity() {
                 },
                 onTimeout = {
                     finishNativeStop()
-                    markOwnerConnectionUncertain(stoppingOwner)
+                    requireOwnerProcessRecovery(stoppingOwner, stopUncertaintyToken)
                     quarantineOwner(stoppingOwner, "background native stop timed out")
                     // A vendor JNI call may never return. Exact-token end keeps
                     // non-playback work from being blocked for the process lifetime;
@@ -3760,26 +3987,37 @@ class VodPlayerActivity : BaseActivity() {
                     PlaybackResourceGovernor.end(resourceToken)
                 },
             ) {
-                var stopFailure: Throwable? = null
+                var stopEscalatedToRelease = false
                 try {
-                    val failures = when (vlcTeardown) {
-                        VodConnectionLifecyclePolicy.Teardown.RELEASE ->
+                    when (vlcTeardown) {
+                        VodConnectionLifecyclePolicy.Teardown.RELEASE -> {
                             cleanupOwnerOnCurrentWorker(stoppingOwner)
-                        VodConnectionLifecyclePolicy.Teardown.STOP ->
-                            VlcOps.runAllBestEffort(
+                        }
+                        VodConnectionLifecyclePolicy.Teardown.STOP -> {
+                            val stopFailures = VlcOps.runAllBestEffort(
                                 { stoppingOwner.mediaPlayer.setEventListener(null) },
                                 { stoppingOwner.mediaPlayer.stop() },
                             )
-                        VodConnectionLifecyclePolicy.Teardown.NONE -> emptyList()
-                    }
-                    stopFailure = failures.firstOrNull()
-                    failures.forEach { failure ->
-                        PlaybackLog.log(
-                            this,
-                            "VOD",
-                            "background stop cleanup failed: " +
-                                failure.javaClass.simpleName,
-                        )
+                            stopFailures.forEach { failure ->
+                                PlaybackLog.log(
+                                    this,
+                                    "VOD",
+                                    "background stop failed: " +
+                                        failure.javaClass.simpleName,
+                                )
+                            }
+                            if (stopFailures.isEmpty()) {
+                                resolveOwnerConnectionUncertainty(stoppingOwner)
+                            } else {
+                                // A failed stop is not reusable. Retire the same
+                                // owner on this worker and prove both release
+                                // boundaries before allowing another connection.
+                                stopEscalatedToRelease = true
+                                stoppingOwner.abandoned.set(true)
+                                cleanupOwnerOnCurrentWorker(stoppingOwner)
+                            }
+                        }
+                        VodConnectionLifecyclePolicy.Teardown.NONE -> Unit
                     }
                 } finally {
                     finishNativeStop()
@@ -3787,26 +4025,15 @@ class VodPlayerActivity : BaseActivity() {
                     finishOwnerOperationOnWorker(ownerOperation)
                     PlaybackResourceGovernor.end(resourceToken)
                 }
-                if (stopFailure != null) {
+                if (stopEscalatedToRelease) {
                     handler.post {
                         if (nativeOwner === stoppingOwner) {
-                            ProviderConnectionSafety.block(
-                                ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
-                            )
                             quarantineOwner(stoppingOwner, "background native stop failed")
                             if (foreground && !isFinishing && !isDestroyed) {
-                                try {
-                                    buildPlayer()
-                                    preparePlayback(backgroundResumePosition)
-                                } catch (error: Throwable) {
-                                    PlaybackLog.log(
-                                        this,
-                                        "VOD",
-                                        "stop-failure restore failed: " +
-                                            error.javaClass.simpleName,
-                                    )
-                                    showTerminalError()
-                                }
+                                // preparePlayback owns the provider gate and only
+                                // constructs a new native backend after closure is
+                                // proven or controlled process recovery completes.
+                                preparePlayback(backgroundResumePosition)
                             }
                         }
                     }
@@ -3850,14 +4077,16 @@ class VodPlayerActivity : BaseActivity() {
             if (ownerOperation == null) {
                 // An earlier timed/stopping operation owns these handles. Never
                 // enqueue a release for them on the replacement worker.
+                markOwnerConnectionUncertain(destroyingOwner)
                 quarantineOwner(destroyingOwner, "destroyed during native operation")
                 super.onDestroy()
                 return
             }
+            val destroyUncertaintyToken = markOwnerConnectionUncertain(destroyingOwner)
             VlcOps.postBounded(
                 timeoutMs = NATIVE_RELEASE_TIMEOUT_MS,
                 onTimeout = {
-                    markOwnerConnectionUncertain(destroyingOwner)
+                    requireOwnerProcessRecovery(destroyingOwner, destroyUncertaintyToken)
                     quarantineOwner(destroyingOwner, "destroy native release timed out")
                 },
             ) {

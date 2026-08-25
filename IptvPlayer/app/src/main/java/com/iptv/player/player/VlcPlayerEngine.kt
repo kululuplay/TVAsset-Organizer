@@ -38,6 +38,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import com.iptv.player.cast.ProviderConnectionSafety
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.PlaybackLog
@@ -85,6 +86,7 @@ class VlcPlayerEngine(
     // quarantined. The retired worker remains their sole owner until that call
     // unwinds; no fresh worker may touch/release the same native objects.
     private val nativeHandlesAbandoned = AtomicBoolean(false)
+    private val nativeOwnershipDefinitivelyReleased = AtomicBoolean(false)
     private val providerUncertaintyToken = AtomicLong(0L)
     // A non-null stats object is not sufficient: affected libVLC/device builds
     // expose a stats object whose video counters remain permanently zero. Only
@@ -460,6 +462,7 @@ class VlcPlayerEngine(
         hostMovePending = false
         playerHasMedia = false
         nativeHandlesAbandoned.set(false)
+        nativeOwnershipDefinitivelyReleased.set(false)
     }
 
     private fun createVideoLayout(): VLCVideoLayout =
@@ -986,7 +989,7 @@ class VlcPlayerEngine(
                 VlcOps.postBounded(
                     timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
                     onTimeout = {
-                        markProviderConnectionUncertain()
+                        requireProviderProcessRecovery(markProviderConnectionUncertain())
                         nativeHandlesAbandoned.set(true)
                         deferredPlay = null
                         invalidateEventSession()
@@ -1060,6 +1063,10 @@ class VlcPlayerEngine(
         val mySeq = opsSeq.incrementAndGet()
         val finishPending = newPendingCompletion()
         if (previousPlayer == null) {
+            // A superseded stop may have registered a token before discovering
+            // that this owner never opened media. There is no provider socket to
+            // drain on the first-start path.
+            resolveProviderConnectionUncertainty()
             startMediaBounded(
                 vlc = vlc,
                 mp = mp,
@@ -1073,7 +1080,7 @@ class VlcPlayerEngine(
         VlcOps.postBounded(
             timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
             onTimeout = {
-                markProviderConnectionUncertain()
+                requireProviderProcessRecovery(markProviderConnectionUncertain())
                 val firstAbandon =
                     nativeHandlesAbandoned.compareAndSet(false, true)
                 deferredPlay = null
@@ -1138,6 +1145,10 @@ class VlcPlayerEngine(
                 finishPending()
                 return@cleanup
             }
+            // MediaPlayer.release is the definitive close boundary for the old
+            // per-media provider socket; LibVLC remains intentionally shared by
+            // the replacement player.
+            resolveProviderConnectionUncertainty()
 
             // Re-check after the (possibly long) teardown: don't attach/start a
             // channel the user has already zapped away from.
@@ -1243,7 +1254,7 @@ class VlcPlayerEngine(
         VlcOps.postBounded(
             timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
             onTimeout = {
-                markProviderConnectionUncertain()
+                requireProviderProcessRecovery(markProviderConnectionUncertain())
                 val firstAbandon =
                     nativeHandlesAbandoned.compareAndSet(false, true)
                 deferredPlay = null
@@ -1266,6 +1277,7 @@ class VlcPlayerEngine(
                 )
             },
         ) start@{
+            var providerBlocked = false
             try {
                 if (
                     nativeHandlesAbandoned.get() ||
@@ -1288,9 +1300,17 @@ class VlcPlayerEngine(
                     addOption(":http-user-agent=${AppInfo.USER_AGENT}")
                 }
                 try {
-                    mp.media = media
-                    if (opsSeq.get() != sequence || mediaPlayer !== mp) return@start
-                    mp.play()
+                    if (!ProviderConnectionSafety.newConnectionAllowed) {
+                        providerBlocked = true
+                    } else {
+                        mp.media = media
+                        if (opsSeq.get() != sequence || mediaPlayer !== mp) return@start
+                        if (!ProviderConnectionSafety.newConnectionAllowed) {
+                            providerBlocked = true
+                        } else {
+                            mp.play()
+                        }
+                    }
                 } finally {
                     media.release()
                 }
@@ -1312,6 +1332,17 @@ class VlcPlayerEngine(
             } finally {
                 finishPending()
             }
+            if (providerBlocked) {
+                commandHandler.post {
+                    if (
+                        opsSeq.get() == sequence &&
+                        mediaPlayer === mp &&
+                        !nativeHandlesAbandoned.get()
+                    ) {
+                        listener?.onError("VLC provider ownership pending")
+                    }
+                }
+            }
         }
     }
 
@@ -1327,34 +1358,55 @@ class VlcPlayerEngine(
         detail: String,
         stopFirst: Boolean = true,
     ) {
-        val failures =
+        val result =
             if (stopFirst) {
-                VlcOps.runAllBestEffort(
-                    { mp?.stop() },
-                    { mp?.release() },
-                    { vlc?.release() },
+                VlcNativeCleanup.runFull(
+                    detachListener = { mp?.setEventListener(null) },
+                    stop = { mp?.stop() },
+                    releaseMediaPlayer = { mp?.release() },
+                    releaseLibVlc = { vlc?.release() },
                 )
             } else {
-                VlcOps.runAllBestEffort(
-                    { mp?.release() },
-                    { vlc?.release() },
+                VlcNativeCleanup.runReleaseOnly(
+                    releaseMediaPlayer = { mp?.release() },
+                    releaseLibVlc = { vlc?.release() },
                 )
             }
         PlaybackLog.log(
             context,
             engineName,
             "quarantined native handles released after $detail " +
-                "(failures=${failures.size})",
+                "(failures=${result.failures.size}, " +
+                "ownershipReleased=${result.ownershipDefinitivelyReleased})",
         )
-        if (failures.isEmpty()) {
+        if (result.ownershipDefinitivelyReleased) {
+            nativeOwnershipDefinitivelyReleased.set(true)
             resolveProviderConnectionUncertainty()
+        } else {
+            requireProviderProcessRecovery()
         }
     }
 
-    private fun markProviderConnectionUncertain() {
-        if (providerUncertaintyToken.get() != 0L) return
-        val token = ProviderConnectionSafety.beginLocalNativeStopUncertainty()
-        if (!providerUncertaintyToken.compareAndSet(0L, token)) {
+    private fun markProviderConnectionUncertain(): Long {
+        while (true) {
+            if (nativeOwnershipDefinitivelyReleased.get()) return 0L
+            val existing = providerUncertaintyToken.get()
+            if (existing != 0L) return existing
+            val token = ProviderConnectionSafety.beginLocalNativeStopUncertainty()
+            if (nativeOwnershipDefinitivelyReleased.get()) {
+                ProviderConnectionSafety.resolveDefinitiveLocalStop(token)
+                return 0L
+            }
+            if (providerUncertaintyToken.compareAndSet(0L, token)) {
+                if (
+                    nativeOwnershipDefinitivelyReleased.get() &&
+                    providerUncertaintyToken.compareAndSet(token, 0L)
+                ) {
+                    ProviderConnectionSafety.resolveDefinitiveLocalStop(token)
+                    return 0L
+                }
+                return token
+            }
             ProviderConnectionSafety.resolveDefinitiveLocalStop(token)
         }
     }
@@ -1362,6 +1414,18 @@ class VlcPlayerEngine(
     private fun resolveProviderConnectionUncertainty() {
         val token = providerUncertaintyToken.getAndSet(0L)
         if (token != 0L) ProviderConnectionSafety.resolveDefinitiveLocalStop(token)
+    }
+
+    private fun requireProviderProcessRecovery(
+        token: Long = providerUncertaintyToken.get(),
+    ) {
+        if (token != 0L) {
+            ProviderConnectionSafety.requireLocalProcessRecovery(token)
+        } else if (!nativeOwnershipDefinitivelyReleased.get()) {
+            ProviderConnectionSafety.block(
+                ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
+            )
+        }
     }
 
     /**
@@ -1438,7 +1502,7 @@ class VlcPlayerEngine(
         VlcOps.postBounded(
             timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
             onTimeout = {
-                markProviderConnectionUncertain()
+                requireProviderProcessRecovery(markProviderConnectionUncertain())
                 nativeHandlesAbandoned.set(true)
                 deferredPlay = null
                 invalidateEventSession()
@@ -1468,7 +1532,7 @@ class VlcPlayerEngine(
         VlcOps.postBounded(
             timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
             onTimeout = {
-                markProviderConnectionUncertain()
+                requireProviderProcessRecovery(markProviderConnectionUncertain())
                 nativeHandlesAbandoned.set(true)
                 deferredPlay = null
                 invalidateEventSession()
@@ -1505,6 +1569,7 @@ class VlcPlayerEngine(
         val vlc = libVlc
         if (nativeHandlesAbandoned.get()) {
             invalidateEventSession()
+            requireProviderProcessRecovery()
             onStopped(false)
             return
         }
@@ -1512,9 +1577,14 @@ class VlcPlayerEngine(
         // itself belongs in the bounded worker below; a vendor implementation may
         // block there just like stop()/detachViews().
         invalidateEventSession()
+        // Block every other local backend while this exact native owner is
+        // relinquishing its provider socket. Success resolves the token before
+        // the FIFO queue can open the next connection.
+        val stopUncertaintyToken = markProviderConnectionUncertain()
         val mySeq = opsSeq.incrementAndGet()
         val finishPending = newPendingCompletion()
         val callbackDelivered = AtomicBoolean(false)
+        val cleanupResult = AtomicReference<VlcNativeCleanupResult?>(null)
         fun deliverStopped(success: Boolean) {
             if (!callbackDelivered.compareAndSet(false, true)) return
             commandHandler.post { onStopped(success) }
@@ -1522,20 +1592,25 @@ class VlcPlayerEngine(
         VlcOps.postBounded(
             timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
             onTimeout = {
-                markProviderConnectionUncertain()
                 nativeHandlesAbandoned.set(true)
                 invalidateEventSession()
+                requireProviderProcessRecovery(stopUncertaintyToken)
                 PlaybackLog.log(context, engineName, "native stop timed out")
                 finishPending()
                 deliverStopped(false)
             },
             onTimedOutActionFinished = {
-                releaseQuarantinedHandles(
-                    mp = mp,
-                    vlc = vlc,
-                    detail = "native stop timeout",
-                    stopFirst = false,
-                )
+                // A stop that eventually returned performs its own release on
+                // this same retired worker. Only a skipped/stale action still
+                // needs the timeout cleanup here.
+                if (cleanupResult.get() == null) {
+                    releaseQuarantinedHandles(
+                        mp = mp,
+                        vlc = vlc,
+                        detail = "native stop timeout",
+                        stopFirst = false,
+                    )
+                }
             },
         ) nativeStop@{
             var stopped = false
@@ -1544,7 +1619,25 @@ class VlcPlayerEngine(
                 if (
                     nativeHandlesAbandoned.get() ||
                     opsSeq.get() != mySeq
-                ) return@nativeStop
+                ) {
+                    if (nativeHandlesAbandoned.get()) {
+                        val result = VlcNativeCleanup.runFull(
+                            detachListener = { mp.setEventListener(null) },
+                            stop = { mp.stop() },
+                            releaseMediaPlayer = { mp.release() },
+                            releaseLibVlc = { vlc?.release() },
+                        )
+                        cleanupResult.set(result)
+                        if (result.ownershipDefinitivelyReleased) {
+                            nativeOwnershipDefinitivelyReleased.set(true)
+                            resolveProviderConnectionUncertainty()
+                            stopped = true
+                        } else {
+                            requireProviderProcessRecovery(stopUncertaintyToken)
+                        }
+                    }
+                    return@nativeStop
+                }
                 runCatching { mp.setEventListener(null) }.onFailure {
                     PlaybackLog.log(
                         context,
@@ -1552,8 +1645,34 @@ class VlcPlayerEngine(
                         "stop listener detach failed: ${it.javaClass.simpleName}",
                     )
                 }
-                mp.stop()
-                stopped = true
+                val stopFailure = runCatching { mp.stop() }.exceptionOrNull()
+                if (stopFailure == null && !nativeHandlesAbandoned.get()) {
+                    stopped = true
+                    resolveProviderConnectionUncertainty()
+                } else {
+                    nativeHandlesAbandoned.set(true)
+                    invalidateEventSession()
+                    val result = VlcNativeCleanup.runReleaseOnly(
+                        releaseMediaPlayer = { mp.release() },
+                        releaseLibVlc = { vlc?.release() },
+                    )
+                    cleanupResult.set(result)
+                    result.failures.forEach { failure ->
+                        PlaybackLog.log(
+                            context,
+                            engineName,
+                            "stop escalation cleanup failed: " +
+                                failure.javaClass.simpleName,
+                        )
+                    }
+                    stopped = result.ownershipDefinitivelyReleased
+                    if (stopped) {
+                        nativeOwnershipDefinitivelyReleased.set(true)
+                        resolveProviderConnectionUncertainty()
+                    } else {
+                        requireProviderProcessRecovery(stopUncertaintyToken)
+                    }
+                }
             } finally {
                 finishPending()
                 deliverStopped(stopped)
@@ -1610,11 +1729,11 @@ class VlcPlayerEngine(
         playerHasMedia = false
         listener = null
         if (mp != null || vlc != null) {
+            val releaseUncertaintyToken = markProviderConnectionUncertain()
             val releaseOperationTimedOut = AtomicBoolean(false)
             VlcOps.postBounded(
                 timeoutMs = NATIVE_RELEASE_TIMEOUT_MS,
                 onTimeout = {
-                    markProviderConnectionUncertain()
                     // Android cannot cancel a thread blocked in vendor JNI.
                     // Quarantine this owner before the fresh worker can run, and
                     // remove only its Android view on main. The retired worker
@@ -1622,6 +1741,7 @@ class VlcPlayerEngine(
                     // sequence if/when the blocked call returns.
                     releaseOperationTimedOut.set(true)
                     nativeHandlesAbandoned.set(true)
+                    requireProviderProcessRecovery(releaseUncertaintyToken)
                     removeRetiredLayout()
                     PlaybackLog.log(context, engineName, "native release timed out")
                 },
@@ -1636,21 +1756,24 @@ class VlcPlayerEngine(
                     commandHandler.post { removeRetiredLayout() }
                     return@releaseOwner
                 }
-                val failures = VlcOps.runAllBestEffort(
-                    { mp?.setEventListener(null) },
-                    { mp?.stop() },
-                    { mp?.release() },
-                    { vlc?.release() },
+                val result = VlcNativeCleanup.runFull(
+                    detachListener = { mp?.setEventListener(null) },
+                    stop = { mp?.stop() },
+                    releaseMediaPlayer = { mp?.release() },
+                    releaseLibVlc = { vlc?.release() },
                 )
-                failures.forEach { failure ->
+                result.failures.forEach { failure ->
                     PlaybackLog.log(
                         context,
                         engineName,
                         "release cleanup failed: ${failure.javaClass.simpleName}",
                     )
                 }
-                if (releaseOperationTimedOut.get() && failures.isEmpty()) {
+                if (result.ownershipDefinitivelyReleased) {
+                    nativeOwnershipDefinitivelyReleased.set(true)
                     resolveProviderConnectionUncertainty()
+                } else {
+                    requireProviderProcessRecovery(releaseUncertaintyToken)
                 }
                 if (!releaseOperationTimedOut.get()) {
                     // Keep the shared VlcOps FIFO occupied until main has removed

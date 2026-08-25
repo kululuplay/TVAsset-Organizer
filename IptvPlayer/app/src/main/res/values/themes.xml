@@ -13,6 +13,16 @@
         <item name="android:textColorSecondary">@color/text_secondary</item>
     </style>
 
+    <!-- Brief black hand-off while the poisoned default process is recycled. -->
+    <style name="Theme.IptvPlayer.ProcessRecovery" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/bg_root</item>
+        <item name="android:colorBackground">@color/bg_root</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
     <!-- Reusable button look (focusable, accent on focus). -->
     <style name="Widget.Iptv.Button" parent="Widget.AppCompat.Button">
         <item name="android:background">@drawable/bg_button</item>

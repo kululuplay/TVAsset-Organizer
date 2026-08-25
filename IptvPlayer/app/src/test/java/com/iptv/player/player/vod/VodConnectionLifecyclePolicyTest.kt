@@ -42,6 +42,19 @@ class VodConnectionLifecyclePolicyTest {
     }
 
     @Test
+    fun `resource safe background mode fully releases an active backend`() {
+        assertEquals(
+            VodConnectionLifecyclePolicy.Teardown.RELEASE,
+            VodConnectionLifecyclePolicy.onStop(
+                isFinishing = false,
+                engineExists = true,
+                connectionMayBeOpen = true,
+                releaseOnBackground = true,
+            ),
+        )
+    }
+
+    @Test
     fun `backgrounding before a connection opens does nothing`() {
         assertEquals(
             VodConnectionLifecyclePolicy.Teardown.NONE,
@@ -49,6 +62,19 @@ class VodConnectionLifecyclePolicyTest {
                 isFinishing = false,
                 engineExists = true,
                 connectionMayBeOpen = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `resource safe background mode releases an idle existing backend`() {
+        assertEquals(
+            VodConnectionLifecyclePolicy.Teardown.RELEASE,
+            VodConnectionLifecyclePolicy.onStop(
+                isFinishing = false,
+                engineExists = true,
+                connectionMayBeOpen = false,
+                releaseOnBackground = true,
             ),
         )
     }

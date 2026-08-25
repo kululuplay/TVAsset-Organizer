@@ -174,6 +174,11 @@ class PlayerController(
         fun onTransportResolved(format: StreamFormat) {}
         /** Structured, URL/message-free failure suitable for bounded QoE. */
         fun onPlaybackFailure(failure: PlaybackFailure) {}
+        /**
+         * A vendor-native owner cannot prove socket closure. Return true only
+         * when the UI launched controlled main-process recovery.
+         */
+        fun onLocalProcessRecoveryRequired(): Boolean = false
         /** Emitted only after all retries + fallback are exhausted. */
         fun onFatalError()
         fun onRetrying(attempt: Int)
@@ -606,24 +611,61 @@ class PlayerController(
         val generation = ++startGeneration
         releaseEngine()
 
-        val create = Runnable {
+        var providerDrainAttempted = false
+        lateinit var create: Runnable
+        fun failClosedForProviderOwnership() {
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "provider connection ownership uncertain -> fail closed",
+            )
+            callback.onPlaybackFailure(
+                PlaybackFailure(
+                    category = PlaybackFailure.Category.RESOURCE,
+                    code = PlaybackFailure.Code.RESOURCE_EXHAUSTED,
+                    phase = PlaybackFailure.Phase.SHUTDOWN,
+                    component = PlaybackFailure.Component.TRANSPORT,
+                    retryAdvice = PlaybackFailure.RetryAdvice.DO_NOT_RETRY,
+                ),
+            )
+            callback.onFatalError()
+        }
+        create = Runnable {
             if (generation != startGeneration) return@Runnable
-            if (!ProviderConnectionSafety.newConnectionAllowed) {
-                PlaybackLog.log(
-                    context,
-                    "Controller",
-                    "provider connection ownership uncertain -> fail closed",
-                )
-                callback.onPlaybackFailure(
-                    PlaybackFailure(
-                        category = PlaybackFailure.Category.RESOURCE,
-                        code = PlaybackFailure.Code.RESOURCE_EXHAUSTED,
-                        phase = PlaybackFailure.Phase.SHUTDOWN,
-                        component = PlaybackFailure.Component.TRANSPORT,
-                        retryAdvice = PlaybackFailure.RetryAdvice.DO_NOT_RETRY,
-                    ),
-                )
-                callback.onFatalError()
+            var safety = ProviderConnectionSafety.snapshot()
+            if (!safety.newConnectionAllowed) {
+                if (safety.remoteUncertain) {
+                    failClosedForProviderOwnership()
+                    return@Runnable
+                }
+                if (
+                    safety.localPendingCount > 0 &&
+                    !safety.localProcessRecoveryRequired &&
+                    !providerDrainAttempted
+                ) {
+                    // A prior Activity may still be completing an ordinary VLC
+                    // release. Wait behind the shared FIFO instead of presenting
+                    // an error or opening an overlapping Exo connection.
+                    providerDrainAttempted = true
+                    VlcOps.post { mainHandler.post(create) }
+                    return@Runnable
+                }
+                if (
+                    safety.localPendingCount > 0 &&
+                    !safety.localProcessRecoveryRequired
+                ) {
+                    // The queue drained but the exact token did not: its old JNI
+                    // worker is no longer a viable proof path.
+                    ProviderConnectionSafety.requireProcessRecoveryForPendingLocalStops()
+                    safety = ProviderConnectionSafety.snapshot()
+                }
+                if (
+                    safety.canRecoverLocalProcess &&
+                    callback.onLocalProcessRecoveryRequired()
+                ) {
+                    return@Runnable
+                }
+                failClosedForProviderOwnership()
                 return@Runnable
             }
             var candidate: PlayerEngine? = null
