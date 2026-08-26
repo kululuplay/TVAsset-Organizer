@@ -44,7 +44,7 @@ import java.util.Locale
 class AboutActivity : BaseActivity() {
 
     private lateinit var binding: ActivityAboutBinding
-    private val checker by lazy { UpdateChecker(ServiceLocator.httpClient) }
+    private val checker by lazy { UpdateChecker(ServiceLocator.httpClient, this) }
 
     private var pendingUpdate: UpdateInfo? = null
     private var downloadFile: File? = null
@@ -130,6 +130,17 @@ class AboutActivity : BaseActivity() {
                     binding.aboutUpdateStatus.setText(R.string.about_up_to_date)
                     binding.aboutUpdateStatus.setTextColor(
                         ContextCompat.getColor(this@AboutActivity, R.color.success),
+                    )
+                    binding.btnCheckUpdate.requestFocus()
+                }
+                is UpdateResult.Deferred -> {
+                    pendingUpdate = null
+                    binding.aboutUpdateStatus.text = getString(
+                        R.string.about_update_staged,
+                        result.targetVersion,
+                    )
+                    binding.aboutUpdateStatus.setTextColor(
+                        ContextCompat.getColor(this@AboutActivity, R.color.text_secondary),
                     )
                     binding.btnCheckUpdate.requestFocus()
                 }

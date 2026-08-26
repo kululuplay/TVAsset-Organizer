@@ -168,7 +168,7 @@
     <string name="adult_locked_title">Vergrendeld</string>
 
     <string name="diag_title">Diagnostiek</string>
-    <string name="diag_run">Tests uitvoeren</string>
+    <string name="diag_run">Volledige ondersteuningstest uitvoeren</string>
     <string name="diag_internet">Internetverbinding</string>
     <string name="diag_server">Server bereikbaar</string>
     <string name="diag_ping">Reactietijd server</string>
@@ -349,6 +349,18 @@
     <string name="diag_subtitle">Netwerkstatus, routering en apparaatinformatie</string>
     <string name="diag_quick_section">Snelle verbindingscontrole</string>
     <string name="diag_quick_desc">Test internettoegang en de verbinding met uw provider.</string>
+    <string name="diag_quick_route_running">Routekwaliteit testen… %1$d s</string>
+    <string name="diag_route_quality">Routekwaliteit</string>
+    <string name="diag_memory">Beschikbaar geheugen</string>
+    <string name="diag_memory_detail">%1$s beschikbaar</string>
+    <string name="diag_storage">Vrije opslag</string>
+    <string name="diag_storage_detail">%1$s beschikbaar</string>
+    <string name="diag_codecs">Codec-ondersteuning</string>
+    <string name="diag_codecs_detail">H.264: %1$s · HEVC: %2$s · AC-3: %3$s · E-AC-3: %4$s</string>
+    <string name="diag_yes">Ja</string>
+    <string name="diag_no">Nee</string>
+    <string name="diag_complete_support_code">%1$d/%2$d controles geslaagd · Supportcode: %3$s</string>
+    <string name="diag_support_code_line">Supportcode: %1$s</string>
     <string name="diag_ready">Klaar om te starten</string>
     <string name="diag_complete_summary">%1$d van %2$d controles geslaagd</string>
     <string name="diag_peering_section">Uitgebreide routeanalyse</string>

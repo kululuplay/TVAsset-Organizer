@@ -168,7 +168,7 @@
     <string name="adult_locked_title">Verrouillé</string>
 
     <string name="diag_title">Diagnostics</string>
-    <string name="diag_run">Lancer les tests</string>
+    <string name="diag_run">Lancer le test d’assistance complet</string>
     <string name="diag_internet">Connexion Internet</string>
     <string name="diag_server">Serveur accessible</string>
     <string name="diag_ping">Temps de réponse du serveur</string>
@@ -349,6 +349,18 @@
     <string name="diag_subtitle">État du réseau, routage et informations sur l’appareil</string>
     <string name="diag_quick_section">Vérification rapide de la connexion</string>
     <string name="diag_quick_desc">Teste l’accès à Internet et la connexion à votre fournisseur.</string>
+    <string name="diag_quick_route_running">Test de la qualité du routage… %1$d s</string>
+    <string name="diag_route_quality">Qualité du routage</string>
+    <string name="diag_memory">Mémoire disponible</string>
+    <string name="diag_memory_detail">%1$s disponible</string>
+    <string name="diag_storage">Stockage libre</string>
+    <string name="diag_storage_detail">%1$s disponible</string>
+    <string name="diag_codecs">Codecs pris en charge</string>
+    <string name="diag_codecs_detail">H.264 : %1$s · HEVC : %2$s · AC-3 : %3$s · E-AC-3 : %4$s</string>
+    <string name="diag_yes">Oui</string>
+    <string name="diag_no">Non</string>
+    <string name="diag_complete_support_code">%1$d/%2$d contrôles réussis · Code d’assistance : %3$s</string>
+    <string name="diag_support_code_line">Code d’assistance : %1$s</string>
     <string name="diag_ready">Prêt à démarrer</string>
     <string name="diag_complete_summary">%1$d vérification(s) réussie(s) sur %2$d</string>
     <string name="diag_peering_section">Analyse avancée du routage</string>

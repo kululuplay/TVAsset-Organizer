@@ -27,9 +27,11 @@ import android.widget.Toast
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.withStarted
 import com.iptv.player.R
 import com.iptv.player.cast.CastController
 import com.iptv.player.cast.ProviderConnectionSafety
+import com.iptv.player.cast.ProviderStartGatePolicy
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.AspectRatio
 import com.iptv.player.data.model.BufferMode
@@ -1714,24 +1716,54 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         afterDrain: () -> Unit,
     ): Boolean {
         val safety = ProviderConnectionSafety.snapshot()
-        if (safety.newConnectionAllowed) return false
-        if (safety.canRecoverLocalProcess) {
-            if (!requestVodProcessRecovery(reason)) {
-                showTerminalError(R.string.error_playback_ownership_uncertain)
+        when (ProviderStartGatePolicy.decide(safety)) {
+            ProviderStartGatePolicy.Decision.READY -> return false
+            ProviderStartGatePolicy.Decision.RECOVER_LOCAL_PROCESS -> {
+                setBuffering(true)
+                val resumed = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                if (!requestVodProcessRecovery(reason) && resumed) {
+                    setBuffering(false)
+                    showTerminalError(R.string.error_playback_ownership_uncertain)
+                }
+                return true
             }
-            return true
+            ProviderStartGatePolicy.Decision.WAIT_FOR_LOCAL_CLEANUP -> Unit
+            ProviderStartGatePolicy.Decision.BLOCKED_BY_REMOTE_OWNER,
+            ProviderStartGatePolicy.Decision.BLOCKED -> {
+                showTerminalError(R.string.error_playback_ownership_uncertain)
+                return true
+            }
         }
-        if (!safety.remoteUncertain && safety.localPendingCount > 0) {
+
+        // Ordinary local cleanup: retain the loading UI and continue automatically.
+        if (safety.localPendingCount > 0) {
             val request = providerStartSeq.incrementAndGet()
             setBuffering(true)
             VlcOps.post {
                 handler.post providerDrained@{
                     if (
                         providerStartSeq.get() != request ||
-                        !foreground ||
                         isFinishing ||
                         isDestroyed
                     ) {
+                        return@providerDrained
+                    }
+                    if (!foreground) {
+                        lifecycleScope.launch {
+                            lifecycle.withStarted {
+                                if (
+                                    providerStartSeq.get() == request &&
+                                    !isFinishing &&
+                                    !isDestroyed &&
+                                    !handleBlockedProviderStart(
+                                        reason = "${reason}_foreground",
+                                        afterDrain = afterDrain,
+                                    )
+                                ) {
+                                    afterDrain()
+                                }
+                            }
+                        }
                         return@providerDrained
                     }
                     var after = ProviderConnectionSafety.snapshot()
@@ -1743,15 +1775,27 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                         ProviderConnectionSafety.requireProcessRecoveryForPendingLocalStops()
                         after = ProviderConnectionSafety.snapshot()
                     }
-                    when {
-                        after.newConnectionAllowed -> afterDrain()
-                        after.canRecoverLocalProcess -> {
-                            if (!requestVodProcessRecovery("${reason}_after_drain")) {
+                    when (ProviderStartGatePolicy.decide(after)) {
+                        ProviderStartGatePolicy.Decision.READY -> afterDrain()
+                        ProviderStartGatePolicy.Decision.RECOVER_LOCAL_PROCESS -> {
+                            val resumed = lifecycle.currentState
+                                .isAtLeast(Lifecycle.State.RESUMED)
+                            if (
+                                !requestVodProcessRecovery("${reason}_after_drain") &&
+                                resumed
+                            ) {
                                 setBuffering(false)
                                 showTerminalError(R.string.error_playback_ownership_uncertain)
                             }
                         }
-                        else -> {
+                        ProviderStartGatePolicy.Decision.WAIT_FOR_LOCAL_CLEANUP -> {
+                            handleBlockedProviderStart(
+                                reason = "${reason}_continued",
+                                afterDrain = afterDrain,
+                            )
+                        }
+                        ProviderStartGatePolicy.Decision.BLOCKED_BY_REMOTE_OWNER,
+                        ProviderStartGatePolicy.Decision.BLOCKED -> {
                             setBuffering(false)
                             showTerminalError(R.string.error_playback_ownership_uncertain)
                         }
@@ -1760,6 +1804,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
             }
             return true
         }
+        // Defensive fallback: a closed-schema decision above should own every state.
         showTerminalError(R.string.error_playback_ownership_uncertain)
         return true
     }

@@ -4,6 +4,9 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
   parsePlaybackPolicy,
+  parseUpdateRolloutPolicy,
+  decideUpdateRollout,
+  sanitizeSupportChecks,
   prepareRows,
   sanitizePlaybackQoe,
   persistTelemetryEvents,
@@ -49,6 +52,109 @@ test("playback policy exposes only typed in-range kill switches", () => {
     null,
   );
   assert.equal(parsePlaybackPolicy("not json"), null);
+});
+
+test("update rollout policy accepts only a closed bounded schema", () => {
+  assert.deepEqual(
+    parseUpdateRolloutPolicy(
+      JSON.stringify({
+        targetVersion: "1.5.83",
+        stableVersion: "1.5.82",
+        rolloutPercent: 10,
+        salt: "release-183",
+        autoPauseMinDevices: 25,
+        autoPauseFailurePercent: 12,
+        autoPauseWindowMinutes: 90,
+        url: "https://user:secret@example.test",
+      }),
+    ),
+    {
+      policyVersion: 1,
+      targetVersion: "1.5.83",
+      stableVersion: "1.5.82",
+      rolloutPercent: 10,
+      paused: false,
+      emergency: false,
+      salt: "release-183",
+      autoPauseEnabled: true,
+      autoPauseMinDevices: 25,
+      autoPauseFailurePercent: 12,
+      autoPauseWindowMinutes: 90,
+    },
+  );
+  assert.equal(parseUpdateRolloutPolicy('{"targetVersion":"latest"}'), null);
+  assert.equal(parseUpdateRolloutPolicy("not-json"), null);
+});
+
+test("rollout cohort is deterministic and pause holds every managed device", () => {
+  const policy = parseUpdateRolloutPolicy(
+    JSON.stringify({ targetVersion: "1.5.83", rolloutPercent: 50, salt: "x" }),
+  );
+  const request = { deviceId: "device-42", candidateVersion: "1.5.83" };
+  assert.deepEqual(
+    decideUpdateRollout(policy, request),
+    decideUpdateRollout(policy, request),
+  );
+  const paused = decideUpdateRollout(policy, request, {
+    autoPaused: true,
+    reason: "fatal rate 20%",
+  });
+  assert.equal(paused.decision, "hold");
+  assert.equal(paused.autoPaused, true);
+  assert.equal(paused.reason, "fatal rate 20%");
+});
+
+test("emergency rollout bypasses cohort but never unrelated versions", () => {
+  const policy = parseUpdateRolloutPolicy(
+    JSON.stringify({
+      targetVersion: "1.5.83",
+      stableVersion: "1.5.82",
+      rolloutPercent: 0,
+      paused: true,
+      emergency: true,
+    }),
+  );
+  assert.equal(
+    decideUpdateRollout(policy, {
+      deviceId: "device-1",
+      candidateVersion: "1.5.83",
+    }).decision,
+    "allow",
+  );
+  assert.equal(
+    decideUpdateRollout(
+      policy,
+      { deviceId: "device-1", candidateVersion: "1.5.83" },
+      { autoPaused: true, reason: "health threshold" },
+    ).decision,
+    "hold",
+  );
+  assert.deepEqual(
+    decideUpdateRollout(policy, {
+      deviceId: "device-1",
+      candidateVersion: "1.5.84",
+    }),
+    { decision: "allow", managed: false },
+  );
+});
+
+test("support checks keep only bounded redacted closed-schema rows", () => {
+  assert.deepEqual(
+    sanitizeSupportChecks([
+      { key: "internet", ok: true, detail: "online" },
+      {
+        key: "provider",
+        label: "Test https://private.example.test?token=hidden",
+        ok: false,
+        detail: "https://user:pass@example.test/live?token=secret",
+      },
+      { key: "bad key!", ok: true, detail: "ignored" },
+    ]),
+    [
+      { key: "internet", label: null, ok: true, detail: "online" },
+      { key: "provider", label: "Test <redacted>", ok: false, detail: "<redacted>" },
+    ],
+  );
 });
 
 test("playback_qoe keeps only the reviewed schema", () => {

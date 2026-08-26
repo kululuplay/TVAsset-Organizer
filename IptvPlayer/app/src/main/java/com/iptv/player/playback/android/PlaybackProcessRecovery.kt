@@ -17,6 +17,7 @@ import com.iptv.player.cast.ProviderConnectionSafety
 import com.iptv.player.ui.recovery.PlaybackProcessRecoveryActivity
 import com.iptv.player.util.AbnormalExitDetector
 import com.iptv.player.util.PlaybackLog
+import com.iptv.player.util.StabilityTelemetry
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -110,6 +111,11 @@ internal object PlaybackProcessRecovery {
         }
 
         return runCatching {
+            StabilityTelemetry.record(
+                type = "process_recovery",
+                severity = "fatal",
+                detail = reason,
+            )
             PlaybackLog.log(
                 activity,
                 "ProcessRecovery",

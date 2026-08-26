@@ -169,7 +169,7 @@
     <string name="adult_locked_title">مقفل</string>
 
     <string name="diag_title">التشخيص</string>
-    <string name="diag_run">تشغيل الاختبارات</string>
+    <string name="diag_run">تشغيل اختبار الدعم الكامل</string>
     <string name="diag_internet">اتصال الإنترنت</string>
     <string name="diag_server">إمكانية الوصول للخادم</string>
     <string name="diag_ping">زمن استجابة الخادم</string>
@@ -361,6 +361,18 @@
     <string name="diag_subtitle">حالة الشبكة والتوجيه ومعلومات الجهاز</string>
     <string name="diag_quick_section">فحص سريع للاتصال</string>
     <string name="diag_quick_desc">يختبر الوصول إلى الإنترنت والاتصال بمزوّد الخدمة.</string>
+    <string name="diag_quick_route_running">جارٍ اختبار جودة المسار… %1$d ث</string>
+    <string name="diag_route_quality">جودة المسار</string>
+    <string name="diag_memory">الذاكرة المتاحة</string>
+    <string name="diag_memory_detail">%1$s متاح</string>
+    <string name="diag_storage">مساحة التخزين الحرة</string>
+    <string name="diag_storage_detail">%1$s متاح</string>
+    <string name="diag_codecs">دعم برامج الترميز</string>
+    <string name="diag_codecs_detail">H.264: %1$s · HEVC: %2$s · AC-3: %3$s · E-AC-3: %4$s</string>
+    <string name="diag_yes">نعم</string>
+    <string name="diag_no">لا</string>
+    <string name="diag_complete_support_code">نجح %1$d/%2$d من الفحوص · رمز الدعم: %3$s</string>
+    <string name="diag_support_code_line">رمز الدعم: %1$s</string>
     <string name="diag_ready">جاهز للتشغيل</string>
     <string name="diag_complete_summary">نجح %1$d من أصل %2$d فحوصات</string>
     <string name="diag_peering_section">تحليل متقدم للمسار</string>

@@ -73,6 +73,7 @@
     <!-- In-App-Update -->
     <string name="about_checking">Suche nach Updates…</string>
     <string name="about_update_failed">Update-Prüfung fehlgeschlagen. Bitte erneut versuchen.</string>
+    <string name="about_update_staged">Update v%1$s wird schrittweise verteilt. Es erscheint automatisch, sobald Ihre Gerätegruppe freigegeben ist.</string>
     <string name="about_download_started">Update wird heruntergeladen…</string>
     <string name="about_install_permission">Zum Aktualisieren Installation aus dieser Quelle erlauben.</string>
     <string name="about_update_file_missing">Die heruntergeladene Update-Datei fehlt. Bitte erneut herunterladen.</string>

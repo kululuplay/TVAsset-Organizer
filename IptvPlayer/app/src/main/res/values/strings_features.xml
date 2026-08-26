@@ -75,6 +75,7 @@
     <!-- In-app update -->
     <string name="about_checking">Checking for updates…</string>
     <string name="about_update_failed">Update check failed. Please try again.</string>
+    <string name="about_update_staged">Update v%1$s is being released gradually. It will appear automatically when your device group is ready.</string>
     <string name="about_download_started">Downloading update…</string>
     <string name="about_install_permission">Allow installing apps from this source to update.</string>
     <string name="about_update_file_missing">The downloaded update file is missing. Please download it again.</string>

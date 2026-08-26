@@ -25,6 +25,7 @@ import coil.load
 import com.iptv.player.R
 import com.iptv.player.cast.CastController
 import com.iptv.player.cast.ProviderConnectionSafety
+import com.iptv.player.cast.ProviderStartGatePolicy
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.NowNext
@@ -199,7 +200,10 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
             binding.bufferingLabel.setText(R.string.buffering)
             binding.bufferingIndicator.visibility = View.VISIBLE
             if (::controller.isInitialized && !castOwnsPlayback) {
-                if (prepareLocalPlaybackRequest()) {
+                if (
+                    prepareLocalPlaybackRequest() ==
+                    ProviderStartGatePolicy.Decision.READY
+                ) {
                     if (localStreamSubmitted) {
                         beginQoeSessionIfNeeded()
                         controller.retry()
@@ -426,7 +430,10 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
             showOverlay(channel)
             return
         }
-        if (!prepareLocalPlaybackRequest()) {
+        if (
+            prepareLocalPlaybackRequest() !=
+            ProviderStartGatePolicy.Decision.READY
+        ) {
             PlaybackResourceGovernor.end(playbackResourceToken)
             playbackResourceToken = null
             showOverlay(channel)
@@ -939,7 +946,10 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
             binding.bufferingLabel.setText(R.string.buffering)
             binding.bufferingIndicator.visibility = View.VISIBLE
             if (::controller.isInitialized && !castOwnsPlayback) {
-                if (prepareLocalPlaybackRequest()) {
+                if (
+                    prepareLocalPlaybackRequest() ==
+                    ProviderStartGatePolicy.Decision.READY
+                ) {
                     if (localStreamSubmitted) {
                         beginQoeSessionIfNeeded()
                         controller.retry()
@@ -966,32 +976,41 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
 
     // ---- Platform playback ownership + anonymous QoE -------------------
 
-    private fun prepareLocalPlaybackRequest(): Boolean {
-        if (castOwnsPlayback || castLoadPending) return false
+    private fun prepareLocalPlaybackRequest(): ProviderStartGatePolicy.Decision {
+        if (castOwnsPlayback || castLoadPending) {
+            return ProviderStartGatePolicy.Decision.BLOCKED_BY_REMOTE_OWNER
+        }
         val safety = ProviderConnectionSafety.snapshot()
-        if (!safety.newConnectionAllowed) {
+        val gate = ProviderStartGatePolicy.decide(safety)
+        if (gate != ProviderStartGatePolicy.Decision.READY) {
             localPlaybackRequested = false
             playbackSession.setPlaying(false)
-            if (safety.canRecoverLocalProcess) {
-                if (
-                    PlaybackProcessRecovery.requestIfRequired(
+            return when (gate) {
+                ProviderStartGatePolicy.Decision.WAIT_FOR_LOCAL_CLEANUP -> {
+                    deferLocalPlaybackUntilProviderDrain()
+                    gate
+                }
+                ProviderStartGatePolicy.Decision.RECOVER_LOCAL_PROCESS -> {
+                    val resumed = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                    val launched = PlaybackProcessRecovery.requestIfRequired(
                         this,
                         reason = "live_start_unresolved_native_owner",
                         resumeIntent = playbackProcessRecoveryIntent(),
                     )
-                ) {
-                    return false
+                    if (launched || !resumed) {
+                        gate
+                    } else {
+                        showProviderOwnershipError()
+                        ProviderStartGatePolicy.Decision.BLOCKED
+                    }
                 }
-            } else if (!safety.remoteUncertain && safety.localPendingCount > 0) {
-                deferLocalPlaybackUntilProviderDrain()
-                return false
+                ProviderStartGatePolicy.Decision.BLOCKED_BY_REMOTE_OWNER,
+                ProviderStartGatePolicy.Decision.BLOCKED -> {
+                    showProviderOwnershipError()
+                    gate
+                }
+                ProviderStartGatePolicy.Decision.READY -> gate
             }
-            binding.playbackCover.visibility = View.VISIBLE
-            binding.bufferingIndicator.visibility = View.GONE
-            binding.errorMessage.setText(R.string.error_playback_ownership_uncertain)
-            binding.errorOverlay.visibility = View.VISIBLE
-            binding.retryButton.requestFocus()
-            return false
         }
         // Focus is requested before opening/reopening the local stream. TV devices
         // normally grant immediately; the listener still owns transient/permanent
@@ -1004,11 +1023,19 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
             binding.errorMessage.setText(R.string.error_audio_focus_unavailable)
             binding.errorOverlay.visibility = View.VISIBLE
             binding.retryButton.requestFocus()
-            return false
+            return ProviderStartGatePolicy.Decision.BLOCKED
         }
         localPlaybackRequested = true
         playbackSession.setPlaying(true)
-        return true
+        return ProviderStartGatePolicy.Decision.READY
+    }
+
+    private fun showProviderOwnershipError() {
+        binding.playbackCover.visibility = View.VISIBLE
+        binding.bufferingIndicator.visibility = View.GONE
+        binding.errorMessage.setText(R.string.error_playback_ownership_uncertain)
+        binding.errorOverlay.visibility = View.VISIBLE
+        binding.retryButton.requestFocus()
     }
 
     private fun deferLocalPlaybackUntilProviderDrain() {
@@ -1039,22 +1066,22 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
                     ProviderConnectionSafety.requireProcessRecoveryForPendingLocalStops()
                     afterDrain = ProviderConnectionSafety.snapshot()
                 }
-                if (afterDrain.newConnectionAllowed) {
-                    resumeLocalPlayback()
-                } else if (
-                    afterDrain.canRecoverLocalProcess &&
-                    PlaybackProcessRecovery.requestIfRequired(
-                        this,
-                        reason = "live_provider_drain_unresolved",
-                        resumeIntent = playbackProcessRecoveryIntent(),
-                    )
-                ) {
-                    Unit
-                } else {
-                    binding.bufferingIndicator.visibility = View.GONE
-                    binding.errorMessage.setText(R.string.error_playback_ownership_uncertain)
-                    binding.errorOverlay.visibility = View.VISIBLE
-                    binding.retryButton.requestFocus()
+                when (ProviderStartGatePolicy.decide(afterDrain)) {
+                    ProviderStartGatePolicy.Decision.READY -> resumeLocalPlayback()
+                    ProviderStartGatePolicy.Decision.RECOVER_LOCAL_PROCESS -> {
+                        val resumed = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                        val launched = PlaybackProcessRecovery.requestIfRequired(
+                            this,
+                            reason = "live_provider_drain_unresolved",
+                            resumeIntent = playbackProcessRecoveryIntent(),
+                        )
+                        if (!launched && resumed) showProviderOwnershipError()
+                    }
+                    ProviderStartGatePolicy.Decision.WAIT_FOR_LOCAL_CLEANUP ->
+                        deferLocalPlaybackUntilProviderDrain()
+                    ProviderStartGatePolicy.Decision.BLOCKED_BY_REMOTE_OWNER,
+                    ProviderStartGatePolicy.Decision.BLOCKED ->
+                        showProviderOwnershipError()
                 }
             }
         }
@@ -1070,7 +1097,10 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         if (playbackResourceToken == null) {
             playbackResourceToken = PlaybackResourceGovernor.begin("live-player")
         }
-        if (!prepareLocalPlaybackRequest()) {
+        if (
+            prepareLocalPlaybackRequest() !=
+            ProviderStartGatePolicy.Decision.READY
+        ) {
             PlaybackResourceGovernor.end(playbackResourceToken)
             playbackResourceToken = null
             return
@@ -1178,11 +1208,13 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
 
     override fun onLocalProcessRecoveryRequired(): Boolean {
         cancelAutoRetry(resetAttempts = false)
-        return PlaybackProcessRecovery.requestIfRequired(
+        val launched = PlaybackProcessRecovery.requestIfRequired(
             this,
             reason = "live_native_owner_unresolved",
             resumeIntent = playbackProcessRecoveryIntent(),
         )
+        return launched ||
+            !lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
     }
 
     override fun playbackProcessRecoveryIntent(): Intent =

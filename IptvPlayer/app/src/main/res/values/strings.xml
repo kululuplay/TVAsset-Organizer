@@ -214,7 +214,7 @@
 
     <!-- Diagnostics -->
     <string name="diag_title">Diagnostics</string>
-    <string name="diag_run">Run tests</string>
+    <string name="diag_run">Run full support test</string>
     <string name="diag_internet">Internet connection</string>
     <string name="diag_server">Server reachable</string>
     <string name="diag_ping">Server response time</string>

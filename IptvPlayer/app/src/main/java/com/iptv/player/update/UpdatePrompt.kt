@@ -47,7 +47,8 @@ object UpdatePrompt {
         }
         activity.lifecycleScope.launch {
             val result = try {
-                UpdateChecker(ServiceLocator.httpClient).check(BuildConfig.VERSION_NAME)
+                UpdateChecker(ServiceLocator.httpClient, activity)
+                    .check(BuildConfig.VERSION_NAME)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

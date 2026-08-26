@@ -33,6 +33,7 @@ import coil.load
 import com.iptv.player.R
 import com.iptv.player.cast.CastController
 import com.iptv.player.cast.ProviderConnectionSafety
+import com.iptv.player.cast.ProviderStartGatePolicy
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.Program
@@ -1892,20 +1893,30 @@ class HomeActivity : BaseActivity() {
             castController.reloadCurrentMedia()
             return
         }
-        if (!preparePreviewPlaybackRequest()) {
-            previewState = LivePreviewPressPolicy.Phase.FAILED
-            pendingFullscreenChannelId = null
-            binding.previewLoading.visibility = View.GONE
-            binding.previewStatus.setText(
-                if (ProviderConnectionSafety.newConnectionAllowed) {
-                    R.string.error_audio_focus_unavailable
-                } else {
-                    R.string.error_playback_ownership_uncertain
-                },
-            )
-            binding.previewStatus.visibility = View.VISIBLE
-            if (ProviderConnectionSafety.newConnectionAllowed) scheduleAutoRetry()
-            return
+        when (preparePreviewPlaybackRequest()) {
+            ProviderStartGatePolicy.Decision.READY -> Unit
+            ProviderStartGatePolicy.Decision.WAIT_FOR_LOCAL_CLEANUP,
+            ProviderStartGatePolicy.Decision.RECOVER_LOCAL_PROCESS -> {
+                // Expected transition: keep the existing loading UI and continue
+                // automatically as soon as the previous provider socket closes.
+                return
+            }
+            ProviderStartGatePolicy.Decision.BLOCKED_BY_REMOTE_OWNER,
+            ProviderStartGatePolicy.Decision.BLOCKED -> {
+                previewState = LivePreviewPressPolicy.Phase.FAILED
+                pendingFullscreenChannelId = null
+                binding.previewLoading.visibility = View.GONE
+                binding.previewStatus.setText(
+                    if (ProviderConnectionSafety.newConnectionAllowed) {
+                        R.string.error_audio_focus_unavailable
+                    } else {
+                        R.string.error_playback_ownership_uncertain
+                    },
+                )
+                binding.previewStatus.visibility = View.VISIBLE
+                if (ProviderConnectionSafety.newConnectionAllowed) scheduleAutoRetry()
+                return
+            }
         }
         if (previewController == null) {
             previewController = PlayerController(
@@ -2034,11 +2045,14 @@ class HomeActivity : BaseActivity() {
             if (castOwnsPreviewPlayback || castLoadPending) return
             PlaybackQoeRuntime.recordFailure(previewQoeSessionId, failure)
         }
-        override fun onLocalProcessRecoveryRequired(): Boolean =
-            PlaybackProcessRecovery.requestIfRequired(
+        override fun onLocalProcessRecoveryRequired(): Boolean {
+            val launched = PlaybackProcessRecovery.requestIfRequired(
                 this@HomeActivity,
                 reason = "preview_native_owner_unresolved",
             )
+            return launched ||
+                !lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        }
         override fun onFatalError() {
             if (castOwnsPreviewPlayback || castLoadPending) return
             binding.previewPlaybackCover.visibility = View.VISIBLE
@@ -2096,9 +2110,23 @@ class HomeActivity : BaseActivity() {
             if (!previewStreamSubmitted || previewController == null) {
                 previewJob?.cancel()
                 previewJob = lifecycleScope.launch { startPreview(channel) }
-            } else if (preparePreviewPlaybackRequest()) {
-                beginPreviewQoe()
-                previewController?.retry()
+            } else {
+                when (preparePreviewPlaybackRequest()) {
+                    ProviderStartGatePolicy.Decision.READY -> {
+                        beginPreviewQoe()
+                        previewController?.retry()
+                    }
+                    ProviderStartGatePolicy.Decision.WAIT_FOR_LOCAL_CLEANUP,
+                    ProviderStartGatePolicy.Decision.RECOVER_LOCAL_PROCESS -> Unit
+                    ProviderStartGatePolicy.Decision.BLOCKED_BY_REMOTE_OWNER,
+                    ProviderStartGatePolicy.Decision.BLOCKED -> {
+                        previewState = LivePreviewPressPolicy.Phase.FAILED
+                        binding.previewLoading.visibility = View.GONE
+                        binding.previewStatus.setText(
+                            R.string.error_playback_ownership_uncertain,
+                        )
+                    }
+                }
             }
             return
         }
@@ -2115,31 +2143,47 @@ class HomeActivity : BaseActivity() {
 
     // ---- Platform playback ownership + anonymous QoE -------------------
 
-    private fun preparePreviewPlaybackRequest(): Boolean {
-        if (castOwnsPreviewPlayback || castLoadPending) return false
+    private fun preparePreviewPlaybackRequest(): ProviderStartGatePolicy.Decision {
+        if (castOwnsPreviewPlayback || castLoadPending) {
+            return ProviderStartGatePolicy.Decision.BLOCKED_BY_REMOTE_OWNER
+        }
         val safety = ProviderConnectionSafety.snapshot()
-        if (!safety.newConnectionAllowed) {
+        val gate = ProviderStartGatePolicy.decide(safety)
+        if (gate != ProviderStartGatePolicy.Decision.READY) {
             localPreviewPlaybackRequested = false
             playbackSession.setPlaying(false)
-            if (safety.canRecoverLocalProcess) {
-                PlaybackProcessRecovery.requestIfRequired(
-                    this,
-                    reason = "preview_start_unresolved_native_owner",
-                )
-            } else if (!safety.remoteUncertain && safety.localPendingCount > 0) {
-                deferPreviewUntilProviderDrain()
+            return when (gate) {
+                ProviderStartGatePolicy.Decision.WAIT_FOR_LOCAL_CLEANUP -> {
+                    deferPreviewUntilProviderDrain()
+                    gate
+                }
+                ProviderStartGatePolicy.Decision.RECOVER_LOCAL_PROCESS -> {
+                    val resumed = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                    val launched = PlaybackProcessRecovery.requestIfRequired(
+                        this,
+                        reason = "preview_start_unresolved_native_owner",
+                    )
+                    if (launched || !resumed) gate
+                    else ProviderStartGatePolicy.Decision.BLOCKED
+                }
+                else -> gate
             }
-            return false
         }
         if (!playbackSession.requestAudioFocus()) {
             localPreviewPlaybackRequested = false
             playbackSession.setPlaying(false)
-            return false
+            return ProviderStartGatePolicy.Decision.BLOCKED
         }
         localPreviewPlaybackRequested = true
         playbackSession.setPlaying(true)
-        return true
+        return ProviderStartGatePolicy.Decision.READY
     }
+
+    private fun requestPreviewProcessRecovery(reason: String): Boolean =
+        PlaybackProcessRecovery.requestIfRequired(
+            this,
+            reason = reason,
+        )
 
     private fun deferPreviewUntilProviderDrain() {
         if (providerDrainPending) return
@@ -2170,17 +2214,36 @@ class HomeActivity : BaseActivity() {
                     ProviderConnectionSafety.requireProcessRecoveryForPendingLocalStops()
                     afterDrain = ProviderConnectionSafety.snapshot()
                 }
-                if (afterDrain.newConnectionAllowed) {
-                    resumePreviewPlayback()
-                } else if (afterDrain.canRecoverLocalProcess) {
-                    PlaybackProcessRecovery.requestIfRequired(
-                        this,
-                        reason = "preview_provider_drain_unresolved",
-                    )
-                } else {
-                    binding.previewLoading.visibility = View.GONE
-                    binding.previewStatus.setText(R.string.error_playback_ownership_uncertain)
-                    binding.previewStatus.visibility = View.VISIBLE
+                when (ProviderStartGatePolicy.decide(afterDrain)) {
+                    ProviderStartGatePolicy.Decision.READY -> resumePreviewPlayback()
+                    ProviderStartGatePolicy.Decision.RECOVER_LOCAL_PROCESS -> {
+                        val resumed = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                        if (
+                            !requestPreviewProcessRecovery(
+                                "preview_provider_drain_unresolved",
+                            ) &&
+                            resumed
+                        ) {
+                            binding.previewLoading.visibility = View.GONE
+                            binding.previewStatus.setText(
+                                R.string.error_playback_ownership_uncertain,
+                            )
+                            binding.previewStatus.visibility = View.VISIBLE
+                        }
+                    }
+                    ProviderStartGatePolicy.Decision.WAIT_FOR_LOCAL_CLEANUP -> {
+                        // A new owner entered teardown after our FIFO marker.
+                        // Requeue without surfacing an error.
+                        deferPreviewUntilProviderDrain()
+                    }
+                    ProviderStartGatePolicy.Decision.BLOCKED_BY_REMOTE_OWNER,
+                    ProviderStartGatePolicy.Decision.BLOCKED -> {
+                        binding.previewLoading.visibility = View.GONE
+                        binding.previewStatus.setText(
+                            R.string.error_playback_ownership_uncertain,
+                        )
+                        binding.previewStatus.visibility = View.VISIBLE
+                    }
                 }
             }
         }
@@ -2193,17 +2256,23 @@ class HomeActivity : BaseActivity() {
             previewingChannel == null ||
             !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         ) return
-        if (!preparePreviewPlaybackRequest()) {
-            binding.previewLoading.visibility = View.GONE
-            binding.previewStatus.setText(
-                if (ProviderConnectionSafety.newConnectionAllowed) {
-                    R.string.error_audio_focus_unavailable
-                } else {
-                    R.string.error_playback_ownership_uncertain
-                },
-            )
-            binding.previewStatus.visibility = View.VISIBLE
-            return
+        when (preparePreviewPlaybackRequest()) {
+            ProviderStartGatePolicy.Decision.READY -> Unit
+            ProviderStartGatePolicy.Decision.WAIT_FOR_LOCAL_CLEANUP,
+            ProviderStartGatePolicy.Decision.RECOVER_LOCAL_PROCESS -> return
+            ProviderStartGatePolicy.Decision.BLOCKED_BY_REMOTE_OWNER,
+            ProviderStartGatePolicy.Decision.BLOCKED -> {
+                binding.previewLoading.visibility = View.GONE
+                binding.previewStatus.setText(
+                    if (ProviderConnectionSafety.newConnectionAllowed) {
+                        R.string.error_audio_focus_unavailable
+                    } else {
+                        R.string.error_playback_ownership_uncertain
+                    },
+                )
+                binding.previewStatus.visibility = View.VISIBLE
+                return
+            }
         }
         if (!previewStreamSubmitted) {
             val channel = previewingChannel ?: return
@@ -3053,7 +3122,13 @@ class HomeActivity : BaseActivity() {
         cancelAutoRetry(resetAttempts = true)
         finishPreviewQoe(endReason)
         if (!castLoadPending) {
-            pausePreviewPlayback(abandonFocus = true)
+            // This path permanently retires the preview controller. Do not queue
+            // stopAndThen() and release() back-to-back: one full release closes
+            // the provider socket and native decoder with less queue latency.
+            localPreviewPlaybackRequested = false
+            PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, false)
+            playbackSession.setPlaying(false)
+            playbackSession.abandonAudioFocus()
         } else {
             localPreviewPlaybackRequested = false
             playbackSession.setPlaying(false)

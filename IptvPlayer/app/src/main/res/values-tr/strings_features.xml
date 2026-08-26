@@ -74,6 +74,7 @@
     <!-- Uygulama içi güncelleme -->
     <string name="about_checking">Güncellemeler denetleniyor…</string>
     <string name="about_update_failed">Güncelleme denetimi başarısız. Tekrar deneyin.</string>
+    <string name="about_update_staged">v%1$s güncellemesi kademeli yayınlanıyor. Cihaz grubunuz hazır olduğunda otomatik görünecek.</string>
     <string name="about_download_started">Güncelleme indiriliyor…</string>
     <string name="about_install_permission">Güncellemek için bu kaynaktan uygulama yüklemeye izin verin.</string>
     <string name="about_update_file_missing">İndirilen güncelleme dosyası bulunamadı. Lütfen yeniden indirin.</string>

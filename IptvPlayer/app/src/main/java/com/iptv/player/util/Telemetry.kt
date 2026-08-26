@@ -30,6 +30,12 @@ object Telemetry {
     /** Network-quality (peering) test result upload, shown per device in the panel. */
     const val NETTEST_ENDPOINT = "$BASE_URL/api/nettest"
 
+    /** Deterministic cohort decision for the newest immutable GitHub release. */
+    const val UPDATE_POLICY_ENDPOINT = "$BASE_URL/api/update-policy"
+
+    /** One-button privacy-safe diagnostics report; returns a short support code. */
+    const val SUPPORT_REPORT_ENDPOINT = "$BASE_URL/api/support-report"
+
     /** User request / complaint submitted from the Home dialog, shown in the panel. */
     const val REQUEST_ENDPOINT = "$BASE_URL/api/request"
 

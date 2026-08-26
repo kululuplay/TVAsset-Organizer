@@ -73,6 +73,7 @@
     <!-- التحديث داخل التطبيق -->
     <string name="about_checking">جارٍ البحث عن تحديثات…</string>
     <string name="about_update_failed">فشل التحقق من التحديث. حاول مرة أخرى.</string>
+    <string name="about_update_staged">يتم إصدار التحديث v%1$s تدريجيًا. سيظهر تلقائيًا عندما تصبح مجموعة جهازك جاهزة.</string>
     <string name="about_update_checksum_mismatch">فشل التحقق من سلامة التحديث. حاول مرة أخرى أو استخدم شبكة مختلفة. (APK-DIGEST)</string>
     <string name="about_download_started">جارٍ تنزيل التحديث…</string>
     <string name="about_install_permission">اسمح بتثبيت التطبيقات من هذا المصدر للتحديث.</string>
