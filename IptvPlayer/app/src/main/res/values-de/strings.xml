@@ -366,10 +366,8 @@
     <string name="diag_codecs_detail">H.264: %1$s · HEVC: %2$s · AC-3: %3$s · E-AC-3: %4$s</string>
     <string name="diag_yes">Ja</string>
     <string name="diag_no">Nein</string>
-    <string name="diag_complete_support_code">%1$d/%2$d Prüfungen bestanden · Support-Code: %3$s</string>
-    <string name="diag_support_code_line">Support-Code: %1$s</string>
     <string name="diag_ready">Bereit zum Starten</string>
-    <string name="diag_complete_summary">%1$d von %2$d Prüfungen erfolgreich</string>
+    <string name="diag_complete_summary">%1$d von %2$d Prüfungen erfolgreich · Mit „Protokolle senden“ teilen</string>
     <string name="diag_peering_section">Erweiterte Routenanalyse</string>
     <string name="diag_peering_desc">Vergleicht die Route zum Dienst mit unabhängigen Referenzpunkten. Dauert etwa drei Minuten.</string>
     <string name="diag_device_desc">Technische Details für eine Support-Anfrage.</string>

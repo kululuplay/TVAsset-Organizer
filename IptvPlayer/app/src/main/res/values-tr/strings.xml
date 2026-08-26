@@ -407,10 +407,8 @@
     <string name="diag_codecs_detail">H.264: %1$s · HEVC: %2$s · AC-3: %3$s · E-AC-3: %4$s</string>
     <string name="diag_yes">Evet</string>
     <string name="diag_no">Hayır</string>
-    <string name="diag_complete_support_code">%1$d/%2$d kontrol başarılı · Destek kodu: %3$s</string>
-    <string name="diag_support_code_line">Destek kodu: %1$s</string>
     <string name="diag_ready">Çalıştırmaya hazır</string>
-    <string name="diag_complete_summary">%2$d kontrolden %1$d tanesi başarılı</string>
+    <string name="diag_complete_summary">%2$d kontrolden %1$d tanesi başarılı · Raporu paylaşmak için Günlükleri gönder’i seçin</string>
     <string name="diag_peering_section">Gelişmiş rota analizi</string>
     <string name="diag_peering_desc">Hizmete giden rotayı bağımsız referans noktalarıyla karşılaştırır. Yaklaşık üç dakika sürer.</string>
     <string name="diag_device_desc">Destek ekibiyle iletişime geçerken paylaşabileceğiniz teknik ayrıntılar.</string>
