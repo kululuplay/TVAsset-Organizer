@@ -190,7 +190,7 @@
     <string name="pin_locked_content">Bu içerik kilitli.</string>
 
     <string name="diag_title">Tanılama</string>
-    <string name="diag_run">Testleri çalıştır</string>
+    <string name="diag_run">Tam destek testini çalıştır</string>
     <string name="diag_internet">İnternet bağlantısı</string>
     <string name="diag_server">Sunucuya erişim</string>
     <string name="diag_ping">Sunucu yanıt süresi</string>
@@ -397,6 +397,18 @@
     <string name="diag_subtitle">Ağ sağlığı, yönlendirme ve cihaz bilgileri</string>
     <string name="diag_quick_section">Hızlı bağlantı kontrolü</string>
     <string name="diag_quick_desc">İnternet erişimini ve sağlayıcı bağlantınızı test eder.</string>
+    <string name="diag_quick_route_running">Rota kalitesi test ediliyor… %1$d sn</string>
+    <string name="diag_route_quality">Rota kalitesi</string>
+    <string name="diag_memory">Kullanılabilir bellek</string>
+    <string name="diag_memory_detail">%1$s kullanılabilir</string>
+    <string name="diag_storage">Boş depolama</string>
+    <string name="diag_storage_detail">%1$s kullanılabilir</string>
+    <string name="diag_codecs">Cihaz codec desteği</string>
+    <string name="diag_codecs_detail">H.264: %1$s · HEVC: %2$s · AC-3: %3$s · E-AC-3: %4$s</string>
+    <string name="diag_yes">Evet</string>
+    <string name="diag_no">Hayır</string>
+    <string name="diag_complete_support_code">%1$d/%2$d kontrol başarılı · Destek kodu: %3$s</string>
+    <string name="diag_support_code_line">Destek kodu: %1$s</string>
     <string name="diag_ready">Çalıştırmaya hazır</string>
     <string name="diag_complete_summary">%2$d kontrolden %1$d tanesi başarılı</string>
     <string name="diag_peering_section">Gelişmiş rota analizi</string>

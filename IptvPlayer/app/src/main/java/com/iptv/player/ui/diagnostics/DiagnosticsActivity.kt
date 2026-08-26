@@ -6,10 +6,14 @@
  */
 package com.iptv.player.ui.diagnostics
 
+import android.app.ActivityManager
 import android.content.Intent
+import android.media.MediaCodecList
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.StatFs
+import android.text.format.Formatter
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
@@ -27,6 +31,7 @@ import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.util.Logger
 import com.iptv.player.util.NetworkUtils
 import com.iptv.player.util.PeeringTester
+import com.iptv.player.util.SupportReportUploader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -46,6 +51,7 @@ class DiagnosticsActivity : BaseActivity() {
     private var peeringJob: Job? = null
     private val peeringRows = mutableListOf<View>()
     private var lastPeeringSummary: String? = null
+    private var lastSupportCode: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -74,6 +80,7 @@ class DiagnosticsActivity : BaseActivity() {
         setQuickRunning(true)
         binding.diagResults.removeAllViews()
         results.clear()
+        lastSupportCode = null
 
         quickJob = lifecycleScope.launch {
             try {
@@ -103,13 +110,56 @@ class DiagnosticsActivity : BaseActivity() {
                         ),
                     )
                 }
-                val summary = getString(
+                deviceHealthResults().forEach(::addResult)
+
+                // Short route-quality sample for the one-button test. The
+                // dedicated peering action still provides the full 3-minute run.
+                val quickVerdict = if (online) {
+                    val quickPeers = PeeringTester.run(
+                        targets = PeeringTester.defaultTargets(
+                            getString(R.string.diag_peering_server),
+                        ),
+                        durationMs = QUICK_ROUTE_DURATION_MS,
+                        intervalMs = 1_000L,
+                        connectTimeoutMs = 1_200,
+                    ) { _, remainingMs ->
+                        binding.diagQuickStatus.text = getString(
+                            R.string.diag_quick_route_running,
+                            (remainingMs / 1_000L).coerceAtLeast(0L),
+                        )
+                    }
+                    PeeringTester.verdict(quickPeers, minSamples = 8)
+                } else {
+                    PeeringTester.Verdict.INCONCLUSIVE
+                }
+                addResult(
+                    DiagnosticResult(
+                        label = getString(R.string.diag_route_quality),
+                        ok = quickVerdict == PeeringTester.Verdict.OK,
+                        detail = getString(verdictRes(quickVerdict)),
+                    ),
+                )
+
+                val summary = buildQuickSummary()
+                lastSupportCode = SupportReportUploader.upload(
+                    this@DiagnosticsActivity,
+                    results,
+                    summary,
+                )
+                val finalStatus = lastSupportCode?.let { code ->
+                    getString(
+                        R.string.diag_complete_support_code,
+                        results.count { it.ok },
+                        results.size,
+                        code,
+                    )
+                } ?: getString(
                     R.string.diag_complete_summary,
                     results.count { it.ok },
                     results.size,
                 )
-                binding.diagQuickStatus.text = summary
-                binding.diagQuickStatus.announceForAccessibility(summary)
+                binding.diagQuickStatus.text = finalStatus
+                binding.diagQuickStatus.announceForAccessibility(finalStatus)
             } catch (ce: CancellationException) {
                 binding.diagQuickStatus.setText(R.string.diag_ready)
                 throw ce
@@ -143,6 +193,79 @@ class DiagnosticsActivity : BaseActivity() {
             binding.diagQuickStatus.setText(R.string.diag_running)
         } else if (!keepStatus) {
             binding.diagQuickStatus.setText(R.string.diag_ready)
+        }
+    }
+
+    private fun deviceHealthResults(): List<DiagnosticResult> {
+        val manager = getSystemService(ACTIVITY_SERVICE) as? ActivityManager
+        val memory = ActivityManager.MemoryInfo().also { info ->
+            runCatching { manager?.getMemoryInfo(info) }
+        }
+        val availableMemory = memory.availMem.coerceAtLeast(0L)
+        val memoryOk = !memory.lowMemory && availableMemory >= MIN_FREE_MEMORY_BYTES
+
+        val freeStorage = StatFs(filesDir.absolutePath).availableBytes.coerceAtLeast(0L)
+        val storageOk = freeStorage >= MIN_FREE_STORAGE_BYTES
+
+        val decoderTypes = runCatching {
+            MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos
+                .asSequence()
+                .filterNot { it.isEncoder }
+                .flatMap { it.supportedTypes.asSequence() }
+                .map { it.lowercase() }
+                .toSet()
+        }.getOrDefault(emptySet())
+        val h264 = "video/avc" in decoderTypes
+        val hevc = "video/hevc" in decoderTypes
+        val ac3 = "audio/ac3" in decoderTypes
+        val eac3 = "audio/eac3" in decoderTypes || "audio/e-ac3" in decoderTypes
+
+        return listOf(
+            DiagnosticResult(
+                getString(R.string.diag_memory),
+                memoryOk,
+                getString(
+                    R.string.diag_memory_detail,
+                    Formatter.formatFileSize(this, availableMemory),
+                ),
+            ),
+            DiagnosticResult(
+                getString(R.string.diag_storage),
+                storageOk,
+                getString(
+                    R.string.diag_storage_detail,
+                    Formatter.formatFileSize(this, freeStorage),
+                ),
+            ),
+            DiagnosticResult(
+                getString(R.string.diag_codecs),
+                h264,
+                getString(
+                    R.string.diag_codecs_detail,
+                    yesNo(h264),
+                    yesNo(hevc),
+                    yesNo(ac3),
+                    yesNo(eac3),
+                ),
+            ),
+        )
+    }
+
+    private fun yesNo(value: Boolean): String = getString(
+        if (value) R.string.diag_yes else R.string.diag_no,
+    )
+
+    private fun buildQuickSummary(): String = buildString {
+        append(deviceInfo())
+        append(" | ")
+        results.forEachIndexed { index, result ->
+            if (index > 0) append("; ")
+            append(result.label)
+            append('=')
+            append(if (result.ok) "OK" else "FAIL")
+            append('(')
+            append(sanitizeDetail(result.detail))
+            append(')')
         }
     }
 
@@ -335,6 +458,10 @@ class DiagnosticsActivity : BaseActivity() {
                 appendLine()
                 appendLine("${getString(R.string.diag_peering)}: $it")
             }
+            lastSupportCode?.let {
+                appendLine()
+                appendLine(getString(R.string.diag_support_code_line, it))
+            }
         }
         // Attach the rotating app log file when available so provider/playback
         // failures captured in the field travel with the diagnostics report.
@@ -359,5 +486,11 @@ class DiagnosticsActivity : BaseActivity() {
         }.onFailure {
             Toast.makeText(this, R.string.settings_share_unavailable, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private companion object {
+        const val QUICK_ROUTE_DURATION_MS = 12_000L
+        const val MIN_FREE_MEMORY_BYTES = 128L * 1024L * 1024L
+        const val MIN_FREE_STORAGE_BYTES = 250L * 1024L * 1024L
     }
 }

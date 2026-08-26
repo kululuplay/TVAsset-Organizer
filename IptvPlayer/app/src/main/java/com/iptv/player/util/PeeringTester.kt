@@ -221,12 +221,13 @@ object PeeringTester {
      * anchors — loss% and jitter are the primary discriminators; RTT only counts
      * with a generous absolute delta.
      */
-    fun verdict(stats: List<PeerStat>): Verdict {
+    fun verdict(stats: List<PeerStat>, minSamples: Int = MIN_SAMPLES): Verdict {
         val server = stats.firstOrNull { it.isServer } ?: return Verdict.INCONCLUSIVE
         val anchors = stats.filter { !it.isServer }
-        if (server.attempts < MIN_SAMPLES) return Verdict.INCONCLUSIVE
+        val required = minSamples.coerceAtLeast(3)
+        if (server.attempts < required) return Verdict.INCONCLUSIVE
 
-        val bestAnchor = anchors.filter { it.samples >= MIN_SAMPLES }.minByOrNull { it.avgMs }
+        val bestAnchor = anchors.filter { it.samples >= required }.minByOrNull { it.avgMs }
             ?: return Verdict.INCONCLUSIVE
 
         // The customer's own line is the problem when even a top-tier anchor is bad.
@@ -236,7 +237,7 @@ object PeeringTester {
 
         // Server reachable (port answers with RST) but never completes a TCP
         // session = the service is down, not a peering problem.
-        if (anchorHealthy && server.samples == 0 && server.refusedCount >= MIN_SAMPLES / 2) {
+        if (anchorHealthy && server.samples == 0 && server.refusedCount >= required / 2) {
             return Verdict.SERVER_DOWN
         }
 

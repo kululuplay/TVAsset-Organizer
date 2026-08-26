@@ -1,5 +1,7 @@
 "use strict";
 
+const crypto = require("node:crypto");
+
 /*
  * Closed-schema persistence for heartbeat telemetry.
  *
@@ -162,6 +164,101 @@ function parsePlaybackPolicy(raw) {
     integer(source.vodReadTimeoutMs, 5_000, 60_000),
   );
   return Object.keys(policy).length > 2 ? Object.freeze(policy) : null;
+}
+
+/** Closed-schema staged update configuration supplied through deployment env. */
+function parseUpdateRolloutPolicy(raw) {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  let source;
+  try {
+    source = JSON.parse(raw);
+  } catch (_) {
+    return null;
+  }
+  if (!source || typeof source !== "object" || Array.isArray(source)) return null;
+  const targetVersion = clip(source.targetVersion, 32);
+  if (!targetVersion || !/^\d+(?:\.\d+){1,3}$/.test(targetVersion)) return null;
+  const stableVersion = clip(source.stableVersion, 32);
+  if (stableVersion && !/^\d+(?:\.\d+){1,3}$/.test(stableVersion)) return null;
+  return Object.freeze({
+    policyVersion: 1,
+    targetVersion,
+    stableVersion: stableVersion || null,
+    rolloutPercent: integer(source.rolloutPercent, 0, 100) ?? 0,
+    paused: source.paused === true,
+    emergency: source.emergency === true,
+    salt: clip(source.salt, 64) || targetVersion,
+    autoPauseEnabled: source.autoPauseEnabled !== false,
+    autoPauseMinDevices: integer(source.autoPauseMinDevices, 3, 10_000) ?? 20,
+    autoPauseFailurePercent:
+      integer(source.autoPauseFailurePercent, 1, 100) ?? 15,
+    autoPauseWindowMinutes:
+      integer(source.autoPauseWindowMinutes, 5, 1_440) ?? 120,
+  });
+}
+
+function rolloutBucket(deviceId, salt) {
+  const digest = crypto
+    .createHash("sha256")
+    .update(`${String(salt)}:${String(deviceId)}`, "utf8")
+    .digest();
+  return digest.readUInt32BE(0) % 10_000;
+}
+
+/** Deterministic cohort decision: the same device never flaps between checks. */
+function decideUpdateRollout(policy, request, runtime = {}) {
+  const candidateVersion = clip(request && request.candidateVersion, 32);
+  const deviceId = clip(request && request.deviceId, 128);
+  if (!policy || candidateVersion !== policy.targetVersion || !deviceId) {
+    return Object.freeze({ decision: "allow", managed: false });
+  }
+  const autoPaused = runtime.autoPaused === true;
+  const paused = policy.paused || autoPaused;
+  const bucket = rolloutBucket(deviceId, policy.salt);
+  // A manual emergency may bypass the cohort and manual pause, but never the
+  // automatic health circuit breaker: a demonstrably broken emergency build
+  // must still stop spreading.
+  const eligible =
+    !autoPaused &&
+    (policy.emergency || (!policy.paused && bucket < policy.rolloutPercent * 100));
+  return Object.freeze({
+    decision: eligible ? "allow" : "hold",
+    managed: true,
+    targetVersion: policy.targetVersion,
+    stableVersion: policy.stableVersion,
+    rolloutPercent: policy.rolloutPercent,
+    cohort: Math.floor(bucket / 100),
+    paused,
+    autoPaused,
+    reason: autoPaused ? clip(runtime.reason, 120) || "health_threshold" : null,
+  });
+}
+
+function sanitizeSupportChecks(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .slice(0, 24)
+    .map((entry) => {
+      const key = clip(entry && entry.key, 40);
+      if (!key || !/^[a-z0-9_]{1,40}$/i.test(key)) return null;
+      const label = clip(entry && entry.label, 80);
+      const detail = clip(entry && entry.detail, 300);
+      return {
+        key,
+        label: label
+          ? label
+              .replace(/https?:\/\/\S+/gi, "<redacted>")
+              .replace(/(?:(?:user|pass|token|auth)=)[^&\s]+/gi, "credential=<redacted>")
+          : null,
+        ok: entry && typeof entry.ok === "boolean" ? entry.ok : false,
+        detail: detail
+          ? detail
+              .replace(/https?:\/\/\S+/gi, "<redacted>")
+              .replace(/(?:(?:user|pass|token|auth)=)[^&\s]+/gi, "credential=<redacted>")
+          : null,
+      };
+    })
+    .filter(Boolean);
 }
 
 /** Return only the privacy-reviewed playback_qoe v1 fields. */
@@ -358,6 +455,9 @@ async function persistTelemetryEvents(db, events, context) {
 module.exports = {
   eventId,
   parsePlaybackPolicy,
+  parseUpdateRolloutPolicy,
+  decideUpdateRollout,
+  sanitizeSupportChecks,
   prepareRows,
   sanitizePlaybackQoe,
   persistTelemetryEvents,

@@ -73,6 +73,7 @@
     <!-- Mise à jour intégrée -->
     <string name="about_checking">Recherche de mises à jour…</string>
     <string name="about_update_failed">Échec de la vérification. Veuillez réessayer.</string>
+    <string name="about_update_staged">La mise à jour v%1$s est distribuée progressivement. Elle apparaîtra automatiquement lorsque votre groupe d’appareils sera prêt.</string>
     <string name="about_update_checksum_mismatch">Le contrôle d’intégrité de la mise à jour a échoué. Réessayez ou utilisez un autre réseau. (APK-DIGEST)</string>
     <string name="about_download_started">Téléchargement de la mise à jour…</string>
     <string name="about_install_permission">Autorisez l\'installation depuis cette source pour mettre à jour.</string>

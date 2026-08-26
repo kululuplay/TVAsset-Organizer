@@ -73,6 +73,7 @@
     <!-- In-app-update -->
     <string name="about_checking">Controleren op updates…</string>
     <string name="about_update_failed">Controle op updates mislukt. Probeer opnieuw.</string>
+    <string name="about_update_staged">Update v%1$s wordt gefaseerd uitgebracht. De update verschijnt automatisch zodra uw apparaatgroep aan de beurt is.</string>
     <string name="about_update_checksum_mismatch">De integriteitscontrole van de update is mislukt. Probeer opnieuw of gebruik een ander netwerk. (APK-DIGEST)</string>
     <string name="about_download_started">Update downloaden…</string>
     <string name="about_install_permission">Sta installatie vanaf deze bron toe om bij te werken.</string>

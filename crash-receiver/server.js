@@ -39,6 +39,9 @@ const { Pool } = require("pg");
 const crypto = require("crypto");
 const {
   parsePlaybackPolicy,
+  parseUpdateRolloutPolicy,
+  decideUpdateRollout,
+  sanitizeSupportChecks,
   persistTelemetryEvents,
 } = require("./telemetry-store");
 
@@ -103,6 +106,17 @@ const RETENTION_LOG_DAYS = intEnv("RETENTION_LOG_DAYS", 30);
 // closed schema: malformed JSON, unknown keys and out-of-range values can never
 // reach a device. Restart the service after changing the environment value.
 const PLAYBACK_POLICY = parsePlaybackPolicy(process.env.PLAYBACK_POLICY_JSON);
+const UPDATE_ROLLOUT_POLICY = parseUpdateRolloutPolicy(
+  process.env.UPDATE_ROLLOUT_JSON,
+);
+const updateRolloutRuntime = {
+  autoPaused: false,
+  reason: null,
+  lastEvaluatedAt: 0,
+  devices: 0,
+  failedDevices: 0,
+  failurePercent: 0,
+};
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -113,6 +127,69 @@ const pool = new Pool({
       ? { rejectUnauthorized: false }
       : false,
 });
+
+const ROLLOUT_EVALUATION_INTERVAL_MS = 5 * 60 * 1000;
+async function evaluateUpdateRolloutHealth(force = false) {
+  const policy = UPDATE_ROLLOUT_POLICY;
+  if (!policy || !policy.autoPauseEnabled || updateRolloutRuntime.autoPaused) {
+    return updateRolloutRuntime;
+  }
+  const now = Date.now();
+  if (
+    !force &&
+    now - updateRolloutRuntime.lastEvaluatedAt < ROLLOUT_EVALUATION_INTERVAL_MS
+  ) {
+    return updateRolloutRuntime;
+  }
+  updateRolloutRuntime.lastEvaluatedAt = now;
+  try {
+    const [devicesResult, failuresResult] = await Promise.all([
+      pool.query(
+        `SELECT count(*)::int AS n
+           FROM devices
+          WHERE app_version = $1
+            AND last_seen > now() - ($2::int * interval '1 minute')`,
+        [policy.targetVersion, policy.autoPauseWindowMinutes],
+      ),
+      pool.query(
+        `SELECT count(DISTINCT device_id)::int AS n
+           FROM telemetry_events
+          WHERE app_version = $1
+            AND received_at > now() - ($2::int * interval '1 minute')
+            AND (
+              severity = 'fatal' OR
+              type IN ('fatal','native_crash','signaled_exit','os_anr',
+                       'suspected_abnormal_exit','process_recovery')
+            )`,
+        [policy.targetVersion, policy.autoPauseWindowMinutes],
+      ),
+    ]);
+    const devices = toInt(devicesResult.rows[0]?.n) || 0;
+    const failedDevices = toInt(failuresResult.rows[0]?.n) || 0;
+    const failurePercent = devices > 0 ? Math.round((failedDevices * 100) / devices) : 0;
+    Object.assign(updateRolloutRuntime, { devices, failedDevices, failurePercent });
+    if (
+      devices >= policy.autoPauseMinDevices &&
+      failurePercent >= policy.autoPauseFailurePercent
+    ) {
+      updateRolloutRuntime.autoPaused = true;
+      updateRolloutRuntime.reason =
+        `health ${failedDevices}/${devices} devices (${failurePercent}%)`;
+      console.error(
+        `[update-rollout] AUTO-PAUSED ${policy.targetVersion}: ` +
+          updateRolloutRuntime.reason,
+      );
+    }
+  } catch (e) {
+    console.error("update rollout health evaluation failed", e);
+    // Health is part of the release safety contract. If it cannot be measured,
+    // fail closed for the managed target until the service is restarted after
+    // the database/telemetry fault is resolved.
+    updateRolloutRuntime.autoPaused = true;
+    updateRolloutRuntime.reason = "health evaluation unavailable";
+  }
+  return updateRolloutRuntime;
+}
 
 async function initDb() {
   await pool.query(`
@@ -291,6 +368,23 @@ async function initDb() {
   `);
   await pool.query(
     `CREATE INDEX IF NOT EXISTS idx_nettest_log_device ON nettest_log(device_id, at DESC);`,
+  );
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS support_reports (
+      code TEXT PRIMARY KEY,
+      device_id TEXT NOT NULL,
+      app_version TEXT,
+      version_code INTEGER,
+      manufacturer TEXT,
+      model TEXT,
+      summary TEXT,
+      checks JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_support_reports_device
+       ON support_reports(device_id, created_at DESC);`,
   );
   // User requests / complaints from the app's Home "İstek & Şikayet" dialog. New
   // table, so CREATE IF NOT EXISTS is enough (no prod ALTER needed). status:
@@ -676,12 +770,39 @@ app.post("/api/heartbeat", async (req, res) => {
     }
     if (resolvedRequests.length) payload.resolvedRequests = resolvedRequests;
     res.status(200).json(payload);
+    // Evaluate at most once per five minutes and never delay the heartbeat.
+    evaluateUpdateRolloutHealth().catch(() => {});
     // Resolve location after responding so the heartbeat stays fast.
     applyGeo(ip).catch(() => {});
   } catch (e) {
     console.error("heartbeat failed", e);
     return res.status(500).json({ error: "store_failed" });
   }
+});
+
+// ---- Deterministic staged app update gate (app -> server) ----
+// The APK still comes from immutable GitHub Releases. This endpoint only decides
+// whether a concrete target version is visible to this stable device cohort.
+app.post("/api/update-policy", async (req, res) => {
+  if ((req.get("X-Kululu-Key") || "") !== INGEST_KEY) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  const b = req.body || {};
+  const deviceId = clip(b.deviceId, 128);
+  const candidateVersion = clip(b.candidateVersion, 32);
+  if (!deviceId || !candidateVersion) {
+    return res.status(400).json({ error: "missing_update_identity" });
+  }
+  await evaluateUpdateRolloutHealth();
+  const decision = decideUpdateRollout(
+    UPDATE_ROLLOUT_POLICY,
+    { deviceId, candidateVersion },
+    updateRolloutRuntime,
+  );
+  return res.status(200).json({
+    ...decision,
+    evaluatedAtEpochMs: Date.now(),
+  });
 });
 
 // ---- Peering / network-quality test result (app -> server) ----
@@ -721,6 +842,51 @@ app.post("/api/nettest", async (req, res) => {
   }
 });
 
+function newSupportCode() {
+  const hex = crypto.randomBytes(4).toString("hex").toUpperCase();
+  return `K-${hex.slice(0, 4)}-${hex.slice(4)}`;
+}
+
+// One-button customer diagnostics. Returns a short code the customer can read
+// over the phone; the report contains only closed-schema checks and redacted text.
+app.post("/api/support-report", async (req, res) => {
+  if ((req.get("X-Kululu-Key") || "") !== INGEST_KEY) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  const b = req.body || {};
+  const deviceId = clip(b.deviceId, 128);
+  if (!deviceId) return res.status(400).json({ error: "missing_device_id" });
+  const checks = sanitizeSupportChecks(b.checks);
+  const summary = clip(redactSensitive(b.summary), 4000);
+  try {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const code = newSupportCode();
+      const inserted = await pool.query(
+        `INSERT INTO support_reports
+          (code, device_id, app_version, version_code, manufacturer, model,
+           summary, checks)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)
+         ON CONFLICT DO NOTHING RETURNING code`,
+        [
+          code,
+          deviceId,
+          clip(b.appVersion, 32),
+          toInt(b.versionCode),
+          clip(b.manufacturer, 80),
+          clip(b.model, 120),
+          summary,
+          JSON.stringify(checks),
+        ],
+      );
+      if (inserted.rows.length) return res.status(200).json({ supportCode: code });
+    }
+    return res.status(503).json({ error: "support_code_unavailable" });
+  } catch (e) {
+    console.error("support report failed", e);
+    return res.status(500).json({ error: "store_failed" });
+  }
+});
+
 // ---- User request / complaint (app -> server) ----
 // The Home "İstek & Şikayet" dialog posts a typed request. Validated, clipped and
 // stored; surfaced in the panel and (best-effort) forwarded to Telegram.
@@ -739,6 +905,7 @@ const TELEMETRY_LABELS = {
   suspected_abnormal_exit: "Şüpheli ani kapanma",
   events_dropped: "Olay taşması (spool overflow)",
   safe_mode: "Güvenli mod (crash-loop koruması)",
+  process_recovery: "Otomatik oynatıcı süreç yenileme",
 };
 const telemetryLabel = (t) => TELEMETRY_LABELS[t] || t || "—";
 app.post("/api/request", async (req, res) => {
@@ -980,6 +1147,7 @@ async function runRetention() {
     ["crash_reports", "received_at", RETENTION_CRASH_DAYS],
     ["watch_log", "at", RETENTION_LOG_DAYS],
     ["nettest_log", "at", RETENTION_LOG_DAYS],
+    ["support_reports", "created_at", RETENTION_LOG_DAYS],
     ["telemetry_events", "received_at", RETENTION_LOG_DAYS],
   ];
   for (const [table, col, days] of sweeps) {
@@ -1138,6 +1306,37 @@ function fmt(ts) {
     return String(ts);
   }
 }
+
+app.get("/support", auth, async (req, res) => {
+  const code = String(req.query.code || "").trim().toUpperCase();
+  if (!/^K-[A-F0-9]{4}-[A-F0-9]{4}$/.test(code)) {
+    return res.status(400).send("Geçerli bir destek kodu girin.");
+  }
+  const report = await pool.query(
+    `SELECT * FROM support_reports WHERE code = $1 LIMIT 1`,
+    [code],
+  );
+  const row = report.rows[0];
+  if (!row) return res.status(404).send("Destek raporu bulunamadı.");
+  const checks = Array.isArray(row.checks) ? row.checks : [];
+  const checkRows = checks.map((check) =>
+    `<tr><td>${esc(check.label || check.key)}</td><td>${check.ok ? "✓" : "✕"}</td>` +
+      `<td>${esc(check.detail || "—")}</td></tr>`,
+  ).join("");
+  return res.send(`<!doctype html><html><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>${esc(code)} — Kululu Destek</title></head>
+    <body style="font-family:system-ui;background:#08111d;color:#edf3fa;padding:24px">
+      <p><a href="/" style="color:#71d7ff">← Panele dön</a></p>
+      <h1>${esc(code)}</h1>
+      <p>${esc(row.manufacturer)} ${esc(row.model)} · v${esc(row.app_version)} · ${fmt(row.created_at)}</p>
+      <p style="white-space:pre-wrap">${esc(row.summary || "—")}</p>
+      <table cellpadding="8" style="border-collapse:collapse;width:100%">
+        <thead><tr><th align="left">Kontrol</th><th>Durum</th><th align="left">Detay</th></tr></thead>
+        <tbody>${checkRows}</tbody>
+      </table>
+    </body></html>`);
+});
 
 // "5 dk önce" style relative label so "online" is obvious at a glance.
 function ago(ts) {
@@ -1860,6 +2059,23 @@ app.get("/", auth, async (req, res) => {
       </div>
       <button class="sendbtn" type="submit">Duyuruyu yayınla</button>
       <div class="muted" style="margin-top:6px">Uygulama her cihaza yalnızca <b>en son yayınlanan</b> ilgili mesajı gösterir. Bu yüzden hedefli duyuruyu, genel duyurudan <b>sonra</b> yayınlayın — aksi halde sonradan yayınlanan genel duyuru hedefli mesajı gölgeler.</div>
+    </form>
+  </section>
+  <section>
+    <h2>Kademeli Güncelleme</h2>
+    ${UPDATE_ROLLOUT_POLICY
+      ? `<div class="ann-item"><b>v${esc(UPDATE_ROLLOUT_POLICY.targetVersion)}</b> · ` +
+        `%${UPDATE_ROLLOUT_POLICY.rolloutPercent} · ` +
+        `${UPDATE_ROLLOUT_POLICY.paused || updateRolloutRuntime.autoPaused ? "DURAKLATILDI" : "aktif"}` +
+        `${updateRolloutRuntime.reason ? ` · ${esc(updateRolloutRuntime.reason)}` : ""}` +
+        `<div class="muted">Son pencere: ${updateRolloutRuntime.failedDevices}/${updateRolloutRuntime.devices} sorunlu cihaz (%${updateRolloutRuntime.failurePercent})</div></div>`
+      : '<div class="empty">UPDATE_ROLLOUT_JSON tanımlı değil; güncellemeler herkese açıktır.</div>'}
+  </section>
+  <section>
+    <h2>Destek Kodu Ara</h2>
+    <form method="get" action="/support" style="display:flex;gap:8px;flex-wrap:wrap">
+      <input name="code" maxlength="11" placeholder="K-AB12-CD34" required>
+      <button class="sendbtn" type="submit">Raporu aç</button>
     </form>
   </section>
   <section>
