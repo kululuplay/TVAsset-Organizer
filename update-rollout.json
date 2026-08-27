@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "targetVersion": "1.5.84",
+  "stableVersion": "1.5.83",
+  "rolloutPercent": 0,
+  "paused": true,
+  "emergency": false,
+  "salt": "release-1.5.84"
+}

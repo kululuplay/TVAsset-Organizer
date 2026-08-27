@@ -359,10 +359,8 @@
     <string name="diag_codecs_detail">H.264 : %1$s · HEVC : %2$s · AC-3 : %3$s · E-AC-3 : %4$s</string>
     <string name="diag_yes">Oui</string>
     <string name="diag_no">Non</string>
-    <string name="diag_complete_support_code">%1$d/%2$d contrôles réussis · Code d’assistance : %3$s</string>
-    <string name="diag_support_code_line">Code d’assistance : %1$s</string>
     <string name="diag_ready">Prêt à démarrer</string>
-    <string name="diag_complete_summary">%1$d vérification(s) réussie(s) sur %2$d</string>
+    <string name="diag_complete_summary">%1$d vérification(s) réussie(s) sur %2$d · Partagez via Envoyer les journaux</string>
     <string name="diag_peering_section">Analyse avancée du routage</string>
     <string name="diag_peering_desc">Compare le trajet vers le service à des points de référence indépendants. Environ trois minutes.</string>
     <string name="diag_device_desc">Détails techniques à joindre à une demande d’assistance.</string>

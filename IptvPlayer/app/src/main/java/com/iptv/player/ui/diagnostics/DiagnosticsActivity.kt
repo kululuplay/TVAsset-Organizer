@@ -31,7 +31,6 @@ import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.util.Logger
 import com.iptv.player.util.NetworkUtils
 import com.iptv.player.util.PeeringTester
-import com.iptv.player.util.SupportReportUploader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -51,7 +50,6 @@ class DiagnosticsActivity : BaseActivity() {
     private var peeringJob: Job? = null
     private val peeringRows = mutableListOf<View>()
     private var lastPeeringSummary: String? = null
-    private var lastSupportCode: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,7 +78,6 @@ class DiagnosticsActivity : BaseActivity() {
         setQuickRunning(true)
         binding.diagResults.removeAllViews()
         results.clear()
-        lastSupportCode = null
 
         quickJob = lifecycleScope.launch {
             try {
@@ -140,20 +137,7 @@ class DiagnosticsActivity : BaseActivity() {
                     ),
                 )
 
-                val summary = buildQuickSummary()
-                lastSupportCode = SupportReportUploader.upload(
-                    this@DiagnosticsActivity,
-                    results,
-                    summary,
-                )
-                val finalStatus = lastSupportCode?.let { code ->
-                    getString(
-                        R.string.diag_complete_support_code,
-                        results.count { it.ok },
-                        results.size,
-                        code,
-                    )
-                } ?: getString(
+                val finalStatus = getString(
                     R.string.diag_complete_summary,
                     results.count { it.ok },
                     results.size,
@@ -254,20 +238,6 @@ class DiagnosticsActivity : BaseActivity() {
     private fun yesNo(value: Boolean): String = getString(
         if (value) R.string.diag_yes else R.string.diag_no,
     )
-
-    private fun buildQuickSummary(): String = buildString {
-        append(deviceInfo())
-        append(" | ")
-        results.forEachIndexed { index, result ->
-            if (index > 0) append("; ")
-            append(result.label)
-            append('=')
-            append(if (result.ok) "OK" else "FAIL")
-            append('(')
-            append(sanitizeDetail(result.detail))
-            append(')')
-        }
-    }
 
     private suspend fun addSafeResult(
         labelRes: Int,
@@ -457,10 +427,6 @@ class DiagnosticsActivity : BaseActivity() {
             lastPeeringSummary?.let {
                 appendLine()
                 appendLine("${getString(R.string.diag_peering)}: $it")
-            }
-            lastSupportCode?.let {
-                appendLine()
-                appendLine(getString(R.string.diag_support_code_line, it))
             }
         }
         // Attach the rotating app log file when available so provider/playback

@@ -371,10 +371,8 @@
     <string name="diag_codecs_detail">H.264: %1$s · HEVC: %2$s · AC-3: %3$s · E-AC-3: %4$s</string>
     <string name="diag_yes">نعم</string>
     <string name="diag_no">لا</string>
-    <string name="diag_complete_support_code">نجح %1$d/%2$d من الفحوص · رمز الدعم: %3$s</string>
-    <string name="diag_support_code_line">رمز الدعم: %1$s</string>
     <string name="diag_ready">جاهز للتشغيل</string>
-    <string name="diag_complete_summary">نجح %1$d من أصل %2$d فحوصات</string>
+    <string name="diag_complete_summary">نجح %1$d من أصل %2$d فحوصات · شارك التقرير عبر إرسال السجلات</string>
     <string name="diag_peering_section">تحليل متقدم للمسار</string>
     <string name="diag_peering_desc">يقارن المسار إلى الخدمة بنقاط مرجعية مستقلة. يستغرق نحو ثلاث دقائق.</string>
     <string name="diag_device_desc">تفاصيل تقنية لمشاركتها عند التواصل مع الدعم.</string>

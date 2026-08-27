@@ -7,18 +7,15 @@ package com.iptv.player.update
 
 import android.content.Context
 import com.google.gson.JsonParser
-import com.iptv.player.BuildConfig
 import com.iptv.player.util.DeviceId
-import com.iptv.player.util.Telemetry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.security.MessageDigest
 
 /** GitHub repository that publishes the APK releases. */
 object UpdateConfig {
@@ -33,6 +30,10 @@ object UpdateConfig {
      */
     const val RELEASES_API =
         "https://api.github.com/repos/$OWNER/$REPO/releases?per_page=10"
+
+    /** Mutable, public control plane; no application backend is required. */
+    const val ROLLOUT_POLICY_URL =
+        "https://raw.githubusercontent.com/$OWNER/$REPO/main/update-rollout.json"
 }
 
 data class UpdateInfo(
@@ -60,23 +61,112 @@ internal object UpdateRolloutGatePolicy {
         data class Hold(val stableVersion: String?) : Outcome
     }
 
-    fun parse(httpCode: Int, body: String?): Outcome {
-        if (httpCode == 404) return Outcome.Allow
-        if (httpCode !in 200..299) return Outcome.Hold(null)
+    fun decide(
+        httpCode: Int,
+        body: String?,
+        candidateVersion: String,
+        deviceId: String,
+    ): Outcome {
+        if (httpCode !in 200..299 || body.isNullOrBlank() || body.length > MAX_POLICY_BYTES) {
+            return Outcome.Hold(null)
+        }
         return runCatching {
-            val root = JsonParser.parseString(body.orEmpty()).asJsonObject
-            if (root.get("decision")?.asString == "allow") {
-                Outcome.Allow
-            } else {
-                Outcome.Hold(
-                    root.get("stableVersion")
-                        ?.takeIf { it.isJsonPrimitive }
-                        ?.asString
-                        ?.takeIf { it.isNotBlank() },
-                )
+            val root = JsonParser.parseString(body).asJsonObject
+            require(root.keySet().all(ALLOWED_KEYS::contains))
+            require(root.get("schema")?.asString?.toIntOrNull() == POLICY_SCHEMA)
+            val targetVersion = requiredString(root, "targetVersion", 32)
+            require(VERSION.matches(targetVersion))
+            require(VERSION.matches(candidateVersion))
+            val stableVersion = optionalString(root, "stableVersion", 32)
+            require(stableVersion == null || VERSION.matches(stableVersion))
+            require(stableVersion == null || compareVersions(stableVersion, targetVersion) < 0)
+            val rolloutPercent = root.get("rolloutPercent")
+                ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }
+                ?.asString
+                ?.toIntOrNull()
+            require(rolloutPercent != null && rolloutPercent in 0..100)
+            val paused = requiredBoolean(root, "paused")
+            val emergency = requiredBoolean(root, "emergency")
+            val salt = requiredString(root, "salt", 64)
+            require(deviceId.isNotBlank())
+
+            when (compareVersions(candidateVersion, targetVersion)) {
+                // Policy can be safely pre-armed before its release exists.
+                -1 -> Outcome.Allow
+                // A newer release without a matching policy is held fail-closed.
+                1 -> Outcome.Hold(stableVersion)
+                else -> {
+                    val eligible = emergency ||
+                        (!paused && rolloutBucket(deviceId, salt) < rolloutPercent * 100)
+                    if (eligible) Outcome.Allow else Outcome.Hold(stableVersion)
+                }
             }
         }.getOrDefault(Outcome.Hold(null))
     }
+
+    private fun requiredString(
+        root: com.google.gson.JsonObject,
+        key: String,
+        maxLength: Int,
+    ): String {
+        val value = root.get(key)
+        require(value != null && value.isJsonPrimitive && value.asJsonPrimitive.isString)
+        return value.asString.trim().also { require(it.isNotEmpty() && it.length <= maxLength) }
+    }
+
+    private fun optionalString(
+        root: com.google.gson.JsonObject,
+        key: String,
+        maxLength: Int,
+    ): String? {
+        val value = root.get(key) ?: return null
+        if (value.isJsonNull) return null
+        require(value.isJsonPrimitive && value.asJsonPrimitive.isString)
+        return value.asString.trim().takeIf { it.isNotEmpty() }
+            ?.also { require(it.length <= maxLength) }
+    }
+
+    private fun requiredBoolean(root: com.google.gson.JsonObject, key: String): Boolean {
+        val value = root.get(key)
+        require(value != null && value.isJsonPrimitive && value.asJsonPrimitive.isBoolean)
+        return value.asBoolean
+    }
+
+    private fun rolloutBucket(deviceId: String, salt: String): Int {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest("$salt:$deviceId".toByteArray(Charsets.UTF_8))
+        var value = 0L
+        repeat(4) { index ->
+            value = (value shl 8) or (digest[index].toInt() and 0xff).toLong()
+        }
+        return (value % 10_000L).toInt()
+    }
+
+    private fun compareVersions(left: String, right: String): Int {
+        val l = versionParts(left)
+        val r = versionParts(right)
+        repeat(maxOf(l.size, r.size)) { index ->
+            val delta = l.getOrElse(index) { 0 }.compareTo(r.getOrElse(index) { 0 })
+            if (delta != 0) return delta
+        }
+        return 0
+    }
+
+    private fun versionParts(version: String): List<Int> =
+        version.split('.').map { it.toIntOrNull() ?: -1 }
+
+    private const val POLICY_SCHEMA = 1
+    private const val MAX_POLICY_BYTES = 4_096
+    private val VERSION = Regex("^\\d+(?:\\.\\d+){1,3}$")
+    private val ALLOWED_KEYS = setOf(
+        "schema",
+        "targetVersion",
+        "stableVersion",
+        "rolloutPercent",
+        "paused",
+        "emergency",
+        "salt",
+    )
 }
 
 class UpdateChecker(
@@ -124,7 +214,7 @@ class UpdateChecker(
                 if (!isNewer(candidate.versionName, currentVersionName)) {
                     return@withContext UpdateResult.UpToDate
                 }
-                when (val gate = rolloutGate(candidate.versionName, currentVersionName)) {
+                when (val gate = rolloutGate(candidate.versionName)) {
                     RolloutGate.Allow -> UpdateResult.Available(candidate.info)
                     is RolloutGate.Hold -> {
                         val stable = gate.stableVersion?.let { version ->
@@ -169,34 +259,29 @@ class UpdateChecker(
         )
     }
 
-    /** Fail closed when the managed rollout service cannot be reached. */
+    /** Fail closed when the public GitHub policy cannot be verified. */
     private suspend fun rolloutGate(
         candidateVersion: String,
-        currentVersionName: String,
     ): RolloutGate {
         val context = appContext ?: return RolloutGate.Allow
-        if (!Telemetry.isEnabled) return RolloutGate.Allow
         return runCatching {
-            val json = JSONObject().apply {
-                put("deviceId", DeviceId.get(context))
-                put("candidateVersion", candidateVersion)
-                put("currentVersion", currentVersionName)
-                put("currentVersionCode", BuildConfig.VERSION_CODE)
-            }
+            val deviceId = DeviceId.get(context)
+            val cacheSlot = System.currentTimeMillis() / POLICY_CACHE_WINDOW_MS
             val request = Request.Builder()
-                .url(Telemetry.UPDATE_POLICY_ENDPOINT)
-                .header("X-Kululu-Key", Telemetry.INGEST_KEY)
-                .post(
-                    json.toString().toRequestBody(
-                        "application/json; charset=utf-8".toMediaType(),
-                    ),
+                .url(
+                    "${UpdateConfig.ROLLOUT_POLICY_URL}" +
+                        "?candidate=$candidateVersion&slot=$cacheSlot",
                 )
+                .header("Accept", "application/json")
+                .header("Cache-Control", "no-cache")
                 .build()
             httpClient.newCall(request).execute().use { response ->
                 when (
-                    val outcome = UpdateRolloutGatePolicy.parse(
+                    val outcome = UpdateRolloutGatePolicy.decide(
                         response.code,
                         response.body?.string(),
+                        candidateVersion,
+                        deviceId,
                     )
                 ) {
                     UpdateRolloutGatePolicy.Outcome.Allow -> RolloutGate.Allow
@@ -205,6 +290,10 @@ class UpdateChecker(
                 }
             }
         }.getOrDefault(RolloutGate.Hold(null))
+    }
+
+    private companion object {
+        const val POLICY_CACHE_WINDOW_MS = 5L * 60L * 1_000L
     }
 
     /** True when [remote] is a strictly higher version than [current]. */
