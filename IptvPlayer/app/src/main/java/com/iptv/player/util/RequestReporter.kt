@@ -1,17 +1,12 @@
 /*
  * RequestReporter.kt
- * Fire-and-forget uploader for user requests/complaints submitted from the Home
- * "İstek & Şikayet" dialog. Mirrors HeartbeatReporter: same OkHttp client and
- * shared ingest key, POSTs a small JSON body to the crash-receiver, which stores
- * it and surfaces it in the operator panel. Returns whether the post succeeded so
- * the dialog can show a confirmation or a retry hint; runs on IO and only lets
- * structured coroutine cancellation propagate.
+ * Customer requests and history use the dedicated, per-installation support API.
+ * Only legacy heartbeat acknowledgements still belong to the old telemetry API;
+ * its numeric IDs must never be sent to the new support database.
  */
 package com.iptv.player.util
 
 import android.content.Context
-import android.os.Build
-import com.iptv.player.BuildConfig
 import com.iptv.player.data.ServiceLocator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -39,43 +34,18 @@ object RequestReporter {
     private const val MAX_HISTORY_ITEMS = 20
     private const val MAX_CREATED_AT_LENGTH = 64
 
-    /**
-     * Posts a single request/complaint. [type] is one of channel/movie/series/
-     * complaint. Runs on IO and swallows all errors, returning false on any
-     * failure so the caller can react without a crash.
-     */
+    /** Compatibility Boolean API; UI callers should use [sendDetailed] for the receipt. */
     suspend fun send(context: Context, type: String, message: String): Boolean =
-        withContext(Dispatchers.IO) {
-            if (!Telemetry.isEnabled) return@withContext false
-            val normalizedType = type.lowercase(Locale.ROOT)
-            val normalizedMessage = normalizeMessage(message) ?: return@withContext false
-            if (normalizedType !in TYPES) return@withContext false
-            try {
-                val app = context.applicationContext
-                val payload = JSONObject().apply {
-                    put("deviceId", DeviceId.get(app))
-                    put("type", normalizedType)
-                    put("message", normalizedMessage)
-                    put("appVersion", BuildConfig.VERSION_NAME)
-                    put("versionCode", BuildConfig.VERSION_CODE)
-                    put("manufacturer", Build.MANUFACTURER)
-                    put("model", Build.MODEL)
-                    val user = runCatching { ServiceLocator.settings.getSourceConfig()?.username }
-                        .getOrNull()
-                    if (!user.isNullOrBlank()) put("username", user)
-                }
-                val request = Request.Builder()
-                    .url(Telemetry.REQUEST_ENDPOINT)
-                    .header("X-Kululu-Key", Telemetry.INGEST_KEY)
-                    .post(payload.toString().toRequestBody(JSON))
-                    .build()
-                execute(request).successful
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                false
-            }
+        sendDetailed(context, type, message) is SupportResult.Success
+
+    suspend fun sendDetailed(context: Context, type: String, message: String): SupportResult {
+        val normalizedType = type.lowercase(Locale.ROOT)
+        val normalizedMessage = normalizeMessage(message)
+        if (normalizedMessage == null || normalizedType !in TYPES) {
+            return SupportResult.Failure(SupportFailureKind.INVALID_INPUT)
         }
+        return SupportClient.sendRequest(context, normalizedType, normalizedMessage)
+    }
 
     /** A single past request of this device, newest first, for the Home history list. */
     data class MyRequest(
@@ -84,34 +54,29 @@ object RequestReporter {
         val message: String,
         val status: String,
         val createdAt: String,
+        val code: String = "",
     )
 
     sealed interface HistoryResult {
         data class Success(val items: List<MyRequest>) : HistoryResult
         data object Error : HistoryResult
+        data class DetailedError(val failure: SupportResult.Failure) : HistoryResult
     }
 
     /**
-     * Fetches this device's own request history from the crash-receiver. Newest
+     * Fetches this installation's own request history from the support service. Newest
      * first, capped server-side. Empty history is kept distinct from a transport
      * or contract error so the UI never reports "no requests" while offline.
      */
     suspend fun fetchMineResult(context: Context): HistoryResult =
         withContext(Dispatchers.IO) {
-            if (!Telemetry.isEnabled) return@withContext HistoryResult.Error
             try {
-                val app = context.applicationContext
-                val deviceId = java.net.URLEncoder.encode(DeviceId.get(app), "UTF-8")
-                val request = Request.Builder()
-                    .url("${Telemetry.REQUESTS_MINE_ENDPOINT}?deviceId=$deviceId")
-                    .header("X-Kululu-Key", Telemetry.INGEST_KEY)
-                    .get()
-                    .build()
-                val response = execute(request)
-                if (!response.successful || response.body.isNullOrBlank()) {
-                    return@withContext HistoryResult.Error
+                val response = when (val result = SupportClient.history(context)) {
+                    is SupportClient.HistoryResult.Success -> result.response
+                    is SupportClient.HistoryResult.Failure ->
+                        return@withContext HistoryResult.DetailedError(result.reason)
                 }
-                val arr = JSONObject(response.body).optJSONArray("requests")
+                val arr = response.optJSONArray("requests")
                     ?: return@withContext HistoryResult.Error
                 val items = buildList {
                     for (i in 0 until minOf(arr.length(), MAX_HISTORY_ITEMS)) {
@@ -141,6 +106,8 @@ object RequestReporter {
                                 createdAt = o.optString("createdAt")
                                     .trim()
                                     .take(MAX_CREATED_AT_LENGTH),
+                                code = o.optString("code")
+                                    .takeIf { Regex("K-[A-F0-9]{16}").matches(it) }.orEmpty(),
                             )
                         )
                     }
@@ -157,7 +124,7 @@ object RequestReporter {
     suspend fun fetchMine(context: Context): List<MyRequest> =
         when (val result = fetchMineResult(context)) {
             is HistoryResult.Success -> result.items
-            HistoryResult.Error -> emptyList()
+            HistoryResult.Error, is HistoryResult.DetailedError -> emptyList()
         }
 
     /**
@@ -198,7 +165,7 @@ object RequestReporter {
     }
 
     private fun sanitizeServerText(value: String, maxLength: Int): String =
-        cleanText(value)
+        cleanText(SupportPayloadPolicy.sanitize(value))
             .trim()
             .take(maxLength)
 

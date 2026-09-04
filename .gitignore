@@ -12,3 +12,5 @@ keystore.properties
 # Node (crash-receiver backend)
 node_modules/
 npm-debug.log*
+.support-npm-cache/
+.support-deploy/

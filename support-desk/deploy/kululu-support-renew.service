@@ -1,0 +1,7 @@
+[Unit]
+Description=Renew Kululu IP HTTPS certificate
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/kululu-support/certbot/bin/certbot renew --quiet --config-dir /etc/kululu-support/acme --work-dir /var/lib/kululu-support/certbot --logs-dir /var/log/kululu-support-certbot --deploy-hook "/usr/sbin/nginx -t && /bin/systemctl reload nginx"

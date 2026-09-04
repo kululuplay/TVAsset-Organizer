@@ -116,7 +116,7 @@ class PlayerController(
             videoOutputConfirmed = false
             stageStartMs = 0L
             mainHandler.removeCallbacksAndMessages(null)
-            stableHandler.removeCallbacksAndMessages(null)
+            progressPolicy.reset()
             resetReconnect()
             cancelWatchdog()
             startStage(stage)
@@ -141,13 +141,14 @@ class PlayerController(
             // onto the re-attached surface (bare re-add can stall video).
             if (url != null) {
                 // Re-baseline as a fresh (re)start: clear the prior confirmation +
-                // stable timer so the next real frame runs onPlaybackProgress and
+                // stability evidence so the next real frame runs onPlaybackProgress and
                 // re-arms the stall poll against the new clock; the startup timeout
                 // covers the replay until that frame arrives.
                 playbackConfirmed = false
                 videoOutputConfirmed = false
+                playbackBuffering = true
                 stageStartMs = 0L
-                stableHandler.removeCallbacksAndMessages(null)
+                progressPolicy.reset()
                 eng.play(url, reset = true)
             }
         }, ENGINE_SWAP_DELAY_MS)
@@ -168,6 +169,8 @@ class PlayerController(
          * Default no-op so callbacks that don't care need not implement it.
          */
         fun onVideoResumed() {}
+        /** Sustained ready playback with an advancing clock, not merely one frame. */
+        fun onStablePlayback() {}
         /** Active backend changed; value is mapped to a closed enum before QoE. */
         fun onEngineChanged(engineName: String) {}
         /** Effective TS/HLS route after channel memory or a bounded fallback. */
@@ -297,11 +300,13 @@ class PlayerController(
         manager.isLowRamDevice
     }.getOrDefault(false)
 
-    // Fires once the current stage has played for STABLE_PLAYBACK_MS without
-    // failing: only THEN is playback treated as truly recovered (reconnect window
-    // + quick-failure counter reset). Kept separate from the reconnect/engine-swap
-    // handlers so a brief first frame can't mark a looping stream as recovered.
-    private val stableHandler = Handler(Looper.getMainLooper())
+    // Recovery is proven by the same clock samples that detect stalls. A separate
+    // delayed "stable" callback could survive EOS and cancel its pending retry.
+    private val progressPolicy = LivePlaybackProgressPolicy(
+        stablePlaybackMs = STABLE_PLAYBACK_MS,
+        stallTimeoutMs = STALL_TIMEOUT_MS,
+    )
+    private var playbackBuffering = true
 
     private var audioDelayMs = 0L
     private var subtitleDelayMs = 0L
@@ -347,8 +352,6 @@ class PlayerController(
     // calls can't clobber it. Generation-guarded against an already-dequeued post.
     private val watchdogHandler = Handler(Looper.getMainLooper())
     private var watchdogGen = 0
-    private var lastPositionMs = -1L
-    private var lastProgressAtMs = 0L
 
     /** True when the active engine can apply audio/subtitle delay (libVLC). */
     val supportsDelay: Boolean get() = engine?.supportsDelay == true
@@ -429,9 +432,10 @@ class PlayerController(
         // A new channel cancels any in-flight reconnect so it can't fire against
         // the stale stream or open a second connection.
         resetReconnect()
-        // New channel: drop the stable-playback timer and the quick-decode-failure
+        // New channel: drop stability evidence and the quick-decode-failure
         // count from the previous stream so they can't bleed into this one.
-        stableHandler.removeCallbacksAndMessages(null)
+        progressPolicy.reset()
+        playbackBuffering = true
         quickDecodeFailures = 0
         softwareSlowHardwareRetryUsed = false
         ac3PcmFallbackUsed = false
@@ -589,11 +593,11 @@ class PlayerController(
         }
         triedStages.add(target)
         stage = target
-        // Fresh (re)start: this stage has not confirmed playback yet, so cancel the
-        // previous stable-playback timer (re-armed on the next confirmed frame).
+        // Fresh (re)start: the new attempt must prove its own frame and progress.
         playbackConfirmed = false
         videoOutputConfirmed = false
-        stableHandler.removeCallbacksAndMessages(null)
+        progressPolicy.reset()
+        playbackBuffering = true
         val useVlc = target != Stage.EXO
         val forceSoftware = target == Stage.VLC_SW
         startEngine(useVlc, forceSoftware)
@@ -674,7 +678,7 @@ class PlayerController(
                     if (useVlc) {
                         val effectiveBuffer = AdaptiveBufferPolicy.resolve(
                             configured = bufferMode,
-                            lowRamDevice = lowRamDevice,
+                            lowRamDevice = lowRamDevice || devicePlaybackProfile.compatibilityMode,
                             recentRebuffers = adaptiveRebuffers,
                         )
                         VlcPlayerEngine(
@@ -686,13 +690,19 @@ class PlayerController(
                     } else {
                         val effectiveBuffer = AdaptiveBufferPolicy.resolve(
                             configured = bufferMode,
-                            lowRamDevice = lowRamDevice,
+                            lowRamDevice = lowRamDevice || devicePlaybackProfile.compatibilityMode,
                             recentRebuffers = adaptiveRebuffers,
                         )
                         ExoPlayerEngine(
                             context = context,
                             allowPassthrough = allowPassthrough,
-                            bufferMode = effectiveBuffer,
+                            bufferMode = if (bufferMode == BufferMode.ADAPTIVE) {
+                                bufferMode
+                            } else {
+                                effectiveBuffer
+                            },
+                            initialRebuffers = adaptiveRebuffers,
+                            constrainedDevice = lowRamDevice || devicePlaybackProfile.compatibilityMode,
                             expectsVideo = expectsVideo,
                         )
                     }
@@ -760,6 +770,7 @@ class PlayerController(
     private fun engineListener(source: PlayerEngine) = object : PlayerListener {
         override fun onPlaybackSubmitted() = post {
             if (source !== engine || suspended) return@post
+            if (playbackConfirmed) return@post
             // A coalesced VLC zap may wait behind a bounded native cleanup before
             // this callback. Start the budget only now, when this URL has reached
             // the actual decoder/native start path.
@@ -768,6 +779,8 @@ class PlayerController(
 
         override fun onBuffering() = post {
             if (source !== engine || suspended) return@post
+            playbackBuffering = true
+            progressPolicy.onBuffering()
             if (
                 bufferMode == BufferMode.ADAPTIVE &&
                 playbackConfirmed &&
@@ -781,6 +794,7 @@ class PlayerController(
 
         override fun onPlaying() = post {
             if (source !== engine || suspended) return@post
+            playbackBuffering = false
             adaptiveBufferingActive = false
             callback.onPlaying(source.engineName)
             if (!expectsVideo) onPlaybackProgress()
@@ -798,7 +812,7 @@ class PlayerController(
                 // Measure route stability from this verified frame, not from the
                 // earlier audio/cache-ready event.
                 stageStartMs = SystemClock.elapsedRealtime()
-                armStablePlaybackTimer()
+                armStallWatchdog()
             } else {
                 onPlaybackProgress()
             }
@@ -1043,7 +1057,7 @@ class PlayerController(
 
     /**
      * Called on the first confirmed playback (a verified frame for TV, onPlaying
-     * for radio) of the current stage. We mark playback confirmed and arm the stable-playback timer
+     * for radio) of the current stage. We begin observing clock progress
      * but deliberately do NOT reset the reconnect window or the quick-decode-failure
      * counter yet: a stream that renders one frame then dies ~1.5s later (the
      * Amlogic MPEG2 hardware decoder loop) must not look "recovered", or the retry
@@ -1054,64 +1068,45 @@ class PlayerController(
         if (playbackConfirmed) return
         playbackConfirmed = true
         stageStartMs = SystemClock.elapsedRealtime()
-        armStablePlaybackTimer()
         // First confirmed progress: swap the startup timeout for the mid-stream
         // stall poll so a later silent freeze (no EndReached/error) still recovers.
         armStallWatchdog()
     }
 
-    /**
-     * Starts (or restarts) the stable-playback window. A delayed first video frame
-     * re-arms this timer, ensuring route memory always observes a full interval of
-     * real displayed video.
-     */
-    private fun armStablePlaybackTimer() {
-        stableHandler.removeCallbacksAndMessages(null)
-        // Capture the stage + route key as of NOW: if this stable callback ever
-        // survives to fire, it must record the route it was ARMED for, never one a
-        // later (un-cancelled) transition swapped in under it.
+    /** Called only after uninterrupted ready samples prove sustained progress. */
+    private fun onStablePlayback() {
         val stableStage = stage
         val stableKey = currentRouteKey
-        stableHandler.postDelayed({
-            if (suspended || stableStage != stage) return@postDelayed
-            PlaybackLog.log(context, "Controller", "stable playback ${STABLE_PLAYBACK_MS}ms -> recovered")
-            quickDecodeFailures = 0
-            unconfirmedStartFailures = 0
-            resetReconnect()
-            // Learn only after a real displayed video frame. getStreamInfo()==null
-            // means "unknown/not ready" as well as audio-only, so treating null as
-            // radio could remember a green/no-frame stage for fourteen days.
-            // Audio-only streams simply skip route memory; correctness wins over a
-            // tiny startup optimisation for radio.
-            val stageHonorsExplicitEngine =
-                mode != PlayerMode.VLC || stableStage != Stage.EXO
-            if (
-                routeMemoryEligible &&
-                routeLearningAllowed &&
-                videoOutputConfirmed &&
-                stageHonorsExplicitEngine
-            ) {
-                PlaybackRouteMemory.markStable(stableKey, stableStage.name)
-            } else if (routeMemoryEligible) {
-                PlaybackLog.log(
-                    context,
-                    "Controller",
-                    "route not learned (realVideo=$videoOutputConfirmed, " +
-                        "eligibleFailure=$routeLearningAllowed, " +
-                        "honorsEngine=$stageHonorsExplicitEngine)",
-                )
-            }
-            if (isLive && (!expectsVideo || videoOutputConfirmed)) {
-                LiveTransportMemory.markStable(
-                    currentTransportKey,
-                    currentTransportFormat,
-                )
-                usingRememberedTransport = false
-            }
-            // The remembered route (if any) is now confirmed; later drops take the
-            // normal same-stage reconnect path, not the distrust-and-restart path.
-            usingRememberedRoute = false
-        }, STABLE_PLAYBACK_MS)
+        if (suspended || !playbackConfirmed || playbackBuffering) return
+        PlaybackLog.log(context, "Controller", "sustained playback progress -> recovered")
+        quickDecodeFailures = 0
+        unconfirmedStartFailures = 0
+        resetReconnect()
+        // Audio-only streams skip decoder memory; TV requires its verified frame.
+        val stageHonorsExplicitEngine =
+            mode != PlayerMode.VLC || stableStage != Stage.EXO
+        if (
+            routeMemoryEligible &&
+            routeLearningAllowed &&
+            videoOutputConfirmed &&
+            stageHonorsExplicitEngine
+        ) {
+            PlaybackRouteMemory.markStable(stableKey, stableStage.name)
+        } else if (routeMemoryEligible) {
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "route not learned (realVideo=$videoOutputConfirmed, " +
+                    "eligibleFailure=$routeLearningAllowed, " +
+                    "honorsEngine=$stageHonorsExplicitEngine)",
+            )
+        }
+        if (isLive && (!expectsVideo || videoOutputConfirmed)) {
+            LiveTransportMemory.markStable(currentTransportKey, currentTransportFormat)
+            usingRememberedTransport = false
+        }
+        usingRememberedRoute = false
+        callback.onStablePlayback()
     }
 
     // ---- Watchdog ---------------------------------------------------------
@@ -1179,35 +1174,33 @@ class PlayerController(
     private fun armStallWatchdog() {
         if (!isLive) return
         cancelWatchdog()
-        lastPositionMs = -1L
-        lastProgressAtMs = SystemClock.elapsedRealtime()
+        progressPolicy.start(
+            nowMs = SystemClock.elapsedRealtime(),
+            positionMs = engine?.playbackPositionMs() ?: -1L,
+        )
         scheduleStallPoll(watchdogGen)
     }
 
     private fun scheduleStallPoll(gen: Int) {
         watchdogHandler.postDelayed({
             if (gen != watchdogGen) return@postDelayed
-            // While a reconnect is mid-flight the attempt's own startup timeout
-            // owns recovery; just keep polling until it re-arms (or supersedes) us.
-            if (reconnecting || engine == null) {
+            // A confirmed reconnect still needs stall monitoring before it can
+            // earn stability. Only a scheduled replacement has another owner.
+            if (reconnectPending || engine == null) {
                 scheduleStallPoll(gen)
                 return@postDelayed
             }
             val pos = engine?.playbackPositionMs() ?: -1L
             val now = SystemClock.elapsedRealtime()
-            when {
-                // Keep the original deadline when the engine reports no clock.
-                // Resetting on every -1 made a player that emitted Playing and
-                // then died without a position hang forever.
-                pos < 0 -> Unit
-                // Clock advanced -> real progress, reset the stall timer.
-                pos > lastPositionMs + PROGRESS_EPSILON_MS -> {
-                    lastPositionMs = pos
-                    lastProgressAtMs = now
-                }
-                // else: frozen clock -> let the stall timer accrue.
+            val decision = progressPolicy.sample(
+                nowMs = now,
+                positionMs = pos,
+                buffering = playbackBuffering,
+            )
+            if (decision == LivePlaybackProgressPolicy.Decision.STABLE) {
+                onStablePlayback()
             }
-            if (now - lastProgressAtMs >= STALL_TIMEOUT_MS) {
+            if (decision == LivePlaybackProgressPolicy.Decision.STALLED) {
                 PlaybackLog.log(context, "Controller", "live stall (no progress ${STALL_TIMEOUT_MS}ms) -> reconnect")
                 recordStability("stall", "warn")
                 notifyPlaybackFailure(
@@ -1228,13 +1221,8 @@ class PlayerController(
     }
 
     private fun handleFailure(reason: Reason) {
-        // A failure before the stable window elapses MUST cancel the pending stable
-        // callback first: a stage that rendered a frame then died near the 10s mark
-        // could otherwise still fire it and FALSELY learn a failed route as good
-        // (the delayed reconnect's startStage only clears it later). Harmless for a
-        // post-stable mid-stream drop — the callback has already fired, so it's a
-        // no-op there.
-        stableHandler.removeCallbacksAndMessages(null)
+        // Never carry readiness/progress evidence into a pending recovery.
+        progressPolicy.reset()
 
         val effectiveReason =
             if (reason == Reason.ERROR && !playbackConfirmed) {
@@ -1460,11 +1448,15 @@ class PlayerController(
     /**
      * A live stream dropped/ended with no further decode path to try. Re-open the
      * SAME channel on the current stage with a backoff schedule bounded by a total
-     * window, until it recovers (onPlaying / onVideoOutput resets the state) or the
+     * window, until sustained playback recovers or the
      * window elapses (then a fatal error with a manual-retry UI). For non-live this
      * degrades to the previous behaviour: a single fatal error, no reconnect loop.
      */
     private fun engageReconnect() {
+        // EOS comes here directly, without handleFailure. Retire its stability
+        // evidence before scheduling a replacement so no success callback can
+        // erase the pending retry near the stability deadline.
+        progressPolicy.reset()
         // The reconnect attempt's own startup timeout (armed once its replacement
         // engine actually receives play()) takes over watchdog duty, so drop any
         // current poll/timeout to avoid overlap.
@@ -1591,7 +1583,7 @@ class PlayerController(
         recoveryNeededOnResume = currentUrl != null
         ++startGeneration
         mainHandler.removeCallbacksAndMessages(null)
-        stableHandler.removeCallbacksAndMessages(null)
+        progressPolicy.reset()
         resetReconnect()
         cancelWatchdog()
         val target = engine
@@ -1625,7 +1617,7 @@ class PlayerController(
         recoveryNeededOnResume = false
         ++startGeneration
         mainHandler.removeCallbacksAndMessages(null)
-        stableHandler.removeCallbacksAndMessages(null)
+        progressPolicy.reset()
         resetReconnect()
         cancelWatchdog()
         engine?.stop()
@@ -1641,7 +1633,7 @@ class PlayerController(
         recoveryNeededOnResume = false
         ++startGeneration
         mainHandler.removeCallbacksAndMessages(null)
-        stableHandler.removeCallbacksAndMessages(null)
+        progressPolicy.reset()
         cancelWatchdog()
         resetReconnect()
         releaseEngine()
@@ -1703,13 +1695,6 @@ class PlayerController(
 
         /** How often the mid-stream stall watchdog re-reads the playback clock. */
         private const val WATCHDOG_POLL_MS = 3_000L
-
-        /**
-         * Minimum forward movement (ms) of the playback clock between polls that
-         * counts as real progress. A small epsilon ignores sub-second clock jitter
-         * while still flagging a genuinely frozen stream (clock stuck) as a stall.
-         */
-        private const val PROGRESS_EPSILON_MS = 250L
 
         /**
          * How long the playback clock may fail to advance before a confirmed live

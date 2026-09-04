@@ -22,6 +22,7 @@ class AdaptiveBufferPolicyTest {
 
     @Test
     fun `low ram devices are capped at normal`() {
+        assertEquals(BufferMode.NORMAL, AdaptiveBufferPolicy.resolve(BufferMode.ADAPTIVE, true, 0))
         assertEquals(BufferMode.NORMAL, AdaptiveBufferPolicy.resolve(BufferMode.ADAPTIVE, true, 6))
     }
 }

@@ -260,7 +260,7 @@
     <string name="settings_toggle_state">%1$s, %2$s</string>
     <string name="settings_selected_option">%1$s, ausgewählt</string>
     <string name="settings_content_manager">Inhaltsverwaltung</string>
-    <string name="settings_share_playback_log">Wiedergabeprotokoll teilen</string>
+    <string name="settings_share_playback_log">Wiedergabeprotokoll senden</string>
     <string name="settings_playback_log_empty">Noch kein Wiedergabeprotokoll vorhanden</string>
     <string name="settings_share_unavailable">Keine App zum Teilen des Wiedergabeprotokolls verfügbar.</string>
 
@@ -367,7 +367,7 @@
     <string name="diag_yes">Ja</string>
     <string name="diag_no">Nein</string>
     <string name="diag_ready">Bereit zum Starten</string>
-    <string name="diag_complete_summary">%1$d von %2$d Prüfungen erfolgreich · Mit „Protokolle senden“ teilen</string>
+    <string name="diag_complete_summary">%1$d von %2$d Prüfungen erfolgreich · Mit „Protokolle senden“ an den Support senden</string>
     <string name="diag_peering_section">Erweiterte Routenanalyse</string>
     <string name="diag_peering_desc">Vergleicht die Route zum Dienst mit unabhängigen Referenzpunkten. Dauert etwa drei Minuten.</string>
     <string name="diag_device_desc">Technische Details für eine Support-Anfrage.</string>
@@ -376,4 +376,14 @@
     <string name="about_update_section">App-Updates</string>
     <string name="about_update_desc">Neue Versionen prüfen und installieren, ohne Konto oder Einstellungen zu verlieren.</string>
     <string name="about_ready">Ihre installierte Version ist bereit.</string>
+    <string name="support_diagnostic_title">Diagnose an Support senden</string>
+    <string name="support_diagnostic_confirm">Geräte- und App-Informationen, eingestellte Wiedergabeoptionen, Testergebnisse sowie bereinigte Wiedergabe- und App-Protokolle direkt an den Kululu-Support senden? Zugangsdaten werden entfernt. Die Protokolle werden 90 Tage aufbewahrt.</string>
+    <string name="support_diagnostic_playback_summary">Wiedergabediagnose aus den App-Einstellungen.</string>
+    <string name="support_diagnostic_send">Senden</string>
+    <string name="support_diagnostic_cancel">Abbrechen</string>
+    <string name="support_diagnostic_retry">Erneut versuchen</string>
+    <string name="support_diagnostic_close">Schließen</string>
+    <string name="support_diagnostic_sending">Bericht wird vorbereitet und gesendet… Bitte auf die Support-Nummer warten. Sie können jederzeit abbrechen.</string>
+    <string name="support_diagnostic_interrupted">Das Senden wurde unterbrochen. Erneut versuchen, um den Empfang zu prüfen und die Support-Nummer zu erhalten; doppelte Meldungen werden vermieden.</string>
+    <string name="support_diagnostic_incomplete">Einige Protokolle oder Einstellungen waren auf diesem Gerät nicht verfügbar. Die verfügbaren Informationen wurden gesendet.</string>
 </resources>
