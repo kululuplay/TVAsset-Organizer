@@ -52,6 +52,7 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.video.VideoFrameMetadataListener
@@ -64,7 +65,6 @@ import com.iptv.player.util.AppInfo
 import com.iptv.player.util.PlaybackLog
 import com.iptv.player.util.PlaybackRemotePolicy
 import java.util.Locale
-import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicLong
 
 @OptIn(markerClass = [UnstableApi::class])
@@ -87,6 +87,8 @@ class ExoPlayerEngine(
                 (context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)
                     ?.isLowRamDevice == true
             }.getOrDefault(false),
+    /** Audio-only preference on constrained or known Amlogic compatibility paths. */
+    private val preferSoftwareAudio: Boolean = constrainedDevice,
 ) : PlayerEngine {
 
     override val engineName: String = "ExoPlayer"
@@ -109,12 +111,14 @@ class ExoPlayerEngine(
     private var audioDecoder = AudioFailureEvidence.Decoder.UNKNOWN
     private var audioDecoderInitialized = false
     private var audioClockStarted = false
-    private val audioUnderrunTimesMs = ArrayDeque<Long>()
+    private val audioUnderrunMonitor = AudioUnderrunMonitor()
     private var audioBufferingSinceMs = 0L
     private var audioBufferingHadMediaProgress = false
     private var audioBufferingVideoBaselineMs = 0L
     private var audioBufferingDurationBaselineMs = 0L
     private var audioUnderrunVideoBaselineMs = 0L
+    private var audioUnderrunBufferBaselineMs = 0L
+    private var audioUnderrunCheckRunnable: Runnable? = null
     private var audioStallCheckRunnable: Runnable? = null
     private val lastVideoFrameAtMs = AtomicLong(0L)
     private var lastHealthPositionMs = -1L
@@ -317,12 +321,14 @@ class ExoPlayerEngine(
                         readyForPlayback = false
                         cancelNoFrameCheck()
                         cancelAudioClockStallCheck()
+                        cancelAudioUnderrunCheck()
                         listener?.onEnded()
                     }
                     Player.STATE_IDLE -> {
                         readyForPlayback = false
                         cancelNoFrameCheck()
                         cancelAudioClockStallCheck()
+                        cancelAudioUnderrunCheck()
                     }
                 }
             }
@@ -333,6 +339,20 @@ class ExoPlayerEngine(
             ) {
                 if (!isCurrentEvent(eventTime)) return
                 scheduleTrackSupportCheck()
+            }
+
+            override fun onPlayWhenReadyChanged(
+                eventTime: AnalyticsListener.EventTime,
+                playWhenReady: Boolean,
+                reason: Int,
+            ) {
+                if (!isCurrentEvent(eventTime)) return
+                if (!playWhenReady) {
+                    cancelAudioClockStallCheck()
+                    cancelAudioUnderrunCheck()
+                } else if (exo.playbackState == Player.STATE_BUFFERING) {
+                    scheduleAudioClockStallCheck()
+                }
             }
 
             override fun onRenderedFirstFrame(
@@ -451,7 +471,7 @@ class ExoPlayerEngine(
                 if (nextCodec != audioCodec) {
                     audioCodec = nextCodec
                     audioClockStarted = false
-                    audioUnderrunTimesMs.clear()
+                    cancelAudioUnderrunCheck()
                     cancelAudioClockStallCheck()
                 }
                 PlaybackLog.log(
@@ -472,6 +492,9 @@ class ExoPlayerEngine(
                 if (!isCurrentEvent(eventTime)) return
                 audioClockStarted = true
                 cancelAudioClockStallCheck()
+                // This is only the first advance after start/resume, not a
+                // continuous health signal. The sink wrapper below observes
+                // actual playout throughout an underrun recovery window.
                 PlaybackLog.log(context, engineName, "audioClock=ADVANCING codec=${audioCodec.name}")
             }
 
@@ -483,27 +506,21 @@ class ExoPlayerEngine(
             ) {
                 if (!isCurrentEvent(eventTime)) return
                 val nowMs = SystemClock.elapsedRealtime()
-                while (
-                    audioUnderrunTimesMs.isNotEmpty() &&
-                    nowMs - audioUnderrunTimesMs.first() > LiveAudioStallPolicy.UNDERRUN_WINDOW_MS
-                ) {
-                    audioUnderrunTimesMs.removeFirst()
-                }
-                if (audioUnderrunTimesMs.isEmpty()) {
+                if (audioUnderrunMonitor.onUnderrun(nowMs)) {
                     audioUnderrunVideoBaselineMs = lastVideoFrameAtMs.get()
+                    audioUnderrunBufferBaselineMs = exo.totalBufferedDuration
                 }
-                audioUnderrunTimesMs.addLast(nowMs)
+                val observation = audioUnderrunMonitor.poll(nowMs)
                 PlaybackLog.log(
                     context,
                     engineName,
                     "audioSink=UNDERRUN codec=${audioCodec.name} " +
-                        "count=${audioUnderrunTimesMs.size} bufferMs=$bufferSizeMs",
+                        "count=${observation.underruns} bufferMs=$bufferSizeMs " +
+                        "feedGapMs=$elapsedSinceLastFeedMs",
                 )
-                evaluateAudioStall(
-                    sinkEvent = AudioFailureEvidence.SinkEvent.UNDERRUN,
-                    nowMs = nowMs,
-                    requireVideoProgressAfterMs = audioUnderrunVideoBaselineMs,
-                )
+                // A 218 ms pair of callbacks on a working AC3 channel is one
+                // short starvation episode, not proof that the decoder failed.
+                scheduleAudioUnderrunCheck()
             }
 
             override fun onAudioSinkError(
@@ -638,9 +655,20 @@ class ExoPlayerEngine(
                     // timestamps when playback-params mode is active. Let Media3
                     // use its stable default clock path instead.
                     .setEnableAudioTrackPlaybackParams(false)
-                return builder.build()
+                return MonitoredAudioSink(builder.build(), audioUnderrunMonitor, SystemClock::elapsedRealtime)
             }
         }.setEnableDecoderFallback(true)
+            .setMediaCodecSelector(MediaCodecSelector { mime, secure, tunneling ->
+                LiveAudioDecoderPolicy.order(
+                    mimeType = mime,
+                    preferSoftwareAudio = preferSoftwareAudio,
+                    allowPassthrough = allowPassthrough,
+                    requiresSecureDecoder = secure,
+                    requiresTunnelingDecoder = tunneling,
+                    candidates = MediaCodecSelector.DEFAULT.getDecoderInfos(mime, secure, tunneling),
+                    isSoftware = { it.softwareOnly },
+                )
+            })
 
     /**
      * Track selection can momentarily be unresolved while the manifest/extractor
@@ -760,8 +788,27 @@ class ExoPlayerEngine(
         if (audioReported) return
         audioReported = true
         cancelTrackSupportCheck()
+        cancelAudioClockStallCheck()
+        cancelAudioUnderrunCheck()
+        logAudioTrackSupport()
         PlaybackLog.log(context, engineName, "$detail -> audio compatibility fallback")
         listener?.onAudioUnavailable()
+    }
+
+    /** Include unsupported tracks too: input-format events only cover selected tracks. */
+    private fun logAudioTrackSupport() {
+        player?.currentTracks?.groups?.filter { it.type == C.TRACK_TYPE_AUDIO }
+            ?.take(4)?.forEach { group ->
+                repeat(minOf(group.length, 4)) { index ->
+                    val format = group.getTrackFormat(index)
+                    PlaybackLog.log(
+                        context, engineName,
+                        "audioCandidate codec=${LiveAudioStallPolicy.codecForMime(format.sampleMimeType)} " +
+                            "channels=${format.channelCount} rate=${format.sampleRate} " +
+                            "support=${group.getTrackSupport(index)} selected=${group.isTrackSelected(index)}",
+                    )
+                }
+            }
     }
 
     private fun audioOutputMode(): AudioFailureEvidence.OutputMode =
@@ -777,6 +824,7 @@ class ExoPlayerEngine(
         bufferingDurationMs: Long = 0L,
         requireVideoProgressAfterMs: Long? = null,
         sourceProgressAfterIssue: Boolean = false,
+        underrunObservation: AudioUnderrunMonitor.Observation = audioUnderrunMonitor.poll(nowMs),
     ) {
         if (audioReported) return
         val lastVideoFrameMs = lastVideoFrameAtMs.get()
@@ -793,7 +841,8 @@ class ExoPlayerEngine(
             sourceProgressAfterIssue = sourceProgressAfterIssue,
             decoderInitialized = audioDecoderInitialized,
             audioClockStarted = audioClockStarted,
-            underrunsInWindow = audioUnderrunTimesMs.size,
+            underrunsInWindow = underrunObservation.underruns,
+            audioClockStalledForMs = underrunObservation.stalledDurationMs,
             bufferingDurationMs = bufferingDurationMs,
             sinkEvent = sinkEvent,
         )
@@ -803,6 +852,12 @@ class ExoPlayerEngine(
         ) {
             return
         }
+        PlaybackLog.log(
+            context, engineName,
+            "audio recovery evidence underruns=${evidence.underrunsInWindow} " +
+                "clockStalledMs=${evidence.audioClockStalledForMs} " +
+                "videoProgress=${evidence.recentVideoProgress} sourceProgress=${evidence.sourceProgressAfterIssue}",
+        )
         reportAudioStall(
             AudioFailureEvidence(
                 codec = evidence.codec,
@@ -813,11 +868,64 @@ class ExoPlayerEngine(
         )
     }
 
+    private fun scheduleAudioUnderrunCheck() {
+        if (audioUnderrunCheckRunnable != null || audioReported || videoFailureReported ||
+            audioCodec != AudioFailureEvidence.Codec.AC3 || allowPassthrough ||
+            player?.playWhenReady != true
+        ) return
+        val generation = streamGeneration
+        val check = object : Runnable {
+            override fun run() {
+                audioUnderrunCheckRunnable = null
+                val exo = player ?: return
+                if (generation != streamGeneration || audioReported || videoFailureReported) return
+                if (!exo.playWhenReady || exo.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE ||
+                    exo.playbackState == Player.STATE_IDLE || exo.playbackState == Player.STATE_ENDED
+                ) {
+                    cancelAudioUnderrunCheck()
+                    return
+                }
+                val nowMs = SystemClock.elapsedRealtime()
+                val observation = audioUnderrunMonitor.poll(nowMs)
+                if (!observation.pending) {
+                    if (observation.recovered) {
+                        PlaybackLog.log(context, engineName, "audio underrun recovered -> keep current decoder")
+                    }
+                    return
+                }
+                evaluateAudioStall(
+                    sinkEvent = AudioFailureEvidence.SinkEvent.UNDERRUN,
+                    nowMs = nowMs,
+                    requireVideoProgressAfterMs = audioUnderrunVideoBaselineMs,
+                    sourceProgressAfterIssue = exo.totalBufferedDuration >=
+                        audioUnderrunBufferBaselineMs + MIN_BUFFER_PROGRESS_EVIDENCE_MS,
+                    underrunObservation = observation,
+                )
+                if (!audioReported && generation == streamGeneration) {
+                    audioUnderrunCheckRunnable = this
+                    handler.postDelayed(this, AudioUnderrunMonitor.POLL_INTERVAL_MS)
+                }
+            }
+        }
+        audioUnderrunCheckRunnable = check
+        handler.postDelayed(check, AudioUnderrunMonitor.POLL_INTERVAL_MS)
+    }
+
+    private fun cancelAudioUnderrunCheck() {
+        audioUnderrunCheckRunnable?.let(handler::removeCallbacks)
+        audioUnderrunCheckRunnable = null
+        audioUnderrunMonitor.reset()
+        audioUnderrunVideoBaselineMs = 0L
+        audioUnderrunBufferBaselineMs = 0L
+    }
+
     private fun scheduleAudioClockStallCheck() {
         if (
             audioCodec != AudioFailureEvidence.Codec.AC3 ||
             allowPassthrough ||
             audioReported ||
+            videoFailureReported ||
+            player?.playWhenReady != true ||
             !firstFrameRendered
         ) {
             return
@@ -832,7 +940,10 @@ class ExoPlayerEngine(
         val generation = streamGeneration
         val check = Runnable {
             audioStallCheckRunnable = null
-            if (generation != streamGeneration || player?.playbackState != Player.STATE_BUFFERING) {
+            if (generation != streamGeneration || player?.playbackState != Player.STATE_BUFFERING ||
+                player?.playWhenReady != true ||
+                player?.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE
+            ) {
                 return@Runnable
             }
             val nowMs = SystemClock.elapsedRealtime()
@@ -865,6 +976,7 @@ class ExoPlayerEngine(
         audioReported = true
         cancelTrackSupportCheck()
         cancelAudioClockStallCheck()
+        cancelAudioUnderrunCheck()
         PlaybackLog.log(
             context,
             engineName,
@@ -899,6 +1011,8 @@ class ExoPlayerEngine(
     private fun reportDecodeFailure(detail: String) {
         if (videoFailureReported) return
         videoFailureReported = true
+        cancelAudioClockStallCheck()
+        cancelAudioUnderrunCheck()
         surfaceFrameHealth.reset()
         droppedFrameHealth.reset()
         cancelTrackSupportCheck()
@@ -948,6 +1062,8 @@ class ExoPlayerEngine(
     private fun reportVideoInvalid(detail: String) {
         if (videoFailureReported) return
         videoFailureReported = true
+        cancelAudioClockStallCheck()
+        cancelAudioUnderrunCheck()
         surfaceFrameHealth.reset()
         droppedFrameHealth.reset()
         cancelTrackSupportCheck()
@@ -1035,7 +1151,7 @@ class ExoPlayerEngine(
         audioDecoder = AudioFailureEvidence.Decoder.UNKNOWN
         audioDecoderInitialized = false
         audioClockStarted = false
-        audioUnderrunTimesMs.clear()
+        cancelAudioUnderrunCheck()
         audioBufferingSinceMs = 0L
         audioBufferingHadMediaProgress = false
         audioBufferingVideoBaselineMs = 0L
@@ -1069,6 +1185,7 @@ class ExoPlayerEngine(
         droppedFrameHealth.reset()
         streamGeneration += 1
         activeMediaId = null
+        audioUnderrunMonitor.reset()
         val retiredView = playerView
         // Disconnect the render surface before releasing the codec. Several TV
         // vendor MediaCodec implementations otherwise retain a destroyed view

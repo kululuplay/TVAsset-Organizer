@@ -11,7 +11,8 @@ import com.iptv.player.playback.core.AudioFailureEvidence
  * produced media and either:
  *
  *  - Media3 reports an audio sink/codec failure, or
- *  - repeated audio underruns happen while video is still advancing, or
+ *  - repeated underruns accompany a confirmed non-advancing audio sink clock
+ *    for the recovery grace period while video/input still advances, or
  *  - an initialized AC-3 decoder never starts its audio clock and remains in
  *    buffering after video was produced.
  *
@@ -33,11 +34,14 @@ internal object LiveAudioStallPolicy {
         val decoderInitialized: Boolean,
         val audioClockStarted: Boolean,
         val underrunsInWindow: Int = 0,
+        /** Fresh sink samples confirm no meaningful playout since the episode began. */
+        val audioClockStalledForMs: Long = 0L,
         val bufferingDurationMs: Long = 0L,
         val sinkEvent: AudioFailureEvidence.SinkEvent? = null,
     ) {
         init {
             require(underrunsInWindow >= 0) { "underrunsInWindow must not be negative" }
+            require(audioClockStalledForMs >= 0L) { "audioClockStalledForMs must not be negative" }
             require(bufferingDurationMs >= 0L) { "bufferingDurationMs must not be negative" }
         }
     }
@@ -58,7 +62,8 @@ internal object LiveAudioStallPolicy {
             evidence.decoderInitialized &&
             evidence.audioClockStarted &&
             (evidence.recentVideoProgress || evidence.sourceProgressAfterIssue) &&
-            evidence.underrunsInWindow >= MIN_UNDERRUNS
+            evidence.underrunsInWindow >= MIN_UNDERRUNS &&
+            evidence.audioClockStalledForMs >= AUDIO_UNDERRUN_RECOVERY_GRACE_MS
         ) {
             return Decision.FALLBACK_TO_VLC_PCM
         }
@@ -127,6 +132,7 @@ internal object LiveAudioStallPolicy {
     }
 
     const val AUDIO_CLOCK_START_TIMEOUT_MS = 6_000L
+    const val AUDIO_UNDERRUN_RECOVERY_GRACE_MS = 6_000L
     const val UNDERRUN_WINDOW_MS = 12_000L
     const val RECENT_VIDEO_PROGRESS_MS = 2_500L
     private const val MIN_UNDERRUNS = 2
