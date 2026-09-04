@@ -40,6 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import com.iptv.player.cast.ProviderConnectionSafety
+import com.iptv.player.playback.android.PlaybackQoeRuntime
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.PlaybackLog
 import com.iptv.player.util.PlaybackRemotePolicy
@@ -97,6 +98,7 @@ class VlcPlayerEngine(
     private val bufferingActive = AtomicBoolean(true)
     private val voutObserved = AtomicBoolean(false)
     private val playbackHealth = VlcPlaybackHealth()
+    private val bufferingClockRecovery = VlcBufferingClockRecoveryGate()
     private val healthHandler = Handler(Looper.getMainLooper())
     // Command continuations must survive health resets. Clearing healthHandler is
     // expected on every zap; using it for cleanup->attach accounting leaked
@@ -130,7 +132,8 @@ class VlcPlayerEngine(
                 maybeReportVideoOutput()
             }
         },
-        continueAfterHealthy = !forceSoftware,
+        continueAfterHealthy =
+            !forceSoftware && !PlaybackQoeRuntime.devicePlaybackProfile().compatibilityMode,
     )
     private val surfaceValidationDeadlineRunnable = Runnable {
         if (
@@ -182,8 +185,10 @@ class VlcPlayerEngine(
                 if (playbackFailureReported.get()) return
             }
             val mp = mediaPlayer ?: return
+            val session = eventSession.get()
             if (mp.currentVideoTrack != null) {
-                readHealthSample(mp)?.let { sample ->
+                val sample = readHealthSample(mp)
+                sample?.let {
                     if (
                         sample.decodedVideo > 0L ||
                         sample.displayedPictures > 0L ||
@@ -242,6 +247,43 @@ class VlcPlayerEngine(
                             reportVideoInvalid("video output froze while input/time advanced")
                     }
                 }
+                // On some older native builds video statistics never become
+                // usable. Sustained clock progress merely arms a finite image
+                // probe: a frozen picture with advancing audio must remain
+                // buffering until fresh video changes are actually observed.
+                if (
+                    isCurrentSession(mp, session) &&
+                    !playbackFailureReported.get() &&
+                    bufferingClockRecovery.shouldProbe(
+                        surfaceWasVerified = videoOutputReported,
+                        bufferingActive = bufferingActive.get(),
+                        videoStatsUsable = videoStatsUsable.get(),
+                        playbackPositionMs = sample?.playbackTimeMs
+                            ?: runCatching { mp.time }.getOrDefault(-1L),
+                        nowMs = SystemClock.elapsedRealtime(),
+                    )
+                ) {
+                    surfaceFrameHealth.requestProgressProbe { progressed ->
+                        if (!isCurrentSession(mp, session)) return@requestProgressProbe
+                        if (
+                            progressed &&
+                            videoOutputReported &&
+                            !videoStatsUsable.get() &&
+                            !playbackFailureReported.get() &&
+                            bufferingActive.compareAndSet(true, false)
+                        ) {
+                            playingObserved.set(true)
+                            PlaybackLog.log(
+                                context,
+                                engineName,
+                                "fresh SurfaceView pictures changed with unavailable stats -> buffering resumed",
+                            )
+                            listener?.onPlaying()
+                        }
+                    }
+                }
+            } else {
+                resetBufferingProgressProbe()
             }
             healthHandler.postDelayed(this, HEALTH_POLL_MS)
         }
@@ -523,12 +565,13 @@ class VlcPlayerEngine(
                     // completion tolerance because native progress may stop at
                     // 99.9; otherwise the spinner stays on screen forever.
                     if (isVlcBuffering(event.buffering)) {
-                        bufferingActive.set(true)
+                        if (!bufferingActive.getAndSet(true)) resetBufferingProgressProbe()
                         healthHandler.removeCallbacks(voutCompatibilityRunnable)
                         healthHandler.removeCallbacks(noDisplayedFrameRunnable)
                         healthHandler.removeCallbacks(noVideoPipelineRunnable)
                         listener?.onBuffering()
                     } else {
+                        resetBufferingProgressProbe()
                         val firstPlaying = playingObserved.compareAndSet(false, true)
                         val resumedFromBuffering = bufferingActive.getAndSet(false)
                         listener?.onPlaying()
@@ -545,6 +588,7 @@ class VlcPlayerEngine(
                     }
                 }
                 MediaPlayer.Event.Playing -> {
+                    resetBufferingProgressProbe()
                     val firstPlaying = playingObserved.compareAndSet(false, true)
                     val resumedFromBuffering = bufferingActive.getAndSet(false)
                     // VLC only accepts delays once the track is running.
@@ -590,6 +634,11 @@ class VlcPlayerEngine(
                     listener?.onError("VLC error")
                 }
             }
+    }
+
+    private fun resetBufferingProgressProbe() {
+        bufferingClockRecovery.reset()
+        surfaceFrameHealth.cancelProgressProbe()
     }
 
     /**
@@ -1045,6 +1094,7 @@ class VlcPlayerEngine(
         bufferingActive.set(true)
         voutObserved.set(false)
         playbackHealth.reset()
+        resetBufferingProgressProbe()
         healthHandler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()
         videoOutputReported = false

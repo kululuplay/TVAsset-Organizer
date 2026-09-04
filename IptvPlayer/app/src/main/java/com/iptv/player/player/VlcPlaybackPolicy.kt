@@ -31,4 +31,72 @@ internal fun shouldSignalVlcFrameProgressResumed(
     displayedFrameAdvanced: Boolean,
 ): Boolean = surfaceWasVerified && bufferingActive && displayedFrameAdvanced
 
+/**
+ * Compatibility fallback for VLC builds whose video statistics remain absent or
+ * all-zero. A clock alone never proves video progress: after initial surface
+ * verification, sustained clock movement merely permits a bounded fresh-image
+ * probe. Only that probe or native picture evidence may clear buffering.
+ */
+internal class VlcBufferingClockRecoveryGate {
+    private var previousPositionMs = UNSET
+    private var previousSampleAtMs = UNSET
+    private var progressStartedAtMs = UNSET
+    private var progressingIntervals = 0
+
+    fun shouldProbe(
+        surfaceWasVerified: Boolean,
+        bufferingActive: Boolean,
+        videoStatsUsable: Boolean,
+        playbackPositionMs: Long,
+        nowMs: Long,
+    ): Boolean {
+        if (!surfaceWasVerified || !bufferingActive || videoStatsUsable || playbackPositionMs < 0L) {
+            reset()
+            return false
+        }
+
+        val previousPosition = previousPositionMs
+        val previousSampleAt = previousSampleAtMs
+        previousPositionMs = playbackPositionMs
+        previousSampleAtMs = nowMs
+        if (previousPosition == UNSET || previousSampleAt == UNSET) return false
+
+        val sampleGapMs = nowMs - previousSampleAt
+        val positionAdvanceMs = playbackPositionMs - previousPosition
+        if (
+            sampleGapMs !in 1L..MAX_SAMPLE_GAP_MS ||
+            positionAdvanceMs < MIN_POSITION_ADVANCE_MS ||
+            // A timestamp jump/seek is not sustained real-time playback.
+            positionAdvanceMs > sampleGapMs * MAX_CLOCK_RATE
+        ) {
+            progressStartedAtMs = UNSET
+            progressingIntervals = 0
+            return false
+        }
+
+        if (progressStartedAtMs == UNSET) progressStartedAtMs = previousSampleAt
+        progressingIntervals++
+        val probeAllowed = progressingIntervals >= REQUIRED_PROGRESS_INTERVALS &&
+            nowMs - progressStartedAtMs >= MIN_PROGRESS_DURATION_MS
+        if (probeAllowed) reset()
+        return probeAllowed
+    }
+
+    fun reset() {
+        previousPositionMs = UNSET
+        previousSampleAtMs = UNSET
+        progressStartedAtMs = UNSET
+        progressingIntervals = 0
+    }
+
+    private companion object {
+        private const val UNSET = -1L
+        private const val MIN_POSITION_ADVANCE_MS = 250L
+        private const val MIN_PROGRESS_DURATION_MS = 3_000L
+        private const val MAX_SAMPLE_GAP_MS = 4_500L
+        private const val MAX_CLOCK_RATE = 2L
+        private const val REQUIRED_PROGRESS_INTERVALS = 2
+    }
+}
+
 private const val VLC_BUFFERING_COMPLETE_PERCENT = 99.5f

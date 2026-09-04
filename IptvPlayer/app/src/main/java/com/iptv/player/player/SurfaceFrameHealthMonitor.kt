@@ -29,6 +29,10 @@ internal class SurfaceFrameHealthMonitor(
     // PixelCopy/GPU work on weak sticks.
     private val continueAfterHealthy: Boolean = true,
 ) {
+    // Engines clear their health-handler messages on every zap. Native copy
+    // completions must still recycle their bitmap and retire in-flight state;
+    // generation checks below suppress all stale playback effects.
+    private val copyResultHandler = Handler(handler.looper)
     private val lock = Any()
     private val recoveryGate = GreenFrameRecoveryGate()
     private val unavailableRetry = SurfaceSampleRetryPolicy()
@@ -38,6 +42,16 @@ internal class SurfaceFrameHealthMonitor(
     private var classifiedFrame = false
     private var samplingUnavailable = false
     private var surfaceProvider: (() -> SurfaceView?)? = null
+    private var progressProbe: ProgressProbe? = null
+    // A timed-out native PixelCopy may still complete later. Do not start another
+    // probe against the GPU until that request actually returns.
+    private var progressSampleInFlight = false
+
+    private class ProgressProbe(
+        val generation: Int,
+        val onResult: (Boolean) -> Unit,
+        val policy: SurfaceProgressProbePolicy = SurfaceProgressProbePolicy(),
+    )
 
     fun hasClassifiedFrame(): Boolean = synchronized(lock) { classifiedFrame }
     fun hasHealthyFrame(): Boolean = synchronized(lock) { recoveryGate.hasHealthyFrame }
@@ -53,7 +67,96 @@ internal class SurfaceFrameHealthMonitor(
             recoveryGate.reset()
             unavailableRetry.reset()
             surfaceProvider = null
+            progressProbe?.policy?.cancel()
+            progressProbe = null
         }
+    }
+
+    /**
+     * Samples only on demand when playback appears stuck in buffering without
+     * native picture counters. Each probe starts with no historical image and
+     * requires two distinct, healthy captures. Failure/unavailability never
+     * proves resumed video. Reset or a new surface invalidates every callback.
+     */
+    fun requestProgressProbe(onResult: (Boolean) -> Unit): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        val probe = synchronized(lock) {
+            if (surfaceProvider == null || progressProbe != null || progressSampleInFlight) return false
+            ProgressProbe(generation, onResult).also { progressProbe = it }
+        }
+        handler.postDelayed({ finishProgressProbe(probe, false) }, PROBE_DEADLINE_MS)
+        handler.post { sampleProgress(probe) }
+        return true
+    }
+
+    fun cancelProgressProbe() {
+        synchronized(lock) {
+            progressProbe?.policy?.cancel()
+            progressProbe = null
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.N)
+    private fun sampleProgress(probe: ProgressProbe) {
+        val provider = synchronized(lock) {
+            if (progressProbe !== probe || generation != probe.generation) return
+            if (sampleInFlight) {
+                handler.postDelayed({ sampleProgress(probe) }, PROBE_SAMPLE_INTERVAL_MS)
+                return
+            }
+            surfaceProvider
+        }
+        val surface = runCatching { provider?.invoke() }.getOrNull()
+        if (surface == null || !surface.holder.surface.isValid || surface.width <= 0 || surface.height <= 0) {
+            finishProgressProbe(probe, false)
+            return
+        }
+        val bitmap = Bitmap.createBitmap(SAMPLE_WIDTH, SAMPLE_HEIGHT, Bitmap.Config.ARGB_8888)
+        synchronized(lock) { progressSampleInFlight = true }
+        runCatching {
+            PixelCopy.request(surface, bitmap, { result ->
+                val decision = try {
+                    synchronized(lock) {
+                        if (progressProbe !== probe || generation != probe.generation) {
+                            SurfaceProgressProbePolicy.Decision.FINISHED
+                        } else {
+                            val pixels = if (result == PixelCopy.SUCCESS) {
+                                IntArray(SAMPLE_WIDTH * SAMPLE_HEIGHT).also {
+                                    bitmap.getPixels(it, 0, SAMPLE_WIDTH, 0, 0, SAMPLE_WIDTH, SAMPLE_HEIGHT)
+                                }
+                            } else {
+                                null
+                            }
+                            probe.policy.onSample(pixels)
+                        }
+                    }
+                } finally {
+                    bitmap.recycle()
+                    synchronized(lock) { progressSampleInFlight = false }
+                }
+                when (decision) {
+                    SurfaceProgressProbePolicy.Decision.PROGRESS -> finishProgressProbe(probe, true)
+                    SurfaceProgressProbePolicy.Decision.FINISHED -> finishProgressProbe(probe, false)
+                    SurfaceProgressProbePolicy.Decision.WAIT ->
+                        handler.postDelayed({ sampleProgress(probe) }, PROBE_SAMPLE_INTERVAL_MS)
+                }
+            }, copyResultHandler)
+        }.onFailure {
+            bitmap.recycle()
+            synchronized(lock) { progressSampleInFlight = false }
+            finishProgressProbe(probe, false)
+        }
+    }
+
+    private fun finishProgressProbe(probe: ProgressProbe, progressed: Boolean) {
+        val callback = synchronized(lock) {
+            if (progressProbe !== probe) return
+            progressProbe = null
+            probe.policy.cancel()
+            if (generation != probe.generation) return
+            probe.onResult
+        }
+        callback(progressed)
     }
 
     fun start(provider: () -> SurfaceView?) {
@@ -82,6 +185,8 @@ internal class SurfaceFrameHealthMonitor(
         val sampleGeneration = synchronized(lock) {
             if (surfaceProvider == null) return
             generation++
+            progressProbe?.policy?.cancel()
+            progressProbe = null
             started = true
             sampleInFlight = false
             classifiedFrame = false
@@ -100,6 +205,14 @@ internal class SurfaceFrameHealthMonitor(
 
     @RequiresApi(Build.VERSION_CODES.N)
     private fun sample(sampleGeneration: Int) {
+        if (synchronized(lock) {
+                sampleGeneration == generation && started &&
+                    (progressProbe != null || progressSampleInFlight)
+            }
+        ) {
+            scheduleSample(sampleGeneration, PROBE_SAMPLE_INTERVAL_MS)
+            return
+        }
         val provider = synchronized(lock) {
             if (
                 sampleGeneration != generation ||
@@ -194,7 +307,7 @@ internal class SurfaceFrameHealthMonitor(
                     }
                     nextDelayMs?.let { scheduleSample(sampleGeneration, it) }
                 },
-                handler,
+                copyResultHandler,
             )
         }.onFailure {
             bitmap.recycle()
@@ -237,6 +350,8 @@ internal class SurfaceFrameHealthMonitor(
         private const val SAMPLE_HEIGHT = 18
         private const val INITIAL_SAMPLE_DELAY_MS = 120L
         private const val STARTUP_SAMPLE_INTERVAL_MS = 220L
+        private const val PROBE_SAMPLE_INTERVAL_MS = 200L
+        private const val PROBE_DEADLINE_MS = 1_500L
         // PixelCopy is serialized: the next capture is scheduled only after the
         // previous callback completes. This prevents a delayed old green capture
         // from racing a newer healthy one and restarting an already-correct image.

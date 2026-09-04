@@ -54,6 +54,7 @@ jobs:
       - name: Test telemetry receiver and release verifier
         working-directory: .
         run: |
+          npm ci --ignore-scripts --no-audit --no-fund
           npm test
           python3 scripts/test_verify_android_upgrade.py
 
@@ -235,6 +236,7 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.name }}
           name: Kululu IPTV v${{ steps.version.outputs.name }}
+          body: Bug fixes and stability improvements.
           make_latest: true
           files: IptvPlayer/release-assets/*.apk
           fail_on_unmatched_files: true

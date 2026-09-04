@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>Kululu Destek Merkezi</title><link rel="stylesheet" href="/desk.css"><script src="/desk.js" defer></script></head>
+<body>
+<section id="login" class="login-shell">
+  <form id="login-form" class="login-card">
+    <div class="brand-mark" aria-hidden="true">K</div><p class="eyebrow">KULULU · DESTEK MERKEZİ</p>
+    <h1>Destek masanız.</h1><p class="muted">Müşteri istekleri ve oynatma raporları, tek yerde.</p>
+    <label for="username">Kullanıcı adı</label><input id="username" name="username" autocomplete="username" required maxlength="80">
+    <label for="password">Parola</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="256">
+    <p id="login-error" role="alert" class="error"></p><button class="primary" id="login-submit">Giriş yap <span aria-hidden="true">↗</span></button>
+    <p class="fine">Yalnızca yetkili Kululu ekibi.</p>
+  </form>
+</section>
+<div id="workspace" class="workspace" hidden>
+  <aside class="sidebar"><div class="brand"><span class="brand-mark" aria-hidden="true">K</span><div>Kululu<span>Destek merkezi</span></div></div>
+    <nav aria-label="Destek görünümleri"><button class="nav active" data-view="all">Gelen kutusu <span>↗</span></button><button class="nav" data-view="diagnostic">Oynatma raporları</button><button class="nav" data-view="requests">İstek ve şikâyetler</button></nav>
+    <div class="sidebar-foot"><span class="status-dot"></span> Özel yönetim paneli<p id="admin-name"></p><button id="logout" class="quiet">Oturumu kapat</button></div>
+  </aside>
+  <main>
+    <header class="topbar"><div><p class="eyebrow">MÜŞTERİ DESTEĞİ</p><h1 id="view-title">Gelen kutusu</h1></div><button id="refresh" class="secondary">↻ Yenile</button></header>
+    <section class="stats" aria-label="Destek özeti"><article><span>Bekleyen kayıt</span><strong id="stat-open">—</strong><small>Yeni ve incelenen</small></article><article><span>Oynatma raporu</span><strong id="stat-reports">—</strong><small>Teknik inceleme için</small></article><article><span>Raporlayan cihaz</span><strong id="stat-devices">—</strong><small>Anonim kurulum kimliği</small></article><article><span>Toplam kayıt</span><strong id="stat-total">—</strong><small>Tüm istek ve raporlar</small></article></section>
+    <section class="inbox"><div class="toolbar"><form id="search-form" class="search"><label class="sr-only" for="query">Kod, mesaj, model veya sürüm ara</label><input id="query" maxlength="100" placeholder="Kod, mesaj, model veya sürüm ara…" type="search"><button class="quiet">Ara</button></form><label class="sr-only" for="filter-status">Durum</label><select id="filter-status"><option value="">Tüm durumlar</option><option value="new">Yeni</option><option value="reviewing">İnceleniyor</option><option value="done">Çözüldü</option></select><label class="sr-only" for="filter-type">Kayıt türü</label><select id="filter-type"><option value="">Tüm türler</option><option value="diagnostic">Oynatma raporu</option><option value="channel">Kanal isteği</option><option value="movie">Film isteği</option><option value="series">Dizi isteği</option><option value="complaint">Şikâyet</option></select></div>
+      <p id="page-message" class="page-message" role="status" aria-live="polite"></p>
+      <div class="table-wrap"><table><thead><tr><th>Kayıt</th><th>Cihaz / sürüm</th><th>Durum</th><th>Alınma zamanı</th><th><span class="sr-only">İşlem</span></th></tr></thead><tbody id="tickets"></tbody></table></div>
+      <div id="empty" class="empty" hidden><div aria-hidden="true">↘</div><h2>Burada henüz kayıt yok.</h2><p>Uygulamadan gönderilen raporlar ve istekler bu kutuda görünecek.</p></div>
+      <footer class="list-footer"><span id="record-count"></span><button id="more" class="secondary" hidden>Daha fazla göster</button></footer>
+    </section>
+    <p class="fine">Tanılama logları 90 gün saklanır. IPTV parolaları ve erişim belirteçleri maskelenir. Kayıt numarasıyla ilgili müşteriyi bulabilirsiniz.</p>
+  </main>
+</div>
+<dialog id="detail"><header><div><p id="detail-type" class="eyebrow"></p><h2 id="detail-code"></h2></div><button id="close-detail" class="secondary" aria-label="Ayrıntıyı kapat">✕</button></header><div class="detail-body"><div id="detail-meta" class="detail-meta"></div><h3>Müşteri mesajı / rapor özeti</h3><p id="detail-message" class="prewrap"></p><section id="log-section"><div class="log-heading"><h3>Oynatma kaydı</h3><button id="copy-log" class="quiet">Kopyala</button></div><pre id="detail-log" tabindex="0"></pre></section><p id="detail-error" role="alert" class="error"></p></div><footer><label for="detail-status">Kayıt durumu</label><select id="detail-status"><option value="new">Yeni</option><option value="reviewing">İnceleniyor</option><option value="done">Çözüldü</option></select><button id="save-status" class="primary">Durumu kaydet</button></footer></dialog>
+</body></html>

@@ -1,0 +1,25 @@
+[Unit]
+Description=Kululu Support Desk
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=kululu-support
+Group=kululu-support
+WorkingDirectory=/opt/kululu-support
+EnvironmentFile=/etc/kululu-support/service.env
+ExecStart=/usr/bin/node --max-old-space-size=256 support-desk/server.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

@@ -823,7 +823,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
             engineName = engineName,
             expectsVideo = !viewModel.radioMode,
         )
-        cancelAutoRetry(resetAttempts = true)
+        cancelAutoRetry(resetAttempts = false)
         binding.errorOverlay.visibility = View.GONE
         PlaybackQoeRuntime.markEngine(qoeSessionId, LivePlaybackQoePolicy.engine(engineName))
         PlaybackQoeRuntime.markReady(qoeSessionId)
@@ -858,7 +858,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         loadingOverlayPolicy.onVideoResumed()
         // First real frame on the (re)attached surface — clear the hand-off cover
         // and any reconnect indicator the moment playback genuinely resumes.
-        cancelAutoRetry(resetAttempts = true)
+        cancelAutoRetry(resetAttempts = false)
         binding.errorOverlay.visibility = View.GONE
         binding.playbackCover.visibility = View.GONE
         binding.bufferingIndicator.visibility = View.GONE
@@ -874,6 +874,13 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         if (castOwnsPlayback || castLoadPending) return
         loadingOverlayPolicy.onEngineChanged(engineName)
         PlaybackQoeRuntime.markEngine(qoeSessionId, LivePlaybackQoePolicy.engine(engineName))
+    }
+
+    override fun onStablePlayback() {
+        if (castOwnsPlayback || castLoadPending) return
+        // Cache readiness or one frame cannot forgive a repeated playback loop.
+        // The controller confirms sustained clock progress for TV and radio.
+        cancelAutoRetry(resetAttempts = true)
     }
 
     override fun onTransportResolved(format: StreamFormat) {
@@ -965,9 +972,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
     }
 
     /**
-     * Stops any pending automatic retry/countdown. [resetAttempts] only on real
-     * success or an explicit user action (manual retry / channel change) — never
-     * on a mere new attempt, which would defeat the growing backoff.
+     * Stops any pending automatic retry/countdown. Reset only after sustained
+     * playback or an explicit manual retry/channel change; one frame is not enough.
      */
     private fun cancelAutoRetry(resetAttempts: Boolean) {
         autoRetryHandler.removeCallbacksAndMessages(null)

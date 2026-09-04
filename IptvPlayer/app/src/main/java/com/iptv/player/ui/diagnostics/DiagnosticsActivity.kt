@@ -1,15 +1,13 @@
 /*
  * DiagnosticsActivity.kt
  * Runs connectivity diagnostics sequentially (internet, ping, speed, DNS) and
- * renders pass/fail rows with detail text. Shows device info and can share a
- * plain-text log summary via an ACTION_SEND intent.
+ * renders pass/fail rows with detail text. Device info and diagnostic logs can
+ * be sent directly to support after explicit confirmation.
  */
 package com.iptv.player.ui.diagnostics
 
 import android.app.ActivityManager
-import android.content.Intent
 import android.media.MediaCodecList
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.StatFs
@@ -18,9 +16,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
-import android.widget.Toast
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.lifecycle.lifecycleScope
 import com.iptv.player.R
@@ -28,9 +24,9 @@ import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.DiagnosticResult
 import com.iptv.player.databinding.ActivityDiagnosticsBinding
 import com.iptv.player.ui.common.BaseActivity
-import com.iptv.player.util.Logger
 import com.iptv.player.util.NetworkUtils
 import com.iptv.player.util.PeeringTester
+import com.iptv.player.util.SupportDiagnosticDialog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -429,29 +425,7 @@ class DiagnosticsActivity : BaseActivity() {
                 appendLine("${getString(R.string.diag_peering)}: $it")
             }
         }
-        // Attach the rotating app log file when available so provider/playback
-        // failures captured in the field travel with the diagnostics report.
-        val logUri: Uri? = Logger.shareableFile()?.let { file ->
-            runCatching {
-                FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-            }.getOrNull()
-        }
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            putExtra(Intent.EXTRA_SUBJECT, getString(R.string.diag_logs_subject))
-            putExtra(Intent.EXTRA_TEXT, summary)
-            if (logUri != null) {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_STREAM, logUri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            } else {
-                type = "text/plain"
-            }
-        }
-        runCatching {
-            startActivity(Intent.createChooser(intent, getString(R.string.diag_send_logs)))
-        }.onFailure {
-            Toast.makeText(this, R.string.settings_share_unavailable, Toast.LENGTH_SHORT).show()
-        }
+        SupportDiagnosticDialog.show(this, summary)
     }
 
     private companion object {

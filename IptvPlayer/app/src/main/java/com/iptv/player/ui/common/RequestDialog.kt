@@ -24,6 +24,8 @@ import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.iptv.player.R
 import com.iptv.player.util.RequestReporter
+import com.iptv.player.util.SupportResult
+import com.iptv.player.util.SupportFailureKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -136,8 +138,8 @@ object RequestDialog {
             messageBox.nextFocusUpId = chips[selected].id
         }
 
-        fun showInline(messageRes: Int, success: Boolean) {
-            inlineStatus.setText(messageRes)
+        fun showInline(message: CharSequence, success: Boolean) {
+            inlineStatus.text = message
             inlineStatus.setTextColor(
                 ContextCompat.getColor(
                     activity,
@@ -293,14 +295,15 @@ object RequestDialog {
                         )
                     }
                 }
-                RequestReporter.HistoryResult.Error -> {
+                RequestReporter.HistoryResult.Error, is RequestReporter.HistoryResult.DetailedError -> {
                     clearHistoryStateCardFocus()
                     historyRows = emptyList()
                     historyList.removeAllViews()
                     historyList.visibility = View.GONE
                     historyStateRow.visibility = View.VISIBLE
                     historyProgress.visibility = View.GONE
-                    historyState.setText(R.string.request_history_failed)
+                    historyState.text = (result as? RequestReporter.HistoryResult.DetailedError)
+                        ?.failure?.userMessage ?: activity.getString(R.string.request_history_failed)
                     historyState.setTextColor(
                         ContextCompat.getColor(activity, R.color.danger)
                     )
@@ -387,7 +390,7 @@ object RequestDialog {
             val raw = messageBox.text?.toString().orEmpty()
             val normalized = RequestReporter.normalizeMessage(raw)
             if (normalized == null) {
-                showInline(R.string.request_empty, success = false)
+                showInline(activity.getString(R.string.request_empty), success = false)
                 messageBox.requestFocus()
                 return@setOnClickListener
             }
@@ -397,12 +400,12 @@ object RequestDialog {
             setSendingState(isSending = true)
             sendJob?.cancel()
             sendJob = activity.lifecycleScope.launch {
-                val sent = try {
-                    RequestReporter.send(activity, type, normalized)
+                val result = try {
+                    RequestReporter.sendDetailed(activity, type, normalized)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
-                    false
+                    SupportResult.Failure(SupportFailureKind.UNKNOWN)
                 }
                 if (
                     !dialog.isShowing ||
@@ -410,6 +413,7 @@ object RequestDialog {
                     activity.isDestroyed
                 ) return@launch
 
+                val sent = result is SupportResult.Success
                 setSendingState(isSending = false, retry = !sent)
                 if (sent) {
                     // Sending deliberately leaves the editor enabled so a TV user
@@ -418,10 +422,10 @@ object RequestDialog {
                     if (messageBox.text?.toString().orEmpty() == raw) {
                         messageBox.setText("")
                     }
-                    showInline(R.string.request_sent, success = true)
+                    showInline(result.userMessage, success = true)
                     loadHistory()
                 } else {
-                    showInline(R.string.request_failed, success = false)
+                    showInline(result.userMessage, success = false)
                 }
             }
         }
@@ -507,7 +511,8 @@ object RequestDialog {
             )
 
             val type = typeLabel(activity, request.type)
-            row.findViewById<TextView>(R.id.histType).text = type
+            row.findViewById<TextView>(R.id.histType).text =
+                if (request.code.isBlank()) type else "$type · ${request.code}"
             row.findViewById<TextView>(R.id.histMessage).text = request.message
 
             val dateText = formatCreatedAt(request.createdAt)
@@ -521,6 +526,7 @@ object RequestDialog {
 
             row.contentDescription = listOfNotNull(
                 type,
+                request.code.takeIf { it.isNotBlank() },
                 status.text?.toString(),
                 dateText,
                 request.message,

@@ -1945,7 +1945,7 @@ class HomeActivity : BaseActivity() {
     }
 
     private fun markPreviewReady() {
-        cancelAutoRetry(resetAttempts = true)
+        cancelAutoRetry(resetAttempts = castOwnsPreviewPlayback)
         previewState = LivePreviewPressPolicy.Phase.READY
         binding.previewPlaybackCover.visibility = View.GONE
         binding.previewLoading.visibility = View.GONE
@@ -1960,6 +1960,11 @@ class HomeActivity : BaseActivity() {
 
     /** UI callback: TV becomes READY only after a real frame; radio on audio playback. */
     private fun buildPreviewCallback() = object : PlayerController.Callback {
+        override fun onStablePlayback() {
+            if (castOwnsPreviewPlayback || castLoadPending) return
+            cancelAutoRetry(resetAttempts = true)
+        }
+
         override fun onBuffering() {
             if (castOwnsPreviewPlayback || castLoadPending) return
             previewLoadingPolicy.onBuffering()

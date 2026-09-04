@@ -187,7 +187,7 @@
     <string name="settings_audio_passthrough">Audio passthrough (for AV receivers)</string>
     <string name="settings_audio_passthrough_warning">Only enable this if an AV receiver or soundbar with Dolby/DTS decoding is connected. On TVs and projectors without a decoder, the picture will play but there will be NO sound. If sound is missing, turn this off.</string>
     <string name="settings_debug_overlay">Debug overlay (on player + preview)</string>
-    <string name="settings_share_playback_log">Share playback log</string>
+    <string name="settings_share_playback_log">Send playback log</string>
     <string name="settings_playback_log_empty">No playback log yet</string>
     <string name="settings_language">Language</string>
     <string name="settings_general">General</string>
@@ -302,4 +302,14 @@
     <string name="recovery_safe_mode">Safe mode: the app crashed repeatedly at startup, so playback settings were reset to their defaults.</string>
     <string name="error_auto_retry_countdown">Could not connect. Retrying automatically in %1$d s…</string>
     <string name="error_auto_retry_exhausted">Still can\'t connect. Press Retry to try again.</string>
+    <string name="support_diagnostic_title">Send diagnostic report</string>
+    <string name="support_diagnostic_confirm">Send device and app information, configured playback settings, test results, and redacted playback and app logs directly to Kululu Support? Login details are removed. Logs are retained for 90 days.</string>
+    <string name="support_diagnostic_playback_summary">Playback diagnostic report sent from app settings.</string>
+    <string name="support_diagnostic_send">Send</string>
+    <string name="support_diagnostic_cancel">Cancel</string>
+    <string name="support_diagnostic_retry">Retry</string>
+    <string name="support_diagnostic_close">Close</string>
+    <string name="support_diagnostic_sending">Preparing and sending your report… Please wait for the support number. You can cancel at any time.</string>
+    <string name="support_diagnostic_interrupted">Sending was interrupted. Retry to check delivery and receive your support number; duplicate reports are avoided.</string>
+    <string name="support_diagnostic_incomplete">Some logs or settings were unavailable on this device. The available information was sent.</string>
 </resources>

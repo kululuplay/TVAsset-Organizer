@@ -23,6 +23,7 @@
 package com.iptv.player.player
 
 import android.content.Context
+import android.app.ActivityManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -44,7 +45,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DecoderReuseEvaluation
-import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ExoPlaybackException
@@ -80,6 +80,13 @@ class ExoPlayerEngine(
      * playback until a real frame has been verified on the video surface.
      */
     private val expectsVideo: Boolean = true,
+    private val initialRebuffers: Int = 0,
+    private val constrainedDevice: Boolean =
+        PlaybackQoeRuntime.devicePlaybackProfile().compatibilityMode ||
+            runCatching {
+                (context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)
+                    ?.isLowRamDevice == true
+            }.getOrDefault(false),
 ) : PlayerEngine {
 
     override val engineName: String = "ExoPlayer"
@@ -87,6 +94,7 @@ class ExoPlayerEngine(
 
     private var player: ExoPlayer? = null
     private var playerView: PlayerView? = null
+    private val playbackClockWindow = Timeline.Window()
     private var listener: PlayerListener? = null
     private var preferredAudioLanguage: String? = null
     private var subtitlePreference: LiveSubtitlePreference = LiveSubtitlePreference.Auto
@@ -115,7 +123,6 @@ class ExoPlayerEngine(
     private var activeMediaId: String? = null
     private var trackSupportCheckRunnable: Runnable? = null
     private var noFrameCheckRunnable: Runnable? = null
-    private var hardwareDecodeRequired = false
     private var lastSurfaceWidth = 0
     private var lastSurfaceHeight = 0
     private val droppedFrameHealth = DroppedFrameRecoveryGate()
@@ -141,6 +148,10 @@ class ExoPlayerEngine(
                 reportVerifiedVideoOutput()
             }
         },
+        // Even a tiny destination can require a full-resolution GPU readback on
+        // old gralloc implementations. Verify startup/reattach, then let native
+        // frame and clock evidence monitor ongoing playback on constrained TVs.
+        continueAfterHealthy = !constrainedDevice,
     )
 
     // A successful first copy that caught a transient green/black surface followed
@@ -162,7 +173,7 @@ class ExoPlayerEngine(
     private val videoProgressRunnable = object : Runnable {
         override fun run() {
             val p = player ?: return
-            val position = p.currentPosition.coerceAtLeast(0L)
+            val position = exoPlaybackClockPositionMs(p, playbackClockWindow).coerceAtLeast(0L)
             val clockAdvance = if (lastHealthPositionMs >= 0L) {
                 (position - lastHealthPositionMs).coerceAtLeast(0L)
             } else {
@@ -171,16 +182,12 @@ class ExoPlayerEngine(
             lastHealthPositionMs = position
             val lastFrame = lastVideoFrameAtMs.get()
             val decision = LiveVideoLivenessPolicy.classify(
-                evidence = LiveVideoLivenessPolicy.Evidence(
-                    playbackReady =
-                        !videoFailureReported &&
-                            firstFrameRendered &&
-                            p.playWhenReady &&
-                            p.playbackState == Player.STATE_READY &&
-                            p.videoFormat != null,
-                    inputBuffering = p.isLoading || p.playbackState == Player.STATE_BUFFERING,
-                    mediaClockAdvanceMs = clockAdvance,
-                    lastFrameAgeMs = lastFrame.takeIf { it > 0L }?.let {
+                evidence = liveVideoEvidence(
+                    player = p,
+                    firstFrameRendered = firstFrameRendered && p.videoFormat != null,
+                    videoFailureReported = videoFailureReported,
+                    clockAdvanceMs = clockAdvance,
+                    frameAgeMs = lastFrame.takeIf { it > 0L }?.let {
                         SystemClock.elapsedRealtime() - it
                     },
                 ),
@@ -198,16 +205,11 @@ class ExoPlayerEngine(
     }
 
     override fun bind(container: ViewGroup) {
-        // Buffer durations from the user's "Buffer size" setting (smaller = faster
-        // zap, larger = fewer stalls on jittery links).
-        val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                /* minBufferMs = */ bufferMode.exoMinBufferMs,
-                /* maxBufferMs = */ bufferMode.exoMaxBufferMs,
-                /* bufferForPlaybackMs = */ bufferMode.exoPlaybackMs,
-                /* bufferForPlaybackAfterRebufferMs = */ bufferMode.exoRebufferMs
-            )
-            .build()
+        val loadControl = LiveLoadControl(bufferMode, constrainedDevice, initialRebuffers)
+        PlaybackLog.log(
+            context, engineName,
+            "liveBuffer=$bufferMode constrained=$constrainedDevice priorRebuffers=$initialRebuffers",
+        )
 
         // Identify every HTTP(S) stream pull as KULULUPLAY (some providers gate
         // playback on the User-Agent).
@@ -538,12 +540,6 @@ class ExoPlayerEngine(
                 decoderReuseEvaluation: DecoderReuseEvaluation?
             ) {
                 if (!isCurrentEvent(eventTime)) return
-                hardwareDecodeRequired =
-                    hardwareDecodeRequired ||
-                    VlcHardwareDevicePolicy.requiresHardwareDecode(
-                        width = format.width,
-                        height = format.height,
-                    )
                 PlaybackLog.log(
                     context, engineName,
                     "videoInputFormat ${format.width}x${format.height} " +
@@ -558,27 +554,20 @@ class ExoPlayerEngine(
             ) {
                 if (!isCurrentEvent(eventTime)) return
                 PlaybackLog.log(context, engineName, "droppedVideoFrames=$droppedFrames/${elapsedMs}ms")
-                // UHD software decode is categorically slower than real time on
-                // TV sticks. A drop callback alone must not evict a healthy
-                // MediaCodec path into that impossible route; real codec errors,
-                // solid output and the frame-stall watchdog remain authoritative.
-                if (hardwareDecodeRequired) {
-                    PlaybackLog.log(
-                        context,
-                        engineName,
-                        "UHD drop batch observed; keep hardware path pending real output failure",
-                    )
-                    return
-                }
+                // Drops measure quality, not decoder failure. Evicting hardware
+                // after a few lost 1080p50 frames can force an old stick into
+                // CPU-bound software decoding. Codec errors and independently
+                // confirmed frozen/invalid output still own recovery.
                 val breach = droppedFrameHealth.onDroppedFrames(
                     nowMs = SystemClock.elapsedRealtime(),
                     droppedFrames = droppedFrames,
                     elapsedMs = elapsedMs,
                 )
                 if (breach != null) {
-                    reportVideoInvalid(
-                        "excessive frame loss ${breach.droppedFrames} frames/" +
-                            "${breach.windowMs}ms",
+                    PlaybackLog.log(
+                        context, engineName,
+                        "sustained frame loss ${breach.droppedFrames}/${breach.windowMs}ms; " +
+                            "await output evidence before decoder fallback",
                     )
                 }
             }
@@ -1054,7 +1043,6 @@ class ExoPlayerEngine(
         audioUnderrunVideoBaselineMs = 0L
         audioStallCheckRunnable = null
         readyForPlayback = false
-        hardwareDecodeRequired = false
         lastSurfaceWidth = 0
         lastSurfaceHeight = 0
         trackSupportCheckRunnable = null
@@ -1071,7 +1059,9 @@ class ExoPlayerEngine(
     // Read on the main thread (Media3 requires it); the controller's stall
     // watchdog polls from a main-looper Handler. Advances during live playback,
     // freezes on a silent source stall.
-    override fun playbackPositionMs(): Long = player?.currentPosition ?: -1L
+    override fun playbackPositionMs(): Long = player?.let {
+        exoPlaybackClockPositionMs(it, playbackClockWindow)
+    } ?: -1L
 
     override fun release() {
         handler.removeCallbacksAndMessages(null)

@@ -23,7 +23,6 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.view.AccessibilityDelegateCompat
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.lifecycle.ViewModelProvider
@@ -45,7 +44,7 @@ import com.iptv.player.ui.profiles.ProfilesActivity
 import com.iptv.player.ui.splash.SplashPrefetch
 import com.iptv.player.util.LocaleManager
 import com.iptv.player.util.Logger
-import com.iptv.player.util.PlaybackLog
+import com.iptv.player.util.SupportDiagnosticDialog
 import com.iptv.player.util.PublicIpProvider
 import com.iptv.player.util.SpeedTester
 import com.iptv.player.work.SyncScheduler
@@ -1519,22 +1518,7 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun sharePlaybackLog() {
-        val file = PlaybackLog.shareableFile(this)
-        if (file == null || !file.exists()) {
-            Toast.makeText(this, R.string.settings_playback_log_empty, Toast.LENGTH_SHORT).show()
-            return
-        }
-        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-        val send = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        runCatching {
-            startActivity(Intent.createChooser(send, getString(R.string.settings_share_playback_log)))
-        }.onFailure {
-            Toast.makeText(this, R.string.settings_share_unavailable, Toast.LENGTH_SHORT).show()
-        }
+        SupportDiagnosticDialog.show(this, getString(R.string.support_diagnostic_playback_summary))
     }
 
     private companion object {
