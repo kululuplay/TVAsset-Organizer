@@ -148,6 +148,25 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon :app:assembleRelease --stacktrace
 
+      - name: Verify MPEG decoder resource packaging
+        # R8 must preserve JLayer's synthesis resource as well as its license.
+        # Check the final minified artifact before it can become an update.
+        # Version metadata is read in the following step.
+        run: |
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          required = {
+              "javazoom/jl/decoder/sfd.ser",
+              "assets/licenses/LGPL-2.1.txt",
+              "assets/licenses/JLayer-NOTICE.txt",
+          }
+          with ZipFile("app/build/outputs/apk/release/app-release.apk") as apk:
+              missing = required - set(apk.namelist())
+              if missing:
+                  raise SystemExit("Missing MPEG decoder resources: " + ", ".join(sorted(missing)))
+          print("MPEG decoder resource and license packaging verified")
+          PY
+
       - name: Read version
         id: version
         run: |
