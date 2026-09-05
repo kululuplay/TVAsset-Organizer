@@ -1,0 +1,23 @@
+JLayer 1.0.1 — JavaZOOM and contributors (1999–2008).
+MPEG audio decoding library, used unmodified, under LGPL 2.1 or later.
+Individual source files retain their original copyright and license notices.
+
+Binary coordinate: javazoom:jlayer:1.0.1 (Maven Central)
+Corresponding source:
+https://repo.maven.apache.org/maven2/javazoom/jlayer/1.0.1/jlayer-1.0.1-sources.jar
+Upstream project: http://www.javazoom.net/javalayer/javalayer.html
+License: LGPL-2.1.txt in this directory.
+
+The application uses only javazoom.jl.decoder. It does not use the desktop
+player, JavaSound, URL loaders, or native decoders from this dependency.
+The library is supplied without warranty. LGPL rights, including modification
+of this library and reverse engineering to debug those modifications, remain
+unrestricted by the application's terms.
+
+To rebuild with a modified library, obtain the corresponding source above,
+build a replacement JAR retaining javazoom.jl.decoder and its .ser resources,
+replace implementation("javazoom:jlayer:1.0.1") in IptvPlayer/app/build.gradle.kts
+with implementation(files("libs/jlayer-modified.jar")), place that JAR under
+IptvPlayer/app/libs/, then run ./gradlew :app:assembleDebug using JDK 17 and
+Android SDK 35. The application build source is available at:
+https://github.com/kululuplay/TVAsset-Organizer

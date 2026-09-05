@@ -24,8 +24,8 @@ android {
         applicationId = "com.iptv.player"
         minSdk = 21
         targetSdk = 34
-        versionCode = 129
-        versionName = "1.5.85"
+        versionCode = 130
+        versionName = "1.5.86"
 
         // Service credentials are injected by CI/local environment and never
         // committed. Blank values disable the optional integration gracefully.
@@ -169,6 +169,9 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-dash:1.8.1")
     implementation("androidx.media3:media3-ui:1.8.1")
     implementation("androidx.media3:media3-common:1.8.1")
+    // Audio-only MPEG Layer I/II/III fallback. No second player/network pull and
+    // no native video decoder: Media3 retains the device's hardware video path.
+    implementation("javazoom:jlayer:1.0.1")
     // libVLC = fallback engine (broadest codec coverage: DTS/AC3/EAC3/etc.).
     // 3.6.5 keeps Android 5+/compileSdk 35 compatibility while carrying the
     // current stable 3.x decoder/surface fixes. 3.7.5 declares minCompileSdk 36

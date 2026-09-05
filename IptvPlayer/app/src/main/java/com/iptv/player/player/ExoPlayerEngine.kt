@@ -4,12 +4,12 @@
  * progressive automatically. Tuned for fast live startup with small buffers.
  *
  * Real-stick hardening (emulator hides these because it decodes in software):
- *   - Audio is forced to PCM (passthrough disabled by default) so AC-3/E-AC-3/
- *     AAC always produce sound; tunneling is disabled (a common green/black
- *     frame cause on cheap sticks).
- *   - When the device has no decoder for an audio codec (e.g. AC-3/E-AC-3/MP2),
- *     the audio track ends up unsupported/unselected -> onAudioUnavailable so the
- *     controller can fall back to libVLC (software PCM decode).
+ *   - Audio prefers decoded PCM (passthrough disabled by default); codec
+ *     availability is checked below. Tunneling is disabled (a common
+ *     green/black frame cause on cheap sticks).
+ *   - A bundled MPEG-1 audio-only renderer covers missing Layer-I/II/III codecs
+ *     while keeping hardware video. Other unsupported codecs (e.g. AC-3/E-AC-3)
+ *     still report onAudioUnavailable so the controller can fall back to libVLC.
  *   - Video uses a SurfaceView (required: Amlogic and most TV SoCs composite
  *     hardware-decoded frames on an underlay plane a TextureView cannot show,
  *     which is the real green-screen cause). The PlayerView uses resize_mode=fill
@@ -48,8 +48,10 @@ import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ExoPlaybackException
+import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioCapabilities
+import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
@@ -130,6 +132,7 @@ class ExoPlayerEngine(
     private var lastSurfaceWidth = 0
     private var lastSurfaceHeight = 0
     private val droppedFrameHealth = DroppedFrameRecoveryGate()
+    private val surfaceReadbackPolicy = SurfaceReadbackPolicy(constrainedDevice)
 
     private val surfaceFrameHealth = SurfaceFrameHealthMonitor(
         handler = handler,
@@ -156,6 +159,9 @@ class ExoPlayerEngine(
         // old gralloc implementations. Verify startup/reattach, then let native
         // frame and clock evidence monitor ongoing playback on constrained TVs.
         continueAfterHealthy = !constrainedDevice,
+        allowPeriodicSampling = {
+            surfaceReadbackPolicy.mode == SurfaceReadbackPolicy.Mode.CONTINUOUS
+        },
     )
 
     // A successful first copy that caught a transient green/black surface followed
@@ -269,19 +275,7 @@ class ExoPlayerEngine(
                 ) {
                     lastSurfaceWidth = width
                     lastSurfaceHeight = height
-                    if (firstFrameRendered) {
-                        surfaceFrameHealth.onOutputTransition()
-                        if (!videoOutputReported) {
-                            handler.removeCallbacks(surfaceValidationDeadlineRunnable)
-                            handler.postDelayed(
-                                surfaceValidationDeadlineRunnable,
-                                PIXEL_VALIDATION_DEADLINE_MS,
-                            )
-                        }
-                        droppedFrameHealth.onOutputTransition(
-                            SystemClock.elapsedRealtime(),
-                        )
-                    }
+                    revalidateVideoOutput()
                 }
             }
         })
@@ -455,7 +449,10 @@ class ExoPlayerEngine(
                 if (!isCurrentEvent(eventTime)) return
                 audioDecoderInitialized = true
                 audioDecoder = LiveAudioStallPolicy.decoderForName(decoderName)
-                PlaybackLog.log(context, engineName, "audioDecoder=${audioDecoder.name}")
+                PlaybackLog.log(
+                    context, engineName,
+                    "audioDecoder=${audioDecoder.name} mpegPcm=${decoderName == MpegAudioDecoder.NAME}",
+                )
                 if (exo.playbackState == Player.STATE_BUFFERING) {
                     scheduleAudioClockStallCheck()
                 }
@@ -548,6 +545,10 @@ class ExoPlayerEngine(
                 initializationDurationMs: Long
             ) {
                 if (!isCurrentEvent(eventTime)) return
+                val previousMode = surfaceReadbackPolicy.mode
+                val decoderChanged = surfaceReadbackPolicy.onVideoDecoderInitialized(decoderName)
+                if (decoderChanged) revalidateVideoOutput()
+                logReadbackModeChange(previousMode)
                 PlaybackLog.log(context, engineName, "videoDecoder=$decoderName")
             }
 
@@ -557,6 +558,15 @@ class ExoPlayerEngine(
                 decoderReuseEvaluation: DecoderReuseEvaluation?
             ) {
                 if (!isCurrentEvent(eventTime)) return
+                val previousMode = surfaceReadbackPolicy.mode
+                // A reused MediaCodec may not emit another initialized event.
+                val decoderChanged = decoderReuseEvaluation?.decoderName
+                    ?.let(surfaceReadbackPolicy::onVideoDecoderInitialized) == true
+                val sourceChanged = surfaceReadbackPolicy.onVideoFormat(format.width, format.height)
+                // A UHD decoder buffer can change while the display stays 1080p.
+                // Never inherit old healthy pixels across a real source change.
+                if (decoderChanged || sourceChanged) revalidateVideoOutput()
+                logReadbackModeChange(previousMode)
                 PlaybackLog.log(
                     context, engineName,
                     "videoInputFormat ${format.width}x${format.height} " +
@@ -615,6 +625,25 @@ class ExoPlayerEngine(
         applyPreferredTrackLanguages()
     }
 
+    private fun revalidateVideoOutput() {
+        if (!firstFrameRendered) return
+        surfaceFrameHealth.onOutputTransition()
+        if (!videoOutputReported) {
+            handler.removeCallbacks(surfaceValidationDeadlineRunnable)
+            handler.postDelayed(surfaceValidationDeadlineRunnable, PIXEL_VALIDATION_DEADLINE_MS)
+        }
+        droppedFrameHealth.onOutputTransition(SystemClock.elapsedRealtime())
+    }
+
+    private fun logReadbackModeChange(previous: SurfaceReadbackPolicy.Mode) {
+        if (previous != surfaceReadbackPolicy.mode) {
+            PlaybackLog.log(
+                context, engineName,
+                "surfaceReadback=${surfaceReadbackPolicy.mode.name}; native frame watchdog retained",
+            )
+        }
+    }
+
     /**
      * Renderers tuned so audio always reaches the speakers. Many Android TV boxes
      * advertise Dolby/DTS passthrough over HDMI even when nothing downstream can
@@ -630,6 +659,26 @@ class ExoPlayerEngine(
      */
     private fun buildRenderersFactory(): DefaultRenderersFactory =
         object : DefaultRenderersFactory(context) {
+            override fun buildAudioRenderers(
+                context: Context,
+                extensionRendererMode: Int,
+                mediaCodecSelector: MediaCodecSelector,
+                enableDecoderFallback: Boolean,
+                audioSink: AudioSink,
+                eventHandler: Handler,
+                eventListener: AudioRendererEventListener,
+                out: ArrayList<Renderer>,
+            ) {
+                super.buildAudioRenderers(
+                    context, extensionRendererMode, mediaCodecSelector, enableDecoderFallback,
+                    audioSink, eventHandler, eventListener, out,
+                )
+                // Appending (not preferring) preserves every working platform
+                // codec. Unsupported MPEG audio now gets PCM in this SAME player,
+                // instead of forcing hardware video onto the full VLC_SW route.
+                out.add(MpegAudioRenderer(eventHandler, eventListener, audioSink))
+            }
+
             @Suppress("DEPRECATION", "UNUSED_PARAMETER")
             override fun buildAudioSink(
                 context: Context,
@@ -1140,6 +1189,7 @@ class ExoPlayerEngine(
     private fun resetHealth(): String {
         handler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()
+        surfaceReadbackPolicy.reset()
         droppedFrameHealth.reset()
         streamGeneration += 1
         activeMediaId = "live-$streamGeneration"
@@ -1182,6 +1232,7 @@ class ExoPlayerEngine(
     override fun release() {
         handler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()
+        surfaceReadbackPolicy.reset()
         droppedFrameHealth.reset()
         streamGeneration += 1
         activeMediaId = null

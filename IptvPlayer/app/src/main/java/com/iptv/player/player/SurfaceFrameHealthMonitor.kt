@@ -8,6 +8,7 @@ import android.view.PixelCopy
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
+import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.annotation.RequiresApi
 
 /**
@@ -28,6 +29,10 @@ internal class SurfaceFrameHealthMonitor(
     // hit that MediaCodec failure; stop after validation to avoid needless
     // PixelCopy/GPU work on weak sticks.
     private val continueAfterHealthy: Boolean = true,
+    /** Re-evaluated when source/decoder metadata arrives, not just at construction. */
+    private val allowPeriodicSampling: () -> Boolean = { true },
+    private val sdkInt: Int = Build.VERSION.SDK_INT,
+    private val nowMs: () -> Long = SystemClock::elapsedRealtime,
 ) {
     // Engines clear their health-handler messages on every zap. Native copy
     // completions must still recycle their bitmap and retire in-flight state;
@@ -57,6 +62,9 @@ internal class SurfaceFrameHealthMonitor(
     fun hasHealthyFrame(): Boolean = synchronized(lock) { recoveryGate.hasHealthyFrame }
     fun isSamplingUnavailable(): Boolean = synchronized(lock) { samplingUnavailable }
 
+    @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.N)
+    private fun supportsPixelCopy(): Boolean = sdkInt >= Build.VERSION_CODES.N
+
     fun reset() {
         synchronized(lock) {
             generation++
@@ -79,7 +87,7 @@ internal class SurfaceFrameHealthMonitor(
      * proves resumed video. Reset or a new surface invalidates every callback.
      */
     fun requestProgressProbe(onResult: (Boolean) -> Unit): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        if (!supportsPixelCopy()) return false
         val probe = synchronized(lock) {
             if (surfaceProvider == null || progressProbe != null || progressSampleInFlight) return false
             ProgressProbe(generation, onResult).also { progressProbe = it }
@@ -160,7 +168,7 @@ internal class SurfaceFrameHealthMonitor(
     }
 
     fun start(provider: () -> SurfaceView?) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        if (!supportsPixelCopy()) return
         val sampleGeneration = synchronized(lock) {
             if (started) return
             started = true
@@ -181,7 +189,7 @@ internal class SurfaceFrameHealthMonitor(
      * while the provider and monitoring lifecycle stay attached to this stream.
      */
     fun onOutputTransition() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        if (!supportsPixelCopy()) return
         val sampleGeneration = synchronized(lock) {
             if (surfaceProvider == null) return
             generation++
@@ -221,6 +229,13 @@ internal class SurfaceFrameHealthMonitor(
             ) {
                 null
             } else {
+                // Metadata can arrive after the first healthy confirmation. Do
+                // not issue one more costly copy merely to discover this change.
+                // Keep provider/health evidence for fresh output revalidation.
+                if (canStopPeriodicSampling()) {
+                    started = false
+                    return@synchronized null
+                }
                 sampleInFlight = true
                 surfaceProvider
             }
@@ -265,7 +280,7 @@ internal class SurfaceFrameHealthMonitor(
                                         FrameColorClassifier.isVisuallyBlank(pixels)
                                 decision = recoveryGate.onSample(
                                     solidGreen = solidGreen,
-                                    nowMs = SystemClock.elapsedRealtime(),
+                                    nowMs = nowMs(),
                                     visuallyBlank = visuallyBlank,
                                 )
                                 if (
@@ -273,11 +288,7 @@ internal class SurfaceFrameHealthMonitor(
                                     GreenFrameRecoveryGate.Decision.SOLID_GREEN_FAILURE ||
                                     decision ==
                                     GreenFrameRecoveryGate.Decision.SOLID_BLANK_FAILURE ||
-                                    (
-                                        decision ==
-                                            GreenFrameRecoveryGate.Decision.FIRST_HEALTHY_FRAME &&
-                                            !continueAfterHealthy
-                                        )
+                                    canStopPeriodicSampling()
                                 ) {
                                     started = false
                                     generation++
@@ -314,6 +325,11 @@ internal class SurfaceFrameHealthMonitor(
             retryAfterUnavailableSurface(sampleGeneration)
         }
     }
+
+    /** Caller holds lock. Existing green/blank suspicion must resolve first. */
+    private fun canStopPeriodicSampling(): Boolean =
+        recoveryGate.hasHealthyFrame && !recoveryGate.hasPendingInvalidFrame &&
+            (!continueAfterHealthy || !allowPeriodicSampling())
 
     @RequiresApi(Build.VERSION_CODES.N)
     private fun retryAfterUnavailableSurface(sampleGeneration: Int) {

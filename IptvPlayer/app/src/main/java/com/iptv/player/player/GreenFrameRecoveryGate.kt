@@ -34,6 +34,10 @@ internal class GreenFrameRecoveryGate(
     var hasHealthyFrame: Boolean = false
         private set
 
+    /** Do not retire pixel checks while an already-observed bad frame is unresolved. */
+    val hasPendingInvalidFrame: Boolean
+        get() = consecutiveGreenSamples > 0 || consecutiveBlankSamples > 0
+
     private var greenSinceMs = UNSET
     private var blankSinceMs = UNSET
     private var healthySinceMs = UNSET

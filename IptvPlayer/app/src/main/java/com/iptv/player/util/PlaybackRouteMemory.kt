@@ -42,11 +42,13 @@ object PlaybackRouteMemory {
     // v5 re-evaluates only old full-software routes: v4 could learn VLC_SW
     // after two harmless AC3 underruns. Keep working EXO/VLC_HW routes and all
     // user settings; newly proven VLC_SW routes may still be remembered.
-    private const val SCHEMA = 5
+    // v6 retries pre-MPEG-PCM full-software routes once so the audio-only
+    // renderer can keep video in Media3. Preserve working hardware routes.
+    private const val SCHEMA = 6
 
     internal fun acceptsStoredRoute(version: Int, stage: String): Boolean =
         stage in setOf("EXO", "VLC_HW", "VLC_SW") &&
-            (version == SCHEMA || (version == 4 && stage != "VLC_SW"))
+            (version == SCHEMA || (version in 4..5 && stage != "VLC_SW"))
 
     /** Hard cap on remembered channels; the least-recently-used is evicted past this. */
     private const val MAX_ENTRIES = 500
