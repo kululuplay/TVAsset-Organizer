@@ -7,7 +7,7 @@ import org.junit.Test
 class LiveAudioStallPolicyTest {
 
     @Test
-    fun `repeated AC3 underruns with advancing video use VLC PCM fallback`() {
+    fun `repeated AC3 underruns require a confirmed stalled audio clock before fallback`() {
         assertEquals(
             LiveAudioStallPolicy.Decision.FALLBACK_TO_VLC_PCM,
             LiveAudioStallPolicy.decide(
@@ -15,10 +15,55 @@ class LiveAudioStallPolicyTest {
                     audioClockStarted = true,
                     recentVideoProgress = true,
                     underrunsInWindow = 2,
+                    audioClockStalledForMs = LiveAudioStallPolicy.AUDIO_UNDERRUN_RECOVERY_GRACE_MS,
                     sinkEvent = AudioFailureEvidence.SinkEvent.UNDERRUN,
                 ),
             ),
         )
+    }
+
+    @Test
+    fun `observed 218 ms AC3 underrun burst never ejects the hardware video route`() {
+        for (durationMs in listOf(0L, 218L, 5_999L)) {
+            assertEquals(
+                LiveAudioStallPolicy.Decision.WAIT,
+                LiveAudioStallPolicy.decide(
+                    healthyBase().copy(
+                        audioClockStarted = true,
+                        recentVideoProgress = true,
+                        underrunsInWindow = 2,
+                        audioClockStalledForMs = durationMs,
+                        sinkEvent = AudioFailureEvidence.SinkEvent.UNDERRUN,
+                    ),
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `many underruns with no sink clock evidence are not a decoder failure`() {
+        assertEquals(
+            LiveAudioStallPolicy.Decision.WAIT,
+            LiveAudioStallPolicy.decide(
+                healthyBase().copy(
+                    audioClockStarted = true,
+                    recentVideoProgress = true,
+                    underrunsInWindow = 20,
+                    audioClockStalledForMs = 0L,
+                    sinkEvent = AudioFailureEvidence.SinkEvent.UNDERRUN,
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `real AC3 sink and codec errors still recover without waiting for underruns`() {
+        for (event in listOf(AudioFailureEvidence.SinkEvent.SINK_ERROR, AudioFailureEvidence.SinkEvent.CODEC_ERROR)) {
+            assertEquals(
+                LiveAudioStallPolicy.Decision.FALLBACK_TO_VLC_PCM,
+                LiveAudioStallPolicy.decide(healthyBase().copy(sinkEvent = event)),
+            )
+        }
     }
 
     @Test
@@ -30,6 +75,7 @@ class LiveAudioStallPolicyTest {
                     audioClockStarted = true,
                     recentVideoProgress = false,
                     underrunsInWindow = 3,
+                    audioClockStalledForMs = 8_000L,
                     sinkEvent = AudioFailureEvidence.SinkEvent.UNDERRUN,
                 ),
             ),

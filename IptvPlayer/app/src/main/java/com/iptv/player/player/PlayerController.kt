@@ -703,6 +703,8 @@ class PlayerController(
                             },
                             initialRebuffers = adaptiveRebuffers,
                             constrainedDevice = lowRamDevice || devicePlaybackProfile.compatibilityMode,
+                            preferSoftwareAudio = lowRamDevice ||
+                                devicePlaybackProfile.compatibilityMode || bypassVlcHardware,
                             expectsVideo = expectsVideo,
                         )
                     }

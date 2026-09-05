@@ -39,7 +39,14 @@ object PlaybackRouteMemory {
     // v4 invalidates routes learned before rapid-zap session isolation and the
     // corrected Fire TV frame-quality gates. Only this tiny route cache is
     // discarded; account credentials and every user setting remain untouched.
-    private const val SCHEMA = 4
+    // v5 re-evaluates only old full-software routes: v4 could learn VLC_SW
+    // after two harmless AC3 underruns. Keep working EXO/VLC_HW routes and all
+    // user settings; newly proven VLC_SW routes may still be remembered.
+    private const val SCHEMA = 5
+
+    internal fun acceptsStoredRoute(version: Int, stage: String): Boolean =
+        stage in setOf("EXO", "VLC_HW", "VLC_SW") &&
+            (version == SCHEMA || (version == 4 && stage != "VLC_SW"))
 
     /** Hard cap on remembered channels; the least-recently-used is evicted past this. */
     private const val MAX_ENTRIES = 500
@@ -82,9 +89,9 @@ object PlaybackRouteMemory {
                 f.readLines().forEach { line ->
                     if (line.isBlank()) return@forEach
                     val o = runCatching { JSONObject(line) }.getOrNull() ?: return@forEach
-                    if (o.optInt("v", 0) != SCHEMA) return@forEach
                     val key = o.optString("k", "")
                     val stage = o.optString("s", "")
+                    if (!acceptsStoredRoute(o.optInt("v", 0), stage)) return@forEach
                     if (key.isEmpty() || stage.isEmpty()) return@forEach
                     val usedAt = o.optLong("u", 0L)
                     if (now - usedAt > TTL_MS) return@forEach // drop expired on load
