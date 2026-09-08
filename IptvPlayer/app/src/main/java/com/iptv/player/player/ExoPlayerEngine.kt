@@ -59,6 +59,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.video.VideoFrameMetadataListener
 import androidx.media3.ui.PlayerView
+import com.iptv.player.BuildConfig
 import com.iptv.player.R
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.playback.android.PlaybackQoeRuntime
@@ -104,6 +105,20 @@ class ExoPlayerEngine(
     private var subtitlePreference: LiveSubtitlePreference = LiveSubtitlePreference.Auto
 
     private val handler = Handler(Looper.getMainLooper())
+    // Absent in normal builds. This observer never feeds playback/health policy.
+    private val playbackDiagnosticGate = if (BuildConfig.LIVE_PLAYBACK_DIAGNOSTICS) {
+        LivePlaybackDiagnosticGate()
+    } else {
+        null
+    }
+    private var playbackDiagnosticSampler: Runnable? = null
+    private var diagnosticAudioReady: Boolean? = null
+    private var diagnosticVideoReady: Boolean? = null
+    private val diagnosticLastVideoFrameAtMs = if (BuildConfig.LIVE_PLAYBACK_DIAGNOSTICS) {
+        AtomicLong(0L)
+    } else {
+        null
+    }
     // Per-stream health flags so each detection fires at most once.
     private var firstFrameRendered = false
     private var videoFailureReported = false
@@ -286,6 +301,18 @@ class ExoPlayerEngine(
                 state: Int,
             ) {
                 if (!isCurrentEvent(eventTime)) return
+                if (playbackDiagnosticGate != null) {
+                    recordPlaybackDiagnostic(
+                        event = when (state) {
+                            Player.STATE_IDLE -> PlaybackDiagnosticEvent.STATE_IDLE
+                            Player.STATE_BUFFERING -> PlaybackDiagnosticEvent.STATE_BUFFERING
+                            Player.STATE_READY -> PlaybackDiagnosticEvent.STATE_READY
+                            Player.STATE_ENDED -> PlaybackDiagnosticEvent.STATE_ENDED
+                            else -> PlaybackDiagnosticEvent.STATE_UNKNOWN
+                        },
+                        eventTime = eventTime,
+                    )
+                }
                 when (state) {
                     Player.STATE_BUFFERING -> {
                         readyForPlayback = false
@@ -327,6 +354,51 @@ class ExoPlayerEngine(
                 }
             }
 
+            override fun onRendererReadyChanged(
+                eventTime: AnalyticsListener.EventTime,
+                rendererIndex: Int,
+                trackType: Int,
+                isReady: Boolean,
+            ) {
+                if (playbackDiagnosticGate == null || !isCurrentEvent(eventTime)) return
+                val event = when (trackType) {
+                    C.TRACK_TYPE_AUDIO -> {
+                        diagnosticAudioReady = isReady
+                        if (isReady) PlaybackDiagnosticEvent.AUDIO_READY
+                        else PlaybackDiagnosticEvent.AUDIO_NOT_READY
+                    }
+                    C.TRACK_TYPE_VIDEO -> {
+                        diagnosticVideoReady = isReady
+                        if (isReady) PlaybackDiagnosticEvent.VIDEO_READY
+                        else PlaybackDiagnosticEvent.VIDEO_NOT_READY
+                    }
+                    else -> return
+                }
+                recordPlaybackDiagnostic(event, eventTime, rendererIndex = rendererIndex)
+            }
+
+            override fun onIsLoadingChanged(
+                eventTime: AnalyticsListener.EventTime,
+                isLoading: Boolean,
+            ) {
+                if (playbackDiagnosticGate == null || !isCurrentEvent(eventTime)) return
+                recordPlaybackDiagnostic(
+                    if (isLoading) PlaybackDiagnosticEvent.LOADING else PlaybackDiagnosticEvent.NOT_LOADING,
+                    eventTime,
+                )
+            }
+
+            override fun onIsPlayingChanged(
+                eventTime: AnalyticsListener.EventTime,
+                isPlaying: Boolean,
+            ) {
+                if (playbackDiagnosticGate == null || !isCurrentEvent(eventTime)) return
+                recordPlaybackDiagnostic(
+                    if (isPlaying) PlaybackDiagnosticEvent.PLAYING else PlaybackDiagnosticEvent.NOT_PLAYING,
+                    eventTime,
+                )
+            }
+
             override fun onTracksChanged(
                 eventTime: AnalyticsListener.EventTime,
                 tracks: Tracks,
@@ -341,6 +413,13 @@ class ExoPlayerEngine(
                 reason: Int,
             ) {
                 if (!isCurrentEvent(eventTime)) return
+                if (playbackDiagnosticGate != null) {
+                    recordPlaybackDiagnostic(
+                        if (playWhenReady) PlaybackDiagnosticEvent.PLAY_WHEN_READY
+                        else PlaybackDiagnosticEvent.PLAY_WHEN_NOT_READY,
+                        eventTime,
+                    )
+                }
                 if (!playWhenReady) {
                     cancelAudioClockStallCheck()
                     cancelAudioUnderrunCheck()
@@ -392,6 +471,14 @@ class ExoPlayerEngine(
                 error: PlaybackException,
             ) {
                 if (!isCurrentEvent(eventTime)) return
+                if (playbackDiagnosticGate != null) {
+                    recordPlaybackDiagnostic(
+                        PlaybackDiagnosticEvent.PLAYER_ERROR,
+                        eventTime,
+                        errorCode = error.errorCode,
+                        httpStatus = findHttpStatus(error),
+                    )
+                }
                 PlaybackLog.log(context, engineName, "onPlayerError ${error.errorCodeName}")
                 val exoError = error as? ExoPlaybackException
                 val rendererType =
@@ -431,7 +518,11 @@ class ExoPlayerEngine(
         // audio keeps playing, which lets the health watchdog recover that case.
         exo.setVideoFrameMetadataListener(
             VideoFrameMetadataListener { _, _, _, _ ->
-                lastVideoFrameAtMs.set(SystemClock.elapsedRealtime())
+                val nowMs = SystemClock.elapsedRealtime()
+                lastVideoFrameAtMs.set(nowMs)
+                // Opt-in observation only: READY refreshes the health timestamp,
+                // so diagnostics keep the actual frame timestamp separately.
+                diagnosticLastVideoFrameAtMs?.set(nowMs)
             },
         )
 
@@ -776,6 +867,95 @@ class ExoPlayerEngine(
             timeline.getWindow(windowIndex, Timeline.Window()).mediaItem.mediaId
         }.getOrNull()
         return mediaId == expected
+    }
+
+    /** Only fixed symbols/numbers are logged: never Format, media identity, or errors' text. */
+    private fun recordPlaybackDiagnostic(
+        event: PlaybackDiagnosticEvent,
+        eventTime: AnalyticsListener.EventTime? = null,
+        rendererIndex: Int? = null,
+        errorCode: Int? = null,
+        httpStatus: Int? = null,
+    ) {
+        val gate = playbackDiagnosticGate ?: return
+        if (activeMediaId == null) return
+        val nowMs = SystemClock.elapsedRealtime()
+        val decision = gate.record(event.name, nowMs) ?: return
+        val exo = player ?: return
+        // Both AnalyticsListener and the sampler run on the main looper. Take
+        // player snapshots only after throttling, not for every readiness flip.
+        val eventRealtimeMs = eventTime?.realtimeMs ?: nowMs
+        val lastFrameMs = diagnosticLastVideoFrameAtMs?.get() ?: 0L
+        val frameAgeMs = if (lastFrameMs > 0L) (nowMs - lastFrameMs).coerceAtLeast(0L) else -1L
+        val state = when (exo.playbackState) {
+            Player.STATE_IDLE -> "IDLE"
+            Player.STATE_BUFFERING -> "BUFFERING"
+            Player.STATE_READY -> "READY"
+            Player.STATE_ENDED -> "ENDED"
+            else -> "UNKNOWN"
+        }
+        val counts = decision.eventCounts.entries.joinToString(",") { (key, count) -> "$key:$count" }
+        PlaybackLog.log(
+            context,
+            engineName,
+            "liveDiag session=$streamGeneration event=${event.name} monoMs=$eventRealtimeMs " +
+                "queueDelayMs=${(nowMs - eventRealtimeMs).coerceAtLeast(0L)} " +
+                "state=$state isLoading=${exo.isLoading} isPlaying=${exo.isPlaying} " +
+                "playWhenReady=${exo.playWhenReady} suppression=${exo.playbackSuppressionReason} " +
+                "positionMs=${exo.currentPosition} bufferedMs=${exo.totalBufferedDuration} " +
+                "lastVideoFrameAgeMs=$frameAgeMs audioCodec=${audioCodec.name} " +
+                "audioReady=${diagnosticAudioReady ?: "unknown"} " +
+                "videoReady=${diagnosticVideoReady ?: "unknown"} " +
+                "rendererIndex=${rendererIndex ?: -1} errorCode=${errorCode ?: -1} " +
+                "httpStatus=${httpStatus ?: -1} suppressed=${decision.suppressed} counts=$counts",
+        )
+    }
+
+    private fun schedulePlaybackDiagnosticSampler() {
+        val gate = playbackDiagnosticGate ?: return
+        cancelPlaybackDiagnosticSampler()
+        val generation = streamGeneration
+        val sampler = object : Runnable {
+            override fun run() {
+                if (generation != streamGeneration || player == null || activeMediaId == null) return
+                if (!gate.isActive(SystemClock.elapsedRealtime())) {
+                    playbackDiagnosticSampler = null
+                    return
+                }
+                recordPlaybackDiagnostic(PlaybackDiagnosticEvent.SAMPLE)
+                if (generation == streamGeneration && gate.isActive(SystemClock.elapsedRealtime())) {
+                    handler.postDelayed(this, PLAYBACK_DIAGNOSTIC_POLL_MS)
+                }
+            }
+        }
+        playbackDiagnosticSampler = sampler
+        // First snapshot is posted only after the new item has been prepared.
+        handler.post(sampler)
+    }
+
+    private fun cancelPlaybackDiagnosticSampler() {
+        playbackDiagnosticSampler?.let(handler::removeCallbacks)
+        playbackDiagnosticSampler = null
+    }
+
+    private enum class PlaybackDiagnosticEvent {
+        SAMPLE,
+        STATE_IDLE,
+        STATE_BUFFERING,
+        STATE_READY,
+        STATE_ENDED,
+        STATE_UNKNOWN,
+        AUDIO_READY,
+        AUDIO_NOT_READY,
+        VIDEO_READY,
+        VIDEO_NOT_READY,
+        LOADING,
+        NOT_LOADING,
+        PLAYING,
+        NOT_PLAYING,
+        PLAY_WHEN_READY,
+        PLAY_WHEN_NOT_READY,
+        PLAYER_ERROR,
     }
 
     private fun cancelTrackSupportCheck() {
@@ -1183,10 +1363,12 @@ class ExoPlayerEngine(
         )
         exo.playWhenReady = true
         exo.prepare()
+        schedulePlaybackDiagnosticSampler()
         listener?.onPlaybackSubmitted()
     }
 
     private fun resetHealth(): String {
+        cancelPlaybackDiagnosticSampler()
         handler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()
         surfaceReadbackPolicy.reset()
@@ -1215,6 +1397,10 @@ class ExoPlayerEngine(
         noFrameCheckRunnable = null
         lastVideoFrameAtMs.set(0L)
         lastHealthPositionMs = -1L
+        diagnosticAudioReady = null
+        diagnosticVideoReady = null
+        diagnosticLastVideoFrameAtMs?.set(0L)
+        playbackDiagnosticGate?.beginSession(SystemClock.elapsedRealtime())
         return checkNotNull(activeMediaId)
     }
 
@@ -1230,6 +1416,7 @@ class ExoPlayerEngine(
     } ?: -1L
 
     override fun release() {
+        cancelPlaybackDiagnosticSampler()
         handler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()
         surfaceReadbackPolicy.reset()
@@ -1393,5 +1580,6 @@ class ExoPlayerEngine(
         private const val VIDEO_CLOCK_EVIDENCE_MS = 500L
         private const val MIN_BUFFER_PROGRESS_EVIDENCE_MS = 250L
         private const val PIXEL_VALIDATION_DEADLINE_MS = 9_000L
+        private const val PLAYBACK_DIAGNOSTIC_POLL_MS = 1_000L
     }
 }

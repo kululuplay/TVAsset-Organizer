@@ -13,6 +13,9 @@ fun buildConfigString(value: String): String =
         .replace("\r", "\\r")
         .replace("\n", "\\n") + "\""
 
+// Local diagnostic APKs are opt-in; normal builds keep the same version/policy.
+val livePlaybackDiagnostics = System.getenv("LIVE_PLAYBACK_DIAGNOSTICS") == "1"
+
 android {
     namespace = "com.iptv.player"
     // Media3 1.8.x is compiled against Android 15 APIs. compileSdk only affects
@@ -26,6 +29,8 @@ android {
         targetSdk = 34
         versionCode = 130
         versionName = "1.5.86"
+        if (livePlaybackDiagnostics) versionNameSuffix = "-diag1"
+        buildConfigField("boolean", "LIVE_PLAYBACK_DIAGNOSTICS", livePlaybackDiagnostics.toString())
 
         // Service credentials are injected by CI/local environment and never
         // committed. Blank values disable the optional integration gracefully.

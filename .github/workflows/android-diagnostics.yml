@@ -1,0 +1,198 @@
+name: Android diagnostic APK
+
+# Isolated opt-in build: this workflow cannot run on main or publish a release.
+on:
+  push:
+    branches: [agent/live-ready-diagnostics-v1.5.86]
+    paths:
+      - IptvPlayer/**
+      - .github/workflows/android-diagnostics.yml
+      - scripts/scan_secrets.py
+      - scripts/verify_android_upgrade.py
+      - scripts/test_verify_android_upgrade.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-diagnostics-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+    working-directory: IptvPlayer
+
+jobs:
+  diagnostic:
+    name: Test, lint and sign isolated diagnostic APK
+    if: >-
+      github.repository == 'kululuplay/TVAsset-Organizer' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/agent/live-ready-diagnostics-v1.5.86'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      LIVE_PLAYBACK_DIAGNOSTICS: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Verify Gradle wrapper
+        uses: gradle/actions/wrapper-validation@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Scan current tree for secrets
+        working-directory: .
+        run: python3 scripts/scan_secrets.py
+
+      - name: Test signed APK verifier
+        working-directory: .
+        run: python3 scripts/test_verify_android_upgrade.py
+
+      - name: Set up JDK 17 without a shared build cache
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+
+      - name: Test and lint diagnostics before accessing signing credentials
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          TELEMETRY_INGEST_KEY: ${{ secrets.TELEMETRY_INGEST_KEY }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --no-build-cache --no-configuration-cache \
+            :app:testDebugUnitTest :app:lintDebug --console=plain
+
+      - name: Validate signing secrets and decode temporary keystore
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          for secret_name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!secret_name}" ]; then
+              echo "::error::$secret_name is required for the signed diagnostic APK"
+              exit 1
+            fi
+          done
+          keystore_path=$(mktemp "$RUNNER_TEMP/live-ready-diagnostics.XXXXXXXX.jks")
+          # Register the exact file before decoding so failed decodes are cleaned up.
+          printf 'path=%s\n' "$keystore_path" >> "$GITHUB_OUTPUT"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          test -s "$keystore_path"
+
+      - name: Build signed diagnostic APK
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          TELEMETRY_INGEST_KEY: ${{ secrets.TELEMETRY_INGEST_KEY }}
+          KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          # assembleRelease also depends on testDebugUnitTest. That task has
+          # already passed above; never rerun JVM tests with signing credentials.
+          ./gradlew --no-daemon --no-build-cache --no-configuration-cache \
+            :app:assembleRelease -x :app:testDebugUnitTest --console=plain
+
+      - name: Remove only this job's temporary keystore
+        if: always() && steps.keystore.outputs.path != ''
+        env:
+          KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
+        run: |
+          set -euo pipefail
+          case "$KEYSTORE_FILE" in
+            "$RUNNER_TEMP"/live-ready-diagnostics.*.jks)
+              rm -f -- "$KEYSTORE_FILE"
+              ;;
+            *)
+              echo "::error::Refusing to remove an unexpected keystore path"
+              exit 1
+              ;;
+          esac
+
+      - name: Verify diagnostic identity, installed signer and MPEG resources
+        working-directory: .
+        run: |
+          set -euo pipefail
+          build_tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
+          if [ ! -x "$build_tools/aapt" ] || [ ! -x "$build_tools/apksigner" ]; then
+            echo "::error::aapt/apksigner not found in Android build-tools"
+            exit 1
+          fi
+          AAPT="$build_tools/aapt" APKSIGNER="$build_tools/apksigner" python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          from scripts.verify_android_upgrade import inspect_apk, verify_upgrade
+
+          apk_path = Path("IptvPlayer/app/build/outputs/apk/release/app-release.apk")
+          current = inspect_apk(apk_path, Path(os.environ["AAPT"]), Path(os.environ["APKSIGNER"]))
+          # The diagnostic keeps code 130 but intentionally changes versionName.
+          # Do not use immutable-release --allow-same-version or a release baseline.
+          verify_upgrade(
+              current,
+              None,
+              expected_package="com.iptv.player",
+              expected_version_code=130,
+              expected_version_name="1.5.86-diag1",
+              allow_same_version=False,
+          )
+          # Public SHA-256 fingerprint verified from the installed production APK.
+          expected_signers = frozenset({
+              "edf92f968eacd650422053e707d844bf73d6a2925f80edc4163e67889852e810",
+          })
+          if current.certificate_sha256 != expected_signers:
+              raise SystemExit("Diagnostic signing certificate does not match the installed APK")
+          required = {
+              "javazoom/jl/decoder/sfd.ser",
+              "assets/licenses/LGPL-2.1.txt",
+              "assets/licenses/JLayer-NOTICE.txt",
+          }
+          with ZipFile(apk_path) as apk:
+              missing = required - set(apk.namelist())
+              if missing:
+                  raise SystemExit("Missing MPEG decoder resources: " + ", ".join(sorted(missing)))
+          print(f"Verified {current.package} v{current.version_name} ({current.version_code})")
+          print("Installed signing certificate, v1/v2 signatures and MPEG resources verified")
+          PY
+
+      - name: Stage verified diagnostic APK only
+        run: |
+          mkdir -p diagnostic-assets
+          cp app/build/outputs/apk/release/app-release.apk \
+            diagnostic-assets/KululuIPTV-v1.5.86-diag1.apk
+
+      - name: Upload signed diagnostic APK as a short-lived artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: KululuIPTV-v1.5.86-diag1
+          path: IptvPlayer/diagnostic-assets/KululuIPTV-v1.5.86-diag1.apk
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - name: Upload test and lint reports only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-diagnostics-checks
+          path: |
+            IptvPlayer/app/build/reports/lint-results-debug.html
+            IptvPlayer/app/build/test-results/testDebugUnitTest/*.xml
+          if-no-files-found: ignore
+          retention-days: 7
