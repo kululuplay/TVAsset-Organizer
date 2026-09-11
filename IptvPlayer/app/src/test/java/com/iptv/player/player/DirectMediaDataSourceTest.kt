@@ -42,7 +42,7 @@ class DirectMediaDataSourceTest {
             position += count
             return count
         }
-        override fun getUri() = uri(resolvedUrl)
+        override fun getUri(): Uri = this@DirectMediaDataSourceTest.uri(resolvedUrl)
         override fun getResponseHeaders() = mapOf("content-type" to listOf(mime))
         override fun addTransferListener(listener: TransferListener) = Unit
         override fun close() { closes++ }
