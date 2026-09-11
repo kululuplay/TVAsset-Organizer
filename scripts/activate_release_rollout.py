@@ -6,11 +6,14 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import http.client
 import json
+import os
 import pathlib
 import re
-import subprocess
-from urllib.parse import quote
+
+# Must match UpdateConfig.ROLLOUT_POLICY_URL, even for a build from master.
+ROLLOUT_BRANCH = "main"
 
 
 def version_parts(value: str) -> tuple[int, ...]:
@@ -53,20 +56,26 @@ def enabled_policy(current: dict, release: dict, latest: dict, version: str, dig
 
 
 def github(method: str, path: str, payload: dict | None = None) -> dict:
-    command = ["gh", "api", "--method", method, path]
-    if payload is not None:
-        command += ["--input", "-"]
-    completed = subprocess.run(command, input=json.dumps(payload) if payload else None,
-                               text=True, capture_output=True, check=False)
-    if completed.returncode:
-        raise RuntimeError(f"GitHub {method} {path} failed: {completed.stderr.strip()}")
-    return json.loads(completed.stdout)
+    # Fixed HTTPS origin, normal TLS verification, no shell and no redirects.
+    connection = http.client.HTTPSConnection("api.github.com", timeout=30)
+    try:
+        connection.request(method, f"/{path}",
+                           body=json.dumps(payload).encode() if payload is not None else None,
+                           headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                                    "Accept": "application/vnd.github+json",
+                                    "Content-Type": "application/json",
+                                    "User-Agent": "KululuIPTV-release-rollout"})
+        response = connection.getresponse()
+        if not 200 <= response.status < 300:
+            raise RuntimeError(f"GitHub {method} {path} failed: HTTP {response.status}")
+        return json.loads(response.read())
+    finally:
+        connection.close()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", required=True)
-    parser.add_argument("--branch", required=True, choices=("main", "master"))
     parser.add_argument("--version", required=True)
     parser.add_argument("--verified-apk", required=True, type=pathlib.Path)
     args = parser.parse_args()
@@ -79,7 +88,7 @@ def main() -> None:
     release = github("GET", f"{root}/releases/tags/v{args.version}")
     latest = github("GET", f"{root}/releases/latest")
     endpoint = f"{root}/contents/update-rollout.json"
-    ref = f"{endpoint}?ref={quote(args.branch, safe='')}"
+    ref = f"{endpoint}?ref={ROLLOUT_BRANCH}"
     source = github("GET", ref)
     current = json.loads(base64.b64decode(source["content"]))
     updated = enabled_policy(current, release, latest, args.version, digest)
@@ -91,7 +100,7 @@ def main() -> None:
             "message": f"Enable v{args.version} in-app updates for all users",
             "content": base64.b64encode(content.encode()).decode(),
             "sha": source["sha"],
-            "branch": args.branch,
+            "branch": ROLLOUT_BRANCH,
         })
     actual = github("GET", ref)
     if json.loads(base64.b64decode(actual["content"])) != updated:

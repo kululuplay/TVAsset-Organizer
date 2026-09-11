@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from activate_release_rollout import enabled_policy, main
+from activate_release_rollout import enabled_policy, github, main
 
 
 class ReleaseRolloutTest(unittest.TestCase):
@@ -99,7 +99,7 @@ class ReleaseRolloutTest(unittest.TestCase):
             apk = Path(directory) / "verified.apk"
             apk.write_bytes(b"verified APK")
             argv = ["activate_release_rollout.py", "--repo", "kululuplay/TVAsset-Organizer",
-                    "--branch", "main", "--version", "1.5.88", "--verified-apk", str(apk)]
+                    "--version", "1.5.88", "--verified-apk", str(apk)]
             with patch("sys.argv", argv), patch("activate_release_rollout.github",
                                                side_effect=responses) as api:
                 if conflict or changed_after_write:
@@ -115,6 +115,7 @@ class ReleaseRolloutTest(unittest.TestCase):
         payload = calls[3].args[2]
         self.assertEqual(payload["sha"], "original-file-sha")
         self.assertEqual(payload["branch"], "main")
+        self.assertTrue(calls[2].args[1].endswith("?ref=main"))
         self.assertEqual(json.loads(base64.b64decode(payload["content"]))["rolloutPercent"], 100)
         self.assertEqual(calls[4].args[0], "GET")
 
@@ -123,6 +124,32 @@ class ReleaseRolloutTest(unittest.TestCase):
 
     def test_readback_mismatch_is_reported(self):
         self.assertEqual(len(self.run_publication(changed_after_write=True)), 5)
+
+    def test_api_uses_fixed_https_origin_and_json_body(self):
+        with patch.dict("os.environ", {"GH_TOKEN": "test-token"}), patch(
+                "activate_release_rollout.http.client.HTTPSConnection") as constructor:
+            connection = constructor.return_value
+            response = connection.getresponse.return_value
+            response.status = 200
+            response.read.return_value = b'{"ok": true}'
+            self.assertEqual(github("PUT", "repos/owner/repo/contents/update-rollout.json",
+                                    {"branch": "main"}), {"ok": True})
+            constructor.assert_called_once_with("api.github.com", timeout=30)
+            request = connection.request.call_args
+            self.assertEqual(request.args, ("PUT", "/repos/owner/repo/contents/update-rollout.json"))
+            self.assertEqual(json.loads(request.kwargs["body"]), {"branch": "main"})
+            connection.close.assert_called_once()
+
+    def test_api_redirects_and_errors_fail_without_leaking_response_body(self):
+        for status in (302, 403, 409, 500):
+            with self.subTest(status=status), patch.dict("os.environ", {"GH_TOKEN": "test-token"}), patch(
+                    "activate_release_rollout.http.client.HTTPSConnection") as constructor:
+                connection = constructor.return_value
+                connection.getresponse.return_value.status = status
+                with self.assertRaisesRegex(RuntimeError, f"HTTP {status}"):
+                    github("GET", "repos/owner/repo/releases/latest")
+                connection.getresponse.return_value.read.assert_not_called()
+                connection.close.assert_called_once()
 
 
 if __name__ == "__main__":

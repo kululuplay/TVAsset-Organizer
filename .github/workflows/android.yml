@@ -277,7 +277,6 @@ jobs:
         run: |
           python3 scripts/activate_release_rollout.py \
             --repo "${{ github.repository }}" \
-            --branch "${{ github.ref_name }}" \
             --version "${{ steps.version.outputs.name }}" \
             --verified-apk "IptvPlayer/release-assets/KululuIPTV-v${{ steps.version.outputs.name }}.apk"
 
