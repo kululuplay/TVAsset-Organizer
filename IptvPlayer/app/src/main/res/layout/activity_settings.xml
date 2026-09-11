@@ -25,7 +25,7 @@
             android:letterSpacing="0.02"
             android:text="@string/settings_title"
             android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_big_title"
+            android:textSize="26sp"
             android:textStyle="bold" />
 
         <Space
@@ -35,20 +35,36 @@
 
         <com.iptv.player.ui.common.ClockView
             android:id="@+id/clock"
+            android:visibility="gone"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="@color/text_primary"
-            android:textSize="@dimen/text_title"
+            android:textSize="23sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/dateText"
+            android:visibility="gone"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="@dimen/space_m"
             android:maxLines="1"
             android:textColor="@color/text_secondary"
             android:textSize="@dimen/text_body" />
+        <TextView
+            android:id="@+id/settingsBackButton"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:paddingHorizontal="16dp"
+            android:gravity="center"
+            android:drawableStart="@drawable/ic_arrow_back"
+            android:drawablePadding="8dp"
+            android:text="@string/action_back"
+            android:textSize="15sp"
+            android:textColor="@color/text_primary"
+            android:background="@drawable/bg_settings_row"
+            android:focusable="true"
+            android:clickable="true" />
     </LinearLayout>
 
     <LinearLayout
@@ -60,9 +76,8 @@
 
         <!-- Category rail. The viewport cannot steal D-pad focus from its rows. -->
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="252dp"
             android:layout_height="match_parent"
-            android:layout_weight="4"
             android:background="@drawable/bg_settings_rail"
             android:clipChildren="false"
             android:orientation="vertical"
@@ -97,7 +112,9 @@
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="8"
+            android:layout_weight="1"
+            android:background="@drawable/bg_settings_panel"
+            android:padding="18dp"
             android:clipChildren="false"
             android:orientation="vertical">
 
@@ -106,7 +123,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="@dimen/space_s"
-                android:background="@drawable/bg_settings_detail_header"
+                android:background="@android:color/transparent"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="@dimen/settings_panel_padding"
@@ -116,6 +133,7 @@
 
                 <ImageView
                     android:id="@+id/detailHeaderIcon"
+                    android:visibility="gone"
                     android:layout_width="@dimen/settings_header_icon"
                     android:layout_height="@dimen/settings_header_icon"
                     android:contentDescription="@null"
@@ -130,7 +148,7 @@
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="@dimen/space_m"
+                    android:layout_marginStart="0dp"
                     android:layout_weight="1"
                     android:orientation="vertical">
 
@@ -142,7 +160,7 @@
                         android:maxLines="1"
                         android:text="@string/settings_general_info"
                         android:textColor="@color/text_primary"
-                        android:textSize="@dimen/text_title"
+                        android:textSize="23sp"
                         android:textStyle="bold" />
 
                     <TextView
@@ -164,7 +182,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_settings_panel"
+                android:background="@android:color/transparent"
                 android:clipChildren="false"
                 android:paddingStart="@dimen/settings_panel_padding"
                 android:paddingTop="@dimen/settings_panel_padding"
@@ -273,7 +291,7 @@
                                 android:gravity="center"
                                 android:maxLines="2"
                                 android:textColor="@color/text_primary"
-                                android:textSize="@dimen/text_title"
+                                android:textSize="23sp"
                                 android:textStyle="bold" />
 
                             <LinearLayout
@@ -387,7 +405,7 @@
                             android:layout_height="wrap_content"
                             android:text="@string/speedtest_title"
                             android:textColor="@color/text_primary"
-                            android:textSize="@dimen/text_title"
+                            android:textSize="23sp"
                             android:textStyle="bold" />
 
                         <TextView
@@ -452,7 +470,7 @@
                                     android:layout_marginBottom="@dimen/space_s"
                                     android:text="@string/speedtest_unit"
                                     android:textColor="@color/text_secondary"
-                                    android:textSize="@dimen/text_title"
+                                    android:textSize="23sp"
                                     android:textStyle="bold" />
                             </LinearLayout>
 

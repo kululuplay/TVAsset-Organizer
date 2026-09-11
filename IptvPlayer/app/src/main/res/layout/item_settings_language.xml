@@ -19,6 +19,15 @@
     android:paddingBottom="@dimen/space_s"
     android:stateListAnimator="@animator/control_focus">
 
+    <ImageView
+        android:id="@+id/cIcon"
+        android:layout_width="@dimen/settings_flag_w"
+        android:layout_height="@dimen/settings_flag_h"
+        android:layout_marginEnd="@dimen/space_s"
+        android:contentDescription="@null"
+        android:duplicateParentState="true"
+        android:scaleType="centerInside"
+        android:visibility="gone" />
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -51,13 +60,5 @@
             android:visibility="gone" />
     </LinearLayout>
 
-    <ImageView
-        android:id="@+id/cIcon"
-        android:layout_width="@dimen/settings_flag_w"
-        android:layout_height="@dimen/settings_flag_h"
-        android:layout_marginStart="@dimen/space_s"
-        android:contentDescription="@null"
-        android:duplicateParentState="true"
-        android:scaleType="centerInside"
-        android:visibility="gone" />
+
 </LinearLayout>

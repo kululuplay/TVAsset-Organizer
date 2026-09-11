@@ -20,6 +20,15 @@
     android:paddingBottom="@dimen/space_s"
     android:stateListAnimator="@animator/control_focus">
 
+    <ImageView
+        android:id="@+id/mIcon"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:layout_marginEnd="11dp"
+        android:contentDescription="@null"
+        android:visibility="gone"
+        app:tint="@color/settings_row_text" />
+
     <TextView
         android:id="@+id/mTitle"
         android:layout_width="0dp"
@@ -29,7 +38,7 @@
         android:ellipsize="end"
         android:maxLines="2"
         android:textColor="@color/settings_row_text"
-        android:textSize="@dimen/text_body"
+        android:textSize="15sp"
         android:textStyle="bold" />
 
     <TextView
@@ -43,7 +52,7 @@
         android:maxLines="2"
         android:maxWidth="@dimen/settings_value_max_w"
         android:textColor="@color/settings_row_text_secondary"
-        android:textSize="@dimen/text_caption"
+        android:textSize="14sp"
         android:visibility="gone" />
 
     <androidx.appcompat.widget.SwitchCompat

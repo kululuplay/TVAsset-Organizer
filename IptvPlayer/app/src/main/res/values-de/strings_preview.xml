@@ -7,4 +7,6 @@
     <string name="epg_popup_finished">BEENDET</string>
     <string name="epg_popup_controls">↑↓ Beschreibung lesen · OK / Zurück Schließen</string>
     <string name="content_new">NEU</string>
+    <string name="settings_player_section">Player</string>
+    <string name="cat_recently_added">Zuletzt hinzugefügt</string>
 </resources>

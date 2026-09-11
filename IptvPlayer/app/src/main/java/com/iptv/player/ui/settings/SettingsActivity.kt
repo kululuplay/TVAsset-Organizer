@@ -74,6 +74,8 @@ class SettingsActivity : BaseActivity() {
         SYSTEM,
     }
 
+    private val inlineGroups = mutableMapOf<View, List<View>>()
+    private val inlineSelections = mutableListOf<() -> Unit>()
     private var selectedRow: View? = null
     private var selectedPanel = Panel.GENERAL
     private val panelRows = linkedMapOf<Panel, View>()
@@ -132,6 +134,7 @@ class SettingsActivity : BaseActivity() {
 
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        binding.settingsBackButton.setOnClickListener { finish() }
         ViewCompat.setAccessibilityHeading(binding.detailTitle, true)
 
         buildPanels()
@@ -188,7 +191,7 @@ class SettingsActivity : BaseActivity() {
         addNavRow(c, getString(R.string.settings_language), Panel.LANGUAGE)
         addNavRow(c, getString(R.string.settings_parental_pin), Panel.PIN)
         addNavRow(c, getString(R.string.settings_content_manager), Panel.CATEGORIES)
-        addNavRow(c, getString(R.string.settings_player_mode), Panel.PLAYER)
+        addNavRow(c, getString(R.string.settings_player_section), Panel.PLAYER)
         addNavRow(c, getString(R.string.settings_time_sync), Panel.TIME)
         addNavRow(c, getString(R.string.settings_speedtest), Panel.SPEEDTEST)
         addNavRow(c, getString(R.string.settings_system_support), Panel.SYSTEM)
@@ -206,6 +209,11 @@ class SettingsActivity : BaseActivity() {
 
     private fun addNavRow(container: LinearLayout, title: String, panel: Panel): View {
         val row = inflateMaster(container, title)
+        row.findViewById<ImageView>(R.id.mIcon).apply {
+            setImageResource(panelIcon(panel))
+            visibility = View.VISIBLE
+        }
+        row.minimumHeight = dp(48)
         row.setOnFocusChangeListener { v, hasFocus -> if (hasFocus) showPanel(panel, v) }
         row.setOnClickListener {
             showPanel(panel, it)
@@ -283,7 +291,7 @@ class SettingsActivity : BaseActivity() {
         Panel.LANGUAGE -> R.string.settings_language
         Panel.PIN -> R.string.settings_parental
         Panel.CATEGORIES -> R.string.settings_content_manager
-        Panel.PLAYER -> R.string.settings_player_mode
+        Panel.PLAYER -> R.string.settings_player_section
         Panel.TIME -> R.string.settings_time_sync
         Panel.SPEEDTEST -> R.string.settings_speedtest
         Panel.SYSTEM -> R.string.settings_system_support
@@ -351,7 +359,8 @@ class SettingsActivity : BaseActivity() {
                 event.keyCode == detailToRailKey &&
                 isFocusInside(binding.detailContainer) &&
                 canLeaveEditTextTowardRail(currentFocus, detailToRailKey) &&
-                canLeavePinKeypadTowardRail(currentFocus, detailToRailKey)
+                canLeavePinKeypadTowardRail(currentFocus, detailToRailKey) &&
+                (inlineGroups[currentFocus]?.firstOrNull()?.let { it === currentFocus } ?: true)
             ) {
                 selectedRow?.requestFocus()
                 return true
@@ -408,7 +417,7 @@ class SettingsActivity : BaseActivity() {
         val c = binding.generalContainer
         c.removeAllViews()
 
-        addSectionHeader(c, getString(R.string.settings_account))
+        val usernameValue = addInfoRow(c, getString(R.string.hint_username), "…")
         val statusValue = addInfoRow(c, getString(R.string.account_status), "…")
         val expiryValue = addInfoRow(c, getString(R.string.account_expiry), "…")
         val connValue = addInfoRow(c, getString(R.string.account_connections), "…")
@@ -416,7 +425,6 @@ class SettingsActivity : BaseActivity() {
         // section instead of a separate Network Info block at the bottom.
         val ipValue = addInfoRow(c, getString(R.string.settings_public_ip), "…")
 
-        addSectionHeader(c, getString(R.string.settings_device_info))
         val version = runCatching {
             packageManager.getPackageInfo(packageName, 0).versionName
         }.getOrNull() ?: "—"
@@ -432,6 +440,7 @@ class SettingsActivity : BaseActivity() {
         generalJob = lifecycleScope.launch {
             launch { ipValue.text = PublicIpProvider.fetchIpv4() ?: "—" }
             val config = ServiceLocator.settings.getSourceConfig()
+            usernameValue.text = config?.username.orEmpty().ifBlank { "—" }
             val info = config?.let { ServiceLocator.repository.getAccountInfo(it) }
             if (info == null) {
                 statusValue.text = getString(R.string.account_none)
@@ -462,9 +471,17 @@ class SettingsActivity : BaseActivity() {
 
     private fun buildLanguagePanel() {
         val c = binding.languageContainer
-        LocaleManager.SUPPORTED.forEach { tag ->
+        var languageLine = LinearLayout(this)
+        listOf("de", "en", "tr", "fr", "nl", "ar").forEachIndexed { index, tag ->
+            if (index % 2 == 0) {
+                languageLine = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                c.addView(languageLine)
+            }
             val row = LayoutInflater.from(this)
-                .inflate(R.layout.item_settings_choice, c, false)
+                .inflate(R.layout.item_settings_language, languageLine, false)
+            row.layoutParams = LinearLayout.LayoutParams(0, dp(64), 1f).apply {
+                marginEnd = dp(10); bottomMargin = dp(10)
+            }
             row.findViewById<TextView>(R.id.cTitle).text = LocaleManager.displayName(tag)
             val icon = row.findViewById<ImageView>(R.id.cIcon)
             icon.setImageResource(flagFor(tag))
@@ -484,7 +501,9 @@ class SettingsActivity : BaseActivity() {
                     recreate()
                 }
             }
-            c.addView(row)
+            languageLine.addView(row)
+            val members = (0 until languageLine.childCount).map { languageLine.getChildAt(it) }
+            members.forEach { inlineGroups[it] = members }
             languageRows[tag] = row
         }
     }
@@ -493,31 +512,14 @@ class SettingsActivity : BaseActivity() {
         val c = binding.playerContainer
         addSectionHeader(c, getString(R.string.settings_live_player_header))
         addPanelDescription(c, getString(R.string.settings_player_scope_desc))
-        listOf(PlayerMode.AUTO, PlayerMode.EXOPLAYER, PlayerMode.VLC).forEach { mode ->
-            val row = LayoutInflater.from(this)
-                .inflate(R.layout.item_settings_choice, c, false)
-            row.findViewById<TextView>(R.id.cTitle).text = playerModeLabel(mode)
-            row.findViewById<TextView>(R.id.cSubtitle).apply {
-                text = playerModeDescription(mode)
-                visibility = View.VISIBLE
-            }
-            val icon = row.findViewById<ImageView>(R.id.cIcon)
-            icon.setImageResource(R.drawable.ic_check)
-            icon.imageTintList = ContextCompat.getColorStateList(this, R.color.settings_row_text)
-            icon.visibility = View.INVISIBLE
-            row.setOnClickListener { selectPlayerMode(mode) }
-            c.addView(row)
-            playerRows[mode] = row
-        }
+        val modes = listOf(PlayerMode.AUTO, PlayerMode.EXOPLAYER, PlayerMode.VLC)
+        val engineButtons = addChoiceGroup(c, "", modes.map { it.name to playerModeLabel(it) },
+            { selectedPlayerMode.name }) { selectPlayerMode(PlayerMode.valueOf(it)) }
+        modes.forEach { playerRows[it] = engineButtons.getValue(it.name) }
 
-        addSectionHeader(c, getString(R.string.settings_playback_tuning_header))
-
-        // Decoder strategy (Auto / Hardware / Software) for the green-screen fix.
-        val decoderRow = inflateMaster(c, getString(R.string.settings_decoder_mode))
-        decoderModeValue = decoderRow.findViewById<TextView>(R.id.mValue)
-            .also { it.visibility = View.VISIBLE }
-        decoderRow.setOnClickListener { showDecoderModeDialog() }
-        c.addView(decoderRow)
+        addChoiceGroup(c, getString(R.string.settings_decoder_mode),
+            DecoderMode.entries.map { it.name to decoderModeLabel(it) },
+            { selectedDecoderMode.name }) { selectInlineDecoder(DecoderMode.valueOf(it)) }
 
         // Live transport is fixed; this row is informational, not a selector.
         val formatRow = inflateMaster(c, getString(R.string.settings_stream_format))
@@ -527,12 +529,9 @@ class SettingsActivity : BaseActivity() {
         formatRow.isClickable = false
         c.addView(formatRow)
 
-        // Buffer size (Low / Normal / High) -> caching on both engines.
-        val bufferRow = inflateMaster(c, getString(R.string.settings_buffer))
-        bufferModeValue = bufferRow.findViewById<TextView>(R.id.mValue)
-            .also { it.visibility = View.VISIBLE }
-        bufferRow.setOnClickListener { showBufferModeDialog() }
-        c.addView(bufferRow)
+        addChoiceGroup(c, getString(R.string.settings_buffer),
+            BufferMode.entries.map { it.name to bufferModeLabel(it) },
+            { selectedBufferMode.name }) { viewModel.setBufferMode(BufferMode.valueOf(it)) }
 
         // Audio passthrough toggle (default OFF = decode to PCM for sound).
         val passthroughRow = inflateMaster(c, getString(R.string.settings_audio_passthrough))
@@ -591,10 +590,11 @@ class SettingsActivity : BaseActivity() {
         clockRow.setOnClickListener { viewModel.setShowClock(!clockSwitch!!.isChecked) }
         c.addView(clockRow)
 
-        val saverRow = inflateMaster(c, getString(R.string.settings_screensaver))
-        screensaverValue = saverRow.findViewById<TextView>(R.id.mValue).also { it.visibility = View.VISIBLE }
-        saverRow.setOnClickListener { showScreensaverDialog() }
-        c.addView(saverRow)
+        addChoiceGroup(c, getString(R.string.settings_screensaver),
+            listOf(0, 5, 10, 15, 30).map { minutes -> minutes.toString() to
+                if (minutes == 0) getString(R.string.settings_screensaver_off)
+                else getString(R.string.settings_minutes, minutes) },
+            { selectedScreensaverMinutes.toString() }) { viewModel.setScreensaverMinutes(it.toInt()) }
 
         val syncRow = inflateMaster(c, getString(R.string.settings_auto_sync))
         autoSyncSwitch = syncRow.findViewById<SwitchCompat>(R.id.mSwitch).also { it.visibility = View.VISIBLE }
@@ -602,10 +602,13 @@ class SettingsActivity : BaseActivity() {
         syncRow.setOnClickListener { toggleAutoSync() }
         c.addView(syncRow)
 
-        val intervalRow = inflateMaster(c, getString(R.string.settings_auto_sync_interval))
-        autoSyncIntervalValue = intervalRow.findViewById<TextView>(R.id.mValue).also { it.visibility = View.VISIBLE }
-        intervalRow.setOnClickListener { showAutoSyncIntervalDialog() }
-        c.addView(intervalRow)
+        addChoiceGroup(c, getString(R.string.settings_auto_sync_interval),
+            listOf(6, 12, 24, 48).map { it.toString() to getString(R.string.settings_every_hours, it) },
+            { autoSyncHours.toString() }) {
+                val hours = it.toInt()
+                viewModel.setAutoSyncHours(hours)
+                if (autoSyncEnabled) SyncScheduler.schedule(this, hours)
+            }
     }
 
     private fun buildCategoriesPanel() {
@@ -1165,7 +1168,7 @@ class SettingsActivity : BaseActivity() {
         val header = TextView(this).apply {
             text = title
             setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.text_primary))
-            textSize = 24f
+            textSize = 17f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             val top = if (container.childCount == 0) 0
             else resources.getDimensionPixelSize(R.dimen.space_l)
@@ -1179,7 +1182,7 @@ class SettingsActivity : BaseActivity() {
         container.addView(TextView(this).apply {
             text = description
             setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.text_secondary))
-            textSize = 16f
+            textSize = 14f
             setLineSpacing(0f, 1.12f)
             setPadding(
                 0,
@@ -1199,11 +1202,83 @@ class SettingsActivity : BaseActivity() {
         return valueView
     }
 
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun addChoiceGroup(
+        container: LinearLayout, title: String, options: List<Pair<String, String>>,
+        selected: () -> String, onSelect: (String) -> Unit,
+    ): Map<String, View> {
+        if (title.isNotBlank()) addSectionHeader(container, title)
+        val line = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(4), 0, dp(14))
+        }
+        val buttons = options.associate { (key, label) ->
+            val button = TextView(this).apply {
+                id = View.generateViewId()
+                text = label
+                textSize = 14f
+                gravity = android.view.Gravity.CENTER
+                maxLines = 2
+                setPadding(dp(10), dp(8), dp(10), dp(8))
+                setTextColor(ContextCompat.getColorStateList(this@SettingsActivity, R.color.settings_row_text))
+                setBackgroundResource(R.drawable.bg_settings_row)
+                isFocusable = true
+                isClickable = true
+                layoutParams = LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginEnd = dp(8) }
+                setOnClickListener { onSelect(key) }
+            }
+            line.addView(button)
+            key to button as View
+        }
+        val members = buttons.values.toList()
+        members.forEach { inlineGroups[it] = members }
+        val render = {
+            buttons.forEach { (key, button) ->
+                button.isSelected = selected() == key
+                val label = options.first { it.first == key }.second
+                button.contentDescription = if (button.isSelected)
+                    getString(R.string.settings_selected_option, label) else label
+            }
+        }
+        inlineSelections += render
+        render()
+        container.addView(line)
+        return buttons
+    }
+
+    private fun selectInlineDecoder(mode: DecoderMode) {
+        if (mode == DecoderMode.SOFTWARE && selectedPlayerMode == PlayerMode.EXOPLAYER) {
+            AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
+                .setTitle(R.string.settings_decoder_software)
+                .setMessage(R.string.settings_software_requires_vlc)
+                .setPositiveButton(android.R.string.ok) { _, _ -> viewModel.selectDecoderMode(mode) }
+                .setNegativeButton(android.R.string.cancel, null).showTracked()
+        } else viewModel.selectDecoderMode(mode)
+    }
+
     private fun configureToggleRow(
         row: View,
         title: String,
         switch: SwitchCompat,
     ) {
+        // Visible On/Off segments share the original persisted toggle action.
+        val group = row as LinearLayout
+        group.orientation = LinearLayout.VERTICAL
+        group.isFocusable = false
+        group.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        group.setPadding(0, dp(8), 0, 0)
+        group.findViewById<TextView>(R.id.mTitle).layoutParams =
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        switch.visibility = View.GONE
+        addChoiceGroup(group, "", listOf(
+            "true" to getString(R.string.settings_on), "false" to getString(R.string.settings_off),
+        ), { switch.isChecked.toString() }) { value ->
+            if (switch.isChecked.toString() != value) row.performClick()
+        }
+        switch.setOnCheckedChangeListener { _, _ ->
+            inlineSelections.forEach { it() }
+        }
         row.contentDescription = title
         ViewCompat.setAccessibilityDelegate(
             row,
@@ -1261,6 +1336,7 @@ class SettingsActivity : BaseActivity() {
                 selectedScreensaverMinutes = it
                 screensaverValue?.text = if (it <= 0) getString(R.string.settings_screensaver_off)
                 else getString(R.string.settings_minutes, it)
+                inlineSelections.forEach { it() }
             }
         }
         lifecycleScope.launch {
@@ -1273,6 +1349,7 @@ class SettingsActivity : BaseActivity() {
             viewModel.autoSyncHours.collectLatest {
                 autoSyncHours = it
                 autoSyncIntervalValue?.text = getString(R.string.settings_every_hours, it)
+                inlineSelections.forEach { it() }
             }
         }
         lifecycleScope.launch {
@@ -1296,8 +1373,6 @@ class SettingsActivity : BaseActivity() {
                 selectedDecoderMode = selection.decoder
                 playerRows.forEach { (m, row) ->
                     row.isSelected = m == selection.player
-                    row.findViewById<ImageView>(R.id.cIcon).visibility =
-                        if (m == selection.player) View.VISIBLE else View.INVISIBLE
                     row.contentDescription = if (m == selection.player) {
                         getString(R.string.settings_selected_option, playerModeLabel(m))
                     } else {
@@ -1305,6 +1380,7 @@ class SettingsActivity : BaseActivity() {
                     }
                 }
                 decoderModeValue?.text = decoderModeLabel(selection.decoder)
+                inlineSelections.forEach { it() }
             }
         }
         lifecycleScope.launch {
@@ -1316,6 +1392,7 @@ class SettingsActivity : BaseActivity() {
             viewModel.bufferMode.collectLatest {
                 selectedBufferMode = it
                 bufferModeValue?.text = bufferModeLabel(it)
+                inlineSelections.forEach { it() }
             }
         }
         lifecycleScope.launch {

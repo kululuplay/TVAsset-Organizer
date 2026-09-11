@@ -7,4 +7,5 @@
     <string name="epg_popup_finished">FINISHED</string>
     <string name="epg_popup_controls">↑↓ Read description · OK / Back Close</string>
     <string name="content_new">NEW</string>
+    <string name="settings_player_section">Player</string>
 </resources>
