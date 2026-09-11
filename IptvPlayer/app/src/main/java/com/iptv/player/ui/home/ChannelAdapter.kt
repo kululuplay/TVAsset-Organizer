@@ -79,6 +79,12 @@ class ChannelAdapter(
         }
 
         fun bind(channel: Channel) {
+            favStar.setOnClickListener {
+                currentChannel()?.takeUnless(lockedProvider)?.let(onToggleFavorite)
+            }
+            favStar.setOnFocusChangeListener { _, focused ->
+                if (focused) currentChannel()?.let(onFocused)
+            }
             itemView.setOnFocusChangeListener { _, hasFocus ->
                 if (hasFocus) currentChannel()?.let(onFocused)
             }
@@ -107,7 +113,11 @@ class ChannelAdapter(
 
             name.text = ChannelText.clean(channel.name)
             number.text = channel.number?.toString() ?: ""
-            favStar.visibility = if (channel.isFavorite) View.VISIBLE else View.GONE
+            favStar.visibility = View.VISIBLE
+            favStar.setImageResource(if (channel.isFavorite) R.drawable.ic_star else R.drawable.ic_star_outline)
+            favStar.contentDescription = itemView.context.getString(
+                if (channel.isFavorite) R.string.removed_from_favorites else R.string.added_to_favorites
+            )
             catchupBadge.visibility = if (channel.catchupDays > 0) View.VISIBLE else View.GONE
             logo.scaleType = ImageView.ScaleType.FIT_CENTER
 

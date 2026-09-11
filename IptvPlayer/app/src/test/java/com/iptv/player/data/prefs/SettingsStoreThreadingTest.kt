@@ -70,7 +70,7 @@ class SettingsStoreThreadingTest {
     }
 
     @Test(timeout = 10000)
-    fun `slow first key creation leaves UI responsive and publishes only complete encrypted source`() = runBlocking {
+    fun `slow first key creation leaves UI responsive and publishes only complete encrypted source`() = runBlocking<Unit> {
         Harness().use { h ->
             val entered = CountDownLatch(1)
             val release = CountDownLatch(1)
@@ -96,7 +96,7 @@ class SettingsStoreThreadingTest {
     }
 
     @Test(timeout = 10000)
-    fun `encryption failure preserves saved account without writing plaintext or partial changes`() = runBlocking {
+    fun `encryption failure preserves saved account without writing plaintext or partial changes`() = runBlocking<Unit> {
         Harness().use { h ->
             withContext(h.ui) { h.settings.saveSource(config) }
             val before = h.data.data.first().asMap()
@@ -111,7 +111,7 @@ class SettingsStoreThreadingTest {
     }
 
     @Test(timeout = 10000)
-    fun `PIN and TMDB key writes reads and observed values never call keystore on UI`() = runBlocking {
+    fun `PIN and TMDB key writes reads and observed values never call keystore on UI`() = runBlocking<Unit> {
         Harness().use { h ->
             withContext(h.ui) {
                 h.settings.setPin("4729")
@@ -125,7 +125,7 @@ class SettingsStoreThreadingTest {
     }
 
     @Test(timeout = 10000)
-    fun `legacy migration runs encryption on worker and preserves encrypted values`() = runBlocking {
+    fun `legacy migration runs encryption on worker and preserves encrypted values`() = runBlocking<Unit> {
         val username = stringPreferencesKey("username")
         val password = stringPreferencesKey("password")
         Harness(preferencesOf(username to "user", password to "encv1:pass")).use { h ->

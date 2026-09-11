@@ -1,8 +1,7 @@
 /*
  * SplashActivity.kt
  * The app's branded entry point. Routes:
- *   !wizardDone        -> WizardActivity (first-run setup)
- *   wizardDone & no src -> LoginActivity (connect a service)
+ *   no source          -> LoginActivity (username and password only)
  *   else               -> DashboardActivity (straight to content)
  *
  * For logged-in users it shows a modern branded splash briefly while
@@ -30,7 +29,6 @@ import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.dashboard.DashboardActivity
 import com.iptv.player.ui.login.LoginActivity
 import com.iptv.player.ui.recovery.CrashRecoveryActivity
-import com.iptv.player.ui.wizard.WizardActivity
 import com.iptv.player.util.LaunchCrashGuard
 import com.iptv.player.util.Logger
 import kotlinx.coroutines.delay
@@ -55,7 +53,7 @@ class SplashActivity : BaseActivity() {
 
     companion object {
         /** Short delay for the routing-only (not logged in) path. */
-        private const val ROUTE_DELAY_MS = 600L
+        private const val ROUTE_DELAY_MS = 1_400L
 
         /** Minimum time for a readable entrance without making repeat launches drag. */
         private const val MIN_SPLASH_MS = 1_400L
@@ -210,10 +208,6 @@ class SplashActivity : BaseActivity() {
     private suspend fun route() {
         val settings = ServiceLocator.settings
         when {
-            !settings.wizardDone.first() -> {
-                delay(ROUTE_DELAY_MS)
-                go(WizardActivity::class.java)
-            }
             !settings.hasSource.first() -> {
                 delay(ROUTE_DELAY_MS)
                 go(LoginActivity::class.java)

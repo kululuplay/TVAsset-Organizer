@@ -14,6 +14,7 @@ import android.view.View
 import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
@@ -212,8 +213,7 @@ class SeriesDetailActivity : BaseActivity() {
             },
             onClicked = { playEpisode(it) },
         )
-        binding.episodeList.layoutManager =
-            LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        binding.episodeList.layoutManager = GridLayoutManager(this, 3)
         binding.episodeList.adapter = episodeAdapter
         // Same guard: setWatchState() rebinds visible episode cards via
         // notifyItemRangeChanged; without this it could steal focus from the card
@@ -862,9 +862,10 @@ class SeriesDetailActivity : BaseActivity() {
                         }
                         return true
                     }
-                    binding.episodeList.hasFocus() &&
-                        binding.similarList.visibility == View.VISIBLE -> {
-                        binding.similarList.requestFocusAt(0)
+                    binding.episodeList.hasFocus() -> {
+                        if (!moveEpisodeRow(down = true) && similarVisible) {
+                            binding.similarList.requestFocusAt(0)
+                        }
                         return true
                     }
                     binding.episodeRetryButton.hasFocus() && similarVisible -> {
@@ -891,7 +892,7 @@ class SeriesDetailActivity : BaseActivity() {
                         return true
                     }
                     binding.episodeList.hasFocus() -> {
-                        focusCurrentSeason()
+                        if (!moveEpisodeRow(down = false)) focusCurrentSeason()
                         return true
                     }
                     binding.similarList.hasFocus() -> {
@@ -932,6 +933,15 @@ class SeriesDetailActivity : BaseActivity() {
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    private fun moveEpisodeRow(down: Boolean): Boolean {
+        val focused = currentFocus?.let(binding.episodeList::findContainingItemView) ?: return false
+        val position = binding.episodeList.getChildAdapterPosition(focused)
+        val target = EpisodeGridNavigation.verticalTarget(position, episodeAdapter.itemCount, 3, down)
+            ?: return false
+        binding.episodeList.requestFocusAt(target)
+        return true
     }
 
     private fun focusCurrentSeason() {

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="login_username_no_email">Saisissez votre identifiant, pas une adresse e-mail.</string>
+    <string name="epg_description_unavailable">Aucune description disponible pour ce programme.</string>
+</resources>

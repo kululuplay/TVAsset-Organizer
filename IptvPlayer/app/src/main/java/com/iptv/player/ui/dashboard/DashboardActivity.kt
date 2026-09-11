@@ -92,7 +92,6 @@ class DashboardActivity : BaseActivity() {
         binding.dateText.text =
             DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date())
         updateSignal()
-        loadWeather()
         loadFooter()
     }
 
@@ -242,7 +241,14 @@ class DashboardActivity : BaseActivity() {
         card.cardTitle.setText(titleRes)
         card.cardSubtitle.setText(subtitleRes)
         card.cardEyebrow.visibility = if (hero) View.VISIBLE else View.GONE
-        bgRes?.let { card.root.setBackgroundResource(it) }
+        val surface = bgRes ?: when (titleRes) {
+            R.string.nav_movies -> R.drawable.bg_proto_movies
+            R.string.nav_series -> R.drawable.bg_proto_series
+            R.string.nav_radio -> R.drawable.bg_proto_radio
+            R.string.nav_favorites -> R.drawable.bg_proto_favorites
+            else -> R.drawable.bg_tile_surface
+        }
+        card.root.setBackgroundResource(surface)
         card.root.contentDescription =
             getString(titleRes) + ". " + getString(subtitleRes)
 
@@ -252,7 +258,7 @@ class DashboardActivity : BaseActivity() {
                 width = badge
                 height = badge
             }
-            val watermark = (badge * 1.9f).toInt()
+            val watermark = (170 * resources.displayMetrics.density).toInt()
             card.cardWatermark.layoutParams = card.cardWatermark.layoutParams.apply {
                 width = watermark
                 height = watermark

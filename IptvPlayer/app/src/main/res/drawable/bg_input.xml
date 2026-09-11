@@ -1,18 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Text input background with a clear focus border (D-pad visibility). -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <solid android:color="@color/bg_card_focused" />
-            <corners android:radius="@dimen/card_radius" />
-            <stroke android:width="@dimen/focus_stroke" android:color="@color/focus_border" />
+            <corners android:radius="14dp" />
+            <solid android:color="#224A65" />
+            <stroke android:width="2dp" android:color="#6CDAFF" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="14dp" />
+            <solid android:color="#224A65" />
+            <stroke android:width="2dp" android:color="#6CDAFF" />
+        </shape>
+    </item>
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="14dp" />
+            <solid android:color="#203D56" />
+            <stroke android:width="1dp" android:color="#53AED3" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="@color/bg_card" />
-            <corners android:radius="@dimen/card_radius" />
-            <stroke android:width="1dp" android:color="@color/text_muted" />
+            <corners android:radius="14dp" />
+            <solid android:color="#182A3E" />
+            <stroke android:width="1dp" android:color="#34516A" />
         </shape>
     </item>
 </selector>

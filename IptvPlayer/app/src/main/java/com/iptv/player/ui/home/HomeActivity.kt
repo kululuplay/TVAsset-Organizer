@@ -465,7 +465,15 @@ class HomeActivity : BaseActivity() {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
                     when {
-                        // Drill back to categories from the channel list (mirrors Back).
+                        binding.epgList.hasFocus() -> {
+                            focusGuideChannelFavorite()
+                            return true
+                        }
+                        binding.channelList.hasFocus() && currentFocus?.id == R.id.favStar -> {
+                            binding.channelList.findContainingItemView(currentFocus!!)?.requestFocus()
+                            return true
+                        }
+                        // Drill back to categories from the channel name.
                         inChannelView && binding.channelList.hasFocus() -> {
                             if (event.repeatCount > 0) return true
                             consumedUntilUp.add(event.keyCode)
@@ -489,7 +497,13 @@ class HomeActivity : BaseActivity() {
                         inChannelView && binding.channelList.hasFocus() -> {
                             if (event.repeatCount > 0) return true
                             consumedUntilUp.add(event.keyCode)
-                            binding.previewCard.requestFocus()
+                            val row = currentFocus?.let(binding.channelList::findContainingItemView)
+                            val favorite = row?.findViewById<View>(R.id.favStar)
+                            if (currentFocus?.id != R.id.favStar && favorite?.isShown == true) {
+                                favorite.requestFocus()
+                            } else {
+                                focusCurrentProgram()
+                            }
                             return true
                         }
                         !inChannelView && binding.categoryList.hasFocus() -> {
@@ -505,6 +519,10 @@ class HomeActivity : BaseActivity() {
                     }
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    if (binding.previewCard.hasFocus()) {
+                        focusCurrentProgram()
+                        return true
+                    }
                     if (event.repeatCount > 0 && binding.searchInput.hasFocus()) return true
                     if (binding.searchInput.hasFocus()) {
                         consumedUntilUp.add(event.keyCode)
@@ -519,6 +537,15 @@ class HomeActivity : BaseActivity() {
                             }
                         }
                         return true
+                    }
+                }
+                KeyEvent.KEYCODE_DPAD_UP -> {
+                    if (binding.epgList.hasFocus()) {
+                        val row = currentFocus?.let(binding.epgList::findContainingItemView)
+                        if (row != null && binding.epgList.getChildAdapterPosition(row) == 0) {
+                            binding.previewCard.requestFocus()
+                            return true
+                        }
                     }
                 }
                 KeyEvent.KEYCODE_GUIDE, KeyEvent.KEYCODE_PROG_RED -> {
@@ -807,9 +834,22 @@ class HomeActivity : BaseActivity() {
         (binding.channelList.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
             ?.supportsChangeAnimations = false
 
-        epgAdapter = ProgramAdapter()
+        epgAdapter = ProgramAdapter { program ->
+            val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM)
+            val timing = date.format(java.util.Date(program.startMs)) + " · " +
+                timeFmt.format(java.util.Date(program.startMs)) + " – " +
+                timeFmt.format(java.util.Date(program.stopMs))
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle(program.title)
+                .setMessage(timing + "\n\n" + program.description.orEmpty().ifBlank {
+                    getString(R.string.epg_description_unavailable)
+                })
+                .setPositiveButton(R.string.action_back, null)
+                .show()
+        }
         binding.epgList.layoutManager = LinearLayoutManager(this)
         binding.epgList.adapter = epgAdapter
+        binding.epgList.itemAnimator = null
 
         fullscreenGuideAdapter = FullscreenChannelGuideAdapter(
             onFocused = ::showFullscreenGuideEpg,
@@ -918,7 +958,29 @@ class HomeActivity : BaseActivity() {
         binding.channelList.nextFocusRightId = binding.previewCard.id
         binding.previewCard.nextFocusUpId = binding.refreshButton.id
         binding.previewCard.nextFocusRightId = binding.previewCard.id
-        binding.previewCard.nextFocusDownId = binding.previewCard.id
+        binding.previewCard.nextFocusDownId = binding.epgList.id
+    }
+
+    private fun focusCurrentProgram() {
+        val programs = epgAdapter.currentList
+        if (programs.isEmpty()) {
+            binding.previewCard.requestFocus()
+            return
+        }
+        val now = System.currentTimeMillis()
+        val index = programs.indexOfFirst { it.isLiveAt(now) }.takeIf { it >= 0 }
+            ?: programs.indexOfFirst { it.startMs >= now }.coerceAtLeast(0)
+        focusRow(binding.epgList, index)
+    }
+
+    private fun focusGuideChannelFavorite() {
+        val index = currentChannels.indexOfFirst { it.id == currentInfoChannel?.id }
+        if (index < 0) { binding.previewCard.requestFocus(); return }
+        focusRow(binding.channelList, index)
+        binding.channelList.post {
+            binding.channelList.findViewHolderForAdapterPosition(index)?.itemView
+                ?.findViewById<View>(R.id.favStar)?.takeIf { it.isShown }?.requestFocus()
+        }
     }
 
     /** Keeps the rail label and count synchronized with its currently visible list. */
@@ -1218,9 +1280,9 @@ class HomeActivity : BaseActivity() {
     private fun bindCaptionMeta(channel: Channel) {
         val number = channel.number?.toString().orEmpty()
         binding.previewNumber.text = number
-        binding.previewNumber.visibility = if (number.isEmpty()) View.GONE else View.VISIBLE
-        binding.previewLiveBadge.visibility = View.VISIBLE
-        binding.previewCaptionLogoPlate.visibility = View.VISIBLE
+        binding.previewNumber.visibility = View.GONE
+        binding.previewLiveBadge.visibility = View.GONE
+        binding.previewCaptionLogoPlate.visibility = View.GONE
         val cleanName = ChannelText.clean(channel.name)
         binding.previewTitle.text = cleanName
         if (previewingChannel == null) showPreviewIdentityPlaceholder()
@@ -1491,7 +1553,7 @@ class HomeActivity : BaseActivity() {
         binding.previewNumber.text = ""
         binding.previewNumber.visibility = View.GONE
         binding.previewLiveBadge.visibility = View.GONE
-        binding.previewCaptionLogoPlate.visibility = View.VISIBLE
+        binding.previewCaptionLogoPlate.visibility = View.GONE
         binding.previewTitle.setText(R.string.adult_locked_title)
         binding.previewProgram.text = ""
         binding.infoLogo.visibility = View.VISIBLE
@@ -2485,7 +2547,7 @@ class HomeActivity : BaseActivity() {
         )
         updateSplitGuide(snapshot.splitPercent)
         binding.leftPane.visibility = View.VISIBLE
-        binding.previewHeader.visibility = View.VISIBLE
+        binding.previewHeader.visibility = View.GONE
         binding.guidePanel.visibility = View.VISIBLE
         binding.previewCaption.visibility = View.VISIBLE
         binding.fullscreenGuideOverlay.visibility = View.GONE

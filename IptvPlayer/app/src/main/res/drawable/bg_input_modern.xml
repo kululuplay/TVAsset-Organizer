@@ -1,19 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modern translucent input. Focus lifts the fill and draws a magenta border so
-     the D-pad cursor is always obvious. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <solid android:color="@color/glass_input_focused" />
             <corners android:radius="14dp" />
-            <stroke android:width="2dp" android:color="@color/brand_magenta" />
+            <solid android:color="#224A65" />
+            <stroke android:width="2dp" android:color="#6CDAFF" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="14dp" />
+            <solid android:color="#224A65" />
+            <stroke android:width="2dp" android:color="#6CDAFF" />
+        </shape>
+    </item>
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="14dp" />
+            <solid android:color="#203D56" />
+            <stroke android:width="1dp" android:color="#53AED3" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="@color/glass_input" />
             <corners android:radius="14dp" />
-            <stroke android:width="1dp" android:color="@color/glass_stroke" />
+            <solid android:color="#182A3E" />
+            <stroke android:width="1dp" android:color="#34516A" />
         </shape>
     </item>
 </selector>

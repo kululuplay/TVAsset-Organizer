@@ -318,10 +318,10 @@ class SettingsStore(
 
     // ---- Language -------------------------------------------------------
 
-    val languageTag: Flow<String> = dataStore.data.map { it[Keys.LANGUAGE] ?: "" }
+    val languageTag: Flow<String> = dataStore.data.map { it[Keys.LANGUAGE] ?: "de" }
 
     suspend fun getLanguageTag(): String =
-        dataStore.data.first()[Keys.LANGUAGE] ?: ""
+        dataStore.data.first()[Keys.LANGUAGE] ?: "de"
 
     suspend fun setLanguageTag(tag: String) {
         // Mirror to plain prefs FIRST so BaseActivity.attachBaseContext can read it
@@ -338,7 +338,7 @@ class SettingsStore(
      * attachBaseContext path where suspend reads are not possible.
      */
     fun languageTagBlocking(): String =
-        localePrefs.getString(Keys.LANGUAGE.name, "") ?: ""
+        localePrefs.getString(Keys.LANGUAGE.name, "de") ?: "de"
 
     private val localePrefs by lazy {
         context.getSharedPreferences("locale_mirror", Context.MODE_PRIVATE)

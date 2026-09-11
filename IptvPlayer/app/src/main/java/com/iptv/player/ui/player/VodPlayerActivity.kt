@@ -1924,7 +1924,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
             return
         }
         controlsVisible = visible
-        val bars = arrayOf(binding.topBar, binding.transportBar, binding.bottomBar)
+        val bars = arrayOf(binding.playerControls)
         for (bar in bars) {
             bar.animate().cancel()
             if (visible) {

@@ -90,9 +90,9 @@ android {
         debug {
             isMinifyEnabled = false
             if (tsOnlyTestBuild) {
-                applicationIdSuffix = ".tstest"
-                versionNameSuffix = "-ts-test1"
-                manifestPlaceholders["appLabel"] = "Kululu IPTV TS Test"
+                applicationIdSuffix = ".preview"
+                versionNameSuffix = "-preview1"
+                manifestPlaceholders["appLabel"] = "Kululu IPTV Preview"
             } else if (compatibilityTestBuild) {
                 applicationIdSuffix = ".compat"
                 versionNameSuffix = "-compat-test"

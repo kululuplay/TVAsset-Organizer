@@ -1,8 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modern Android TV launcher. A large Live hero anchors the screen, the four
-     primary libraries form a compact editorial grid, and personal/utilities sit
-     in a dedicated quick-action rail. Everything fits a 960x540dp TV viewport
-     without scrolling and has an explicit D-pad target. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -12,7 +8,6 @@
     android:clipChildren="false"
     android:paddingHorizontal="@dimen/safe_area_h"
     android:paddingVertical="@dimen/safe_area_v">
-
     <LinearLayout
         android:id="@+id/topBar"
         android:layout_width="0dp"
@@ -22,26 +17,22 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
-
         <FrameLayout
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="@drawable/bg_splash_logo_panel"
             android:padding="9dp">
-
             <ImageView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:contentDescription="@string/app_name"
-                android:src="@drawable/ic_kululu_logo" />
+                android:src="@drawable/ic_play" />
         </FrameLayout>
-
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="12dp"
             android:orientation="vertical">
-
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -51,7 +42,6 @@
                 android:textColor="@color/text_primary"
                 android:textSize="20sp"
                 android:textStyle="bold" />
-
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -60,12 +50,10 @@
                 android:textColor="@color/text_secondary"
                 android:textSize="@dimen/text_small" />
         </LinearLayout>
-
         <Space
             android:layout_width="0dp"
             android:layout_height="1dp"
             android:layout_weight="1" />
-
         <LinearLayout
             android:id="@+id/signalChip"
             android:layout_width="wrap_content"
@@ -75,7 +63,6 @@
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingHorizontal="12dp">
-
             <ImageView
                 android:id="@+id/signalIcon"
                 android:layout_width="17dp"
@@ -83,7 +70,6 @@
                 android:contentDescription="@string/signal_good"
                 android:src="@drawable/ic_signal"
                 app:tint="@color/success" />
-
             <TextView
                 android:id="@+id/signalText"
                 android:layout_width="wrap_content"
@@ -93,14 +79,12 @@
                 android:textSize="@dimen/text_small"
                 android:textStyle="bold" />
         </LinearLayout>
-
         <ImageButton
             android:id="@+id/btnRefresh"
             style="@style/Widget.Iptv.IconButton"
             android:contentDescription="@string/action_refresh"
             android:src="@drawable/ic_refresh" />
     </LinearLayout>
-
     <LinearLayout
         android:id="@+id/dashboardBody"
         android:layout_width="0dp"
@@ -113,7 +97,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/topBar">
-
         <LinearLayout
             android:id="@+id/heroHeader"
             android:layout_width="match_parent"
@@ -121,13 +104,11 @@
             android:baselineAligned="false"
             android:gravity="center_vertical"
             android:orientation="horizontal">
-
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:orientation="vertical">
-
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -136,7 +117,6 @@
                     android:textColor="@color/text_primary"
                     android:textSize="27sp"
                     android:textStyle="bold" />
-
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -145,13 +125,21 @@
                     android:textColor="@color/text_secondary"
                     android:textSize="@dimen/text_small" />
             </LinearLayout>
-
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
+                android:gravity="end"
+                android:orientation="vertical">
+                <com.iptv.player.ui.common.ClockView
+                    android:id="@+id/clock"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:includeFontPadding="false"
+                    android:letterSpacing="0.02"
+                    android:textColor="@color/text_primary"
+                    android:textSize="34sp"
+                    android:textStyle="bold" />
                 <LinearLayout
                     android:id="@+id/weatherChip"
                     android:layout_width="wrap_content"
@@ -159,8 +147,8 @@
                     android:background="@drawable/bg_time_chip"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
-                    android:paddingHorizontal="12dp">
-
+                    android:paddingHorizontal="12dp"
+                    android:visibility="gone">
                     <ImageView
                         android:id="@+id/weatherIcon"
                         android:layout_width="17dp"
@@ -168,7 +156,6 @@
                         android:contentDescription="@string/weather_unavailable"
                         android:src="@drawable/ic_weather_clouds"
                         app:tint="@color/text_primary" />
-
                     <TextView
                         android:id="@+id/weatherText"
                         android:layout_width="wrap_content"
@@ -182,33 +169,20 @@
                         android:textSize="@dimen/text_small"
                         android:textStyle="bold" />
                 </LinearLayout>
-
                 <TextView
                     android:id="@+id/dateText"
                     android:layout_width="wrap_content"
-                    android:layout_height="36dp"
+                    android:layout_height="wrap_content"
                     android:layout_marginStart="@dimen/space_s"
-                    android:background="@drawable/bg_time_chip"
+                    android:background="@android:color/transparent"
                     android:gravity="center"
                     android:maxLines="1"
-                    android:paddingHorizontal="12dp"
+                    android:paddingHorizontal="0dp"
                     android:textColor="@color/text_primary"
                     android:textSize="@dimen/text_small"
-                    android:textStyle="bold" />
-
-                <com.iptv.player.ui.common.ClockView
-                    android:id="@+id/clock"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:includeFontPadding="false"
-                    android:letterSpacing="0.02"
-                    android:textColor="@color/text_primary"
-                    android:textSize="34sp"
-                    android:textStyle="bold" />
+                    android:textStyle="normal" />
             </LinearLayout>
         </LinearLayout>
-
         <LinearLayout
             android:id="@+id/primaryDestinations"
             android:layout_width="match_parent"
@@ -217,7 +191,6 @@
             android:layout_weight="1"
             android:clipChildren="false"
             android:orientation="horizontal">
-
             <include
                 android:id="@+id/tileLive"
                 layout="@layout/item_dashboard_card"
@@ -225,21 +198,18 @@
                 android:layout_height="match_parent"
                 android:layout_marginEnd="12dp"
                 android:layout_weight="1.05" />
-
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1.35"
                 android:clipChildren="false"
                 android:orientation="vertical">
-
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
                     android:layout_weight="1"
                     android:clipChildren="false"
                     android:orientation="horizontal">
-
                     <include
                         android:id="@+id/tileMovies"
                         layout="@layout/item_dashboard_card"
@@ -247,7 +217,6 @@
                         android:layout_height="match_parent"
                         android:layout_marginEnd="12dp"
                         android:layout_weight="1" />
-
                     <include
                         android:id="@+id/tileSeries"
                         layout="@layout/item_dashboard_card"
@@ -255,7 +224,6 @@
                         android:layout_height="match_parent"
                         android:layout_weight="1" />
                 </LinearLayout>
-
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
@@ -263,7 +231,6 @@
                     android:layout_weight="1"
                     android:clipChildren="false"
                     android:orientation="horizontal">
-
                     <include
                         android:id="@+id/tileRadio"
                         layout="@layout/item_dashboard_card"
@@ -271,7 +238,6 @@
                         android:layout_height="match_parent"
                         android:layout_marginEnd="12dp"
                         android:layout_weight="1" />
-
                     <include
                         android:id="@+id/tileFavorites"
                         layout="@layout/item_dashboard_card"
@@ -281,15 +247,13 @@
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>
-
         <LinearLayout
             android:id="@+id/quickActions"
             android:layout_width="match_parent"
-            android:layout_height="84dp"
+            android:layout_height="72dp"
             android:layout_marginTop="12dp"
             android:clipChildren="false"
             android:orientation="horizontal">
-
             <include
                 android:id="@+id/tileContinue"
                 layout="@layout/item_dashboard_quick_action"
@@ -297,7 +261,6 @@
                 android:layout_height="match_parent"
                 android:layout_marginEnd="12dp"
                 android:layout_weight="1" />
-
             <include
                 android:id="@+id/tileSearch"
                 layout="@layout/item_dashboard_quick_action"
@@ -305,7 +268,6 @@
                 android:layout_height="match_parent"
                 android:layout_marginEnd="12dp"
                 android:layout_weight="1" />
-
             <include
                 android:id="@+id/tileSettings"
                 layout="@layout/item_dashboard_quick_action"
@@ -313,7 +275,6 @@
                 android:layout_height="match_parent"
                 android:layout_marginEnd="12dp"
                 android:layout_weight="1" />
-
             <include
                 android:id="@+id/tileRequest"
                 layout="@layout/item_dashboard_quick_action"
@@ -322,24 +283,45 @@
                 android:layout_weight="1" />
         </LinearLayout>
     </LinearLayout>
-
     <LinearLayout
         android:id="@+id/footer"
         android:layout_width="0dp"
-        android:layout_height="34dp"
+        android:layout_height="44dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
-
+        app:layout_constraintStart_toStartOf="parent"
+        android:background="@drawable/bg_preview_caption"
+        android:paddingHorizontal="12dp">
+        <TextView
+            android:id="@+id/footerUser"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:maxWidth="220dp"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/text_small"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/footerExpiry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:maxLines="1"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_small" />
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
         <ImageView
             android:layout_width="16dp"
             android:layout_height="16dp"
             android:contentDescription="@string/dash_website"
             android:src="@drawable/ic_globe"
             app:tint="@color/accent_cyan" />
-
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -348,49 +330,6 @@
             android:textColor="@color/text_secondary"
             android:textSize="@dimen/text_small"
             android:textStyle="bold" />
-
-        <ImageView
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:layout_marginStart="@dimen/space_m"
-            android:contentDescription="@string/dash_whatsapp"
-            android:src="@drawable/ic_whatsapp"
-            app:tint="@color/accent_emerald" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:text="@string/dash_whatsapp"
-            android:textColor="@color/text_secondary"
-            android:textSize="@dimen/text_small"
-            android:textStyle="bold" />
-
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="1dp"
-            android:layout_weight="1" />
-
-        <TextView
-            android:id="@+id/footerUser"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:maxWidth="220dp"
-            android:textColor="@color/text_secondary"
-            android:textSize="@dimen/text_small"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/footerExpiry"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:maxLines="1"
-            android:textColor="@color/text_muted"
-            android:textSize="@dimen/text_small" />
-
         <TextView
             android:id="@+id/footerVersion"
             android:layout_width="wrap_content"
@@ -398,9 +337,9 @@
             android:layout_marginStart="12dp"
             android:maxLines="1"
             android:textColor="@color/text_muted"
-            android:textSize="@dimen/text_small" />
+            android:textSize="@dimen/text_small"
+            android:visibility="gone" />
     </LinearLayout>
-
     <TextView
         android:id="@+id/statusBanner"
         android:layout_width="wrap_content"

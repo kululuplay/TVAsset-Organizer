@@ -1,19 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  TV-first sign-in experience.
-  The cinematic horizontal split stays intentionally lightweight: all depth is
-  built from XML shapes so low-powered Android TV sticks do not pay for blur,
-  video, or bitmap effects. The functional card scrolls when the IME, large
-  fonts, or long translations reduce the available landscape height.
--->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/bg_login_aurora"
     android:clipChildren="false"
     android:clipToPadding="false">
-
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -25,27 +18,23 @@
         android:paddingTop="@dimen/safe_area_v"
         android:paddingEnd="@dimen/safe_area_h"
         android:paddingBottom="@dimen/safe_area_v">
-
-        <!-- Brand story: deliberately non-interactive so D-pad focus starts in the form. -->
         <LinearLayout
             android:id="@+id/brandHero"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_marginEnd="@dimen/space_l"
-            android:layout_weight="1.08"
+            android:layout_weight="1.1"
             android:background="@drawable/bg_onboarding_hero_panel"
             android:clipChildren="false"
             android:clipToPadding="false"
             android:gravity="center_vertical"
             android:orientation="vertical"
             android:padding="24dp">
-
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
-
                 <ImageView
                     android:layout_width="58dp"
                     android:layout_height="58dp"
@@ -53,8 +42,7 @@
                     android:contentDescription="@null"
                     android:importantForAccessibility="no"
                     android:padding="12dp"
-                    android:src="@drawable/ic_kululu_logo" />
-
+                    android:src="@drawable/ic_play" />
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
@@ -66,7 +54,6 @@
                     android:textColor="@color/text_primary"
                     android:textSize="24sp"
                     android:textStyle="bold" />
-
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -87,7 +74,6 @@
                     android:textSize="12sp"
                     android:textStyle="bold" />
             </LinearLayout>
-
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -99,7 +85,6 @@
                 android:textColor="@color/brand_pink"
                 android:textSize="13sp"
                 android:textStyle="bold" />
-
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -110,7 +95,6 @@
                 android:textColor="@color/text_primary"
                 android:textSize="31sp"
                 android:textStyle="bold" />
-
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -120,13 +104,11 @@
                 android:text="@string/login_hero_body"
                 android:textColor="@color/text_secondary"
                 android:textSize="15sp" />
-
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_l"
                 android:orientation="vertical">
-
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -138,7 +120,6 @@
                     android:paddingTop="9dp"
                     android:paddingEnd="12dp"
                     android:paddingBottom="9dp">
-
                     <ImageView
                         android:layout_width="26dp"
                         android:layout_height="26dp"
@@ -146,14 +127,12 @@
                         android:importantForAccessibility="no"
                         android:src="@drawable/ic_tv"
                         app:tint="@color/brand_pink" />
-
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="12dp"
                         android:layout_weight="1"
                         android:orientation="vertical">
-
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -163,7 +142,6 @@
                             android:textColor="@color/text_primary"
                             android:textSize="15sp"
                             android:textStyle="bold" />
-
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -175,7 +153,6 @@
                             android:textSize="12sp" />
                     </LinearLayout>
                 </LinearLayout>
-
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -188,7 +165,6 @@
                     android:paddingTop="9dp"
                     android:paddingEnd="12dp"
                     android:paddingBottom="9dp">
-
                     <ImageView
                         android:layout_width="26dp"
                         android:layout_height="26dp"
@@ -196,14 +172,12 @@
                         android:importantForAccessibility="no"
                         android:src="@drawable/ic_movie"
                         app:tint="@color/brand_pink" />
-
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="12dp"
                         android:layout_weight="1"
                         android:orientation="vertical">
-
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -213,7 +187,6 @@
                             android:textColor="@color/text_primary"
                             android:textSize="15sp"
                             android:textStyle="bold" />
-
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -225,7 +198,6 @@
                             android:textSize="12sp" />
                     </LinearLayout>
                 </LinearLayout>
-
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -238,7 +210,6 @@
                     android:paddingTop="9dp"
                     android:paddingEnd="12dp"
                     android:paddingBottom="9dp">
-
                     <ImageView
                         android:layout_width="26dp"
                         android:layout_height="26dp"
@@ -246,14 +217,12 @@
                         android:importantForAccessibility="no"
                         android:src="@drawable/ic_account"
                         app:tint="@color/brand_pink" />
-
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="12dp"
                         android:layout_weight="1"
                         android:orientation="vertical">
-
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -263,7 +232,6 @@
                             android:textColor="@color/text_primary"
                             android:textSize="15sp"
                             android:textStyle="bold" />
-
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -277,8 +245,6 @@
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>
-
-        <!-- Authentication card: scrollable for IME, accessibility fonts, and translations. -->
         <ScrollView
             android:layout_width="0dp"
             android:layout_height="match_parent"
@@ -289,7 +255,6 @@
             android:focusable="false"
             android:overScrollMode="never"
             android:scrollbars="none">
-
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -298,7 +263,6 @@
                 android:gravity="center"
                 android:minHeight="0dp"
                 android:orientation="vertical">
-
                 <LinearLayout
                     android:id="@+id/loginCard"
                     android:layout_width="match_parent"
@@ -308,7 +272,6 @@
                     android:clipToPadding="false"
                     android:orientation="vertical"
                     android:padding="24dp">
-
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -319,7 +282,6 @@
                         android:textColor="@color/brand_pink"
                         android:textSize="12sp"
                         android:textStyle="bold" />
-
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -329,7 +291,6 @@
                         android:textColor="@color/text_primary"
                         android:textSize="25sp"
                         android:textStyle="bold" />
-
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -338,7 +299,6 @@
                         android:text="@string/login_subtitle"
                         android:textColor="@color/text_secondary"
                         android:textSize="14sp" />
-
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -356,8 +316,8 @@
                         android:text="@string/login_secure_endpoint"
                         android:textColor="@color/text_primary"
                         android:textSize="12sp"
-                        android:textStyle="bold" />
-
+                        android:textStyle="bold"
+                        android:visibility="gone" />
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -367,7 +327,6 @@
                         android:textColor="@color/text_primary"
                         android:textSize="14sp"
                         android:textStyle="bold" />
-
                     <EditText
                         android:id="@+id/inputUsername"
                         style="@style/Widget.Iptv.Input"
@@ -386,7 +345,6 @@
                         android:paddingEnd="16dp"
                         android:singleLine="true"
                         android:textDirection="ltr" />
-
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -396,9 +354,6 @@
                         android:textColor="@color/text_primary"
                         android:textSize="14sp"
                         android:textStyle="bold" />
-
-                    <!-- Keep the credential field LTR so the trailing TV action remains
-                         physically on the right and matches the explicit D-pad graph. -->
                     <FrameLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -406,7 +361,6 @@
                         android:clipChildren="false"
                         android:clipToPadding="false"
                         android:layoutDirection="ltr">
-
                         <EditText
                             android:id="@+id/inputPassword"
                             style="@style/Widget.Iptv.Input"
@@ -426,7 +380,6 @@
                             android:paddingEnd="168dp"
                             android:singleLine="true"
                             android:textDirection="ltr" />
-
                         <TextView
                             android:id="@+id/passwordToggle"
                             android:layout_width="152dp"
@@ -451,7 +404,6 @@
                             android:textSize="12sp"
                             android:textStyle="bold" />
                     </FrameLayout>
-
                     <LinearLayout
                         android:id="@+id/loginErrorCard"
                         android:layout_width="match_parent"
@@ -463,13 +415,11 @@
                         android:orientation="vertical"
                         android:padding="12dp"
                         android:visibility="gone">
-
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
-
                             <TextView
                                 android:id="@+id/loginErrorCode"
                                 android:layout_width="wrap_content"
@@ -484,7 +434,6 @@
                                 android:textColor="@color/text_primary"
                                 android:textSize="12sp"
                                 android:textStyle="bold" />
-
                             <TextView
                                 android:id="@+id/loginErrorTitle"
                                 android:layout_width="0dp"
@@ -497,7 +446,6 @@
                                 android:textSize="14sp"
                                 android:textStyle="bold" />
                         </LinearLayout>
-
                         <TextView
                             android:id="@+id/loginErrorHelp"
                             android:layout_width="match_parent"
@@ -507,15 +455,12 @@
                             android:textColor="@color/text_secondary"
                             android:textSize="13sp" />
                     </LinearLayout>
-
-                    <!-- Fixed-height CTA shell keeps the card stable while loading. -->
                     <FrameLayout
                         android:layout_width="match_parent"
                         android:layout_height="56dp"
                         android:layout_marginTop="@dimen/space_l"
                         android:clipChildren="false"
                         android:clipToPadding="false">
-
                         <Button
                             android:id="@+id/btnConnect"
                             style="@style/Widget.Iptv.Button"
@@ -527,9 +472,8 @@
                             android:paddingEnd="56dp"
                             android:text="@string/action_connect"
                             android:textAllCaps="false"
-                            android:textColor="@color/text_primary"
+                            android:textColor="@color/proto_primary_text"
                             android:textStyle="bold" />
-
                         <ProgressBar
                             android:id="@+id/progress"
                             android:layout_width="24dp"
@@ -540,7 +484,6 @@
                             android:indeterminateTint="@color/text_primary"
                             android:visibility="gone" />
                     </FrameLayout>
-
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -552,7 +495,8 @@
                         android:maxLines="2"
                         android:text="@string/login_security_note"
                         android:textColor="@color/text_secondary"
-                        android:textSize="12sp" />
+                        android:textSize="12sp"
+                        android:visibility="gone" />
                 </LinearLayout>
             </LinearLayout>
         </ScrollView>

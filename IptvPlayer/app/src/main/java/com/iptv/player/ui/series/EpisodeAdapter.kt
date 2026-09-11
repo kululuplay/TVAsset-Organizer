@@ -74,6 +74,7 @@ class EpisodeAdapter(
         private val thumb: ImageView = itemView.findViewById(R.id.episodeThumb)
         private val number: TextView = itemView.findViewById(R.id.episodeNumber)
         private val title: TextView = itemView.findViewById(R.id.episodeTitle)
+        private val description: TextView = itemView.findViewById(R.id.episodeDescription)
         private val progress: ProgressBar = itemView.findViewById(R.id.episodeProgress)
         private val watched: ImageView = itemView.findViewById(R.id.episodeWatched)
 
@@ -82,6 +83,7 @@ class EpisodeAdapter(
                 R.string.episode_se_format, episode.seasonNumber, episode.episodeNumber
             )
             title.text = episode.title
+            description.text = episode.plot.orEmpty()
 
             bindArtwork(episode)
             bindWatchState(episode)
