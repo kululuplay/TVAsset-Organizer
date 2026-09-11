@@ -287,7 +287,8 @@
                                 android:layout_marginEnd="8dp"
                                 android:contentDescription="@null"
                                 android:src="@drawable/ic_play"
-                                app:tint="#FF111722" />
+                                app:tint="@color/proto_primary_text"
+                                android:duplicateParentState="true" />
                             <TextView
                                 android:id="@+id/playLabel"
                                 android:layout_width="wrap_content"
@@ -296,7 +297,8 @@
                                 android:text="@string/detail_play"
                                 android:textColor="@color/proto_primary_text"
                                 android:textSize="@dimen/detail_action_text"
-                                android:textStyle="bold" />
+                                android:textStyle="bold"
+                                android:duplicateParentState="true" />
                         </LinearLayout>
                         <TextView
                             android:id="@+id/trailerButton"

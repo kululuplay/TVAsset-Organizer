@@ -7,7 +7,8 @@
     android:background="@drawable/bg_dashboard_modern"
     android:clipChildren="false"
     android:paddingHorizontal="@dimen/safe_area_h"
-    android:paddingVertical="@dimen/safe_area_v">
+    android:paddingVertical="@dimen/safe_area_v"
+    android:clipToPadding="false">
     <LinearLayout
         android:id="@+id/topBar"
         android:layout_width="0dp"
@@ -96,7 +97,8 @@
         app:layout_constraintBottom_toTopOf="@id/footer"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/topBar">
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        android:clipToPadding="false">
         <LinearLayout
             android:id="@+id/heroHeader"
             android:layout_width="match_parent"
@@ -190,7 +192,8 @@
             android:layout_marginTop="12dp"
             android:layout_weight="1"
             android:clipChildren="false"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:clipToPadding="false">
             <include
                 android:id="@+id/tileLive"
                 layout="@layout/item_dashboard_card"
@@ -203,13 +206,15 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1.35"
                 android:clipChildren="false"
-                android:orientation="vertical">
+                android:orientation="vertical"
+                android:clipToPadding="false">
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
                     android:layout_weight="1"
                     android:clipChildren="false"
-                    android:orientation="horizontal">
+                    android:orientation="horizontal"
+                    android:clipToPadding="false">
                     <include
                         android:id="@+id/tileMovies"
                         layout="@layout/item_dashboard_card"
@@ -230,7 +235,8 @@
                     android:layout_marginTop="12dp"
                     android:layout_weight="1"
                     android:clipChildren="false"
-                    android:orientation="horizontal">
+                    android:orientation="horizontal"
+                    android:clipToPadding="false">
                     <include
                         android:id="@+id/tileRadio"
                         layout="@layout/item_dashboard_card"
@@ -253,7 +259,8 @@
             android:layout_height="72dp"
             android:layout_marginTop="12dp"
             android:clipChildren="false"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:clipToPadding="false">
             <include
                 android:id="@+id/tileContinue"
                 layout="@layout/item_dashboard_quick_action"

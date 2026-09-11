@@ -6,11 +6,12 @@
     android:layout_height="match_parent"
     android:background="@drawable/bg_tile_surface"
     android:clickable="true"
-    android:clipChildren="false"
+    android:clipChildren="true"
     android:focusable="true"
     android:focusableInTouchMode="false"
     android:foreground="@drawable/bg_dashboard_tile_focus"
-    android:stateListAnimator="@animator/dashboard_tile_focus">
+    android:stateListAnimator="@animator/dashboard_tile_focus"
+    android:clipToOutline="true">
     <ImageView
         android:id="@+id/cardWatermark"
         android:layout_width="104dp"

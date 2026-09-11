@@ -401,7 +401,7 @@ class SettingsStore(
 
     // ---- UI toggles -----------------------------------------------------
 
-    val showClock: Flow<Boolean> = dataStore.data.map { it[Keys.SHOW_CLOCK] ?: false }
+    val showClock: Flow<Boolean> = dataStore.data.map { it[Keys.SHOW_CLOCK] ?: true }
 
     suspend fun setShowClock(enabled: Boolean) =
         dataStore.edit { it[Keys.SHOW_CLOCK] = enabled }
