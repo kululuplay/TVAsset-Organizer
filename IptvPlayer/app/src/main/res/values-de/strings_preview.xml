@@ -2,4 +2,8 @@
 <resources>
     <string name="login_username_no_email">Bitte den Benutzernamen eingeben, keine E-Mail-Adresse.</string>
     <string name="epg_description_unavailable">Für diese Sendung ist keine Beschreibung verfügbar.</string>
+    <string name="epg_popup_now">JETZT</string>
+    <string name="epg_popup_upcoming">DEMNÄCHST</string>
+    <string name="epg_popup_finished">BEENDET</string>
+    <string name="epg_popup_controls">↑↓ Beschreibung lesen · OK / Zurück Schließen</string>
 </resources>

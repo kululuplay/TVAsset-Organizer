@@ -835,17 +835,7 @@ class HomeActivity : BaseActivity() {
             ?.supportsChangeAnimations = false
 
         epgAdapter = ProgramAdapter { program ->
-            val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM)
-            val timing = date.format(java.util.Date(program.startMs)) + " · " +
-                timeFmt.format(java.util.Date(program.startMs)) + " – " +
-                timeFmt.format(java.util.Date(program.stopMs))
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle(program.title)
-                .setMessage(timing + "\n\n" + program.description.orEmpty().ifBlank {
-                    getString(R.string.epg_description_unavailable)
-                })
-                .setPositiveButton(R.string.action_back, null)
-                .show()
+            EpgInfoDialog.show(this, currentInfoChannel, program)
         }
         binding.epgList.layoutManager = LinearLayoutManager(this)
         binding.epgList.adapter = epgAdapter
