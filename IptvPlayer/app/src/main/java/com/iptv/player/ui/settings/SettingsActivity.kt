@@ -1210,15 +1210,18 @@ class SettingsActivity : BaseActivity() {
         if (title.isNotBlank()) addSectionHeader(container, title)
         val line = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
+            isBaselineAligned = false
             setPadding(0, dp(4), 0, dp(14))
         }
         val buttons = options.associate { (key, label) ->
             val button = TextView(this).apply {
                 id = View.generateViewId()
-                text = label
+                // Keep explanatory suffixes in accessibility text, not on compact TV buttons.
+                text = label.substringBefore(" (")
                 textSize = 14f
                 gravity = android.view.Gravity.CENTER
                 maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
                 setPadding(dp(10), dp(8), dp(10), dp(8))
                 setTextColor(ContextCompat.getColorStateList(this@SettingsActivity, R.color.settings_row_text))
                 setBackgroundResource(R.drawable.bg_settings_row)

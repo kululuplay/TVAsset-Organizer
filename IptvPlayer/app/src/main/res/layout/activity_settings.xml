@@ -33,7 +33,7 @@
             android:layout_height="1dp"
             android:layout_weight="1" />
 
-        <com.iptv.player.ui.common.ClockView
+        <TextView
             android:id="@+id/clock"
             android:visibility="gone"
             android:layout_width="wrap_content"
