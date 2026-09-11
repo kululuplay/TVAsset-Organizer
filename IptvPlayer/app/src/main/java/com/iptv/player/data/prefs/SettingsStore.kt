@@ -9,6 +9,7 @@
 package com.iptv.player.data.prefs
 
 import android.content.Context
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -32,18 +33,24 @@ import com.iptv.player.data.model.SourceConfig
 import com.iptv.player.data.model.SourceType
 import com.iptv.player.security.SecureValueCodec
 import com.iptv.player.util.KululuEndpoint
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
-private val Context.dataStore by preferencesDataStore(name = "settings")
+private val Context.settingsDataStore by preferencesDataStore(name = "settings")
 
 class SettingsStore(
     private val context: Context,
     private val secureValues: SecureValueCodec,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val dataStore: DataStore<Preferences> = context.settingsDataStore,
 ) {
 
     private object Keys {
@@ -101,16 +108,16 @@ class SettingsStore(
 
     // ---- Routing flags --------------------------------------------------
 
-    val hasSource: Flow<Boolean> = context.dataStore.data.map {
+    val hasSource: Flow<Boolean> = dataStore.data.map {
         !it[Keys.SOURCE_TYPE].isNullOrEmpty()
     }
 
-    val wizardDone: Flow<Boolean> = context.dataStore.data.map {
+    val wizardDone: Flow<Boolean> = dataStore.data.map {
         it[Keys.WIZARD_DONE] ?: false
     }
 
     suspend fun setWizardDone(done: Boolean) =
-        context.dataStore.edit { it[Keys.WIZARD_DONE] = done }
+        dataStore.edit { it[Keys.WIZARD_DONE] = done }
 
     /**
      * Stable per-install device id for telemetry. Returns the persisted id, or
@@ -118,26 +125,26 @@ class SettingsStore(
      * runs only when no id exists yet.
      */
     suspend fun getOrCreateDeviceId(generate: () -> String): String {
-        val existing = context.dataStore.data.map { it[Keys.DEVICE_ID] }.first()
+        val existing = dataStore.data.map { it[Keys.DEVICE_ID] }.first()
         if (!existing.isNullOrBlank()) return existing
         val created = generate()
-        context.dataStore.edit { it[Keys.DEVICE_ID] = created }
+        dataStore.edit { it[Keys.DEVICE_ID] = created }
         return created
     }
 
     /** Id of the most recent remote announcement already shown (0 = none). */
     suspend fun getLastShownAnnouncementId(): Long =
-        context.dataStore.data.first()[Keys.LAST_ANNOUNCEMENT_ID] ?: 0L
+        dataStore.data.first()[Keys.LAST_ANNOUNCEMENT_ID] ?: 0L
 
     suspend fun setLastShownAnnouncementId(id: Long) =
-        context.dataStore.edit { it[Keys.LAST_ANNOUNCEMENT_ID] = id }
+        dataStore.edit { it[Keys.LAST_ANNOUNCEMENT_ID] = id }
 
     // ---- Playback -------------------------------------------------------
 
     val playbackSelection: Flow<PlaybackSelection> = flow {
         migratePlaybackPreferences()
         emitAll(
-            context.dataStore.data
+            dataStore.data
                 .map(::resolvedPlaybackSelection)
                 .distinctUntilChanged(),
         )
@@ -155,12 +162,12 @@ class SettingsStore(
     /** Read player + decoder from the same DataStore revision. */
     suspend fun getPlaybackSelection(): PlaybackSelection {
         migratePlaybackPreferences()
-        return resolvedPlaybackSelection(context.dataStore.data.first())
+        return resolvedPlaybackSelection(dataStore.data.first())
     }
 
     /** Atomically update the two playback-routing axes (avoids transient conflicts). */
     suspend fun setPlaybackSelection(player: PlayerMode, decoder: DecoderMode) =
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val selection = PlaybackSelectionPolicy.normalize(player, decoder)
             prefs[Keys.PLAYER_MODE] = selection.player.name
             prefs[Keys.DECODER_MODE] = selection.decoder.name
@@ -178,7 +185,7 @@ class SettingsStore(
      * while an asynchronous app-start migration is still pending.
      */
     private suspend fun migratePlaybackPreferences() =
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             if (prefs[Keys.PLAYBACK_PREFS_MIGRATED] == true) return@edit
             val selection = PlaybackSelectionPolicy.normalize(
                 player = PlayerMode.fromName(prefs[Keys.PLAYER_MODE]),
@@ -197,94 +204,94 @@ class SettingsStore(
         decoder = DecoderMode.fromName(prefs[Keys.DECODER_MODE]),
     )
 
-    val streamFormat: Flow<StreamFormat> = context.dataStore.data.map {
+    val streamFormat: Flow<StreamFormat> = dataStore.data.map {
         StreamFormat.fromName(it[Keys.LIVE_STREAM_FORMAT])
     }
 
     suspend fun getStreamFormat(): StreamFormat =
-        StreamFormat.fromName(context.dataStore.data.first()[Keys.LIVE_STREAM_FORMAT])
+        StreamFormat.fromName(dataStore.data.first()[Keys.LIVE_STREAM_FORMAT])
 
     suspend fun setStreamFormat(format: StreamFormat) =
-        context.dataStore.edit { it[Keys.LIVE_STREAM_FORMAT] = format.name }
+        dataStore.edit { it[Keys.LIVE_STREAM_FORMAT] = format.name }
 
-    val bufferMode: Flow<BufferMode> = context.dataStore.data.map {
+    val bufferMode: Flow<BufferMode> = dataStore.data.map {
         BufferMode.fromName(it[Keys.BUFFER_MODE])
     }
 
     suspend fun getBufferMode(): BufferMode =
-        BufferMode.fromName(context.dataStore.data.first()[Keys.BUFFER_MODE])
+        BufferMode.fromName(dataStore.data.first()[Keys.BUFFER_MODE])
 
     suspend fun setBufferMode(mode: BufferMode) =
-        context.dataStore.edit { it[Keys.BUFFER_MODE] = mode.name }
+        dataStore.edit { it[Keys.BUFFER_MODE] = mode.name }
 
     /**
      * Audio passthrough (encoded bitstream over HDMI/SPDIF for AV receivers).
      * Default OFF: decode everything to PCM so cheap sticks always have sound.
      */
-    val audioPassthrough: Flow<Boolean> = context.dataStore.data.map {
+    val audioPassthrough: Flow<Boolean> = dataStore.data.map {
         it[Keys.AUDIO_PASSTHROUGH] ?: false
     }
 
     suspend fun getAudioPassthrough(): Boolean =
-        context.dataStore.data.first()[Keys.AUDIO_PASSTHROUGH] ?: false
+        dataStore.data.first()[Keys.AUDIO_PASSTHROUGH] ?: false
 
     suspend fun setAudioPassthrough(enabled: Boolean) =
-        context.dataStore.edit { it[Keys.AUDIO_PASSTHROUGH] = enabled }
+        dataStore.edit { it[Keys.AUDIO_PASSTHROUGH] = enabled }
 
     /**
      * On-screen Debug overlay (engine/stage/resolution + live PlaybackLog tail)
      * shown on the live preview, fullscreen and VOD players. Default OFF — it is
      * a diagnostics aid for reproducing green-screen / fallback issues.
      */
-    val debugOverlay: Flow<Boolean> = context.dataStore.data.map {
+    val debugOverlay: Flow<Boolean> = dataStore.data.map {
         it[Keys.DEBUG_OVERLAY] ?: false
     }
 
     suspend fun setDebugOverlay(enabled: Boolean) =
-        context.dataStore.edit { it[Keys.DEBUG_OVERLAY] = enabled }
+        dataStore.edit { it[Keys.DEBUG_OVERLAY] = enabled }
 
-    val aspectRatio: Flow<AspectRatio> = context.dataStore.data.map { prefs ->
+    val aspectRatio: Flow<AspectRatio> = dataStore.data.map { prefs ->
         runCatching { AspectRatio.valueOf(prefs[Keys.ASPECT] ?: "") }
             .getOrDefault(AspectRatio.ORIGINAL)
     }
 
     suspend fun setAspectRatio(ratio: AspectRatio) =
-        context.dataStore.edit { it[Keys.ASPECT] = ratio.name }
+        dataStore.edit { it[Keys.ASPECT] = ratio.name }
 
-    val resumeOnLaunch: Flow<Boolean> = context.dataStore.data.map {
+    val resumeOnLaunch: Flow<Boolean> = dataStore.data.map {
         it[Keys.RESUME_ON_LAUNCH] ?: false
     }
 
     suspend fun setResumeOnLaunch(enabled: Boolean) =
-        context.dataStore.edit { it[Keys.RESUME_ON_LAUNCH] = enabled }
+        dataStore.edit { it[Keys.RESUME_ON_LAUNCH] = enabled }
 
-    val lastChannelId: Flow<String?> = context.dataStore.data.map { it[Keys.LAST_CHANNEL] }
+    val lastChannelId: Flow<String?> = dataStore.data.map { it[Keys.LAST_CHANNEL] }
 
     suspend fun setLastChannel(channelId: String) =
-        context.dataStore.edit { it[Keys.LAST_CHANNEL] = channelId }
+        dataStore.edit { it[Keys.LAST_CHANNEL] = channelId }
 
     // ---- Preferred audio / subtitle track ------------------------------
     // Stored as an engine token (a language tag on ExoPlayer, a track name on
     // libVLC). Best-effort across engines/streams: re-applied when it matches.
 
     suspend fun getPreferredAudioTrack(): String? =
-        context.dataStore.data.first()[Keys.PREF_AUDIO_TRACK]
+        dataStore.data.first()[Keys.PREF_AUDIO_TRACK]
 
     suspend fun setPreferredAudioTrack(token: String) =
-        context.dataStore.edit { it[Keys.PREF_AUDIO_TRACK] = token }
+        dataStore.edit { it[Keys.PREF_AUDIO_TRACK] = token }
 
     suspend fun getPreferredSubtitleTrack(): String? =
-        context.dataStore.data.first()[Keys.PREF_SUBTITLE_TRACK]
+        dataStore.data.first()[Keys.PREF_SUBTITLE_TRACK]
 
     suspend fun setPreferredSubtitleTrack(token: String) =
-        context.dataStore.edit { it[Keys.PREF_SUBTITLE_TRACK] = token }
+        dataStore.edit { it[Keys.PREF_SUBTITLE_TRACK] = token }
 
     /** Stable ISO language preferences for the engine-agnostic live player. */
     suspend fun getLiveAudioLanguage(): String? =
-        context.dataStore.data.first()[Keys.LIVE_AUDIO_LANGUAGE]
+        dataStore.data.first()[Keys.LIVE_AUDIO_LANGUAGE]
 
     suspend fun setLiveAudioLanguage(language: String?) =
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val normalized = com.iptv.player.player.TrackLanguage.normalize(language)
             if (normalized == null) prefs.remove(Keys.LIVE_AUDIO_LANGUAGE)
             else prefs[Keys.LIVE_AUDIO_LANGUAGE] = normalized
@@ -292,11 +299,11 @@ class SettingsStore(
 
     suspend fun getLiveSubtitlePreference(): LiveSubtitlePreference =
         LiveSubtitlePreference.fromStorage(
-            context.dataStore.data.first()[Keys.LIVE_SUBTITLE_LANGUAGE],
+            dataStore.data.first()[Keys.LIVE_SUBTITLE_LANGUAGE],
         )
 
     suspend fun setLiveSubtitlePreference(preference: LiveSubtitlePreference) =
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs[Keys.LIVE_SUBTITLE_LANGUAGE] = preference.storageValue()
         }
 
@@ -311,10 +318,10 @@ class SettingsStore(
 
     // ---- Language -------------------------------------------------------
 
-    val languageTag: Flow<String> = context.dataStore.data.map { it[Keys.LANGUAGE] ?: "" }
+    val languageTag: Flow<String> = dataStore.data.map { it[Keys.LANGUAGE] ?: "" }
 
     suspend fun getLanguageTag(): String =
-        context.dataStore.data.first()[Keys.LANGUAGE] ?: ""
+        dataStore.data.first()[Keys.LANGUAGE] ?: ""
 
     suspend fun setLanguageTag(tag: String) {
         // Mirror to plain prefs FIRST so BaseActivity.attachBaseContext can read it
@@ -322,7 +329,7 @@ class SettingsStore(
         // Writing the mirror before the DataStore suspend point guarantees a caller
         // that recreates right after this returns sees the new locale immediately.
         localePrefs.edit().putString(Keys.LANGUAGE.name, tag).apply()
-        context.dataStore.edit { it[Keys.LANGUAGE] = tag }
+        dataStore.edit { it[Keys.LANGUAGE] = tag }
     }
 
     /**
@@ -340,19 +347,22 @@ class SettingsStore(
     // ---- Parental control ----------------------------------------------
 
     /** Adult content is PIN-locked by default. */
-    val lockAdult: Flow<Boolean> = context.dataStore.data.map { it[Keys.LOCK_ADULT] ?: true }
+    val lockAdult: Flow<Boolean> = dataStore.data.map { it[Keys.LOCK_ADULT] ?: true }
 
     suspend fun setLockAdult(enabled: Boolean) =
-        context.dataStore.edit { it[Keys.LOCK_ADULT] = enabled }
+        dataStore.edit { it[Keys.LOCK_ADULT] = enabled }
 
     /** Defaults to [DEFAULT_PIN] until the user sets their own. */
-    suspend fun getPin(): String? =
-        context.dataStore.data.first()[Keys.PIN]
+    suspend fun getPin(): String? = withContext(ioDispatcher) {
+        dataStore.data.first()[Keys.PIN]
             ?.let(secureValues::decrypt)
             ?: DEFAULT_PIN
+    }
 
-    suspend fun setPin(pin: String) =
-        context.dataStore.edit { it[Keys.PIN] = secureValues.encrypt(pin) }
+    suspend fun setPin(pin: String) = withContext(ioDispatcher) {
+        val encrypted = secureValues.encrypt(pin)
+        dataStore.edit { it[Keys.PIN] = encrypted }
+    }
 
     suspend fun hasPin(): Boolean = !getPin().isNullOrEmpty()
 
@@ -360,86 +370,89 @@ class SettingsStore(
 
     // Preserve a key saved by an older app version; otherwise use the
     // CI-injected BuildConfig value. The key is no longer exposed in Settings.
-    val tmdbKey: Flow<String> = context.dataStore.data.map {
+    val tmdbKey: Flow<String> = dataStore.data.map {
         secureValues.decrypt(it[Keys.TMDB_KEY]).takeIf(String::isNotBlank)
+            ?: DEFAULT_TMDB_KEY
+    }.flowOn(ioDispatcher)
+
+    suspend fun getTmdbKey(): String = withContext(ioDispatcher) {
+        secureValues.decrypt(dataStore.data.first()[Keys.TMDB_KEY])
+            .takeIf(String::isNotBlank)
             ?: DEFAULT_TMDB_KEY
     }
 
-    suspend fun getTmdbKey(): String =
-        secureValues.decrypt(context.dataStore.data.first()[Keys.TMDB_KEY])
-            .takeIf(String::isNotBlank)
-            ?: DEFAULT_TMDB_KEY
-
-    suspend fun setTmdbKey(key: String) =
-        context.dataStore.edit {
-            if (key.isBlank()) it.remove(Keys.TMDB_KEY)
-            else it[Keys.TMDB_KEY] = secureValues.encrypt(key)
+    suspend fun setTmdbKey(key: String) = withContext(ioDispatcher) {
+        val encrypted = key.takeIf(String::isNotBlank)?.let(secureValues::encrypt)
+        dataStore.edit {
+            if (encrypted == null) it.remove(Keys.TMDB_KEY)
+            else it[Keys.TMDB_KEY] = encrypted
         }
+    }
 
     // ---- Profiles -------------------------------------------------------
 
-    val activeProfileId: Flow<Long> = context.dataStore.data.map { it[Keys.ACTIVE_PROFILE] ?: -1L }
+    val activeProfileId: Flow<Long> = dataStore.data.map { it[Keys.ACTIVE_PROFILE] ?: -1L }
 
     suspend fun getActiveProfileId(): Long =
-        context.dataStore.data.first()[Keys.ACTIVE_PROFILE] ?: -1L
+        dataStore.data.first()[Keys.ACTIVE_PROFILE] ?: -1L
 
     suspend fun setActiveProfileId(id: Long) =
-        context.dataStore.edit { it[Keys.ACTIVE_PROFILE] = id }
+        dataStore.edit { it[Keys.ACTIVE_PROFILE] = id }
 
     // ---- UI toggles -----------------------------------------------------
 
-    val showClock: Flow<Boolean> = context.dataStore.data.map { it[Keys.SHOW_CLOCK] ?: false }
+    val showClock: Flow<Boolean> = dataStore.data.map { it[Keys.SHOW_CLOCK] ?: false }
 
     suspend fun setShowClock(enabled: Boolean) =
-        context.dataStore.edit { it[Keys.SHOW_CLOCK] = enabled }
+        dataStore.edit { it[Keys.SHOW_CLOCK] = enabled }
 
     /** Screensaver idle minutes; 0 disables it. */
-    val screensaverMinutes: Flow<Int> = context.dataStore.data.map { it[Keys.SCREENSAVER_MIN] ?: 10 }
+    val screensaverMinutes: Flow<Int> = dataStore.data.map { it[Keys.SCREENSAVER_MIN] ?: 10 }
 
     suspend fun setScreensaverMinutes(minutes: Int) =
-        context.dataStore.edit { it[Keys.SCREENSAVER_MIN] = minutes }
+        dataStore.edit { it[Keys.SCREENSAVER_MIN] = minutes }
 
     // ---- Background auto-sync -------------------------------------------
 
-    val autoSyncEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.AUTO_SYNC] ?: false }
+    val autoSyncEnabled: Flow<Boolean> = dataStore.data.map { it[Keys.AUTO_SYNC] ?: false }
 
-    suspend fun isAutoSyncEnabled(): Boolean = context.dataStore.data.first()[Keys.AUTO_SYNC] ?: false
+    suspend fun isAutoSyncEnabled(): Boolean = dataStore.data.first()[Keys.AUTO_SYNC] ?: false
 
     suspend fun setAutoSyncEnabled(enabled: Boolean) =
-        context.dataStore.edit { it[Keys.AUTO_SYNC] = enabled }
+        dataStore.edit { it[Keys.AUTO_SYNC] = enabled }
 
     /** Sync interval in hours (default 12; minimum enforced by the scheduler). */
-    val autoSyncHours: Flow<Int> = context.dataStore.data.map { it[Keys.AUTO_SYNC_HOURS] ?: 12 }
+    val autoSyncHours: Flow<Int> = dataStore.data.map { it[Keys.AUTO_SYNC_HOURS] ?: 12 }
 
-    suspend fun getAutoSyncHours(): Int = context.dataStore.data.first()[Keys.AUTO_SYNC_HOURS] ?: 12
+    suspend fun getAutoSyncHours(): Int = dataStore.data.first()[Keys.AUTO_SYNC_HOURS] ?: 12
 
     suspend fun setAutoSyncHours(hours: Int) =
-        context.dataStore.edit { it[Keys.AUTO_SYNC_HOURS] = hours }
+        dataStore.edit { it[Keys.AUTO_SYNC_HOURS] = hours }
 
     // ---- EPG bookkeeping ------------------------------------------------
 
-    suspend fun getEpgUpdatedAt(): Long = context.dataStore.data.first()[Keys.EPG_UPDATED_AT] ?: 0L
+    suspend fun getEpgUpdatedAt(): Long = dataStore.data.first()[Keys.EPG_UPDATED_AT] ?: 0L
 
     suspend fun setEpgUpdatedAt(time: Long) =
-        context.dataStore.edit { it[Keys.EPG_UPDATED_AT] = time }
+        dataStore.edit { it[Keys.EPG_UPDATED_AT] = time }
 
     // ---- Subscription expiry warning -----------------------------------
     // Stores the expiry timestamp the user chose to suppress the reminder for.
     // A later renewal (a different expiry date) re-enables the reminder.
 
     suspend fun getSuppressedExpiryWarning(): Long =
-        context.dataStore.data.first()[Keys.EXPIRY_WARN_SUPPRESSED] ?: 0L
+        dataStore.data.first()[Keys.EXPIRY_WARN_SUPPRESSED] ?: 0L
 
     suspend fun setSuppressedExpiryWarning(expiryMs: Long) =
-        context.dataStore.edit { it[Keys.EXPIRY_WARN_SUPPRESSED] = expiryMs }
+        dataStore.edit { it[Keys.EXPIRY_WARN_SUPPRESSED] = expiryMs }
 
     // ---- Source config --------------------------------------------------
 
-    suspend fun getSourceConfig(): SourceConfig? {
-        val prefs = context.dataStore.data.first()
-        val typeName = prefs[Keys.SOURCE_TYPE] ?: return null
-        val type = runCatching { SourceType.valueOf(typeName) }.getOrNull() ?: return null
-        return SourceConfig(
+    suspend fun getSourceConfig(): SourceConfig? = withContext(ioDispatcher) {
+        val prefs = dataStore.data.first()
+        val typeName = prefs[Keys.SOURCE_TYPE] ?: return@withContext null
+        val type = runCatching { SourceType.valueOf(typeName) }.getOrNull() ?: return@withContext null
+        SourceConfig(
             type = type,
             serverUrl = KululuEndpoint.migrateLegacyServerUrl(
                 secureValues.decrypt(prefs[Keys.SERVER_URL]),
@@ -450,7 +463,9 @@ class SettingsStore(
         )
     }
 
-    suspend fun saveSource(config: SourceConfig) {
+    suspend fun saveSource(config: SourceConfig): Unit = withContext(ioDispatcher) {
+        // First use may create a hardware-backed key. Keystore IPC can take
+        // seconds on older sticks; it must never occupy the UI thread.
         // Encrypt before opening the DataStore transaction: secure-storage failure
         // aborts the save and never falls back to writing cleartext credentials.
         val serverUrl = secureValues.encrypt(
@@ -459,7 +474,7 @@ class SettingsStore(
         val username = secureValues.encrypt(config.username)
         val password = secureValues.encrypt(config.password)
         val m3uUrl = secureValues.encrypt(config.m3uUrl)
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs[Keys.SOURCE_TYPE] = config.type.name
             prefs[Keys.SERVER_URL] = serverUrl
             prefs[Keys.USERNAME] = username
@@ -476,8 +491,8 @@ class SettingsStore(
      * One-time/lazy migration for installs created before secure field storage.
      * Safe to run on every launch: versioned envelopes are left untouched.
      */
-    suspend fun migrateSensitiveValues() {
-        context.dataStore.edit { prefs ->
+    suspend fun migrateSensitiveValues(): Unit = withContext(ioDispatcher) {
+        dataStore.edit { prefs ->
             fun migrate(key: Preferences.Key<String>) {
                 val value = prefs[key] ?: return
                 if (value.isNotBlank() && !secureValues.isEncrypted(value)) {
@@ -494,13 +509,13 @@ class SettingsStore(
     }
 
     suspend fun isSecureStorageMigrated(): Boolean =
-        context.dataStore.data.first()[Keys.SECURE_STORAGE_MIGRATED] ?: false
+        dataStore.data.first()[Keys.SECURE_STORAGE_MIGRATED] ?: false
 
     suspend fun markSecureStorageMigrated() =
-        context.dataStore.edit { it[Keys.SECURE_STORAGE_MIGRATED] = true }
+        dataStore.edit { it[Keys.SECURE_STORAGE_MIGRATED] = true }
 
     suspend fun clearSource() {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs.remove(Keys.SOURCE_TYPE)
             prefs.remove(Keys.SERVER_URL)
             prefs.remove(Keys.USERNAME)
@@ -529,10 +544,10 @@ class SettingsStore(
 
     /** Category ids the user has hidden for [type]. */
     fun hiddenCategories(type: ContentType): Flow<Set<String>> =
-        context.dataStore.data.map { it[hiddenKey(type)] ?: emptySet() }
+        dataStore.data.map { it[hiddenKey(type)] ?: emptySet() }
 
     suspend fun setCategoryHidden(type: ContentType, categoryId: String, hidden: Boolean) =
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[hiddenKey(type)]?.toMutableSet() ?: mutableSetOf()
             if (hidden) current.add(categoryId) else current.remove(categoryId)
             prefs[hiddenKey(type)] = current
@@ -540,15 +555,15 @@ class SettingsStore(
 
     /** User's custom category order for [type] (empty = source/default order). */
     fun categoryOrder(type: ContentType): Flow<List<String>> =
-        context.dataStore.data.map { prefs ->
+        dataStore.data.map { prefs ->
             prefs[orderKey(type)]?.split('\n')?.filter { it.isNotEmpty() } ?: emptyList()
         }
 
     suspend fun setCategoryOrder(type: ContentType, orderedIds: List<String>) =
-        context.dataStore.edit { it[orderKey(type)] = orderedIds.joinToString("\n") }
+        dataStore.edit { it[orderKey(type)] = orderedIds.joinToString("\n") }
 
     suspend fun resetCategoryOrder(type: ContentType) =
-        context.dataStore.edit { it.remove(orderKey(type)) }
+        dataStore.edit { it.remove(orderKey(type)) }
 
     // LIVE has no sort control; it maps to the VOD key but is never read for LIVE.
     private fun sortKey(type: ContentType) = when (type) {
@@ -558,14 +573,14 @@ class SettingsStore(
 
     /** Persisted grid sort for [type]; defaults to newest-first. */
     fun contentSort(type: ContentType): Flow<ContentSort> =
-        context.dataStore.data.map { prefs ->
+        dataStore.data.map { prefs ->
             prefs[sortKey(type)]
                 ?.let { runCatching { ContentSort.valueOf(it) }.getOrNull() }
                 ?: ContentSort.RECENT
         }
 
     suspend fun setContentSort(type: ContentType, sort: ContentSort) =
-        context.dataStore.edit { it[sortKey(type)] = sort.name }
+        dataStore.edit { it[sortKey(type)] = sort.name }
 
     companion object {
         /** Default parental PIN used until the user sets their own. */
