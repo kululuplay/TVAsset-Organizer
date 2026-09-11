@@ -9,4 +9,5 @@
     <string name="content_new">NEU</string>
     <string name="settings_player_section">Player</string>
     <string name="cat_recently_added">Zuletzt hinzugefügt</string>
+    <string name="cat_for_you">Für Sie empfohlen</string>
 </resources>

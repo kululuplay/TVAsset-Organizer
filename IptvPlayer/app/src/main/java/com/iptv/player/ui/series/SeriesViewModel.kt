@@ -79,7 +79,7 @@ class SeriesViewModel(
                         CAT_POPULAR,
                         getApplication<Application>().getString(R.string.cat_for_you),
                         ContentType.SERIES,
-                        count = cats.sumOf { it.count ?: 0 }
+                        count = cats.sumOf { it.count ?: 0 }.coerceAtMost(50)
                     )
                 )
                 addAll(cats)
@@ -309,7 +309,7 @@ class SeriesViewModel(
                     q.isNotEmpty() -> repo.pagingSeriesSearch(q, hiddenList, sort)
                     // "You may like" always shows highest-rated first, regardless of
                     // the grid's current sort selection.
-                    catId == CAT_POPULAR -> repo.pagingSeriesAll(ContentSort.RATING, hiddenList)
+                    catId == CAT_POPULAR -> repo.pagingRecommendedSeries(hiddenList)
                     catId == null || catId == CAT_ALL -> repo.pagingRecentSeries(hiddenList)
                     // A selected category that becomes hidden (Content Manager) must
                     // not keep leaking its content through the unfiltered by-category

@@ -80,7 +80,7 @@ class VodViewModel(
                         CAT_POPULAR,
                         getApplication<Application>().getString(R.string.cat_for_you),
                         ContentType.VOD,
-                        count = cats.sumOf { it.count ?: 0 }
+                        count = cats.sumOf { it.count ?: 0 }.coerceAtMost(50)
                     )
                 )
                 addAll(cats)
@@ -325,7 +325,7 @@ class VodViewModel(
                     q.isNotEmpty() -> repo.pagingVodSearch(q, hiddenList, sort)
                     // "You may like" always shows highest-rated first, regardless of
                     // the grid's current sort selection.
-                    catId == CAT_POPULAR -> repo.pagingVodAll(ContentSort.RATING, hiddenList)
+                    catId == CAT_POPULAR -> repo.pagingRecommendedVod(hiddenList)
                     catId == null || catId == CAT_ALL -> repo.pagingRecentVod(hiddenList)
                     // A selected category that becomes hidden (Content Manager) must
                     // not keep leaking its content through the unfiltered by-category

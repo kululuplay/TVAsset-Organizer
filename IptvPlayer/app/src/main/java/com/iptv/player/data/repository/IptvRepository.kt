@@ -608,6 +608,10 @@ class IptvRepository(
         Pager(pagingConfig) { vodDao.pagingRecent(hidden) }
             .flow.map { data -> data.map { it.toModel() } }
 
+    fun pagingRecommendedVod(hidden: List<String>): Flow<PagingData<VodItem>> =
+        Pager(pagingConfig) { vodDao.pagingRecommended(hidden) }
+            .flow.map { data -> data.map { it.toModel() } }
+
     fun pagingVodByCategory(categoryId: String): Flow<PagingData<VodItem>> =
         Pager(pagingConfig) { vodDao.pagingByCategory(categoryId) }
             .flow.map { data -> data.map { it.toModel() } }
@@ -988,6 +992,10 @@ class IptvRepository(
     /** Whole series cache, newest first — the "Recently added" default view. */
     fun pagingRecentSeries(hidden: List<String> = emptyList()): Flow<PagingData<Series>> =
         Pager(pagingConfig) { seriesDao.pagingRecent(hidden) }
+            .flow.map { data -> data.map { it.toModel() } }
+
+    fun pagingRecommendedSeries(hidden: List<String>): Flow<PagingData<Series>> =
+        Pager(pagingConfig) { seriesDao.pagingRecommended(hidden) }
             .flow.map { data -> data.map { it.toModel() } }
 
     fun pagingSeriesByCategory(categoryId: String): Flow<PagingData<Series>> =

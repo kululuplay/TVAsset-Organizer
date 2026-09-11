@@ -92,6 +92,9 @@ interface VodDao {
     @Query("SELECT * FROM vod WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY addedAt DESC, name LIMIT 50")
     fun pagingRecent(hidden: List<String>): PagingSource<Int, VodEntity>
 
+    @Query("SELECT * FROM vod WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY rating DESC, name, id LIMIT 50")
+    fun pagingRecommended(hidden: List<String>): PagingSource<Int, VodEntity>
+
     @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
     fun pagingByCategory(categoryId: String): PagingSource<Int, VodEntity>
 
@@ -244,6 +247,9 @@ interface SeriesDao {
      */
     @Query("SELECT * FROM series WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY addedAt DESC, name LIMIT 50")
     fun pagingRecent(hidden: List<String>): PagingSource<Int, SeriesEntity>
+
+    @Query("SELECT * FROM series WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY rating DESC, name, id LIMIT 50")
+    fun pagingRecommended(hidden: List<String>): PagingSource<Int, SeriesEntity>
 
     @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
     fun pagingByCategory(categoryId: String): PagingSource<Int, SeriesEntity>
