@@ -13,6 +13,11 @@ fun buildConfigString(value: String): String =
         .replace("\r", "\\r")
         .replace("\n", "\\n") + "\""
 
+// Local diagnostic APKs are opt-in; normal builds keep the same version/policy.
+val livePlaybackDiagnostics = System.getenv("LIVE_PLAYBACK_DIAGNOSTICS") == "1"
+val tsOnlyTestBuild = providers.gradleProperty("tsOnlyTestBuild").orNull == "true"
+val compatibilityTestBuild = providers.gradleProperty("compatibilityTestBuild").orNull == "true"
+
 android {
     namespace = "com.iptv.player"
     // Media3 1.8.x is compiled against Android 15 APIs. compileSdk only affects
@@ -26,6 +31,10 @@ android {
         targetSdk = 34
         versionCode = 130
         versionName = "1.5.86"
+        manifestPlaceholders["appLabel"] = "@string/app_name"
+        buildConfigField("boolean", "TS_ONLY_TEST_BUILD", tsOnlyTestBuild.toString())
+        if (livePlaybackDiagnostics) versionNameSuffix = "-diag1"
+        buildConfigField("boolean", "LIVE_PLAYBACK_DIAGNOSTICS", livePlaybackDiagnostics.toString())
 
         // Service credentials are injected by CI/local environment and never
         // committed. Blank values disable the optional integration gracefully.
@@ -80,6 +89,14 @@ android {
         }
         debug {
             isMinifyEnabled = false
+            if (tsOnlyTestBuild) {
+                applicationIdSuffix = ".tstest"
+                versionNameSuffix = "-ts-test1"
+                manifestPlaceholders["appLabel"] = "Kululu IPTV TS Test"
+            } else if (compatibilityTestBuild) {
+                applicationIdSuffix = ".compat"
+                versionNameSuffix = "-compat-test"
+            }
         }
     }
 
@@ -165,7 +182,6 @@ dependencies {
     // 1.8.1 is the newest Media3 line that keeps minSdk 21. It also fixes TV
     // multichannel audio being incorrectly marked unsupported by track selection.
     implementation("androidx.media3:media3-exoplayer:1.8.1")
-    implementation("androidx.media3:media3-exoplayer-hls:1.8.1")
     implementation("androidx.media3:media3-exoplayer-dash:1.8.1")
     implementation("androidx.media3:media3-ui:1.8.1")
     implementation("androidx.media3:media3-common:1.8.1")
@@ -183,6 +199,7 @@ dependencies {
 
     // --- Unit tests (pure JVM; no emulator / Robolectric) ---
     testImplementation("junit:junit:4.13.2")
+    testImplementation("net.sf.kxml:kxml2:2.3.0")
     // Mockito provides no-op stubs for the Context/ViewGroup the controller
     // stores but never really uses in tests (engine + scheduler are faked).
     testImplementation("org.mockito:mockito-core:5.12.0")

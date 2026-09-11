@@ -138,7 +138,6 @@
     <string name="settings_decoder_software">تفضيل البرمجيات (وضع الجودة)</string>
     <string name="settings_stream_format">صيغة البث المباشر</string>
     <string name="settings_stream_format_ts">MPEG-TS ‏(.ts) — الأكثر توافقاً</string>
-    <string name="settings_stream_format_hls">HLS ‏(.m3u8) — متكيّف</string>
     <string name="settings_buffer">حجم التخزين المؤقت</string>
     <string name="settings_buffer_adaptive">تلقائي متكيف (موصى به)</string>
     <string name="settings_buffer_low">منخفض (تبديل سريع)</string>

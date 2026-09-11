@@ -151,7 +151,6 @@
     <string name="settings_decoder_software">Yazılımı tercih et (kalite modu)</string>
     <string name="settings_stream_format">Canlı yayın formatı</string>
     <string name="settings_stream_format_ts">MPEG-TS (.ts) — en uyumlu</string>
-    <string name="settings_stream_format_hls">HLS (.m3u8) — uyarlanır</string>
     <string name="settings_buffer">Tampon boyutu</string>
     <string name="settings_buffer_adaptive">Uyarlanabilir (önerilen)</string>
     <string name="settings_buffer_low">Düşük (hızlı geçiş)</string>

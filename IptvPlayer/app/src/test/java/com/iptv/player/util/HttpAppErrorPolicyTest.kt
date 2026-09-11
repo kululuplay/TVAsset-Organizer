@@ -20,6 +20,7 @@ class HttpAppErrorPolicyTest {
 
     @Test
     fun `maps missing endpoint and unknown client response separately`() {
+        assertEquals(AppError.CANNOT_CONNECT, HttpAppErrorPolicy.fromStatus(400))
         assertEquals(AppError.SERVICE_NOT_FOUND, HttpAppErrorPolicy.fromStatus(404))
         assertEquals(AppError.CANNOT_CONNECT, HttpAppErrorPolicy.fromStatus(418))
     }

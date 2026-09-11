@@ -28,6 +28,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.withStarted
+import com.iptv.player.player.MediaTransportPolicy
 import com.iptv.player.R
 import com.iptv.player.cast.CastController
 import com.iptv.player.cast.ProviderConnectionSafety
@@ -96,6 +97,8 @@ import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.util.VLCVideoLayout
+import com.iptv.player.player.VlcSurfaceRetirement
+import com.iptv.player.player.VlcSurfaceViews
 
 class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider {
 
@@ -114,6 +117,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         val cleanupScheduled = AtomicBoolean(false)
         val cleanupClaimed = AtomicBoolean(false)
         val ownershipDefinitivelyReleased = AtomicBoolean(false)
+        val surfaceRetirement = VlcSurfaceRetirement()
         val activeOperation = AtomicReference<OwnerOperation?>(null)
         val providerUncertaintyToken = AtomicLong(0L)
     }
@@ -645,7 +649,6 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     private fun qoeTransport(url: String?): PlaybackTransportKind {
         val path = url.orEmpty().substringBefore('?').substringBefore('#').lowercase(Locale.ROOT)
         return when {
-            path.endsWith(".m3u8") -> PlaybackTransportKind.HLS
             path.endsWith(".mpd") -> PlaybackTransportKind.DASH
             path.endsWith(".ts") -> PlaybackTransportKind.MPEG_TS
             path.isNotBlank() -> PlaybackTransportKind.PROGRESSIVE
@@ -990,6 +993,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
             // that arrives just after cleanup must not quarantine this retired
             // owner and mint a brand-new token with no remaining cleanup path.
             owner.ownershipDefinitivelyReleased.set(true)
+            owner.surfaceRetirement.ownershipReleased()
             resolveOwnerConnectionUncertainty(owner)
         } else {
             requireOwnerProcessRecovery(owner, cleanupUncertaintyToken)
@@ -1045,14 +1049,16 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
      * teardown remains exclusively on the owner worker.
      */
     private fun removeOwnerLayoutOnMain(owner: NativePlayerOwner) {
-        val remove = {
-            (owner.videoLayout.parent as? ViewGroup)?.removeView(owner.videoLayout)
-            Unit
-        }
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            remove()
-        } else {
-            handler.post { remove() }
+        owner.surfaceRetirement.requestRemoval {
+            val remove = {
+                (owner.videoLayout.parent as? ViewGroup)?.removeView(owner.videoLayout)
+                Unit
+            }
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                remove()
+            } else {
+                handler.post { remove() }
+            }
         }
     }
 
@@ -1074,6 +1080,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
      * ever touching the timed-out MediaPlayer/LibVLC handles.
      */
     private fun quarantineOwner(owner: NativePlayerOwner, reason: String) {
+        VlcSurfaceViews.retire(owner.videoLayout)
         // Quarantine means native ownership is no longer synchronously provable.
         // Register the exact owner before clearing current fields so every caller
         // (including future recovery paths) preserves the one-connection gate.
@@ -1093,9 +1100,8 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         if (wasCurrent) invalidateEventSession()
         owner.abandoned.set(true)
         clearCurrentOwner(owner)
-        // Do not let an abandoned SurfaceView cover the replacement owner. This
-        // is the only teardown performed here; every native call remains with the
-        // old owner worker.
+        // A view removal re-enters libVLC through SurfaceHolder callbacks. Defer
+        // it until release proof; the provider gate prevents a replacement start.
         removeOwnerLayoutOnMain(owner)
         PlaybackLog.log(this, "VOD", "owner=${owner.generation} quarantined: $reason")
 
@@ -1143,24 +1149,15 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     }
 
     /**
-     * Reserve an idle owner for planned rebuild/destroy cleanup. IVLCVout requires
-     * detachViews() on main, but the reservation proves no owner-worker operation
-     * can touch this handle concurrently. Active/timed-out owners never enter this
-     * path: removing their layout destroys the Surface (IVLCVout performs its
-     * automatic detach) and their retired worker performs listener/stop/release.
+     * Reserve an owner for planned rebuild/destroy cleanup. Native command idle
+     * is not decoder idle: detachViews itself can block on main. Stop/release
+     * must finish on the owner worker before its layout can be removed.
      */
     private fun retireIdleOwnerOnMain(owner: NativePlayerOwner): OwnerOperation? {
         val operation = beginOwnerOperation(owner) ?: return null
+        VlcSurfaceViews.retire(owner.videoLayout)
         invalidateEventSession()
         owner.abandoned.set(true)
-        runCatching { owner.mediaPlayer.detachViews() }.onFailure { failure ->
-            PlaybackLog.log(
-                this,
-                "VOD",
-                "owner=${owner.generation} main-thread detach failed: " +
-                    failure.javaClass.simpleName,
-            )
-        }
         removeOwnerLayoutOnMain(owner)
         clearCurrentOwner(owner)
         return operation
@@ -2255,11 +2252,12 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         vlc.setUserAgent(AppInfo.USER_AGENT, AppInfo.USER_AGENT)
         val mp = MediaPlayer(vlc)
 
-        val layout = VLCVideoLayout(this).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
+        val layout = VlcSurfaceViews.create(this, subtitles = true) { lostLayout ->
+            handler.post {
+                if (videoLayout === lostLayout && foreground) {
+                    onSurfaceOutputFailure("VLC output surface lost")
+                }
+            }
         }
         binding.videoContainer.addView(layout)
         // 3rd true = render embedded subtitles; 4th false = SurfaceView output,
@@ -2604,6 +2602,10 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     }
 
     private fun preparePlayback(positionMs: Long) {
+        if (MediaTransportPolicy.isHlsUrl(streamUrl.orEmpty())) {
+            showTerminalError()
+            return
+        }
         if (
             handleBlockedProviderStart(
                 reason = "vod_start_unresolved_native_owner",
@@ -2701,6 +2703,8 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         val cachingMs = bufferMode.networkCachingMs
         val media = try {
             Media(vlc, android.net.Uri.parse(url)).apply {
+                MediaTransportPolicy.requireDirectMedia(url)
+                addOption(MediaTransportPolicy.VLC_FILE_DEMUX)
                 // Hardware decoding unless the global Decoder setting forces software
                 // (mirrors VlcPlayerEngine on the live TV path).
                 // Prefer hardware while respecting libVLC's device/codec safety list.
@@ -2771,6 +2775,10 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                     !foreground ||
                     owner.abandoned.get()
                 ) return@playbackCommand
+                if (!VlcSurfaceViews.awaitReady(owner.videoLayout, subtitles = true)) {
+                    throw java.io.IOException("VLC output surface unavailable")
+                }
+                if (playbackOpsSeq.get() != operation || !foreground || owner.abandoned.get()) return@playbackCommand
                 installEventListener(mp, listenerSession)
                 if (
                     playbackOpsSeq.get() != operation ||

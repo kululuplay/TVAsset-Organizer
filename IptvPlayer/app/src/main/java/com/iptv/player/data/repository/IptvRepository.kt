@@ -115,6 +115,7 @@ class IptvRepository(
     private val catalogCommitMutex = Mutex()
     private val refreshGenerations = DatasetGenerationGate()
     private val epgSyncMutex = Mutex()
+    private val panelTimezones = java.util.concurrent.ConcurrentHashMap<String, String>()
     /** Process-local fast path; guarded exclusively by [playbackStateMigrationMutex]. */
     private val claimedLegacyPlaybackProfiles = mutableSetOf<Long>()
 
@@ -416,16 +417,20 @@ class IptvRepository(
             when (config.type) {
                 SourceType.XTREAM -> {
                     val api = buildXtreamApi(config.serverUrl)
-                    val info = api.authenticate(config.username, config.password).userInfo
+                    val auth = api.authenticate(config.username, config.password)
+                    auth.serverInfo?.timezone?.let { panelTimezones[config.serverUrl] = it }
+                    val info = auth.userInfo
                         ?: return@withContext Outcome.Failure(AppError.CANNOT_CONNECT)
                     when {
                         info.auth == 0 -> Outcome.Failure(AppError.BAD_CREDENTIALS)
+                        info.auth != 1 -> Outcome.Failure(AppError.CANNOT_CONNECT)
                         info.status.equals("Disabled", true) ||
                             info.status.equals("Banned", true) ->
                             Outcome.Failure(AppError.ACCOUNT_DISABLED)
                         info.status.equals("Expired", true) ->
                             Outcome.Failure(AppError.SUBSCRIPTION_EXPIRED)
-                        else -> Outcome.Success(Unit)
+                        info.status.equals("Active", true) -> Outcome.Success(Unit)
+                        else -> Outcome.Failure(AppError.CANNOT_CONNECT)
                     }
                 }
                 SourceType.M3U_URL -> {
@@ -434,7 +439,15 @@ class IptvRepository(
                         .header("Range", "bytes=0-1023")
                         .build()
                     httpClient.newCall(request).execute().use { resp ->
-                        if (resp.isSuccessful) Outcome.Success(Unit)
+                        if (resp.isSuccessful) {
+                            val prefix = resp.body?.charStream()?.let { reader ->
+                                val chars = CharArray(1024)
+                                val count = reader.read(chars)
+                                if (count > 0) String(chars, 0, count) else ""
+                            }.orEmpty()
+                            if (M3uParser.hasPlaylistSignature(prefix)) Outcome.Success(Unit)
+                            else Outcome.Failure(AppError.EMPTY_PLAYLIST)
+                        }
                         else Outcome.Failure(
                             HttpAppErrorPolicy.fromStatus(resp.code),
                             httpStatus = resp.code.takeIf { it in 400..599 },
@@ -872,6 +885,7 @@ class IptvRepository(
             if (config.type == SourceType.XTREAM) {
                 val api = buildXtreamApi(config.serverUrl)
                 val response = api.getVodInfo(config.username, config.password, id)
+                check(response.movieData?.streamId == id) { "Mismatched VOD detail identifier" }
                 val info = response.info
                 val directStreamUrl = XtreamUrlBuilder.resolveDirectSource(
                     config.serverUrl,
@@ -896,6 +910,7 @@ class IptvRepository(
         } catch (ce: CancellationException) {
             throw ce
         } catch (t: Throwable) {
+            Logger.w("Xtream", "VOD detail unavailable; retaining cached metadata", t)
             cached
         }
         val enriched = enrichWithTmdb(merged, isMovie = true)
@@ -1518,10 +1533,21 @@ class IptvRepository(
             if (config.type != SourceType.XTREAM) return@withContext null
             val streamId = channel.id.removePrefix("xt_live_").toLongOrNull()
                 ?: return@withContext null
-            val durationMin = ((program.stopMs - program.startMs) / 60_000L)
+            val durationMin = ((program.stopMs - program.startMs + 59_999L) / 60_000L)
                 .toInt().coerceAtLeast(1)
-            val formatter = java.text.SimpleDateFormat("yyyy-MM-dd:HH-mm", java.util.Locale.US)
-            val start = formatter.format(java.util.Date(program.startMs))
+            val timezone = panelTimezones[config.serverUrl] ?: run {
+                try {
+                    val auth = buildXtreamApi(config.serverUrl).authenticate(config.username, config.password)
+                    auth.serverInfo?.timezone?.also { panelTimezones[config.serverUrl] = it }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    Logger.w("Xtream", "Catch-up unavailable: panel timezone could not be verified", failure)
+                    null
+                }
+            }
+            val start = com.iptv.player.data.remote.XtreamTime.formatCatchup(program.startMs, timezone)
+                ?: return@withContext null
             XtreamUrlBuilder.catchupUrl(
                 config.serverUrl, config.username, config.password,
                 streamId, start, durationMin
@@ -1646,19 +1672,10 @@ class IptvRepository(
         }.getOrElse { DiagnosticResult("ping", false, it.message ?: "error") }
     }
 
-    /** Rough download speed in Mbps by pulling up to ~2MB from the server. */
+    /** The panel root and M3U are not throughput endpoints; do not download them. */
+    @Suppress("UNUSED_PARAMETER")
     suspend fun speedTestMbps(config: SourceConfig): DiagnosticResult = withContext(Dispatchers.IO) {
-        val target = config.serverUrl.ifBlank { config.m3uUrl }
-        runCatching {
-            val request = Request.Builder().url(target).header("Range", "bytes=0-2097151").build()
-            val start = System.currentTimeMillis()
-            httpClient.newCall(request).execute().use { resp ->
-                val bytes = resp.body?.bytes()?.size ?: 0
-                val secs = (System.currentTimeMillis() - start) / 1000.0
-                val mbps = if (secs > 0) (bytes * 8 / 1_000_000.0) / secs else 0.0
-                DiagnosticResult("speed", bytes > 0, String.format("%.1f Mbps", mbps))
-            }
-        }.getOrElse { DiagnosticResult("speed", false, it.message ?: "error") }
+        DiagnosticResult("speed", false, "Not measured: no verified server speed-test endpoint")
     }
 
     suspend fun checkDns(config: SourceConfig): DiagnosticResult = withContext(Dispatchers.IO) {

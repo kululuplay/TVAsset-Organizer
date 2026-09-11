@@ -21,14 +21,12 @@ internal object LivePlaybackQoePolicy {
 
     fun sessionDescriptor(
         radio: Boolean,
-        hls: Boolean,
     ): SessionDescriptor = SessionDescriptor(
         content = if (radio) PlaybackContentKind.RADIO else PlaybackContentKind.LIVE_TV,
-        transport = if (hls) PlaybackTransportKind.HLS else PlaybackTransportKind.MPEG_TS,
+        transport = PlaybackTransportKind.MPEG_TS,
     )
 
     fun transport(format: StreamFormat): PlaybackTransportKind = when (format) {
-        StreamFormat.HLS -> PlaybackTransportKind.HLS
         StreamFormat.TS -> PlaybackTransportKind.MPEG_TS
     }
 

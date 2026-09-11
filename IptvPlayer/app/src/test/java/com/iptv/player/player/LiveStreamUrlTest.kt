@@ -9,17 +9,6 @@ import org.junit.Test
 class LiveStreamUrlTest {
 
     @Test
-    fun `TS path is rewritten to HLS`() {
-        assertEquals(
-            "https://example.test/live/user/pass/42.m3u8",
-            LiveStreamUrl.applyFormat(
-                "https://example.test/live/user/pass/42.ts",
-                StreamFormat.HLS,
-            ),
-        )
-    }
-
-    @Test
     fun `HLS path is rewritten to TS`() {
         assertEquals(
             "https://example.test/live/user/pass/42.ts",
@@ -33,10 +22,10 @@ class LiveStreamUrlTest {
     @Test
     fun `query and fragment are preserved verbatim`() {
         assertEquals(
-            "https://example.test/live/42.m3u8?token=a.ts&mode=1#edge",
+            "https://example.test/live/42.ts?token=a.ts&mode=1#edge",
             LiveStreamUrl.applyFormat(
                 "https://example.test/live/42.ts?token=a.ts&mode=1#edge",
-                StreamFormat.HLS,
+                StreamFormat.TS,
             ),
         )
     }
@@ -44,10 +33,10 @@ class LiveStreamUrlTest {
     @Test
     fun `extension matching is case insensitive while path casing is preserved`() {
         assertEquals(
-            "https://EXAMPLE.test/Live/Channel.m3u8?Token=ABC",
+            "https://EXAMPLE.test/Live/Channel.ts?Token=ABC",
             LiveStreamUrl.applyFormat(
                 "https://EXAMPLE.test/Live/Channel.TS?Token=ABC",
-                StreamFormat.HLS,
+                StreamFormat.TS,
             ),
         )
     }
@@ -62,7 +51,7 @@ class LiveStreamUrlTest {
         )
 
         urls.forEach { url ->
-            assertEquals(url, LiveStreamUrl.applyFormat(url, StreamFormat.HLS))
+            assertEquals(url, LiveStreamUrl.applyFormat(url, StreamFormat.TS))
             assertEquals(url, LiveStreamUrl.applyFormat(url, StreamFormat.TS))
         }
     }
@@ -77,10 +66,10 @@ class LiveStreamUrlTest {
             ),
         )
         assertEquals(
-            "https://example.test/live/42.m3u8?token=abc",
+            "https://example.test/live/42.ts?token=abc",
             LiveStreamUrl.applyFormat(
                 "https://example.test/live/42.M3U8?token=abc",
-                StreamFormat.HLS,
+                StreamFormat.TS,
             ),
         )
     }
@@ -105,7 +94,7 @@ class LiveStreamUrlTest {
     }
 
     @Test
-    fun `route key separates providers formats and policy generation`() {
+    fun `route key separates providers and uses the new policy generation`() {
         val ts = LiveStreamUrl.routeKey(
             "channel-42",
             StreamFormat.TS,
@@ -113,7 +102,7 @@ class LiveStreamUrlTest {
         )
         val hls = LiveStreamUrl.routeKey(
             "channel-42",
-            StreamFormat.HLS,
+            StreamFormat.TS,
             "https://one.example/live/42.m3u8",
         )
         val otherProvider = LiveStreamUrl.routeKey(
@@ -122,13 +111,13 @@ class LiveStreamUrlTest {
             "https://two.example/live/42.ts",
         )
 
-        assertNotEquals(ts, hls)
+        assertEquals(ts, hls)
         assertNotEquals(ts, otherProvider)
-        assertEquals(true, ts.startsWith("p3|"))
+        assertEquals(true, ts.startsWith("p4|"))
     }
 
     @Test
-    fun `transport memory never overrides a later explicit format choice`() {
+    fun `transport memory uses the TS-only policy generation`() {
         val tsPreference = LiveStreamUrl.transportKey(
             "channel-42",
             "https://one.example/live/42.ts",
@@ -137,11 +126,11 @@ class LiveStreamUrlTest {
         val hlsPreference = LiveStreamUrl.transportKey(
             "channel-42",
             "https://one.example/live/42.ts",
-            StreamFormat.HLS,
+            StreamFormat.TS,
         )
 
-        assertNotEquals(tsPreference, hlsPreference)
-        assertEquals(true, tsPreference.startsWith("t2|"))
+        assertEquals(tsPreference, hlsPreference)
+        assertEquals(true, tsPreference.startsWith("t3|"))
     }
 
     @Test

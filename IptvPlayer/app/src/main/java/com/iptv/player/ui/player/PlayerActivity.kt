@@ -1244,7 +1244,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         if (qoeSessionId != null || castOwnsPlayback || currentChannel == null) return
         val descriptor = LivePlaybackQoePolicy.sessionDescriptor(
             radio = viewModel.radioMode,
-            hls = format == StreamFormat.HLS,
         )
         qoeSessionId = PlaybackQoeRuntime.start(
             kind = descriptor.content,

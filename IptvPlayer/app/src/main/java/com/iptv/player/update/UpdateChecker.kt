@@ -186,6 +186,8 @@ class UpdateChecker(
     }
 
     suspend fun check(currentVersionName: String): UpdateResult = withContext(Dispatchers.IO) {
+        // An isolated test package must never offer the production updater APK.
+        if (com.iptv.player.BuildConfig.TS_ONLY_TEST_BUILD) return@withContext UpdateResult.UpToDate
         try {
             val request = Request.Builder()
                 .url(UpdateConfig.RELEASES_API)

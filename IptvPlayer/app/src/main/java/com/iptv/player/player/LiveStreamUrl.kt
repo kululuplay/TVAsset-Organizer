@@ -13,7 +13,7 @@ import java.util.Locale
 object LiveStreamUrl {
 
     /**
-     * Applies the selected live container to a recognised Xtream live URL.
+     * Canonicalizes live TS URLs, including old stored HLS live addresses.
      *
      * Only a terminal `.ts` or `.m3u8` path extension is rewritten. Query strings
      * and fragments are preserved verbatim, while extensionless and non-live media
@@ -37,7 +37,6 @@ object LiveStreamUrl {
         val path = if (cut >= 0) url.substring(0, cut) else url
         return when {
             path.endsWith(".ts", ignoreCase = true) -> StreamFormat.TS
-            path.endsWith(".m3u8", ignoreCase = true) -> StreamFormat.HLS
             else -> null
         }
     }
@@ -54,9 +53,7 @@ object LiveStreamUrl {
         "$ROUTE_POLICY|${sourceFingerprint(streamUrl)}|$channelId|${format.name}"
 
     /**
-     * Key for the bounded TS/HLS winner memory. The configured format is part of
-     * the namespace: changing the explicit Settings choice must never be silently
-     * overridden by a winner learned under the previous choice.
+     * TS-only memory namespace excludes routes learned before HLS was removed.
      */
     fun transportKey(
         channelId: String,
@@ -68,7 +65,7 @@ object LiveStreamUrl {
     fun routeKeyWithFormat(routeKey: String?, format: StreamFormat): String? {
         val key = routeKey ?: return null
         val marker = key.substringAfterLast('|', missingDelimiterValue = "")
-        if (marker != StreamFormat.TS.name && marker != StreamFormat.HLS.name) return key
+        if (marker != StreamFormat.TS.name && marker != "HLS") return key
         return key.substringBeforeLast('|') + "|" + format.name
     }
 
@@ -97,7 +94,7 @@ object LiveStreamUrl {
             .joinToString(separator = "") { "%02x".format(Locale.US, it.toInt() and 0xff) }
     }
 
-    private const val ROUTE_POLICY = "p3"
-    private const val TRANSPORT_POLICY = "t2"
+    private const val ROUTE_POLICY = "p4"
+    private const val TRANSPORT_POLICY = "t3"
     private const val SOURCE_FINGERPRINT_BYTES = 6
 }

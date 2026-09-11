@@ -2404,7 +2404,6 @@ class HomeActivity : BaseActivity() {
         ) return
         val descriptor = LivePlaybackQoePolicy.sessionDescriptor(
             radio = radioMode,
-            hls = format == StreamFormat.HLS,
         )
         previewQoeSessionId = PlaybackQoeRuntime.start(
             kind = descriptor.content,

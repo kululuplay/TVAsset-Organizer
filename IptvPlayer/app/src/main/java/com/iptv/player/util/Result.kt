@@ -44,7 +44,8 @@ enum class AppError(val messageRes: Int) {
 /** Closed HTTP-to-product mapping shared by login and repository operations. */
 object HttpAppErrorPolicy {
     fun fromStatus(status: Int): AppError = when (status) {
-        400, 401 -> AppError.BAD_CREDENTIALS
+        400 -> AppError.CANNOT_CONNECT
+        401 -> AppError.BAD_CREDENTIALS
         403, 423 -> AppError.ACCESS_DENIED
         404, 410 -> AppError.SERVICE_NOT_FOUND
         408 -> AppError.REQUEST_TIMEOUT

@@ -284,7 +284,6 @@ internal object VodPlaybackRoutingPolicy {
     }
 
     private val MEDIA3_EXTENSIONS = setOf(
-        ".m3u8",
         ".mpd",
         ".mp4",
         ".m4v",

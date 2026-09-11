@@ -97,7 +97,6 @@ class SettingsActivity : BaseActivity() {
     private var debugOverlaySwitch: SwitchCompat? = null
     private var selectedPlayerMode = PlayerMode.AUTO
     private var selectedDecoderMode = DecoderMode.AUTO
-    private var selectedStreamFormat = StreamFormat.TS
     private var selectedBufferMode = BufferMode.NORMAL
     private var selectedScreensaverMinutes = 10
 
@@ -520,11 +519,12 @@ class SettingsActivity : BaseActivity() {
         decoderRow.setOnClickListener { showDecoderModeDialog() }
         c.addView(decoderRow)
 
-        // Live stream container preference (TS / HLS) for providers serving both.
+        // Live transport is fixed; this row is informational, not a selector.
         val formatRow = inflateMaster(c, getString(R.string.settings_stream_format))
         streamFormatValue = formatRow.findViewById<TextView>(R.id.mValue)
             .also { it.visibility = View.VISIBLE }
-        formatRow.setOnClickListener { showStreamFormatDialog() }
+        formatRow.isFocusable = false
+        formatRow.isClickable = false
         c.addView(formatRow)
 
         // Buffer size (Low / Normal / High) -> caching on both engines.
@@ -1309,7 +1309,6 @@ class SettingsActivity : BaseActivity() {
         }
         lifecycleScope.launch {
             viewModel.streamFormat.collectLatest {
-                selectedStreamFormat = it
                 streamFormatValue?.text = streamFormatLabel(it)
             }
         }
@@ -1469,24 +1468,8 @@ class SettingsActivity : BaseActivity() {
     private fun streamFormatLabel(format: StreamFormat): String = getString(
         when (format) {
             StreamFormat.TS -> R.string.settings_stream_format_ts
-            StreamFormat.HLS -> R.string.settings_stream_format_hls
         }
     )
-
-    private fun showStreamFormatDialog() {
-        val formats = listOf(StreamFormat.TS, StreamFormat.HLS)
-        val labels = formats.map { streamFormatLabel(it) }.toTypedArray()
-        AlertDialog.Builder(this, R.style.ThemeOverlay_Iptv_AlertDialog)
-            .setTitle(R.string.settings_stream_format)
-            .setSingleChoiceItems(
-                labels,
-                formats.indexOf(selectedStreamFormat).coerceAtLeast(0),
-            ) { dialog, which ->
-                viewModel.setStreamFormat(formats[which])
-                dialog.dismiss()
-            }
-            .showTracked()
-    }
 
     private fun bufferModeLabel(mode: BufferMode): String = getString(
         when (mode) {

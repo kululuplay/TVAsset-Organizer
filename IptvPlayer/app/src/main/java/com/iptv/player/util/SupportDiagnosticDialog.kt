@@ -147,13 +147,17 @@ class SupportDiagnosticDialog : DialogFragment() {
 
     private suspend fun readSnapshot(context: Context, summary: String): SupportDiagnosticSnapshot {
         var incomplete = false
+        val observed = com.iptv.player.playback.android.PlaybackQoeRuntime.diagnosticSnapshot()
+        var configured = "unavailable"
         val metadata: Map<String, Any?> = try {
             val settings = ServiceLocator.settings
             val selection = settings.getPlaybackSelection()
+            configured = "engine=${selection.player.name} decoder=${selection.decoder.name} " +
+                "transport=${settings.getStreamFormat().name} buffer=${settings.getBufferMode().name}"
             mapOf(
-                "engine" to "configured:${selection.player.name}",
-                "decoder" to "configured:${selection.decoder.name}",
-                "transport" to "configured:${settings.getStreamFormat().name}",
+                "engine" to observed["engine"],
+                "decoder" to observed["decoder"],
+                "transport" to observed["transport"],
                 "buffer" to "configured:${settings.getBufferMode().name}",
             )
         } catch (cancelled: CancellationException) {
@@ -173,7 +177,7 @@ class SupportDiagnosticDialog : DialogFragment() {
                 // Never upload a credential fragment from a partially read line.
                 val offset = if (start == 0L) 0 else bytes.indexOf('\n'.code.toByte()) + 1
                 if (start > 0L && offset == 0) "" else {
-                    String(bytes, offset, bytes.size - offset, Charsets.UTF_8)
+                    DiagnosticRun.currentText(String(bytes, offset, bytes.size - offset, Charsets.UTF_8))
                 }
             }
         } catch (cancelled: CancellationException) {
@@ -188,10 +192,15 @@ class SupportDiagnosticDialog : DialogFragment() {
             // recentText may cut inside a line before redaction changes its
             // length. Always discard that first line rather than risk a partial
             // legacy URL/credential at the snapshot boundary.
-            tail.substringAfter('\n', "")
+            DiagnosticRun.currentText(tail.substringAfter('\n', ""))
         }
         if (playback.isBlank() || general.isBlank()) incomplete = true
         val log = buildString {
+            appendLine("=== Current process ${DiagnosticRun.marker} ===")
+            appendLine("deviceEpochMs=${System.currentTimeMillis()} elapsedRealtimeMs=${android.os.SystemClock.elapsedRealtime()} timezone=${java.util.TimeZone.getDefault().id}")
+            appendLine("configured: $configured")
+            appendLine("observed: ${observed.entries.joinToString { "${it.key}=${it.value}" }}")
+            appendLine("Older process logs excluded; decoder UNKNOWN until supported by decoder event evidence below.")
             appendLine("=== Playback log ===")
             appendLine(playback.ifBlank { "[Playback log unavailable]" })
             appendLine("=== App log ===")
