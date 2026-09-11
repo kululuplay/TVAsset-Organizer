@@ -13,6 +13,7 @@ import java.io.Closeable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
@@ -46,19 +47,22 @@ class SettingsStoreThreadingTest {
 
     private class Harness(initial: Preferences = emptyPreferences()) : Closeable {
         val ui = Executors.newSingleThreadExecutor { Thread(it, "test-ui") }.asCoroutineDispatcher()
-        val io = Executors.newSingleThreadExecutor { Thread(it, "secure-storage-io") }.asCoroutineDispatcher()
+        val ioThread = AtomicReference<Thread>()
+        val io = Executors.newSingleThreadExecutor {
+            Thread(it, "secure-storage-io").also(ioThread::set)
+        }.asCoroutineDispatcher()
         val codec: SecureValueCodec = mock(SecureValueCodec::class.java)
         val data = MemoryStore(initial)
         val settings = SettingsStore(mock(Context::class.java), codec, io, data)
 
         init {
             `when`(codec.encrypt(anyString())).thenAnswer {
-                assertEquals("secure-storage-io", Thread.currentThread().name)
+                assertSame(ioThread.get(), Thread.currentThread())
                 val value = it.getArgument<String>(0)
                 if (value.isBlank()) value else "encv1:$value"
             }
             `when`(codec.decrypt(anyString())).thenAnswer {
-                assertEquals("secure-storage-io", Thread.currentThread().name)
+                assertSame(ioThread.get(), Thread.currentThread())
                 it.getArgument<String>(0).removePrefix("encv1:")
             }
             `when`(codec.isEncrypted(anyString())).thenAnswer {
@@ -75,7 +79,7 @@ class SettingsStoreThreadingTest {
             val entered = CountDownLatch(1)
             val release = CountDownLatch(1)
             doAnswer {
-                assertEquals("secure-storage-io", Thread.currentThread().name)
+                assertSame(h.ioThread.get(), Thread.currentThread())
                 entered.countDown()
                 check(release.await(5, TimeUnit.SECONDS))
                 "encv1:" + it.getArgument<String>(0)
