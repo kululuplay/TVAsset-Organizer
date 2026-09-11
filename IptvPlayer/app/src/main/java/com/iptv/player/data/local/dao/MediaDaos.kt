@@ -89,7 +89,7 @@ interface VodDao {
      * [hidden] category ids are excluded so Content Manager hides leak nowhere
      * (empty list = exclude nothing; rows with no category are always kept).
      */
-    @Query("SELECT * FROM vod WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY addedAt DESC, name")
+    @Query("SELECT * FROM vod WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY addedAt DESC, name LIMIT 50")
     fun pagingRecent(hidden: List<String>): PagingSource<Int, VodEntity>
 
     @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
@@ -242,7 +242,7 @@ interface SeriesDao {
      * [hidden] category ids are excluded so Content Manager hides leak nowhere
      * (empty list = exclude nothing; rows with no category are always kept).
      */
-    @Query("SELECT * FROM series WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY addedAt DESC, name")
+    @Query("SELECT * FROM series WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY addedAt DESC, name LIMIT 50")
     fun pagingRecent(hidden: List<String>): PagingSource<Int, SeriesEntity>
 
     @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")

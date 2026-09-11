@@ -69,10 +69,7 @@ class SeriesViewModel(
                         CAT_ALL,
                         getApplication<Application>().getString(R.string.cat_recently_added),
                         ContentType.SERIES,
-                        // The "Recently added" grid is the whole cache sorted newest
-                        // first (unbounded), so the badge must show the real total —
-                        // capping it to a fixed number made the count contradict the grid.
-                        count = cats.sumOf { it.count ?: 0 }
+                        count = cats.sumOf { it.count ?: 0 }.coerceAtMost(50)
                     )
                 )
                 // "You may like" — top-rated series across the whole catalog, so
@@ -103,6 +100,8 @@ class SeriesViewModel(
 
     private var selectionLoadJob: Job? = null
     private var catalogLoadJob: Job? = null
+    private val refreshedCategories = mutableSetOf<String>()
+    private var refreshedFullCatalog = false
     private var sortRestoreJob: Job? = null
 
     init {
@@ -187,7 +186,7 @@ class SeriesViewModel(
                 ensureFullCatalog()
             } else {
                 catalogLoadJob?.cancelAndJoin()
-                loadSingleCategory(categoryId)
+                loadSingleCategory(categoryId, force = categoryId !in refreshedCategories)
             }
         }
     }
@@ -195,7 +194,7 @@ class SeriesViewModel(
     private fun ensureFullCatalog() {
         if (catalogLoadJob?.isActive == true) return
         catalogLoadJob = viewModelScope.launch {
-            loadFullCatalog(forceAll = false)
+            loadFullCatalog(forceAll = !refreshedFullCatalog)
         }
     }
 
@@ -211,7 +210,10 @@ class SeriesViewModel(
         }
         _loadState.value = CatalogLoadState(loading = true, total = 1)
         when (val result = repo.refreshSeriesCategory(config, categoryId, force)) {
-            is Outcome.Success -> _loadState.value = CatalogLoadState()
+            is Outcome.Success -> {
+                refreshedCategories += categoryId
+                _loadState.value = CatalogLoadState()
+            }
             is Outcome.Failure -> {
                 _loadState.value = CatalogLoadState(errorRes = result.error.messageRes)
             }
@@ -261,6 +263,7 @@ class SeriesViewModel(
         categoryIds.forEachIndexed { index, categoryId ->
             when (val result = repo.refreshSeriesCategory(config, categoryId, force = forceAll)) {
                 is Outcome.Success -> {
+                    refreshedCategories += categoryId
                     _loadState.value = CatalogLoadState(
                         loading = true,
                         completed = index + 1,
@@ -277,6 +280,7 @@ class SeriesViewModel(
                 }
             }
         }
+        if (forceAll) refreshedFullCatalog = true
         _loadState.value = CatalogLoadState()
     }
 
@@ -306,7 +310,7 @@ class SeriesViewModel(
                     // "You may like" always shows highest-rated first, regardless of
                     // the grid's current sort selection.
                     catId == CAT_POPULAR -> repo.pagingSeriesAll(ContentSort.RATING, hiddenList)
-                    catId == null || catId == CAT_ALL -> repo.pagingSeriesAll(sort, hiddenList)
+                    catId == null || catId == CAT_ALL -> repo.pagingRecentSeries(hiddenList)
                     // A selected category that becomes hidden (Content Manager) must
                     // not keep leaking its content through the unfiltered by-category
                     // path; fall back to the filtered "all" grid until reselected.

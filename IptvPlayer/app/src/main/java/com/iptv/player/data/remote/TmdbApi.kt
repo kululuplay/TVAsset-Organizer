@@ -13,6 +13,14 @@ import retrofit2.http.Query
 
 interface TmdbApi {
 
+    @GET("3/tv/{id}/season/{season}")
+    suspend fun seasonDetail(
+        @Path("id") id: String,
+        @Path("season") season: Int,
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String,
+    ): TmdbSeason
+
     @GET("3/search/movie")
     suspend fun searchMovie(
         @Query("api_key") apiKey: String,
@@ -70,6 +78,16 @@ interface TmdbApi {
             path?.takeIf { it.isNotBlank() }?.let { PROFILE_BASE + it }
     }
 }
+
+data class TmdbSeason(@SerializedName("episodes") val episodes: List<TmdbEpisode>?)
+
+data class TmdbEpisode(
+    @SerializedName("episode_number") val episodeNumber: Int?,
+    @SerializedName("name") val name: String?,
+    @SerializedName("overview") val overview: String?,
+    @SerializedName("still_path") val stillPath: String?,
+    @SerializedName("runtime") val runtime: Int?,
+)
 
 data class TmdbSearchResponse(
     @SerializedName("results") val results: List<TmdbResult>?

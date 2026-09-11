@@ -16,6 +16,7 @@ import androidx.paging.PagingDataAdapter
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
+import com.iptv.player.data.remote.MetadataPolicy
 import com.iptv.player.R
 import com.iptv.player.data.model.Series
 import com.iptv.player.ui.common.LogoPlaceholder
@@ -75,6 +76,7 @@ class SeriesAdapter(
     }
 
     inner class VH(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val newBadge: TextView = itemView.findViewById(R.id.posterNew)
         private val poster: ImageView = itemView.findViewById(R.id.posterImage)
         private val name: TextView = itemView.findViewById(R.id.posterName)
         private val meta: TextView = itemView.findViewById(R.id.posterMeta)
@@ -88,6 +90,8 @@ class SeriesAdapter(
 
         fun bind(item: Series) {
             boundItem = item
+            newBadge.visibility = if (MetadataPolicy.isNew(item.addedAt) && !(adultLocked && item.isAdult()))
+                View.VISIBLE else View.GONE
             itemView.isFocusable = true
             itemView.isClickable = true
             itemView.alpha = 1f
@@ -157,6 +161,7 @@ class SeriesAdapter(
 
             itemView.contentDescription = buildList {
                 add(item.name)
+                if (newBadge.visibility == View.VISIBLE) add(itemView.context.getString(R.string.content_new))
                 year?.let(::add)
                 ratingText?.let { add(itemView.context.getString(R.string.detail_rating) + " " + it) }
                 if (pct in 1..99) {
@@ -172,6 +177,7 @@ class SeriesAdapter(
          */
         fun clear() {
             boundItem = null
+            newBadge.visibility = View.GONE
             itemView.isFocusable = false
             itemView.isClickable = false
             itemView.alpha = 0f

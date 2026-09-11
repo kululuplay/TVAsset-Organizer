@@ -142,6 +142,13 @@ enum class BufferMode(
     NORMAL(5000, 3000, 12000, 1500, 2500),
     HIGH(10000, 6000, 20000, 3000, 5000);
 
+    /** File playback can seek/refill on demand; it does not need the live-TV cache. */
+    val vodNetworkCachingMs: Int get() = when (this) {
+        LOW -> 750
+        NORMAL, ADAPTIVE -> 1500
+        HIGH -> 3000
+    }
+
     companion object {
         fun fromName(value: String?): BufferMode =
             entries.firstOrNull { it.name == value } ?: NORMAL

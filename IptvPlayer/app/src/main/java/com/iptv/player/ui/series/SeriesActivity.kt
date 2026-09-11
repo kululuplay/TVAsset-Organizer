@@ -398,17 +398,11 @@ class SeriesActivity : BaseActivity() {
         binding.contentTitle.text = when {
             query.isNotEmpty() -> getString(R.string.search_results_title)
             cat == null -> getString(R.string.nav_series)
-            cat.id == SeriesViewModel.CAT_ALL -> {
-                if (viewModel.sort.value == ContentSort.RECENT) {
-                    getString(R.string.cat_recently_added)
-                } else {
-                    getString(R.string.all_series)
-                }
-            }
+            cat.id == SeriesViewModel.CAT_ALL -> getString(R.string.cat_recently_added)
             else -> cat.name
         }
         binding.sortButton.visibility =
-            if (query.isEmpty() && cat?.id == SeriesViewModel.CAT_POPULAR) View.GONE
+            if (query.isEmpty() && cat?.id in setOf(SeriesViewModel.CAT_POPULAR, SeriesViewModel.CAT_ALL)) View.GONE
             else View.VISIBLE
     }
 

@@ -400,19 +400,13 @@ class VodActivity : BaseActivity() {
         binding.contentTitle.text = when {
             query.isNotEmpty() -> getString(R.string.search_results_title)
             cat == null -> getString(R.string.nav_movies)
-            cat.id == VodViewModel.CAT_ALL -> {
-                if (viewModel.sort.value == ContentSort.RECENT) {
-                    getString(R.string.cat_recently_added)
-                } else {
-                    getString(R.string.all_movies)
-                }
-            }
+            cat.id == VodViewModel.CAT_ALL -> getString(R.string.cat_recently_added)
             else -> cat.name
         }
         // "You may like" always shows highest-rated first regardless of the sort
         // control. Search supports all sort modes, so keep the control there.
         binding.sortButton.visibility =
-            if (query.isEmpty() && cat?.id == VodViewModel.CAT_POPULAR) View.GONE
+            if (query.isEmpty() && cat?.id in setOf(VodViewModel.CAT_POPULAR, VodViewModel.CAT_ALL)) View.GONE
             else View.VISIBLE
     }
 

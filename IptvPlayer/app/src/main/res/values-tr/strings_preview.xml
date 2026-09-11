@@ -6,4 +6,5 @@
     <string name="epg_popup_upcoming">SIRADAKİ</string>
     <string name="epg_popup_finished">BİTTİ</string>
     <string name="epg_popup_controls">↑↓ Açıklamayı oku · OK / Geri Kapat</string>
+    <string name="content_new">YENİ</string>
 </resources>

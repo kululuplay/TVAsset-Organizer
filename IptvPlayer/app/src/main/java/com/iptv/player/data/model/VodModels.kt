@@ -23,7 +23,8 @@ data class VodItem(
     val durationSecs: Int? = null,
     val trailerUrl: String? = null,
     val tmdbId: String? = null,
-    var isFavorite: Boolean = false
+    var isFavorite: Boolean = false,
+    val addedAt: Long = 0L
 )
 
 /** A series header (its episodes are loaded on demand). */
@@ -42,7 +43,8 @@ data class Series(
     val releaseDate: String? = null,
     val trailerUrl: String? = null,
     val tmdbId: String? = null,
-    var isFavorite: Boolean = false
+    var isFavorite: Boolean = false,
+    val addedAt: Long = 0L
 )
 
 /** A cast member shown on detail screens: name + optional head-shot URL. */

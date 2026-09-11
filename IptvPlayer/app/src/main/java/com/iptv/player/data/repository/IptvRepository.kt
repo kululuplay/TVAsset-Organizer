@@ -58,6 +58,7 @@ import com.iptv.player.data.model.VodItem
 import com.iptv.player.data.parser.M3uParser
 import com.iptv.player.data.parser.XmltvParser
 import com.iptv.player.data.prefs.SettingsStore
+import com.iptv.player.data.remote.MetadataPolicy
 import com.iptv.player.data.remote.TmdbApi
 import com.iptv.player.data.remote.XtreamApi
 import com.iptv.player.data.remote.XtreamUrlBuilder
@@ -603,8 +604,8 @@ class IptvRepository(
     // ---- Paging 3 (bounded movie lists) ---------------------------------
 
     /** Whole movie cache, newest first — the "Recently added" default view. */
-    fun pagingRecentVod(): Flow<PagingData<VodItem>> =
-        Pager(pagingConfig) { vodDao.pagingRecent(emptyList()) }
+    fun pagingRecentVod(hidden: List<String> = emptyList()): Flow<PagingData<VodItem>> =
+        Pager(pagingConfig) { vodDao.pagingRecent(hidden) }
             .flow.map { data -> data.map { it.toModel() } }
 
     fun pagingVodByCategory(categoryId: String): Flow<PagingData<VodItem>> =
@@ -788,9 +789,7 @@ class IptvRepository(
                         durationSecs = previous?.durationSecs,
                         trailerUrl = previous?.trailerUrl,
                         tmdbId = previous?.tmdbId,
-                        addedAt = s.added?.trim()?.toLongOrNull()
-                            ?: previous?.addedAt
-                            ?: 0L,
+                        addedAt = MetadataPolicy.newest(previous?.addedAt ?: 0L, s.added),
                         position = position,
                         categoryPosition = catPosition
                     )
@@ -987,8 +986,8 @@ class IptvRepository(
     // ---- Paging 3 (bounded series lists) --------------------------------
 
     /** Whole series cache, newest first — the "Recently added" default view. */
-    fun pagingRecentSeries(): Flow<PagingData<Series>> =
-        Pager(pagingConfig) { seriesDao.pagingRecent(emptyList()) }
+    fun pagingRecentSeries(hidden: List<String> = emptyList()): Flow<PagingData<Series>> =
+        Pager(pagingConfig) { seriesDao.pagingRecent(hidden) }
             .flow.map { data -> data.map { it.toModel() } }
 
     fun pagingSeriesByCategory(categoryId: String): Flow<PagingData<Series>> =
@@ -1163,10 +1162,10 @@ class IptvRepository(
                         genre = s.genre ?: previous?.genre,
                         releaseDate = s.releaseDate ?: previous?.releaseDate,
                         trailerUrl = youtube(s.youtubeTrailer) ?: previous?.trailerUrl,
-                        tmdbId = previous?.tmdbId,
-                        addedAt = s.lastModified?.trim()?.toLongOrNull()
-                            ?: previous?.addedAt
-                            ?: 0L,
+                        tmdbId = MetadataPolicy.tmdbId(s.tmdbId) ?: previous?.tmdbId,
+                        addedAt = MetadataPolicy.newest(
+                            previous?.addedAt ?: 0L, s.lastModified, s.lastEpisodeAdded, s.added,
+                        ),
                         position = position,
                         categoryPosition = catPosition
                     )
@@ -1335,6 +1334,10 @@ class IptvRepository(
                                 releaseDate = enrichedSeries.releaseDate,
                                 trailerUrl = enrichedSeries.trailerUrl,
                                 tmdbId = enrichedSeries.tmdbId,
+                                addedAt = MetadataPolicy.newest(
+                                    cachedEntity.addedAt, detail?.lastModified, detail?.lastEpisodeAdded,
+                                    *info.episodes.orEmpty().values.flatten().map { it.added }.toTypedArray(),
+                                ),
                             ),
                         ),
                     )
@@ -2056,10 +2059,10 @@ class IptvRepository(
         if (key.isBlank()) return item
         return runCatching {
             val api = retrofitBuilder.baseUrl(TmdbApi.BASE_URL).build().create(TmdbApi::class.java)
-            val result = item.tmdbId?.takeIf { it.isNotBlank() }?.let { tmdbId ->
+            val result = MetadataPolicy.tmdbId(item.tmdbId)?.let { tmdbId ->
                 if (isMovie) api.movieDetail(tmdbId, key) else api.tvDetail(tmdbId, key)
-            } ?: (if (isMovie) api.searchMovie(key, item.name)
-            else api.searchTv(key, item.name)).results?.firstOrNull() ?: return item
+            } ?: (if (isMovie) api.searchMovie(key, MetadataPolicy.searchTitle(item.name))
+            else api.searchTv(key, MetadataPolicy.searchTitle(item.name))).results?.firstOrNull() ?: return item
             item.copy(
                 posterUrl = TmdbApi.posterUrl(result.posterPath) ?: item.posterUrl,
                 backdropUrl = TmdbApi.backdropUrl(result.backdropPath) ?: item.backdropUrl,
@@ -2068,7 +2071,7 @@ class IptvRepository(
                 releaseDate = item.releaseDate?.takeIf { it.isNotBlank() }
                     ?: result.releaseDate
                     ?: result.firstAirDate,
-                tmdbId = item.tmdbId ?: result.id?.toString(),
+                tmdbId = MetadataPolicy.tmdbId(item.tmdbId) ?: result.id?.toString(),
             )
         }.getOrDefault(item)
     }
@@ -2078,9 +2081,9 @@ class IptvRepository(
         if (key.isBlank()) return item
         return runCatching {
             val api = retrofitBuilder.baseUrl(TmdbApi.BASE_URL).build().create(TmdbApi::class.java)
-            val result = item.tmdbId?.takeIf { it.isNotBlank() }?.let { tmdbId ->
+            val result = MetadataPolicy.tmdbId(item.tmdbId)?.let { tmdbId ->
                 api.tvDetail(tmdbId, key)
-            } ?: api.searchTv(key, item.name).results?.firstOrNull() ?: return item
+            } ?: api.searchTv(key, MetadataPolicy.searchTitle(item.name)).results?.firstOrNull() ?: return item
             item.copy(
                 posterUrl = TmdbApi.posterUrl(result.posterPath) ?: item.posterUrl,
                 backdropUrl = TmdbApi.backdropUrl(result.backdropPath) ?: item.backdropUrl,
@@ -2089,7 +2092,7 @@ class IptvRepository(
                 releaseDate = item.releaseDate?.takeIf { it.isNotBlank() }
                     ?: result.firstAirDate
                     ?: result.releaseDate,
-                tmdbId = item.tmdbId ?: result.id?.toString(),
+                tmdbId = MetadataPolicy.tmdbId(item.tmdbId) ?: result.id?.toString(),
             )
         }.getOrDefault(item)
     }
@@ -2117,9 +2120,9 @@ class IptvRepository(
 
         runCatching {
             val api = retrofitBuilder.baseUrl(TmdbApi.BASE_URL).build().create(TmdbApi::class.java)
-            val id = tmdbId?.takeIf { it.isNotBlank() } ?: run {
-                val results = if (isMovie) api.searchMovie(key, name).results
-                else api.searchTv(key, name).results
+            val id = MetadataPolicy.tmdbId(tmdbId) ?: run {
+                val results = if (isMovie) api.searchMovie(key, MetadataPolicy.searchTitle(name)).results
+                else api.searchTv(key, MetadataPolicy.searchTitle(name)).results
                 results?.firstOrNull()?.id?.toString()
             } ?: return@runCatching fallback
 
@@ -2133,6 +2136,27 @@ class IptvRepository(
                 .take(15)
             if (people.isNotEmpty()) people else fallback
         }.getOrDefault(fallback)
+    }
+
+    /** Fetch the selected season only. Metadata never creates a playable provider episode. */
+    suspend fun enrichSeason(series: Series, season: Season): Season = withContext(Dispatchers.IO) {
+        val key = settings.getTmdbKey()
+        if (key.isBlank()) return@withContext season
+        try {
+            val api = retrofitBuilder.baseUrl(TmdbApi.BASE_URL).build().create(TmdbApi::class.java)
+            val id = MetadataPolicy.tmdbId(series.tmdbId) ?: api.searchTv(
+                key, MetadataPolicy.searchTitle(series.name), Locale.getDefault().toLanguageTag(),
+            ).results?.firstOrNull()?.id?.toString() ?: return@withContext season
+            val metadata = api.seasonDetail(id, season.seasonNumber, key, Locale.getDefault().toLanguageTag())
+                .episodes.orEmpty().associateBy { it.episodeNumber }
+            season.copy(episodes = season.episodes.map { episode ->
+                metadata[episode.episodeNumber]?.let { MetadataPolicy.enrichEpisode(episode, it) } ?: episode
+            })
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            season
+        }
     }
 
     // ---- Mapping helpers ------------------------------------------------
@@ -2176,7 +2200,7 @@ class IptvRepository(
         categoryId = categoryId, categoryName = categoryName, rating = rating,
         plot = plot, cast = cast, director = director, genre = genre,
         releaseDate = releaseDate, durationSecs = durationSecs,
-        trailerUrl = KululuEndpoint.migrateLegacyAssetUrl(trailerUrl), tmdbId = tmdbId
+        trailerUrl = KululuEndpoint.migrateLegacyAssetUrl(trailerUrl), tmdbId = tmdbId, addedAt = addedAt
     )
 
     private fun SeriesEntity.toModel() = Series(
@@ -2187,7 +2211,7 @@ class IptvRepository(
         categoryId = categoryId,
         categoryName = categoryName, rating = rating, plot = plot, cast = cast,
         director = director, genre = genre, releaseDate = releaseDate,
-        trailerUrl = KululuEndpoint.migrateLegacyAssetUrl(trailerUrl), tmdbId = tmdbId
+        trailerUrl = KululuEndpoint.migrateLegacyAssetUrl(trailerUrl), tmdbId = tmdbId, addedAt = addedAt
     )
 
     private fun EpisodeEntity.toModel() = Episode(

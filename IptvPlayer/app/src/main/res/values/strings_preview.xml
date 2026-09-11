@@ -6,4 +6,5 @@
     <string name="epg_popup_upcoming">UP NEXT</string>
     <string name="epg_popup_finished">FINISHED</string>
     <string name="epg_popup_controls">↑↓ Read description · OK / Back Close</string>
+    <string name="content_new">NEW</string>
 </resources>

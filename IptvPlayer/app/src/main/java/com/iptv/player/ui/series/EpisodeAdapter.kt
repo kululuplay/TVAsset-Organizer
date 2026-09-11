@@ -74,6 +74,7 @@ class EpisodeAdapter(
         private val thumb: ImageView = itemView.findViewById(R.id.episodeThumb)
         private val number: TextView = itemView.findViewById(R.id.episodeNumber)
         private val title: TextView = itemView.findViewById(R.id.episodeTitle)
+        private val duration: TextView = itemView.findViewById(R.id.episodeDuration)
         private val description: TextView = itemView.findViewById(R.id.episodeDescription)
         private val progress: ProgressBar = itemView.findViewById(R.id.episodeProgress)
         private val watched: ImageView = itemView.findViewById(R.id.episodeWatched)
@@ -84,6 +85,11 @@ class EpisodeAdapter(
             )
             title.text = episode.title
             description.text = episode.plot.orEmpty()
+            description.visibility = if (episode.plot.isNullOrBlank()) View.GONE else View.VISIBLE
+            duration.text = episode.durationSecs?.takeIf { it > 0 }?.let {
+                String.format(java.util.Locale.getDefault(), "%d:%02d", it / 60, it % 60)
+            }.orEmpty()
+            duration.visibility = if (duration.text.isEmpty()) View.GONE else View.VISIBLE
 
             bindArtwork(episode)
             bindWatchState(episode)

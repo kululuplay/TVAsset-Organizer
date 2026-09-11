@@ -4,6 +4,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class EpisodeGridNavigationTest {
+    @Test fun `two column episode cards reach last episode and return to seasons`() {
+        assertEquals(3, EpisodeGridNavigation.verticalTarget(1, 5, 2, true))
+        assertEquals(4, EpisodeGridNavigation.verticalTarget(3, 5, 2, true))
+        assertEquals(2, EpisodeGridNavigation.verticalTarget(4, 5, 2, false))
+        assertNull(EpisodeGridNavigation.verticalTarget(1, 5, 2, false))
+    }
     @Test fun `vertical traversal preserves column in full rows`() {
         assertEquals(5, EpisodeGridNavigation.verticalTarget(2, 12, 3, true))
         assertEquals(2, EpisodeGridNavigation.verticalTarget(5, 12, 3, false))
