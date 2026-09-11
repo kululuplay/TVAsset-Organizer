@@ -57,6 +57,7 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund
           npm test
           python3 scripts/test_verify_android_upgrade.py
+          python3 scripts/test_activate_release_rollout.py
 
       - name: Test, lint and assemble debug
         run: |
@@ -265,6 +266,19 @@ jobs:
           make_latest: true
           files: IptvPlayer/release-assets/*.apk
           fail_on_unmatched_files: true
+
+      - name: Enable in-app rollout for the published release
+        # Only a new production publication enables distribution. Rebuilding an
+        # existing version must not undo a deliberate operational pause.
+        if: steps.existing.outputs.exists == 'false'
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/activate_release_rollout.py \
+            --repo "${{ github.repository }}" \
+            --version "${{ steps.version.outputs.name }}" \
+            --verified-apk "IptvPlayer/release-assets/KululuIPTV-v${{ steps.version.outputs.name }}.apk"
 
       - name: Upload signed APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
