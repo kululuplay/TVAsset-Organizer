@@ -5,6 +5,7 @@
  */
 package com.iptv.player.data.local.dao
 
+import com.iptv.player.data.recommendation.RecommendationCandidate
 import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Insert
@@ -92,8 +93,16 @@ interface VodDao {
     @Query("SELECT * FROM vod WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY addedAt DESC, name LIMIT 50")
     fun pagingRecent(hidden: List<String>): PagingSource<Int, VodEntity>
 
-    @Query("SELECT * FROM vod WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY rating DESC, name, id LIMIT 50")
-    fun pagingRecommended(hidden: List<String>): PagingSource<Int, VodEntity>
+    @Query("SELECT COUNT(*) FROM vod")
+    fun observeRecommendationCatalog(): Flow<Int>
+
+    @Query("""SELECT id, name, genre, categoryId, rating, addedAt AS addedAt FROM vod
+        WHERE id > :afterId AND (categoryId IS NULL OR categoryId NOT IN (:hidden))
+        ORDER BY id LIMIT 256""")
+    suspend fun recommendationCandidates(afterId: String, hidden: List<String>): List<RecommendationCandidate>
+
+    @Query("SELECT * FROM vod WHERE id IN (:ids) AND (categoryId IS NULL OR categoryId NOT IN (:hidden))")
+    suspend fun recommendedItems(ids: List<String>, hidden: List<String>): List<VodEntity>
 
     @Query("SELECT * FROM vod WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
     fun pagingByCategory(categoryId: String): PagingSource<Int, VodEntity>
@@ -207,6 +216,14 @@ interface VodCategoryDao {
 
 @Dao
 interface SeriesDao {
+    @Query("""SELECT id FROM series WHERE (:categoryId IS NULL OR categoryId = :categoryId)
+        AND (categoryId IS NULL OR categoryId NOT IN (:hidden)) AND episodeCheckedAt < :beforeMs
+        ORDER BY episodeCheckedAt, addedAt DESC, id""")
+    suspend fun episodeDatesDue(categoryId: String?, hidden: List<String>, beforeMs: Long): List<String>
+
+    @Query("UPDATE series SET latestEpisodeAt = :latest, episodeCheckedAt = :checkedAt WHERE id = :id")
+    suspend fun updateEpisodeDate(id: String, latest: Long, checkedAt: Long)
+
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSeries(items: List<SeriesEntity>)
@@ -221,10 +238,10 @@ interface SeriesDao {
     fun observeAll(): Flow<List<SeriesEntity>>
 
     /** Most recently added series first, capped to :limit, for the "Recently added" rail. */
-    @Query("SELECT * FROM series ORDER BY addedAt DESC, name LIMIT :limit")
+    @Query("SELECT * FROM series ORDER BY COALESCE(NULLIF(latestEpisodeAt, 0), addedAt) DESC, name LIMIT :limit")
     fun observeRecent(limit: Int): Flow<List<SeriesEntity>>
 
-    @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
+    @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY COALESCE(NULLIF(latestEpisodeAt, 0), addedAt) DESC, name")
     fun observeByCategory(categoryId: String): Flow<List<SeriesEntity>>
 
     @Query("""
@@ -235,7 +252,7 @@ interface SeriesDao {
     """)
     fun observeCategories(): Flow<List<CategoryRow>>
 
-    @Query("SELECT * FROM series WHERE name LIKE '%' || :query || '%' ORDER BY addedAt DESC, name LIMIT 200")
+    @Query("SELECT * FROM series WHERE name LIKE '%' || :query || '%' ORDER BY COALESCE(NULLIF(latestEpisodeAt, 0), addedAt) DESC, name LIMIT 200")
     fun search(query: String): Flow<List<SeriesEntity>>
 
     // ---- Paging 3 sources (bounded, lazily-paged for huge catalogs) -----
@@ -245,13 +262,21 @@ interface SeriesDao {
      * [hidden] category ids are excluded so Content Manager hides leak nowhere
      * (empty list = exclude nothing; rows with no category are always kept).
      */
-    @Query("SELECT * FROM series WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY addedAt DESC, name LIMIT 50")
+    @Query("SELECT * FROM series WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY COALESCE(NULLIF(latestEpisodeAt, 0), addedAt) DESC, name LIMIT 50")
     fun pagingRecent(hidden: List<String>): PagingSource<Int, SeriesEntity>
 
-    @Query("SELECT * FROM series WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY rating DESC, name, id LIMIT 50")
-    fun pagingRecommended(hidden: List<String>): PagingSource<Int, SeriesEntity>
+    @Query("SELECT COUNT(*) FROM series")
+    fun observeRecommendationCatalog(): Flow<Int>
 
-    @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY addedAt DESC, name")
+    @Query("""SELECT id, name, genre, categoryId, rating, COALESCE(NULLIF(latestEpisodeAt, 0), addedAt) AS addedAt FROM series
+        WHERE id > :afterId AND (categoryId IS NULL OR categoryId NOT IN (:hidden))
+        ORDER BY id LIMIT 256""")
+    suspend fun recommendationCandidates(afterId: String, hidden: List<String>): List<RecommendationCandidate>
+
+    @Query("SELECT * FROM series WHERE id IN (:ids) AND (categoryId IS NULL OR categoryId NOT IN (:hidden))")
+    suspend fun recommendedItems(ids: List<String>, hidden: List<String>): List<SeriesEntity>
+
+    @Query("SELECT * FROM series WHERE categoryId = :categoryId ORDER BY COALESCE(NULLIF(latestEpisodeAt, 0), addedAt) DESC, name")
     fun pagingByCategory(categoryId: String): PagingSource<Int, SeriesEntity>
 
     // ---- Sorted variants (A-Z / rating / year) for the list sort control ----
@@ -279,7 +304,7 @@ interface SeriesDao {
         JOIN series_fts ON s.id = series_fts.id
         WHERE series_fts MATCH :query
           AND (s.categoryId IS NULL OR s.categoryId NOT IN (:hidden))
-        ORDER BY s.addedAt DESC, s.name
+        ORDER BY COALESCE(NULLIF(s.latestEpisodeAt, 0), s.addedAt) DESC, s.name
     """)
     fun pagingSearchRecent(query: String, hidden: List<String>): PagingSource<Int, SeriesEntity>
 
@@ -338,7 +363,7 @@ interface SeriesDao {
     suspend fun deleteEpisodesForSeries(seriesId: String)
 
     /** A handful of other series in the same category, for the "Similar" rail. */
-    @Query("SELECT * FROM series WHERE categoryId = :categoryId AND id != :excludeId ORDER BY addedAt DESC, name LIMIT :limit")
+    @Query("SELECT * FROM series WHERE categoryId = :categoryId AND id != :excludeId ORDER BY COALESCE(NULLIF(latestEpisodeAt, 0), addedAt) DESC, name LIMIT :limit")
     suspend fun sampleByCategory(categoryId: String, excludeId: String, limit: Int): List<SeriesEntity>
 }
 

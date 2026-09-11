@@ -5,6 +5,7 @@
  */
 package com.iptv.player.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -104,8 +105,10 @@ data class SeriesEntity(
     val releaseDate: String?,
     val trailerUrl: String?,
     val tmdbId: String?,
-    /** Unix seconds the series was last updated. */
+    /** General provider edit timestamp; episode dates take priority when known. */
     val addedAt: Long = 0,
+    @ColumnInfo(defaultValue = "0") val latestEpisodeAt: Long = 0,
+    @ColumnInfo(defaultValue = "0") val episodeCheckedAt: Long = 0,
     /** Index in the source's stream list, so lists keep the server's order. */
     val position: Int = 0,
     /** Index of this item's category in the source's category list. */

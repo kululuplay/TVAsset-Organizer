@@ -23,6 +23,12 @@ internal object MetadataPolicy {
             .map { if (it >= 100_000_000_000L) it / 1000L else it }
             .filter { it > 0L }.maxOrNull() ?: 0L
 
+    fun episodeTimestamp(timestamps: List<String?>, nowMs: Long): Long = timestamps
+        .map { newest(0, it) }.filter { it in 1..(nowMs / 1000 + 300) }.maxOrNull() ?: 0L
+
+    fun seriesFreshness(seriesEditedAt: Long, latestEpisodeAt: Long): Long =
+        latestEpisodeAt.takeIf { it > 0 } ?: seriesEditedAt
+
     fun enrichEpisode(episode: Episode, metadata: TmdbEpisode): Episode {
         val generic = Regex("(?i)^(?:episode|folge|bölüm)\\s*\\d+$|^\\d+\\.?\\s*(?:bölüm|episode|folge)$")
         return episode.copy(

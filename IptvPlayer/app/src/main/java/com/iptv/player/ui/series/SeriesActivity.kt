@@ -167,6 +167,16 @@ class SeriesActivity : BaseActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        viewModel.onBrowseStarted()
+    }
+
+    override fun onStop() {
+        viewModel.onBrowseStopped()
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         binding.dateText.text = DateFormat
@@ -575,6 +585,11 @@ class SeriesActivity : BaseActivity() {
                     viewModel.loadState.collectLatest { state ->
                         catalogLoadState = state
                         renderScreenState()
+                    }
+                }
+                launch {
+                    viewModel.episodeDatesUpdating.collectLatest { updating ->
+                        binding.episodeDatesProgress.visibility = if (updating) View.VISIBLE else View.GONE
                     }
                 }
             }

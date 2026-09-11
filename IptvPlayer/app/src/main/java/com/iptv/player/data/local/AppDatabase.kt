@@ -44,6 +44,8 @@ import com.iptv.player.data.local.entity.VodEntity
 import com.iptv.player.data.local.entity.VodFtsEntity
 import com.iptv.player.data.local.entity.WatchedEntity
 import com.iptv.player.data.local.dao.WatchedDao
+import com.iptv.player.data.local.dao.RecommendationDao
+import com.iptv.player.data.local.dao.WatchSignalEntity
 
 @Database(
     entities = [
@@ -63,9 +65,10 @@ import com.iptv.player.data.local.dao.WatchedDao
         VodFtsEntity::class,
         SeriesFtsEntity::class,
         ChannelFtsEntity::class,
-        WatchedEntity::class
+        WatchedEntity::class,
+        WatchSignalEntity::class
     ],
-    version = 13,
+    version = 14,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -86,6 +89,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun seriesFtsDao(): SeriesFtsDao
     abstract fun channelFtsDao(): ChannelFtsDao
     abstract fun watchedDao(): WatchedDao
+    abstract fun recommendationDao(): RecommendationDao
 
     companion object {
 
@@ -230,6 +234,19 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE series ADD COLUMN latestEpisodeAt INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE series ADD COLUMN episodeCheckedAt INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("CREATE TABLE IF NOT EXISTS watch_signals (" +
+                    "profileId INTEGER NOT NULL, kind TEXT NOT NULL, itemId TEXT NOT NULL, " +
+                    "day INTEGER NOT NULL, watchedMs INTEGER NOT NULL, lastWatchedAt INTEGER NOT NULL, " +
+                    "PRIMARY KEY(profileId, kind, itemId, day))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_watch_signals_profileId_lastWatchedAt " +
+                    "ON watch_signals (profileId, lastWatchedAt)")
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(
                 context.applicationContext,
@@ -242,6 +259,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_10_11,
                     MIGRATION_11_12,
                     MIGRATION_12_13,
+                    MIGRATION_13_14,
                 )
                 // Safety net for upgrades from versions older than 8 (dev-only
                 // builds that predate real migrations); v8 -> v9 is non-destructive.

@@ -323,8 +323,7 @@ class VodViewModel(
                 val hiddenList = hidden.toList()
                 when {
                     q.isNotEmpty() -> repo.pagingVodSearch(q, hiddenList, sort)
-                    // "You may like" always shows highest-rated first, regardless of
-                    // the grid's current sort selection.
+                    // Personal recommendations have their own ranking, independent of sort.
                     catId == CAT_POPULAR -> repo.pagingRecommendedVod(hiddenList)
                     catId == null || catId == CAT_ALL -> repo.pagingRecentVod(hiddenList)
                     // A selected category that becomes hidden (Content Manager) must

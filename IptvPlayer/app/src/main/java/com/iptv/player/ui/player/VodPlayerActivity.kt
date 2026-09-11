@@ -464,8 +464,29 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
             }
         }
     }
+    private val watchTime = WatchTimeAccumulator()
+    private fun sampleWatchTime() {
+        watchTime.sample(SystemClock.elapsedRealtime(), activePositionMs(),
+            foreground && playbackStarted && activeIsPlaying() && !recoveryInProgress &&
+                !userSeeking && seekTimeline.targetMs == null && !playbackEnded)
+    }
+
+    private fun flushWatchTime() {
+        val delta = watchTime.drain()
+        val meta = resumeMeta ?: return
+        if (delta <= 0) return
+        val profileId = activeProfileId
+        val now = System.currentTimeMillis()
+        ServiceLocator.appScope.launch {
+            try { repo.recordWatchTime(profileId, meta, delta, now) }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (_: Exception) { /* History must never interrupt playback. */ }
+        }
+    }
+
     private val progressRunnable = object : Runnable {
         override fun run() {
+            sampleWatchTime()
             updateProgress()
             handler.postDelayed(this, 500L)
         }
@@ -473,6 +494,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     private val saveRunnable = object : Runnable {
         override fun run() {
             persistResume()
+            flushWatchTime()
             handler.postDelayed(this, SAVE_INTERVAL_MS)
         }
     }
@@ -3346,6 +3368,8 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
 
     /** Swaps the player onto [next], reusing the live engine, and plays from start. */
     private fun startEpisode(next: Episode, prev: ResumeMeta) {
+        flushWatchTime()
+        watchTime.sample(SystemClock.elapsedRealtime(), 0, false)
         dismissNextEpisodePrompt(restoreFocus = false)
         playbackEnded = false
         completionHandled = false
@@ -3929,6 +3953,9 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     }
 
     override fun onStop() {
+        sampleWatchTime()
+        flushWatchTime()
+        watchTime.sample(SystemClock.elapsedRealtime(), 0, false)
         handler.removeCallbacks(applySeekRunnable)
         seekGeneration++
         val resourceToken = playbackResourceToken

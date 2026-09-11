@@ -7,6 +7,17 @@
  */
 package com.iptv.player.data.repository
 
+import com.iptv.player.data.local.dao.WatchSignalEntity
+import com.iptv.player.data.recommendation.RecommendationRanker
+import com.iptv.player.data.recommendation.RecommendationCandidate
+import com.iptv.player.data.recommendation.WatchPreference
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.flowOn
 import android.util.Base64
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
@@ -111,6 +122,7 @@ class IptvRepository(
     private val profileDao = db.profileDao()
     private val resumeDao = db.resumeDao()
     private val watchedDao = db.watchedDao()
+    private val recommendationDao = db.recommendationDao()
     private val epgMappingDao = db.epgMappingDao()
     private val playbackStateMigrationMutex = Mutex()
     private val catalogCommitMutex = Mutex()
@@ -608,9 +620,16 @@ class IptvRepository(
         Pager(pagingConfig) { vodDao.pagingRecent(hidden) }
             .flow.map { data -> data.map { it.toModel() } }
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
     fun pagingRecommendedVod(hidden: List<String>): Flow<PagingData<VodItem>> =
-        Pager(pagingConfig) { vodDao.pagingRecommended(hidden) }
-            .flow.map { data -> data.map { it.toModel() } }
+        settings.activeProfileId.distinctUntilChanged().flatMapLatest { profileId ->
+            combine(recommendationDao.observePreferences(profileId), vodDao.observeRecommendationCatalog()) { history, _ -> history }
+                .debounce(600).mapLatest { history ->
+                    val ids = recommendationIds(profileId, "movie", history, hidden)
+                    val items = vodDao.recommendedItems(ids, hidden).associateBy { it.id }
+                    PagingData.from(ids.mapNotNull { items[it]?.toModel() }, sourceLoadStates = androidx.paging.LoadStates(androidx.paging.LoadState.NotLoading(false), androidx.paging.LoadState.NotLoading(true), androidx.paging.LoadState.NotLoading(true)))
+                }.flowOn(Dispatchers.IO)
+        }
 
     fun pagingVodByCategory(categoryId: String): Flow<PagingData<VodItem>> =
         Pager(pagingConfig) { vodDao.pagingByCategory(categoryId) }
@@ -994,9 +1013,16 @@ class IptvRepository(
         Pager(pagingConfig) { seriesDao.pagingRecent(hidden) }
             .flow.map { data -> data.map { it.toModel() } }
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
     fun pagingRecommendedSeries(hidden: List<String>): Flow<PagingData<Series>> =
-        Pager(pagingConfig) { seriesDao.pagingRecommended(hidden) }
-            .flow.map { data -> data.map { it.toModel() } }
+        settings.activeProfileId.distinctUntilChanged().flatMapLatest { profileId ->
+            combine(recommendationDao.observePreferences(profileId), seriesDao.observeRecommendationCatalog()) { history, _ -> history }
+                .debounce(600).mapLatest { history ->
+                    val ids = recommendationIds(profileId, "series", history, hidden)
+                    val items = seriesDao.recommendedItems(ids, hidden).associateBy { it.id }
+                    PagingData.from(ids.mapNotNull { items[it]?.toModel() }, sourceLoadStates = androidx.paging.LoadStates(androidx.paging.LoadState.NotLoading(false), androidx.paging.LoadState.NotLoading(true), androidx.paging.LoadState.NotLoading(true)))
+                }.flowOn(Dispatchers.IO)
+        }
 
     fun pagingSeriesByCategory(categoryId: String): Flow<PagingData<Series>> =
         Pager(pagingConfig) { seriesDao.pagingByCategory(categoryId) }
@@ -1135,6 +1161,52 @@ class IptvRepository(
      * intact. Skips the network when the category is already loaded unless [force]
      * is set. Keeps the FTS index in lockstep and marks the category loaded.
      */
+    /** Some panels never update get_series.last_modified when adding episodes.
+     * Check only the visible category (or visible catalog), with two requests in
+     * flight and a 15-minute cache. No TMDB, posters, playback or episode writes.
+     * One batch commit keeps Paging focus stable while dates arrive.
+     */
+    suspend fun refreshSeriesEpisodeDates(
+        config: SourceConfig, categoryId: String?, hidden: List<String>, force: Boolean = false,
+    ): Outcome<Int> = withContext(Dispatchers.IO) {
+        if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
+        val now = System.currentTimeMillis()
+        val ids = seriesDao.episodeDatesDue(categoryId, hidden, if (force) now + 1 else now - 900_000L)
+        if (ids.isEmpty()) return@withContext Outcome.Success(0)
+        val generation = refreshGenerations.begin("series_dates:${categoryId ?: "all"}", config)
+        val api = buildXtreamApi(config.serverUrl)
+        var applied = 0
+        try {
+            // Small categories commit together so posters do not jump every time
+            // one response arrives. Large categories publish bounded batches.
+            ids.chunked(50).forEach { batch ->
+                val updates = mutableListOf<Pair<String, Long>>()
+                coroutineScope {
+                    batch.chunked(2).forEach { pair ->
+                        pair.map { id -> async {
+                            try {
+                                val info = api.getSeriesInfo(config.username, config.password, id)
+                                val episodes = info.episodes ?: return@async null
+                                if (info.info == null) return@async null
+                                id to MetadataPolicy.episodeTimestamp(
+                                    episodes.values.flatten().map { it.added } + info.info.lastEpisodeAdded, now,
+                                )
+                            } catch (e: CancellationException) { throw e }
+                            catch (_: Exception) { null }
+                        } }.awaitAll().filterNotNull().let(updates::addAll)
+                    }
+                }
+                val committed = commitSnapshot(config, generation) {
+                    updates.forEach { (id, date) -> seriesDao.updateEpisodeDate(id, date, now) }
+                }
+                if (!committed) return@withContext staleDataset(CatalogDataset.SERIES_CATEGORY)
+                applied += updates.size
+            }
+            Outcome.Success(applied)
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) { e.toOutcomeFailure() }
+    }
+
     suspend fun refreshSeriesCategory(
         config: SourceConfig,
         categoryId: String,
@@ -1172,8 +1244,10 @@ class IptvRepository(
                         trailerUrl = youtube(s.youtubeTrailer) ?: previous?.trailerUrl,
                         tmdbId = MetadataPolicy.tmdbId(s.tmdbId) ?: previous?.tmdbId,
                         addedAt = MetadataPolicy.newest(
-                            previous?.addedAt ?: 0L, s.lastModified, s.lastEpisodeAdded, s.added,
+                            previous?.addedAt ?: 0L, s.lastModified, s.added,
                         ),
+                        latestEpisodeAt = MetadataPolicy.newest(previous?.latestEpisodeAt ?: 0L, s.lastEpisodeAdded),
+                        episodeCheckedAt = previous?.episodeCheckedAt ?: 0L,
                         position = position,
                         categoryPosition = catPosition
                     )
@@ -1342,10 +1416,12 @@ class IptvRepository(
                                 releaseDate = enrichedSeries.releaseDate,
                                 trailerUrl = enrichedSeries.trailerUrl,
                                 tmdbId = enrichedSeries.tmdbId,
-                                addedAt = MetadataPolicy.newest(
-                                    cachedEntity.addedAt, detail?.lastModified, detail?.lastEpisodeAdded,
-                                    *info.episodes.orEmpty().values.flatten().map { it.added }.toTypedArray(),
+                                addedAt = MetadataPolicy.newest(cachedEntity.addedAt, detail?.lastModified),
+                                latestEpisodeAt = MetadataPolicy.episodeTimestamp(
+                                    info.episodes.orEmpty().values.flatten().map { it.added } + detail?.lastEpisodeAdded,
+                                    System.currentTimeMillis(),
                                 ),
+                                episodeCheckedAt = System.currentTimeMillis(),
                             ),
                         ),
                     )
@@ -1767,6 +1843,7 @@ class IptvRepository(
         db.withTransaction {
             resumeDao.clearProfile(id)
             watchedDao.clearProfile(id)
+            recommendationDao.clearProfile(id)
             profileDao.remove(id)
         }
     }
@@ -2044,6 +2121,44 @@ class IptvRepository(
                 .toSet()
         }
 
+    /** Durable actual-playback deltas, isolated to the profile that opened the player. */
+    suspend fun recordWatchTime(profileId: Long, meta: ResumeMeta, deltaMs: Long, nowMs: Long) =
+        withContext(Dispatchers.IO) {
+            if (profileId < 0 || deltaMs <= 0) return@withContext
+            val kind = when (meta.kind) {
+                ResumeKind.MOVIE -> "movie"
+                ResumeKind.EPISODE -> "series"
+                else -> return@withContext
+            }
+            val id = (if (kind == "movie") meta.vodId else meta.seriesId)
+                ?.takeIf { it.isNotBlank() } ?: return@withContext
+            val day = nowMs / RecommendationRanker.DAY_MS
+            db.withTransaction {
+                // A late lifecycle write must not recreate a deleted profile's history.
+                if (profileDao.getById(profileId) == null) return@withTransaction
+                recommendationDao.insert(WatchSignalEntity(profileId, kind, id, day, 0, nowMs))
+                recommendationDao.add(profileId, kind, id, day, deltaMs.coerceAtMost(60_000), nowMs)
+                recommendationDao.prune(profileId, nowMs - 90 * RecommendationRanker.DAY_MS)
+            }
+        }
+
+    private suspend fun recommendationIds(
+        profileId: Long, kind: String, history: List<WatchPreference>, hidden: List<String>,
+    ): List<String> {
+        val excluded = if (kind == "movie") watchedDao.allIds(profileId)
+            .filter { it.startsWith("vod_") }.map { it.removePrefix("vod_") }.toSet() else emptySet()
+        val ranker = RecommendationRanker(profileId, kind, history, System.currentTimeMillis(), excluded)
+        var afterId = ""
+        do {
+            val chunk: List<RecommendationCandidate> = if (kind == "movie")
+                vodDao.recommendationCandidates(afterId, hidden) else seriesDao.recommendationCandidates(afterId, hidden)
+            chunk.forEach(ranker::offer)
+            if (chunk.isEmpty()) break
+            afterId = chunk.last().id
+        } while (chunk.size == 256)
+        return ranker.results(50)
+    }
+
     // ---- Similar / recommended -----------------------------------------
 
     /** Other movies in the same category as [item], for the detail "Similar" rail. */
@@ -2219,7 +2334,8 @@ class IptvRepository(
         categoryId = categoryId,
         categoryName = categoryName, rating = rating, plot = plot, cast = cast,
         director = director, genre = genre, releaseDate = releaseDate,
-        trailerUrl = KululuEndpoint.migrateLegacyAssetUrl(trailerUrl), tmdbId = tmdbId, addedAt = addedAt
+        trailerUrl = KululuEndpoint.migrateLegacyAssetUrl(trailerUrl), tmdbId = tmdbId,
+        addedAt = MetadataPolicy.seriesFreshness(addedAt, latestEpisodeAt)
     )
 
     private fun EpisodeEntity.toModel() = Episode(
