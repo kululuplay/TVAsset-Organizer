@@ -130,7 +130,7 @@
                 android:clipToPadding="false"
                 android:nextFocusRight="@id/previewCard"
                 android:paddingBottom="8dp" />
-            <androidx.recyclerview.widget.RecyclerView
+            <com.iptv.player.ui.home.ChannelListView
                 android:id="@+id/channelList"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
