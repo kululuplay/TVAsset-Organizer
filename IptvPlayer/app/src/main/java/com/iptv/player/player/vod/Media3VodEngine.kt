@@ -37,6 +37,8 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.video.VideoFrameMetadataListener
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.iptv.player.player.DirectMediaDataSource
+import com.iptv.player.player.MediaTransportPolicy
 import com.iptv.player.R
 import com.iptv.player.playback.android.PlaybackQoeRuntime
 import com.iptv.player.playback.core.FailureSignal
@@ -225,6 +227,7 @@ class Media3VodEngine(
         exo.addListener(boundListener)
 
         return try {
+            MediaTransportPolicy.requireDirectMedia(url)
             val item = MediaItem.Builder()
                 .setMediaId(mediaId)
                 .setUri(url)
@@ -461,7 +464,7 @@ class Media3VodEngine(
             readTimeoutMs = config.readTimeoutMs,
             allowHttpToHttpsRedirects = config.allowHttpToHttpsRedirects,
         )
-        val mediaSourceFactory = DefaultMediaSourceFactory(httpFactory)
+        val mediaSourceFactory = DefaultMediaSourceFactory(DirectMediaDataSource.Factory(httpFactory))
         val deviceProfile = PlaybackQoeRuntime.devicePlaybackProfile()
         val selector = DefaultTrackSelector(context).apply {
             val parameters = buildUponParameters()

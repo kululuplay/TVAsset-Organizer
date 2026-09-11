@@ -1,39 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Fixed-size TV episode card. Stable dimensions prevent a long title or missing
-     image from changing rail height and moving the D-pad target. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="210dp"
-    android:layout_height="178dp"
+    android:layout_width="match_parent"
+    android:layout_height="146dp"
     android:layout_marginEnd="10dp"
     android:background="@drawable/bg_series_episode_card"
     android:focusable="true"
     android:focusableInTouchMode="false"
-    android:orientation="vertical"
-    android:padding="6dp"
-    android:stateListAnimator="@animator/control_focus">
-
+    android:orientation="horizontal"
+    android:padding="10dp"
+    android:stateListAnimator="@animator/control_focus"
+    android:layout_marginBottom="10dp">
     <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="108dp"
+        android:layout_width="174dp"
+        android:layout_height="100dp"
+        android:layout_gravity="center_vertical"
         android:background="@drawable/bg_series_art_frame"
         android:clipToOutline="true"
         android:importantForAccessibility="noHideDescendants">
-
         <ImageView
             android:id="@+id/episodeThumb"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:contentDescription="@null"
             android:scaleType="centerCrop" />
-
         <View
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:layout_gravity="bottom"
             android:background="@drawable/bg_scrim_bottom"
             android:importantForAccessibility="no" />
-
         <ProgressBar
             android:id="@+id/episodeProgress"
             style="?android:attr/progressBarStyleHorizontal"
@@ -44,7 +41,6 @@
             android:progressTint="@color/brand_pink"
             android:progressBackgroundTint="@color/progress_track"
             android:visibility="gone" />
-
         <ImageView
             android:id="@+id/episodeWatched"
             android:layout_width="24dp"
@@ -58,7 +54,13 @@
             android:visibility="gone"
             android:contentDescription="@string/cd_watched" />
     </FrameLayout>
-
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:layout_marginStart="12dp"
+        android:gravity="center_vertical"
+        android:orientation="vertical">
     <TextView
         android:id="@+id/episodeNumber"
         android:layout_width="match_parent"
@@ -70,16 +72,32 @@
         android:textColor="@color/brand_pink"
         android:textSize="@dimen/text_small"
         android:textStyle="bold" />
-
     <TextView
         android:id="@+id/episodeTitle"
         android:layout_width="match_parent"
-        android:layout_height="34dp"
+        android:layout_height="wrap_content"
         android:ellipsize="end"
         android:gravity="center_vertical"
         android:importantForAccessibility="no"
         android:maxLines="2"
         android:textColor="@color/text_primary"
-        android:textSize="13sp"
+        android:textSize="16sp"
         android:textStyle="bold" />
+    <TextView
+        android:id="@+id/episodeDescription"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:textSize="13sp"
+        android:textColor="@color/text_secondary"
+        android:maxLines="2"
+        android:ellipsize="end" />
+    <TextView
+        android:id="@+id/episodeDuration"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:textSize="12sp"
+        android:textColor="@color/text_secondary" />
+    </LinearLayout>
 </LinearLayout>

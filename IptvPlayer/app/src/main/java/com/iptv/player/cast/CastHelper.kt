@@ -6,6 +6,7 @@
  */
 package com.iptv.player.cast
 
+import com.iptv.player.player.MediaTransportPolicy
 import android.content.Context
 import android.net.Uri
 import com.google.android.gms.cast.MediaInfo
@@ -39,7 +40,7 @@ object CastHelper {
     /**
      * Submits a stream to the connected Cast device. The Boolean return only says
      * whether a request could be submitted; [onResult] reports the receiver's
-     * asynchronous acceptance. Note: the default receiver plays HLS/MP4/WebM;
+     * asynchronous acceptance. Note: the default receiver plays MP4/WebM;
      * raw MPEG-TS live streams generally will not cast.
      */
     fun loadMedia(
@@ -51,6 +52,7 @@ object CastHelper {
         startPositionMs: Long = 0L,
         onResult: ((Boolean) -> Unit)? = null,
     ): Boolean = try {
+        MediaTransportPolicy.requireDirectMedia(url)
         val client = castContext(context)?.sessionManager?.currentCastSession?.remoteMediaClient
         if (client == null) {
             false
@@ -99,7 +101,6 @@ object CastHelper {
     private fun guessMime(url: String): String {
         val lower = url.substringBefore('?').lowercase()
         return when {
-            lower.endsWith(".m3u8") -> "application/x-mpegURL"
             lower.endsWith(".mpd") -> "application/dash+xml"
             lower.endsWith(".mkv") -> "video/x-matroska"
             lower.endsWith(".webm") -> "video/webm"

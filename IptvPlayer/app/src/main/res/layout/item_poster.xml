@@ -53,6 +53,23 @@
         app:layout_constraintBottom_toBottomOf="@id/posterImage"
         app:layout_constraintEnd_toEndOf="@id/posterImage" />
 
+    <TextView
+        android:id="@+id/posterNew"
+        android:layout_width="wrap_content"
+        android:layout_height="24dp"
+        android:layout_margin="7dp"
+        android:paddingHorizontal="8dp"
+        android:gravity="center"
+        android:background="@drawable/bg_content_new"
+        android:text="@string/content_new"
+        android:textColor="#07151D"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        android:importantForAccessibility="no"
+        app:layout_constraintBottom_toBottomOf="@id/posterImage"
+        app:layout_constraintStart_toStartOf="@id/posterImage" />
+
     <!-- Resume progress bar pinned to the bottom of the poster artwork. -->
     <ProgressBar
         android:id="@+id/posterProgress"

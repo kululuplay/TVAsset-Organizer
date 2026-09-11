@@ -20,6 +20,8 @@ import org.xmlpull.v1.XmlPullParser
 import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.TimeZone
+import java.util.zip.GZIPInputStream
 
 object XmltvParser {
 
@@ -32,10 +34,22 @@ object XmltvParser {
         input: InputStream,
         onChannel: (id: String, displayName: String) -> Unit = { _, _ -> },
         onProgram: (Program) -> Unit
+    ) = parseWithParser(Xml.newPullParser(), input, onChannel, onProgram)
+
+    internal fun parseWithParser(
+        parser: XmlPullParser,
+        input: InputStream,
+        onChannel: (id: String, displayName: String) -> Unit = { _, _ -> },
+        onProgram: (Program) -> Unit,
     ) {
-        val parser = Xml.newPullParser()
         parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
-        parser.setInput(input, null)
+        val buffered = input.buffered()
+        buffered.mark(2)
+        val gzip = buffered.read() == 0x1f && buffered.read() == 0x8b
+        buffered.reset()
+        parser.setInput(if (gzip) GZIPInputStream(buffered) else buffered, null)
+        var rootSeen = false
+        var rootClosed = false
 
         var channel: String? = null
         var startMs = 0L
@@ -52,6 +66,10 @@ object XmltvParser {
         while (event != XmlPullParser.END_DOCUMENT) {
             when (event) {
                 XmlPullParser.START_TAG -> {
+                    if (parser.depth == 1) {
+                        require(parser.name == "tv") { "Expected XMLTV tv root" }
+                        rootSeen = true
+                    }
                     when (parser.name) {
                         "channel" -> {
                             chanId = parser.getAttributeValue(null, "id")
@@ -79,6 +97,7 @@ object XmltvParser {
                     }
                 }
                 XmlPullParser.END_TAG -> {
+                    if (parser.depth == 1 && parser.name == "tv") rootClosed = true
                     when (parser.name) {
                         "title", "desc", "display-name" -> current = null
                         "channel" -> {
@@ -90,7 +109,7 @@ object XmltvParser {
                         }
                         "programme" -> {
                             val ch = channel
-                            if (ch != null && stopMs > startMs && !title.isNullOrBlank()) {
+                            if (!ch.isNullOrBlank() && startMs > 0 && stopMs > startMs && !title.isNullOrBlank()) {
                                 onProgram(
                                     Program(
                                         epgChannelId = ch,
@@ -107,16 +126,24 @@ object XmltvParser {
             }
             event = parser.next()
         }
+        require(rootSeen && rootClosed) { "Empty or truncated XMLTV response" }
     }
 
     // XMLTV time is "yyyyMMddHHmmss Z"; the offset may be missing or attached
     // without a separating space (e.g. "20240101120000+0300").
-    private val withZone = SimpleDateFormat("yyyyMMddHHmmss Z", Locale.US)
-    private val noZone = SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
+    private val formats = object : ThreadLocal<Pair<SimpleDateFormat, SimpleDateFormat>>() {
+        override fun initialValue() =
+            SimpleDateFormat("yyyyMMddHHmmss Z", Locale.US).apply { isLenient = false } to
+                SimpleDateFormat("yyyyMMddHHmmss", Locale.US).apply {
+                    isLenient = false
+                    timeZone = TimeZone.getTimeZone("UTC")
+                }
+    }
 
     private fun parseTime(raw: String?): Long {
         if (raw.isNullOrBlank()) return 0L
         val value = raw.trim()
+        val (withZone, noZone) = formats.get()!!
         return try {
             // Split off a trailing +HHMM / -HHMM timezone offset, with or without
             // a separating space, so a glued offset doesn't make the whole parse

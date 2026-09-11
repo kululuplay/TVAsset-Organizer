@@ -39,6 +39,22 @@
             android:background="@drawable/bg_scrim_bottom"
             android:importantForAccessibility="no" />
 
+    <TextView
+        android:id="@+id/posterNew"
+        android:layout_width="wrap_content"
+        android:layout_height="24dp"
+        android:layout_margin="7dp"
+        android:paddingHorizontal="8dp"
+        android:gravity="center"
+        android:background="@drawable/bg_content_new"
+        android:text="@string/content_new"
+        android:textColor="#07151D"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        android:importantForAccessibility="no"
+        android:layout_gravity="bottom|start" />
+
         <ProgressBar
             android:id="@+id/posterProgress"
             style="?android:attr/progressBarStyleHorizontal"

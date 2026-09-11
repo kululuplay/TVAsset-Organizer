@@ -173,7 +173,7 @@ class PlayerController(
         fun onStablePlayback() {}
         /** Active backend changed; value is mapped to a closed enum before QoE. */
         fun onEngineChanged(engineName: String) {}
-        /** Effective TS/HLS route after channel memory or a bounded fallback. */
+        /** Effective MPEG-TS transport for every live playback surface. */
         fun onTransportResolved(format: StreamFormat) {}
         /** Structured, URL/message-free failure suitable for bounded QoE. */
         fun onPlaybackFailure(failure: PlaybackFailure) {}
@@ -233,8 +233,6 @@ class PlayerController(
     private var currentRouteKey: String? = null
     private var currentTransportKey: String? = null
     private var currentTransportFormat: StreamFormat? = null
-    private var transportFallbackUsed = false
-    private var usingRememberedTransport = false
     // True while the CURRENT play started on a remembered stage that DIFFERS from
     // the cold base stage and has not yet proved stable. If it fails before then,
     // we distrust the memory and restart from the base ladder (see handleFailure).
@@ -447,19 +445,14 @@ class PlayerController(
         cancelWatchdog()
         currentOriginalUrl = url
         currentTransportKey = transportKey
-        transportFallbackUsed = false
-        val configuredFormat = LiveStreamUrl.detectFormat(url)
-        val rememberedTransport =
-            if (transportKey != null && configuredFormat != null) {
-                LiveTransportMemory.bestFormat(transportKey)
-            } else {
-                null
-            }
-        currentTransportFormat = rememberedTransport ?: configuredFormat
-        currentUrl = currentTransportFormat?.let { LiveStreamUrl.applyFormat(url, it) } ?: url
+        currentTransportFormat = if (isLive) StreamFormat.TS else null
+        currentUrl = if (isLive) LiveStreamUrl.applyFormat(url, StreamFormat.TS) else url
+        if (MediaTransportPolicy.isHlsUrl(currentUrl.orEmpty())) {
+            release()
+            callback.onFatalError()
+            return
+        }
         currentTransportFormat?.let(callback::onTransportResolved)
-        usingRememberedTransport =
-            rememberedTransport != null && rememberedTransport != configuredFormat
         // A route learned under VLC/Auto must not override a later Exo/Hardware
         // preference (or vice versa). The source/policy fingerprint is already in
         // routeKey; namespace it by the active settings pair as well.
@@ -522,7 +515,7 @@ class PlayerController(
             // fresh native MediaPlayer/Media per channel, so reset is a no-op there.)
             PlaybackLog.log(context, "Controller", "fast-zap reuse stage=$initial reset")
             // Use the controller-resolved URL, not the caller's original URL:
-            // transport memory may have selected the alternate TS/HLS container.
+            // the live URL has already been canonicalized to MPEG-TS.
             // Replaying [url] here silently discarded that decision only on the
             // fast-zap path and also desynchronised route/transport memory.
             reusable.play(currentUrl ?: url, reset = true)
@@ -541,12 +534,7 @@ class PlayerController(
         PlaybackLog.log(
             context, "Controller",
             "play mode=$mode decoder=$decoderMode start=$stage" +
-                (if (usingRememberedRoute) " (route memory)" else "") +
-                (if (usingRememberedTransport) {
-                    " transport=$currentTransportFormat (memory)"
-                } else {
-                    ""
-                })
+                (if (usingRememberedRoute) " (route memory)" else ""),
         )
         startStage(stage)
     }
@@ -870,17 +858,11 @@ class PlayerController(
                     )
                 },
             )
-            if (
-                !playbackConfirmed &&
-                tryTransportFallback(
-                    failure = if (manifestFailure) {
-                        LiveTransportPolicy.Failure.MANIFEST
-                    } else {
-                        LiveTransportPolicy.Failure.SOURCE_STARTUP
-                    },
-                    httpStatus = httpStatus,
-                )
-            ) {
+            if (LiveTransportPolicy.isAuthoritativeHttpFailure(httpStatus)) {
+                // Authorization/resource rejection cannot be repaired by a decoder swap.
+                PlaybackLog.log(context, "Controller", "terminal source HTTP $httpStatus")
+                release()
+                callback.onFatalError()
                 return@post
             }
             handleEngineFailure(Reason.ERROR, reportFailure = false)
@@ -1002,61 +984,6 @@ class PlayerController(
         return PlaybackFailureClassifier.classify(signal, phase)
     }
 
-    /** Try the alternate container once without ever changing host/scheme/port. */
-    private fun tryTransportFallback(
-        failure: LiveTransportPolicy.Failure,
-        httpStatus: Int? = null,
-    ): Boolean {
-        val url = currentUrl ?: return false
-        val alternative = LiveTransportPolicy.alternate(
-            currentUrl = url,
-            currentFormat = currentTransportFormat,
-            failure = failure,
-            httpStatus = httpStatus,
-            alreadyTried = transportFallbackUsed,
-        ) ?: return false
-
-        if (usingRememberedTransport) {
-            LiveTransportMemory.forget(currentTransportKey, currentTransportFormat)
-        }
-        transportFallbackUsed = true
-        usingRememberedTransport = false
-        currentUrl = alternative.url
-        currentTransportFormat = alternative.format
-        callback.onTransportResolved(alternative.format)
-        val effectiveRouteKey = LiveStreamUrl.routeKeyWithFormat(
-            currentRawRouteKey,
-            alternative.format,
-        )
-        currentRouteKey = effectiveRouteKey?.let { "${mode.name}|${decoderMode.name}|$it" }
-        unconfirmedStartFailures = 0
-        resetReconnect()
-        // A different container has a different demux/startup profile. Give it a
-        // fresh, bounded engine ladder instead of inheriting "already tried"
-        // stages from the failed container. Route memory is also namespaced by
-        // format, so only a winner learned for this exact alternative may steer
-        // the new attempt.
-        triedStages.clear()
-        memoryIgnoredThisPlay = false
-        usingRememberedRoute = false
-        val base = baseInitialStage()
-        val remembered = rememberedStage()
-        val restartStage = remembered ?: base
-        usingRememberedRoute = remembered != null && remembered != base
-        PlaybackLog.log(
-            context,
-            "Controller",
-            "source startup -> one transport retry ${alternative.format} stage=$restartStage",
-        )
-        recordStability(
-            "transport_fallback",
-            "warn",
-            "to=${alternative.format} status=${httpStatus ?: "unknown"}",
-        )
-        startStage(restartStage)
-        return true
-    }
-
     /**
      * Called on the first confirmed playback (a verified frame for TV, onPlaying
      * for radio) of the current stage. We begin observing clock progress
@@ -1105,7 +1032,6 @@ class PlayerController(
         }
         if (isLive && (!expectsVideo || videoOutputConfirmed)) {
             LiveTransportMemory.markStable(currentTransportKey, currentTransportFormat)
-            usingRememberedTransport = false
         }
         usingRememberedRoute = false
         callback.onStablePlayback()
@@ -1156,14 +1082,6 @@ class PlayerController(
                     PlaybackFailure.Phase.STARTUP,
                 ),
             )
-            if (
-                engine?.supportsPreciseSourceErrors == true &&
-                tryTransportFallback(
-                    LiveTransportPolicy.Failure.SOURCE_STARTUP,
-                )
-            ) {
-                return@postDelayed
-            }
             handleFailure(Reason.STARTUP)
         }, STARTUP_TIMEOUT_MS)
     }
@@ -1212,9 +1130,6 @@ class PlayerController(
                     ),
                 )
                 cancelWatchdog()
-                if (tryTransportFallback(LiveTransportPolicy.Failure.PLAYBACK_STALL)) {
-                    return@postDelayed
-                }
                 engageReconnect()
                 return@postDelayed
             }

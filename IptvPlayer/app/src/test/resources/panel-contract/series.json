@@ -1,0 +1,74 @@
+[
+  {
+    "num": 1,
+    "name": "Fixture",
+    "title": "Fixture",
+    "year": "2025",
+    "series_id": 385,
+    "stream_type": "series",
+    "cover": "https://example.test/fixture",
+    "plot": "Fixture",
+    "cast": "Fixture",
+    "director": "Fixture",
+    "genre": "Fixture",
+    "releaseDate": "2025-10-11",
+    "release_date": "2025-10-11",
+    "last_modified": "1788618702",
+    "rating": "9",
+    "rating_5based": 4.5,
+    "backdrop_path": [
+      "https://example.test/fixture"
+    ],
+    "youtube_trailer": null,
+    "episode_run_time": null,
+    "category_id": "12"
+  },
+  {
+    "num": 2,
+    "name": "Fixture",
+    "title": "Fixture",
+    "year": "2026",
+    "series_id": 412,
+    "stream_type": "series",
+    "cover": "https://example.test/fixture",
+    "plot": "Fixture",
+    "cast": "Fixture",
+    "director": "Fixture",
+    "genre": "Fixture",
+    "releaseDate": "2026-02-09",
+    "release_date": "2026-02-09",
+    "last_modified": "1788614065",
+    "rating": "0",
+    "rating_5based": 0.0,
+    "backdrop_path": [
+      "https://example.test/fixture"
+    ],
+    "youtube_trailer": null,
+    "episode_run_time": null,
+    "category_id": "12"
+  },
+  {
+    "num": 3,
+    "name": "Fixture",
+    "title": "Fixture",
+    "year": "2026",
+    "series_id": 421,
+    "stream_type": "series",
+    "cover": "https://example.test/fixture",
+    "plot": null,
+    "cast": "Fixture",
+    "director": "Fixture",
+    "genre": "Fixture",
+    "releaseDate": "2026-06-10",
+    "release_date": "2026-06-10",
+    "last_modified": "1788618702",
+    "rating": "9",
+    "rating_5based": 4.5,
+    "backdrop_path": [
+      "https://example.test/fixture"
+    ],
+    "youtube_trailer": null,
+    "episode_run_time": null,
+    "category_id": "12"
+  }
+]

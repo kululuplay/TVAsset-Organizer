@@ -1,7 +1,7 @@
 /*
  * CastOptionsProvider.kt
  * Required by the Cast framework (referenced from the manifest meta-data). Uses
- * the default media receiver so standard HLS/MP4 streams can be cast.
+ * the default media receiver so standard MP4 streams can be cast.
  */
 package com.iptv.player.cast
 

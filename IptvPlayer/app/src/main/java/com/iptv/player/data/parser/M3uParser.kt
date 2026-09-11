@@ -12,6 +12,17 @@ import java.io.BufferedReader
 
 object M3uParser {
 
+    private fun isStreamUrl(line: String): Boolean = runCatching {
+        val uri = java.net.URI(line)
+        uri.scheme?.lowercase() in setOf("http", "https", "rtsp", "rtsps", "rtmp", "rtmps", "udp", "rtp") &&
+            !uri.rawAuthority.isNullOrBlank()
+    }.getOrDefault(false)
+
+    fun hasPlaylistSignature(prefix: String): Boolean {
+        val first = prefix.trimStart('\uFEFF', ' ', '\t', '\r', '\n').lineSequence().firstOrNull().orEmpty()
+        return first.startsWith("#EXTM3U", ignoreCase = true) || isStreamUrl(first)
+    }
+
     // Matches attribute pairs like tvg-logo="http://..." inside an #EXTINF line.
     private val ATTR_REGEX = Regex("([a-zA-Z0-9-]+)=\"([^\"]*)\"")
 
@@ -19,19 +30,25 @@ object M3uParser {
         val channels = ArrayList<Channel>()
         var pending: PendingInfo? = null
         var autoId = 0
+        var headerSeen = false
+        var contentSeen = false
 
         reader.forEachLine { raw ->
+            val clean = raw.trim().trimStart('\uFEFF')
+            if (clean.isNotBlank() && !clean.startsWith("#")) contentSeen = true
+            if (clean.startsWith("<")) throw java.io.IOException("HTML/XML is not a playlist")
             // A single malformed line must never abort parsing the whole playlist.
             runCatching {
-                val line = raw.trim()
+                val line = clean
                 when {
+                    line.startsWith("#EXTM3U", ignoreCase = true) -> headerSeen = true
                     line.startsWith("#EXTINF", ignoreCase = true) -> {
                         pending = parseExtInf(line)
                     }
                     line.isEmpty() || line.startsWith("#") -> {
                         // Ignore comments / directives we don't use yet.
                     }
-                    else -> {
+                    isStreamUrl(line) -> {
                         // A URL line completes the previously seen #EXTINF. If no
                         // #EXTINF preceded it, treat the bare URL as a minimal
                         // channel so the entry isn't silently dropped.
@@ -59,6 +76,7 @@ object M3uParser {
                 }
             }
         }
+        if (!headerSeen && contentSeen && channels.isEmpty()) throw java.io.IOException("Malformed playlist response")
         return channels
     }
 

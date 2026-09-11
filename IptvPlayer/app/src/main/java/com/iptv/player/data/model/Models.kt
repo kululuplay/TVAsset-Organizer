@@ -103,21 +103,13 @@ enum class DecoderMode {
     }
 }
 
-/**
- * Live stream container format the user prefers. Xtream live channels are stored
- * with the default `.ts` extension; choosing HLS rewrites that to `.m3u8` at
- * playback time (some providers serve both and one path is smoother than the
- * other on a given network). VOD/series keep their real container extension.
- */
+/** Live TV/radio always use MPEG-TS; VOD retains its original file container. */
 enum class StreamFormat(val extension: String) {
-    /** MPEG-TS (`.ts`) — the most compatible Xtream live transport. */
-    TS("ts"),
-    /** HLS (`.m3u8`) — adaptive segmented delivery. */
-    HLS("m3u8");
+    TS("ts");
 
     companion object {
-        fun fromName(value: String?): StreamFormat =
-            entries.firstOrNull { it.name == value } ?: TS
+        // Migrate stored HLS/unknown preferences to TS without a settings reset.
+        fun fromName(value: String?): StreamFormat = TS
     }
 }
 
@@ -149,6 +141,13 @@ enum class BufferMode(
     LOW(1500, 1000, 4000, 500, 1000),
     NORMAL(5000, 3000, 12000, 1500, 2500),
     HIGH(10000, 6000, 20000, 3000, 5000);
+
+    /** File playback can seek/refill on demand; it does not need the live-TV cache. */
+    val vodNetworkCachingMs: Int get() = when (this) {
+        LOW -> 750
+        NORMAL, ADAPTIVE -> 1500
+        HIGH -> 3000
+    }
 
     companion object {
         fun fromName(value: String?): BufferMode =

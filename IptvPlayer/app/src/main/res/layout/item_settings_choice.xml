@@ -35,7 +35,7 @@
             android:ellipsize="end"
             android:maxLines="2"
             android:textColor="@color/settings_row_text"
-            android:textSize="@dimen/text_body"
+            android:textSize="16sp"
             android:textStyle="bold" />
 
         <TextView
@@ -47,7 +47,7 @@
             android:ellipsize="end"
             android:maxLines="2"
             android:textColor="@color/settings_row_text_secondary"
-            android:textSize="@dimen/text_caption"
+            android:textSize="13sp"
             android:visibility="gone" />
     </LinearLayout>
 

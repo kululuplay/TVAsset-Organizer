@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Premium widescreen splash: a restrained brand monolith, large editorial
-     wordmark and a real stage-progress panel. Designed to look intentional on
-     both 720p sticks and 4K Android TV panels without expensive bitmap assets. -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -10,23 +7,18 @@
     android:background="@drawable/bg_splash_modern"
     android:paddingHorizontal="@dimen/safe_area_h"
     android:paddingVertical="@dimen/safe_area_v">
-
     <LinearLayout
         android:id="@+id/splashHero"
-        android:layout_width="0dp"
+        android:layout_width="520dp"
         android:layout_height="wrap_content"
         android:baselineAligned="false"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
+        android:gravity="center"
+        android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
-
-        <FrameLayout
-            android:layout_width="268dp"
-            android:layout_height="268dp">
-
+        <FrameLayout android:layout_width="176dp" android:layout_height="176dp">
             <View
                 android:id="@+id/logoGlow"
                 android:layout_width="match_parent"
@@ -34,7 +26,6 @@
                 android:layout_gravity="center"
                 android:alpha="0"
                 android:background="@drawable/bg_splash_glow" />
-
             <View
                 android:id="@+id/logoOrbit"
                 android:layout_width="176dp"
@@ -43,7 +34,6 @@
                 android:alpha="0"
                 android:background="@drawable/bg_splash_orbit"
                 android:rotation="45" />
-
             <FrameLayout
                 android:id="@+id/logoBadge"
                 android:layout_width="132dp"
@@ -52,23 +42,21 @@
                 android:alpha="0"
                 android:background="@drawable/bg_splash_logo_panel"
                 android:elevation="12dp">
-
                 <ImageView
                     android:layout_width="70dp"
                     android:layout_height="70dp"
                     android:layout_gravity="center"
                     android:contentDescription="@string/app_name"
-                    android:src="@drawable/ic_kululu_logo" />
+                    android:src="@drawable/ic_play" />
             </FrameLayout>
         </FrameLayout>
-
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/space_xl"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
+            android:layout_marginStart="0dp"
+            android:layout_weight="0"
+            android:orientation="vertical"
+            android:gravity="center">
             <TextView
                 android:id="@+id/appName"
                 android:layout_width="wrap_content"
@@ -78,9 +66,8 @@
                 android:letterSpacing="0.045"
                 android:text="@string/app_name"
                 android:textColor="@color/text_primary"
-                android:textSize="44sp"
+                android:textSize="38sp"
                 android:textStyle="bold" />
-
             <TextView
                 android:id="@+id/tagline"
                 android:layout_width="wrap_content"
@@ -90,8 +77,9 @@
                 android:letterSpacing="0.02"
                 android:text="@string/app_tagline"
                 android:textColor="@color/text_secondary"
-                android:textSize="18sp" />
-
+                android:textSize="18sp"
+                android:gravity="center"
+                android:layout_marginStart="0dp" />
             <LinearLayout
                 android:id="@+id/statusPanel"
                 android:layout_width="match_parent"
@@ -102,18 +90,15 @@
                 android:orientation="vertical"
                 android:paddingHorizontal="@dimen/space_m"
                 android:paddingVertical="12dp">
-
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
-
                     <View
                         android:layout_width="8dp"
                         android:layout_height="8dp"
                         android:background="@drawable/bg_splash_dot" />
-
                     <TextView
                         android:id="@+id/splashStatus"
                         android:layout_width="0dp"
@@ -128,13 +113,11 @@
                         android:textSize="@dimen/text_caption"
                         android:textStyle="bold" />
                 </LinearLayout>
-
                 <FrameLayout
                     android:layout_width="match_parent"
                     android:layout_height="4dp"
                     android:layout_marginTop="12dp"
                     android:background="@drawable/bg_splash_progress_track">
-
                     <View
                         android:id="@+id/splashProgressFill"
                         android:layout_width="match_parent"
@@ -145,7 +128,6 @@
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
-
     <TextView
         android:id="@+id/splashVersion"
         android:layout_width="wrap_content"

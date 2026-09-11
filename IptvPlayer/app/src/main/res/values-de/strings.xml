@@ -141,7 +141,6 @@
     <string name="settings_decoder_software">Software bevorzugen (Qualitätsmodus)</string>
     <string name="settings_stream_format">Live-Stream-Format</string>
     <string name="settings_stream_format_ts">MPEG-TS (.ts) — höchste Kompatibilität</string>
-    <string name="settings_stream_format_hls">HLS (.m3u8) — adaptiv</string>
     <string name="settings_buffer">Puffergröße</string>
     <string name="settings_buffer_adaptive">Adaptiv (empfohlen)</string>
     <string name="settings_buffer_low">Niedrig (schnelles Umschalten)</string>

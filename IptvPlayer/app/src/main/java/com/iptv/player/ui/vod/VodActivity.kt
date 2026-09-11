@@ -31,7 +31,6 @@ import com.iptv.player.databinding.ActivityVodBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.NewContentPopup
 import com.iptv.player.ui.common.PinLockHelper
-import com.iptv.player.ui.common.SafeGridLayoutManager
 import com.iptv.player.util.NewContentNotifier
 import com.iptv.player.ui.common.autoFitColumns
 import com.iptv.player.ui.common.hideSoftKeyboard
@@ -223,14 +222,17 @@ class VodActivity : BaseActivity() {
         }
         vodAdapter.progressProvider = { id -> progressMap[id] ?: 0 }
         vodAdapter.watchedProvider = { id -> id in watchedSet }
-        binding.posterGrid.layoutManager = SafeGridLayoutManager(this, 4)
+        binding.posterGrid.layoutManager = GridLayoutManager(this, 4).apply {
+            // GapWorker used a stale Paging position during rapid D-pad scroll
+            // on the test stick. Paging still preloads data; avoid speculative
+            // RecyclerView holder creation outside the normal layout pass.
+            isItemPrefetchEnabled = false
+        }
         binding.posterGrid.autoFitColumns(min = 4)
         binding.posterGrid.adapter = vodAdapter
         // A modest cache keeps the immediately adjacent TV row warm without
         // retaining dozens of full-size bitmaps on low-memory streaming sticks.
         binding.posterGrid.setItemViewCacheSize(8)
-        (binding.posterGrid.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
-            ?.supportsChangeAnimations = false
 
         binding.sortButton.setOnClickListener {
             resetPosterAnchor()
@@ -398,19 +400,13 @@ class VodActivity : BaseActivity() {
         binding.contentTitle.text = when {
             query.isNotEmpty() -> getString(R.string.search_results_title)
             cat == null -> getString(R.string.nav_movies)
-            cat.id == VodViewModel.CAT_ALL -> {
-                if (viewModel.sort.value == ContentSort.RECENT) {
-                    getString(R.string.cat_recently_added)
-                } else {
-                    getString(R.string.all_movies)
-                }
-            }
+            cat.id == VodViewModel.CAT_ALL -> getString(R.string.cat_recently_added)
             else -> cat.name
         }
         // "You may like" always shows highest-rated first regardless of the sort
         // control. Search supports all sort modes, so keep the control there.
         binding.sortButton.visibility =
-            if (query.isEmpty() && cat?.id == VodViewModel.CAT_POPULAR) View.GONE
+            if (query.isEmpty() && cat?.id in setOf(VodViewModel.CAT_POPULAR, VodViewModel.CAT_ALL)) View.GONE
             else View.VISIBLE
     }
 

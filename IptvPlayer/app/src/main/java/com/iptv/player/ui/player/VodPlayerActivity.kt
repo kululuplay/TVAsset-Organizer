@@ -28,6 +28,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.withStarted
+import com.iptv.player.player.MediaTransportPolicy
 import com.iptv.player.R
 import com.iptv.player.cast.CastController
 import com.iptv.player.cast.ProviderConnectionSafety
@@ -96,6 +97,8 @@ import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.util.VLCVideoLayout
+import com.iptv.player.player.VlcSurfaceRetirement
+import com.iptv.player.player.VlcSurfaceViews
 
 class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider {
 
@@ -114,6 +117,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         val cleanupScheduled = AtomicBoolean(false)
         val cleanupClaimed = AtomicBoolean(false)
         val ownershipDefinitivelyReleased = AtomicBoolean(false)
+        val surfaceRetirement = VlcSurfaceRetirement()
         val activeOperation = AtomicReference<OwnerOperation?>(null)
         val providerUncertaintyToken = AtomicLong(0L)
     }
@@ -334,6 +338,11 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     // Position to jump to once playback actually starts (resume support). VLC only
     // accepts a seek after the first Playing event, so we defer it until then.
     private var pendingSeekMs = 0L
+    private val seekTimeline = SeekTimeline()
+    private var seekGeneration = 0L
+    private val applySeekRunnable = Runnable {
+        seekTimeline.targetMs?.let { dispatchSeekCommand(it, seekGeneration) }
+    }
     // Retained across a decoder rebuild, where mediaPlayer is intentionally null
     // during onStop but the pending position still needs a durable Room snapshot.
     private var lastKnownDurationMs = 0L
@@ -455,8 +464,29 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
             }
         }
     }
+    private val watchTime = WatchTimeAccumulator()
+    private fun sampleWatchTime() {
+        watchTime.sample(SystemClock.elapsedRealtime(), activePositionMs(),
+            foreground && playbackStarted && activeIsPlaying() && !recoveryInProgress &&
+                !userSeeking && seekTimeline.targetMs == null && !playbackEnded)
+    }
+
+    private fun flushWatchTime() {
+        val delta = watchTime.drain()
+        val meta = resumeMeta ?: return
+        if (delta <= 0) return
+        val profileId = activeProfileId
+        val now = System.currentTimeMillis()
+        ServiceLocator.appScope.launch {
+            try { repo.recordWatchTime(profileId, meta, delta, now) }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (_: Exception) { /* History must never interrupt playback. */ }
+        }
+    }
+
     private val progressRunnable = object : Runnable {
         override fun run() {
+            sampleWatchTime()
             updateProgress()
             handler.postDelayed(this, 500L)
         }
@@ -464,6 +494,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     private val saveRunnable = object : Runnable {
         override fun run() {
             persistResume()
+            flushWatchTime()
             handler.postDelayed(this, SAVE_INTERVAL_MS)
         }
     }
@@ -645,7 +676,6 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     private fun qoeTransport(url: String?): PlaybackTransportKind {
         val path = url.orEmpty().substringBefore('?').substringBefore('#').lowercase(Locale.ROOT)
         return when {
-            path.endsWith(".m3u8") -> PlaybackTransportKind.HLS
             path.endsWith(".mpd") -> PlaybackTransportKind.DASH
             path.endsWith(".ts") -> PlaybackTransportKind.MPEG_TS
             path.isNotBlank() -> PlaybackTransportKind.PROGRESSIVE
@@ -807,7 +837,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
      * native value overwrite the user's resume/recovery target.
      */
     private fun bestResumePosition(playerPositionMs: Long? = activePositionMs()): Long =
-        maxOf(
+        seekTimeline.targetMs ?: maxOf(
             playerPositionMs ?: 0L,
             pendingSeekMs,
             backgroundResumePosition,
@@ -990,6 +1020,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
             // that arrives just after cleanup must not quarantine this retired
             // owner and mint a brand-new token with no remaining cleanup path.
             owner.ownershipDefinitivelyReleased.set(true)
+            owner.surfaceRetirement.ownershipReleased()
             resolveOwnerConnectionUncertainty(owner)
         } else {
             requireOwnerProcessRecovery(owner, cleanupUncertaintyToken)
@@ -1045,14 +1076,16 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
      * teardown remains exclusively on the owner worker.
      */
     private fun removeOwnerLayoutOnMain(owner: NativePlayerOwner) {
-        val remove = {
-            (owner.videoLayout.parent as? ViewGroup)?.removeView(owner.videoLayout)
-            Unit
-        }
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            remove()
-        } else {
-            handler.post { remove() }
+        owner.surfaceRetirement.requestRemoval {
+            val remove = {
+                (owner.videoLayout.parent as? ViewGroup)?.removeView(owner.videoLayout)
+                Unit
+            }
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                remove()
+            } else {
+                handler.post { remove() }
+            }
         }
     }
 
@@ -1074,6 +1107,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
      * ever touching the timed-out MediaPlayer/LibVLC handles.
      */
     private fun quarantineOwner(owner: NativePlayerOwner, reason: String) {
+        VlcSurfaceViews.retire(owner.videoLayout)
         // Quarantine means native ownership is no longer synchronously provable.
         // Register the exact owner before clearing current fields so every caller
         // (including future recovery paths) preserves the one-connection gate.
@@ -1093,9 +1127,8 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         if (wasCurrent) invalidateEventSession()
         owner.abandoned.set(true)
         clearCurrentOwner(owner)
-        // Do not let an abandoned SurfaceView cover the replacement owner. This
-        // is the only teardown performed here; every native call remains with the
-        // old owner worker.
+        // A view removal re-enters libVLC through SurfaceHolder callbacks. Defer
+        // it until release proof; the provider gate prevents a replacement start.
         removeOwnerLayoutOnMain(owner)
         PlaybackLog.log(this, "VOD", "owner=${owner.generation} quarantined: $reason")
 
@@ -1143,24 +1176,15 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     }
 
     /**
-     * Reserve an idle owner for planned rebuild/destroy cleanup. IVLCVout requires
-     * detachViews() on main, but the reservation proves no owner-worker operation
-     * can touch this handle concurrently. Active/timed-out owners never enter this
-     * path: removing their layout destroys the Surface (IVLCVout performs its
-     * automatic detach) and their retired worker performs listener/stop/release.
+     * Reserve an owner for planned rebuild/destroy cleanup. Native command idle
+     * is not decoder idle: detachViews itself can block on main. Stop/release
+     * must finish on the owner worker before its layout can be removed.
      */
     private fun retireIdleOwnerOnMain(owner: NativePlayerOwner): OwnerOperation? {
         val operation = beginOwnerOperation(owner) ?: return null
+        VlcSurfaceViews.retire(owner.videoLayout)
         invalidateEventSession()
         owner.abandoned.set(true)
-        runCatching { owner.mediaPlayer.detachViews() }.onFailure { failure ->
-            PlaybackLog.log(
-                this,
-                "VOD",
-                "owner=${owner.generation} main-thread detach failed: " +
-                    failure.javaClass.simpleName,
-            )
-        }
         removeOwnerLayoutOnMain(owner)
         clearCurrentOwner(owner)
         return operation
@@ -1342,16 +1366,28 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                 }
                 KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
                     showControls()
-                    seekBy(SKIP_MS)
+                    seekBy(SeekTimeline.step(event.repeatCount))
                     return true
                 }
                 KeyEvent.KEYCODE_MEDIA_REWIND -> {
                     showControls()
-                    seekBy(-SKIP_MS)
+                    seekBy(-SeekTimeline.step(event.repeatCount))
                     return true
                 }
             }
 
+            val horizontal = event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+            if (horizontal && (!controlsVisible || binding.seekBar.hasFocus()) &&
+                binding.errorOverlay.visibility != View.VISIBLE &&
+                binding.nextEpisodeOverlay.visibility != View.VISIBLE
+            ) {
+                showControls()
+                binding.seekBar.requestFocus()
+                val direction = if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
+                seekBy(direction * SeekTimeline.step(event.repeatCount))
+                return true
+            }
             if (!isSystemKey && !controlsVisible) {
                 // Left/right are natural 10-second seek shortcuts on TV. Other
                 // keys reveal the overlay without accidentally activating the
@@ -1552,7 +1588,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     }
 
     private fun detectPlaybackStall(positionMs: Long) {
-        if (!foreground || !playbackStarted || userSeeking || recoveryInProgress) return
+        if (!foreground || !playbackStarted || userSeeking || seekTimeline.targetMs != null || recoveryInProgress) return
         detectVideoLiveness(positionMs)
         if (recoveryInProgress) return
         val now = SystemClock.uptimeMillis()
@@ -1927,7 +1963,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
             return
         }
         controlsVisible = visible
-        val bars = arrayOf(binding.topBar, binding.transportBar, binding.bottomBar)
+        val bars = arrayOf(binding.playerControls)
         for (bar in bars) {
             bar.animate().cancel()
             if (visible) {
@@ -2223,7 +2259,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         // Mirror live TV (VlcPlayerEngine): keep VLC's proven decode defaults.
         // avcodec-fast and skipped loop filtering caused macroblocking/pixel rain
         // on real H.264/H.265 content, so neither is enabled here.
-        val cachingMs = bufferMode.networkCachingMs
+        val cachingMs = bufferMode.vodNetworkCachingMs
         val options = arrayListOf(
             "--network-caching=$cachingMs",
             "--file-caching=$cachingMs",
@@ -2255,11 +2291,12 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         vlc.setUserAgent(AppInfo.USER_AGENT, AppInfo.USER_AGENT)
         val mp = MediaPlayer(vlc)
 
-        val layout = VLCVideoLayout(this).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
+        val layout = VlcSurfaceViews.create(this, subtitles = true) { lostLayout ->
+            handler.post {
+                if (videoLayout === lostLayout && foreground) {
+                    onSurfaceOutputFailure("VLC output surface lost")
+                }
+            }
         }
         binding.videoContainer.addView(layout)
         // 3rd true = render embedded subtitles; 4th false = SurfaceView output,
@@ -2604,6 +2641,10 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     }
 
     private fun preparePlayback(positionMs: Long) {
+        if (MediaTransportPolicy.isHlsUrl(streamUrl.orEmpty())) {
+            showTerminalError()
+            return
+        }
         if (
             handleBlockedProviderStart(
                 reason = "vod_start_unresolved_native_owner",
@@ -2698,9 +2739,11 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         binding.errorOverlay.visibility = View.GONE
         setBuffering(true)
         updateTrackButtons()
-        val cachingMs = bufferMode.networkCachingMs
+        val cachingMs = bufferMode.vodNetworkCachingMs
         val media = try {
             Media(vlc, android.net.Uri.parse(url)).apply {
+                MediaTransportPolicy.requireDirectMedia(url)
+                addOption(MediaTransportPolicy.VLC_FILE_DEMUX)
                 // Hardware decoding unless the global Decoder setting forces software
                 // (mirrors VlcPlayerEngine on the live TV path).
                 // Prefer hardware while respecting libVLC's device/codec safety list.
@@ -2771,6 +2814,10 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                     !foreground ||
                     owner.abandoned.get()
                 ) return@playbackCommand
+                if (!VlcSurfaceViews.awaitReady(owner.videoLayout, subtitles = true)) {
+                    throw java.io.IOException("VLC output surface unavailable")
+                }
+                if (playbackOpsSeq.get() != operation || !foreground || owner.abandoned.get()) return@playbackCommand
                 installEventListener(mp, listenerSession)
                 if (
                     playbackOpsSeq.get() != operation ||
@@ -3321,6 +3368,8 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
 
     /** Swaps the player onto [next], reusing the live engine, and plays from start. */
     private fun startEpisode(next: Episode, prev: ResumeMeta) {
+        flushWatchTime()
+        watchTime.sample(SystemClock.elapsedRealtime(), 0, false)
         dismissNextEpisodePrompt(restoreFocus = false)
         playbackEnded = false
         completionHandled = false
@@ -3422,47 +3471,53 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     }
 
     private fun seekBy(deltaMs: Long) {
-        if (!foreground) return
-        if (castHandoffStopped) return
-        val length = activeDurationMs()
+        if (!foreground || castHandoffStopped) return
+        val length = maxOf(activeDurationMs(), lastKnownDurationMs)
         if (length <= 0L) return
-        val target = (activePositionMs() + deltaMs).coerceIn(0L, length)
+        val target = seekTimeline.offset(activePositionMs(), deltaMs, length, SystemClock.uptimeMillis())
         requestSeek(target)
-        binding.seekBar.progress = target.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-        binding.currentTime.text = formatTime(target)
     }
 
     private fun requestSeek(targetMs: Long) {
-        if (castHandoffStopped) return
-        val target = targetMs.coerceAtLeast(0L)
+        if (!foreground || castHandoffStopped) return
+        val duration = maxOf(activeDurationMs(), lastKnownDurationMs)
+        if (duration <= 0L) return
+        val target = seekTimeline.request(targetMs, duration, SystemClock.uptimeMillis())
         playbackEnded = false
         completionHandled = false
         completionGeneration++
+        seekGeneration++
         pendingSeekMs = target
         backgroundResumePosition = target
+        lastObservedPositionMs = target
         resetStallWatch(target)
-        dispatchSeekCommand(target)
+        binding.seekBar.progress = target.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        binding.currentTime.text = formatTime(target)
+        // Held D-pad input selects one final position instead of flooding the decoder.
+        handler.removeCallbacks(applySeekRunnable)
+        handler.postDelayed(applySeekRunnable, 180L)
     }
 
-    private fun dispatchSeekCommand(target: Long, attempt: Int = 0) {
+    private fun dispatchSeekCommand(target: Long, generation: Long, attempt: Int = 0) {
+        if (!foreground || generation != seekGeneration || castHandoffStopped) return
         if (isMedia3Route()) {
             media3VodEngine?.seekTo(target)
+            seekTimeline.markIssued()
             if (pendingSeekMs == target) pendingSeekMs = 0L
             return
         }
         val posted = postBoundedOwnerCommand(
             label = "seek",
             onCompletedMain = {
-                if (pendingSeekMs == target) pendingSeekMs = 0L
+                if (generation == seekGeneration) {
+                    seekTimeline.markIssued()
+                    if (pendingSeekMs == target) pendingSeekMs = 0L
+                }
             },
-        ) { player ->
-            player.setTime(target)
-        }
-        // A lifecycle/start command may briefly own the handle. Coalesce repeated
-        // seeks around the latest target and retry only while this target is current.
-        if (!posted && playbackStarted && pendingSeekMs == target && attempt < 25) {
+        ) { player -> player.setTime(target) }
+        if (!posted && playbackStarted && generation == seekGeneration && attempt < 25) {
             handler.postDelayed(
-                { dispatchSeekCommand(target, attempt + 1) },
+                { dispatchSeekCommand(target, generation, attempt + 1) },
                 NATIVE_EVENT_RETRY_MS,
             )
         }
@@ -3808,6 +3863,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         lastKnownDurationMs = duration
         val seekMax = duration.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         if (binding.seekBar.max != seekMax) binding.seekBar.max = seekMax
+        binding.seekBar.keyProgressIncrement = SKIP_MS.toInt()
         binding.totalTime.text = formatTime(duration)
     }
 
@@ -3815,11 +3871,12 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         if (!activeEngineExists()) return
         if (userSeeking) return
         refreshVlcPlaybackSnapshot()
-        if (binding.seekBar.max <= 0) updateDuration()
+        updateDuration()
         val position = activePositionMs()
-        binding.seekBar.progress = position.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-        binding.currentTime.text = formatTime(position)
-        detectPlaybackStall(position)
+        val displayed = seekTimeline.display(position, SystemClock.uptimeMillis())
+        binding.seekBar.progress = displayed.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        binding.currentTime.text = formatTime(displayed)
+        if (seekTimeline.targetMs == null) detectPlaybackStall(position)
     }
 
     private fun persistResume(durable: Boolean = false) {
@@ -3896,6 +3953,11 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     }
 
     override fun onStop() {
+        sampleWatchTime()
+        flushWatchTime()
+        watchTime.sample(SystemClock.elapsedRealtime(), 0, false)
+        handler.removeCallbacks(applySeekRunnable)
+        seekGeneration++
         val resourceToken = playbackResourceToken
         playbackResourceToken = null
         var resourceReleaseDeferred = false

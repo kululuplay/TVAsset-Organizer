@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="login_username_no_email">Bitte den Benutzernamen eingeben, keine E-Mail-Adresse.</string>
+    <string name="epg_description_unavailable">Für diese Sendung ist keine Beschreibung verfügbar.</string>
+    <string name="epg_popup_now">JETZT</string>
+    <string name="epg_popup_upcoming">DEMNÄCHST</string>
+    <string name="epg_popup_finished">BEENDET</string>
+    <string name="epg_popup_controls">↑↓ Beschreibung lesen · OK / Zurück Schließen</string>
+    <string name="content_new">NEU</string>
+    <string name="settings_player_section">Player</string>
+    <string name="cat_recently_added">Zuletzt hinzugefügt</string>
+    <string name="cat_for_you">Für Sie empfohlen</string>
+</resources>

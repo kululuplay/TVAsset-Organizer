@@ -88,6 +88,7 @@ class VlcPlayerEngine(
     // unwinds; no fresh worker may touch/release the same native objects.
     private val nativeHandlesAbandoned = AtomicBoolean(false)
     private val nativeOwnershipDefinitivelyReleased = AtomicBoolean(false)
+    private var surfaceRetirement = VlcSurfaceRetirement()
     private val providerUncertaintyToken = AtomicLong(0L)
     // A non-null stats object is not sufficient: affected libVLC/device builds
     // expose a stats object whose video counters remain permanently zero. Only
@@ -505,14 +506,16 @@ class VlcPlayerEngine(
         playerHasMedia = false
         nativeHandlesAbandoned.set(false)
         nativeOwnershipDefinitivelyReleased.set(false)
+        surfaceRetirement = VlcSurfaceRetirement()
     }
 
     private fun createVideoLayout(): VLCVideoLayout =
-        VLCVideoLayout(context).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            )
+        VlcSurfaceViews.create(context) { lostLayout ->
+            commandHandler.post {
+                if (videoLayout === lostLayout && !nativeHandlesAbandoned.get()) {
+                    listener?.onError("VLC output surface lost")
+                }
+            }
         }
 
     private data class VlcEventSnapshot(
@@ -931,6 +934,14 @@ class VlcPlayerEngine(
         val target = videoHost
         val currentParent = layout.parent as? ViewGroup
 
+        // No queued command does not mean the decoder is idle. detachViews on
+        // a playing owner calls nativeSetVideoTrack on main. The next play owns
+        // the stop/release -> fresh surface handoff; retain this surface until it.
+        if (playerHasMedia) {
+            hostMovePending = false
+            return true
+        }
+
         if (target == null || currentParent !== target) {
             if (viewsAttached) {
                 val mp = mediaPlayer ?: return false
@@ -977,6 +988,11 @@ class VlcPlayerEngine(
     // Media. Retiring the old player before the new one opens its URL preserves
     // the provider's single-connection contract and isolates late native events.
     override fun play(url: String, reset: Boolean) {
+        if (MediaTransportPolicy.isHlsUrl(url)) {
+            stop()
+            listener?.onSourceFailure("HLS playback is disabled", 415)
+            return
+        }
         if (nativeHandlesAbandoned.get()) {
             PlaybackLog.log(context, engineName, "play refused on quarantined native handles")
             listener?.onError("VLC native session unavailable")
@@ -1010,6 +1026,7 @@ class VlcPlayerEngine(
         videoHost ?: return
         val boundPlayer = mediaPlayer ?: return
         val previousPlayer = boundPlayer.takeIf { playerHasMedia }
+        if (previousPlayer != null) VlcSurfaceViews.retire(videoLayout)
         val mp = if (previousPlayer == null) {
             // First start after bind: keep the already-attached player/surface.
             boundPlayer
@@ -1301,6 +1318,7 @@ class VlcPlayerEngine(
         // replacement have completed. The controller's startup budget must begin
         // here—not when a rapid zap was merely stored in deferredPlay.
         listener?.onPlaybackSubmitted()
+        val startLayout = videoLayout
         VlcOps.postBounded(
             timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
             onTimeout = {
@@ -1334,7 +1352,12 @@ class VlcPlayerEngine(
                     opsSeq.get() != sequence ||
                     mediaPlayer !== mp
                 ) return@start
+                if (!VlcSurfaceViews.awaitReady(startLayout, subtitles = false)) {
+                    throw java.io.IOException("VLC output surface unavailable")
+                }
+                if (nativeHandlesAbandoned.get() || opsSeq.get() != sequence || mediaPlayer !== mp) return@start
                 val media = Media(vlc, android.net.Uri.parse(url)).apply {
+                    addOption(MediaTransportPolicy.VLC_LIVE_DEMUX)
                     // Hardware is preferred but never forced past libVLC's
                     // per-device safety list. The old force=true made AUTO and
                     // Hardware identical and enabled broken MediaCodec paths.
@@ -1431,6 +1454,7 @@ class VlcPlayerEngine(
         )
         if (result.ownershipDefinitivelyReleased) {
             nativeOwnershipDefinitivelyReleased.set(true)
+            surfaceRetirement.ownershipReleased()
             resolveProviderConnectionUncertainty()
         } else {
             requireProviderProcessRecovery()
@@ -1607,6 +1631,7 @@ class VlcPlayerEngine(
     }
 
     override fun stopAndThen(onStopped: (Boolean) -> Unit) {
+        VlcSurfaceViews.retire(videoLayout)
         profileHandler.removeCallbacksAndMessages(null)
         audioHandler.removeCallbacksAndMessages(null)
         healthHandler.removeCallbacksAndMessages(null)
@@ -1670,22 +1695,9 @@ class VlcPlayerEngine(
                     nativeHandlesAbandoned.get() ||
                     opsSeq.get() != mySeq
                 ) {
-                    if (nativeHandlesAbandoned.get()) {
-                        val result = VlcNativeCleanup.runFull(
-                            detachListener = { mp.setEventListener(null) },
-                            stop = { mp.stop() },
-                            releaseMediaPlayer = { mp.release() },
-                            releaseLibVlc = { vlc?.release() },
-                        )
-                        cleanupResult.set(result)
-                        if (result.ownershipDefinitivelyReleased) {
-                            nativeOwnershipDefinitivelyReleased.set(true)
-                            resolveProviderConnectionUncertainty()
-                            stopped = true
-                        } else {
-                            requireProviderProcessRecovery(stopUncertaintyToken)
-                        }
-                    }
+                    // An earlier operation's retired worker still owns these
+                    // handles. A queued stop on the replacement worker must not
+                    // claim cleanup or report that the old socket was closed.
                     return@nativeStop
                 }
                 runCatching { mp.setEventListener(null) }.onFailure {
@@ -1718,6 +1730,7 @@ class VlcPlayerEngine(
                     stopped = result.ownershipDefinitivelyReleased
                     if (stopped) {
                         nativeOwnershipDefinitivelyReleased.set(true)
+                        surfaceRetirement.ownershipReleased()
                         resolveProviderConnectionUncertainty()
                     } else {
                         requireProviderProcessRecovery(stopUncertaintyToken)
@@ -1731,6 +1744,7 @@ class VlcPlayerEngine(
     }
 
     override fun release() {
+        VlcSurfaceViews.retire(videoLayout)
         profileHandler.removeCallbacksAndMessages(null)
         audioHandler.removeCallbacksAndMessages(null)
         healthHandler.removeCallbacksAndMessages(null)
@@ -1742,15 +1756,26 @@ class VlcPlayerEngine(
         // also invalidates delayed cleanup->attach continuations.
         opsSeq.incrementAndGet()
         val retiredLayout = videoLayout
+        val retirement = surfaceRetirement
         fun removeRetiredLayout() {
-            retiredLayout?.let { layout ->
-                (layout.parent as? ViewGroup)?.removeView(layout)
+            retirement.requestRemoval {
+                val remove = {
+                    retiredLayout?.let { layout ->
+                        (layout.parent as? ViewGroup)?.removeView(layout)
+                    }
+                    Unit
+                }
+                if (Looper.myLooper() == Looper.getMainLooper()) {
+                    remove()
+                } else {
+                    commandHandler.post { remove() }
+                }
             }
         }
         if (nativeHandlesAbandoned.get()) {
             // The timed-out worker owns these handles until it unwinds. Only
-            // relinquish Java/UI ownership here; touching JNI from a fresh worker
-            // would race the quarantined call.
+            // relinquish references here. Removal itself waits for release proof:
+            // SurfaceView.surfaceDestroyed re-enters JNI even from removeView.
             removeRetiredLayout()
             mediaPlayer = null
             libVlc = null
@@ -1786,7 +1811,7 @@ class VlcPlayerEngine(
                 onTimeout = {
                     // Android cannot cancel a thread blocked in vendor JNI.
                     // Quarantine this owner before the fresh worker can run, and
-                    // remove only its Android view on main. The retired worker
+                    // defer its Android view removal. The retired worker
                     // remains the sole native owner and continues the teardown
                     // sequence if/when the blocked call returns.
                     releaseOperationTimedOut.set(true)
@@ -1821,11 +1846,13 @@ class VlcPlayerEngine(
                 }
                 if (result.ownershipDefinitivelyReleased) {
                     nativeOwnershipDefinitivelyReleased.set(true)
+                    retirement.ownershipReleased()
                     resolveProviderConnectionUncertainty()
                 } else {
                     requireProviderProcessRecovery(releaseUncertaintyToken)
                 }
-                if (!releaseOperationTimedOut.get()) {
+                // Late successful release must also drain the retained view.
+                if (result.ownershipDefinitivelyReleased) {
                     // Keep the shared VlcOps FIFO occupied until main has removed
                     // the now-retired SurfaceView. The next engine's play cannot
                     // race a still-visible old native window.

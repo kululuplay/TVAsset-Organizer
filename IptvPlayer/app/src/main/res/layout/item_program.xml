@@ -1,28 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Guide row: the active programme gains an emerald surface and progress rail. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="7dp"
     android:background="@drawable/bg_epg_row_modern"
-    android:minHeight="54dp"
+    android:minHeight="56dp"
     android:orientation="vertical"
     android:paddingHorizontal="11dp"
-    android:paddingVertical="7dp">
-
+    android:paddingVertical="7dp"
+    android:focusable="true"
+    android:clickable="true">
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal">
-
         <View
             android:id="@+id/programDot"
             android:layout_width="4dp"
             android:layout_height="30dp"
             android:layout_marginEnd="10dp"
             android:background="@drawable/bg_epg_dot" />
-
         <TextView
             android:id="@+id/programTitle"
             android:layout_width="0dp"
@@ -33,7 +32,6 @@
             android:textColor="@color/text_primary"
             android:textSize="16sp"
             android:textStyle="bold" />
-
         <TextView
             android:id="@+id/programLive"
             android:layout_width="wrap_content"
@@ -42,12 +40,11 @@
             android:background="@drawable/bg_epg_live_badge"
             android:gravity="center"
             android:paddingHorizontal="8dp"
-            android:text="@string/live_label"
-            android:textColor="@android:color/white"
+            android:text="@string/now_playing"
+            android:textColor="#0A2734"
             android:textSize="10sp"
             android:textStyle="bold"
             android:visibility="gone" />
-
         <TextView
             android:id="@+id/programTime"
             android:layout_width="wrap_content"
@@ -57,7 +54,6 @@
             android:textSize="13sp"
             android:textStyle="bold" />
     </LinearLayout>
-
     <ProgressBar
         android:id="@+id/programProgress"
         style="?android:attr/progressBarStyleHorizontal"

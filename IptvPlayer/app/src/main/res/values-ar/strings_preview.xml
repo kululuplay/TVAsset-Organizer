@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="login_username_no_email">أدخل اسم المستخدم، وليس البريد الإلكتروني.</string>
+    <string name="epg_description_unavailable">لا يوجد وصف متاح لهذا البرنامج.</string>
+</resources>

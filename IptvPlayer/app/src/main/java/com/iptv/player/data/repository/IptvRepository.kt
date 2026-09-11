@@ -7,6 +7,17 @@
  */
 package com.iptv.player.data.repository
 
+import com.iptv.player.data.local.dao.WatchSignalEntity
+import com.iptv.player.data.recommendation.RecommendationRanker
+import com.iptv.player.data.recommendation.RecommendationCandidate
+import com.iptv.player.data.recommendation.WatchPreference
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.flowOn
 import android.util.Base64
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
@@ -58,6 +69,7 @@ import com.iptv.player.data.model.VodItem
 import com.iptv.player.data.parser.M3uParser
 import com.iptv.player.data.parser.XmltvParser
 import com.iptv.player.data.prefs.SettingsStore
+import com.iptv.player.data.remote.MetadataPolicy
 import com.iptv.player.data.remote.TmdbApi
 import com.iptv.player.data.remote.XtreamApi
 import com.iptv.player.data.remote.XtreamUrlBuilder
@@ -110,11 +122,13 @@ class IptvRepository(
     private val profileDao = db.profileDao()
     private val resumeDao = db.resumeDao()
     private val watchedDao = db.watchedDao()
+    private val recommendationDao = db.recommendationDao()
     private val epgMappingDao = db.epgMappingDao()
     private val playbackStateMigrationMutex = Mutex()
     private val catalogCommitMutex = Mutex()
     private val refreshGenerations = DatasetGenerationGate()
     private val epgSyncMutex = Mutex()
+    private val panelTimezones = java.util.concurrent.ConcurrentHashMap<String, String>()
     /** Process-local fast path; guarded exclusively by [playbackStateMigrationMutex]. */
     private val claimedLegacyPlaybackProfiles = mutableSetOf<Long>()
 
@@ -416,16 +430,20 @@ class IptvRepository(
             when (config.type) {
                 SourceType.XTREAM -> {
                     val api = buildXtreamApi(config.serverUrl)
-                    val info = api.authenticate(config.username, config.password).userInfo
+                    val auth = api.authenticate(config.username, config.password)
+                    auth.serverInfo?.timezone?.let { panelTimezones[config.serverUrl] = it }
+                    val info = auth.userInfo
                         ?: return@withContext Outcome.Failure(AppError.CANNOT_CONNECT)
                     when {
                         info.auth == 0 -> Outcome.Failure(AppError.BAD_CREDENTIALS)
+                        info.auth != 1 -> Outcome.Failure(AppError.CANNOT_CONNECT)
                         info.status.equals("Disabled", true) ||
                             info.status.equals("Banned", true) ->
                             Outcome.Failure(AppError.ACCOUNT_DISABLED)
                         info.status.equals("Expired", true) ->
                             Outcome.Failure(AppError.SUBSCRIPTION_EXPIRED)
-                        else -> Outcome.Success(Unit)
+                        info.status.equals("Active", true) -> Outcome.Success(Unit)
+                        else -> Outcome.Failure(AppError.CANNOT_CONNECT)
                     }
                 }
                 SourceType.M3U_URL -> {
@@ -434,7 +452,15 @@ class IptvRepository(
                         .header("Range", "bytes=0-1023")
                         .build()
                     httpClient.newCall(request).execute().use { resp ->
-                        if (resp.isSuccessful) Outcome.Success(Unit)
+                        if (resp.isSuccessful) {
+                            val prefix = resp.body?.charStream()?.let { reader ->
+                                val chars = CharArray(1024)
+                                val count = reader.read(chars)
+                                if (count > 0) String(chars, 0, count) else ""
+                            }.orEmpty()
+                            if (M3uParser.hasPlaylistSignature(prefix)) Outcome.Success(Unit)
+                            else Outcome.Failure(AppError.EMPTY_PLAYLIST)
+                        }
                         else Outcome.Failure(
                             HttpAppErrorPolicy.fromStatus(resp.code),
                             httpStatus = resp.code.takeIf { it in 400..599 },
@@ -590,9 +616,20 @@ class IptvRepository(
     // ---- Paging 3 (bounded movie lists) ---------------------------------
 
     /** Whole movie cache, newest first — the "Recently added" default view. */
-    fun pagingRecentVod(): Flow<PagingData<VodItem>> =
-        Pager(pagingConfig) { vodDao.pagingRecent(emptyList()) }
+    fun pagingRecentVod(hidden: List<String> = emptyList()): Flow<PagingData<VodItem>> =
+        Pager(pagingConfig) { vodDao.pagingRecent(hidden) }
             .flow.map { data -> data.map { it.toModel() } }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
+    fun pagingRecommendedVod(hidden: List<String>): Flow<PagingData<VodItem>> =
+        settings.activeProfileId.distinctUntilChanged().flatMapLatest { profileId ->
+            combine(recommendationDao.observePreferences(profileId), vodDao.observeRecommendationCatalog()) { history, _ -> history }
+                .debounce(600).mapLatest { history ->
+                    val ids = recommendationIds(profileId, "movie", history, hidden)
+                    val items = vodDao.recommendedItems(ids, hidden).associateBy { it.id }
+                    PagingData.from(ids.mapNotNull { items[it]?.toModel() }, sourceLoadStates = androidx.paging.LoadStates(androidx.paging.LoadState.NotLoading(false), androidx.paging.LoadState.NotLoading(true), androidx.paging.LoadState.NotLoading(true)))
+                }.flowOn(Dispatchers.IO)
+        }
 
     fun pagingVodByCategory(categoryId: String): Flow<PagingData<VodItem>> =
         Pager(pagingConfig) { vodDao.pagingByCategory(categoryId) }
@@ -775,9 +812,7 @@ class IptvRepository(
                         durationSecs = previous?.durationSecs,
                         trailerUrl = previous?.trailerUrl,
                         tmdbId = previous?.tmdbId,
-                        addedAt = s.added?.trim()?.toLongOrNull()
-                            ?: previous?.addedAt
-                            ?: 0L,
+                        addedAt = MetadataPolicy.newest(previous?.addedAt ?: 0L, s.added),
                         position = position,
                         categoryPosition = catPosition
                     )
@@ -872,6 +907,7 @@ class IptvRepository(
             if (config.type == SourceType.XTREAM) {
                 val api = buildXtreamApi(config.serverUrl)
                 val response = api.getVodInfo(config.username, config.password, id)
+                check(response.movieData?.streamId == id) { "Mismatched VOD detail identifier" }
                 val info = response.info
                 val directStreamUrl = XtreamUrlBuilder.resolveDirectSource(
                     config.serverUrl,
@@ -896,6 +932,7 @@ class IptvRepository(
         } catch (ce: CancellationException) {
             throw ce
         } catch (t: Throwable) {
+            Logger.w("Xtream", "VOD detail unavailable; retaining cached metadata", t)
             cached
         }
         val enriched = enrichWithTmdb(merged, isMovie = true)
@@ -972,9 +1009,20 @@ class IptvRepository(
     // ---- Paging 3 (bounded series lists) --------------------------------
 
     /** Whole series cache, newest first — the "Recently added" default view. */
-    fun pagingRecentSeries(): Flow<PagingData<Series>> =
-        Pager(pagingConfig) { seriesDao.pagingRecent(emptyList()) }
+    fun pagingRecentSeries(hidden: List<String> = emptyList()): Flow<PagingData<Series>> =
+        Pager(pagingConfig) { seriesDao.pagingRecent(hidden) }
             .flow.map { data -> data.map { it.toModel() } }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
+    fun pagingRecommendedSeries(hidden: List<String>): Flow<PagingData<Series>> =
+        settings.activeProfileId.distinctUntilChanged().flatMapLatest { profileId ->
+            combine(recommendationDao.observePreferences(profileId), seriesDao.observeRecommendationCatalog()) { history, _ -> history }
+                .debounce(600).mapLatest { history ->
+                    val ids = recommendationIds(profileId, "series", history, hidden)
+                    val items = seriesDao.recommendedItems(ids, hidden).associateBy { it.id }
+                    PagingData.from(ids.mapNotNull { items[it]?.toModel() }, sourceLoadStates = androidx.paging.LoadStates(androidx.paging.LoadState.NotLoading(false), androidx.paging.LoadState.NotLoading(true), androidx.paging.LoadState.NotLoading(true)))
+                }.flowOn(Dispatchers.IO)
+        }
 
     fun pagingSeriesByCategory(categoryId: String): Flow<PagingData<Series>> =
         Pager(pagingConfig) { seriesDao.pagingByCategory(categoryId) }
@@ -1113,6 +1161,52 @@ class IptvRepository(
      * intact. Skips the network when the category is already loaded unless [force]
      * is set. Keeps the FTS index in lockstep and marks the category loaded.
      */
+    /** Some panels never update get_series.last_modified when adding episodes.
+     * Check only the visible category (or visible catalog), with two requests in
+     * flight and a 15-minute cache. No TMDB, posters, playback or episode writes.
+     * One batch commit keeps Paging focus stable while dates arrive.
+     */
+    suspend fun refreshSeriesEpisodeDates(
+        config: SourceConfig, categoryId: String?, hidden: List<String>, force: Boolean = false,
+    ): Outcome<Int> = withContext(Dispatchers.IO) {
+        if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
+        val now = System.currentTimeMillis()
+        val ids = seriesDao.episodeDatesDue(categoryId, hidden, if (force) now + 1 else now - 900_000L)
+        if (ids.isEmpty()) return@withContext Outcome.Success(0)
+        val generation = refreshGenerations.begin("series_dates:${categoryId ?: "all"}", config)
+        val api = buildXtreamApi(config.serverUrl)
+        var applied = 0
+        try {
+            // Small categories commit together so posters do not jump every time
+            // one response arrives. Large categories publish bounded batches.
+            ids.chunked(50).forEach { batch ->
+                val updates = mutableListOf<Pair<String, Long>>()
+                coroutineScope {
+                    batch.chunked(2).forEach { pair ->
+                        pair.map { id -> async {
+                            try {
+                                val info = api.getSeriesInfo(config.username, config.password, id)
+                                val episodes = info.episodes ?: return@async null
+                                if (info.info == null) return@async null
+                                id to MetadataPolicy.episodeTimestamp(
+                                    episodes.values.flatten().map { it.added } + info.info.lastEpisodeAdded, now,
+                                )
+                            } catch (e: CancellationException) { throw e }
+                            catch (_: Exception) { null }
+                        } }.awaitAll().filterNotNull().let(updates::addAll)
+                    }
+                }
+                val committed = commitSnapshot(config, generation) {
+                    updates.forEach { (id, date) -> seriesDao.updateEpisodeDate(id, date, now) }
+                }
+                if (!committed) return@withContext staleDataset(CatalogDataset.SERIES_CATEGORY)
+                applied += updates.size
+            }
+            Outcome.Success(applied)
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) { e.toOutcomeFailure() }
+    }
+
     suspend fun refreshSeriesCategory(
         config: SourceConfig,
         categoryId: String,
@@ -1148,10 +1242,12 @@ class IptvRepository(
                         genre = s.genre ?: previous?.genre,
                         releaseDate = s.releaseDate ?: previous?.releaseDate,
                         trailerUrl = youtube(s.youtubeTrailer) ?: previous?.trailerUrl,
-                        tmdbId = previous?.tmdbId,
-                        addedAt = s.lastModified?.trim()?.toLongOrNull()
-                            ?: previous?.addedAt
-                            ?: 0L,
+                        tmdbId = MetadataPolicy.tmdbId(s.tmdbId) ?: previous?.tmdbId,
+                        addedAt = MetadataPolicy.newest(
+                            previous?.addedAt ?: 0L, s.lastModified, s.added,
+                        ),
+                        latestEpisodeAt = MetadataPolicy.newest(previous?.latestEpisodeAt ?: 0L, s.lastEpisodeAdded),
+                        episodeCheckedAt = previous?.episodeCheckedAt ?: 0L,
                         position = position,
                         categoryPosition = catPosition
                     )
@@ -1320,6 +1416,12 @@ class IptvRepository(
                                 releaseDate = enrichedSeries.releaseDate,
                                 trailerUrl = enrichedSeries.trailerUrl,
                                 tmdbId = enrichedSeries.tmdbId,
+                                addedAt = MetadataPolicy.newest(cachedEntity.addedAt, detail?.lastModified),
+                                latestEpisodeAt = MetadataPolicy.episodeTimestamp(
+                                    info.episodes.orEmpty().values.flatten().map { it.added } + detail?.lastEpisodeAdded,
+                                    System.currentTimeMillis(),
+                                ),
+                                episodeCheckedAt = System.currentTimeMillis(),
                             ),
                         ),
                     )
@@ -1518,10 +1620,21 @@ class IptvRepository(
             if (config.type != SourceType.XTREAM) return@withContext null
             val streamId = channel.id.removePrefix("xt_live_").toLongOrNull()
                 ?: return@withContext null
-            val durationMin = ((program.stopMs - program.startMs) / 60_000L)
+            val durationMin = ((program.stopMs - program.startMs + 59_999L) / 60_000L)
                 .toInt().coerceAtLeast(1)
-            val formatter = java.text.SimpleDateFormat("yyyy-MM-dd:HH-mm", java.util.Locale.US)
-            val start = formatter.format(java.util.Date(program.startMs))
+            val timezone = panelTimezones[config.serverUrl] ?: run {
+                try {
+                    val auth = buildXtreamApi(config.serverUrl).authenticate(config.username, config.password)
+                    auth.serverInfo?.timezone?.also { panelTimezones[config.serverUrl] = it }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    Logger.w("Xtream", "Catch-up unavailable: panel timezone could not be verified", failure)
+                    null
+                }
+            }
+            val start = com.iptv.player.data.remote.XtreamTime.formatCatchup(program.startMs, timezone)
+                ?: return@withContext null
             XtreamUrlBuilder.catchupUrl(
                 config.serverUrl, config.username, config.password,
                 streamId, start, durationMin
@@ -1646,19 +1759,10 @@ class IptvRepository(
         }.getOrElse { DiagnosticResult("ping", false, it.message ?: "error") }
     }
 
-    /** Rough download speed in Mbps by pulling up to ~2MB from the server. */
+    /** The panel root and M3U are not throughput endpoints; do not download them. */
+    @Suppress("UNUSED_PARAMETER")
     suspend fun speedTestMbps(config: SourceConfig): DiagnosticResult = withContext(Dispatchers.IO) {
-        val target = config.serverUrl.ifBlank { config.m3uUrl }
-        runCatching {
-            val request = Request.Builder().url(target).header("Range", "bytes=0-2097151").build()
-            val start = System.currentTimeMillis()
-            httpClient.newCall(request).execute().use { resp ->
-                val bytes = resp.body?.bytes()?.size ?: 0
-                val secs = (System.currentTimeMillis() - start) / 1000.0
-                val mbps = if (secs > 0) (bytes * 8 / 1_000_000.0) / secs else 0.0
-                DiagnosticResult("speed", bytes > 0, String.format("%.1f Mbps", mbps))
-            }
-        }.getOrElse { DiagnosticResult("speed", false, it.message ?: "error") }
+        DiagnosticResult("speed", false, "Not measured: no verified server speed-test endpoint")
     }
 
     suspend fun checkDns(config: SourceConfig): DiagnosticResult = withContext(Dispatchers.IO) {
@@ -1739,6 +1843,7 @@ class IptvRepository(
         db.withTransaction {
             resumeDao.clearProfile(id)
             watchedDao.clearProfile(id)
+            recommendationDao.clearProfile(id)
             profileDao.remove(id)
         }
     }
@@ -2016,6 +2121,44 @@ class IptvRepository(
                 .toSet()
         }
 
+    /** Durable actual-playback deltas, isolated to the profile that opened the player. */
+    suspend fun recordWatchTime(profileId: Long, meta: ResumeMeta, deltaMs: Long, nowMs: Long) =
+        withContext(Dispatchers.IO) {
+            if (profileId < 0 || deltaMs <= 0) return@withContext
+            val kind = when (meta.kind) {
+                ResumeKind.MOVIE -> "movie"
+                ResumeKind.EPISODE -> "series"
+                else -> return@withContext
+            }
+            val id = (if (kind == "movie") meta.vodId else meta.seriesId)
+                ?.takeIf { it.isNotBlank() } ?: return@withContext
+            val day = nowMs / RecommendationRanker.DAY_MS
+            db.withTransaction {
+                // A late lifecycle write must not recreate a deleted profile's history.
+                if (profileDao.getById(profileId) == null) return@withTransaction
+                recommendationDao.insert(WatchSignalEntity(profileId, kind, id, day, 0, nowMs))
+                recommendationDao.add(profileId, kind, id, day, deltaMs.coerceAtMost(60_000), nowMs)
+                recommendationDao.prune(profileId, nowMs - 90 * RecommendationRanker.DAY_MS)
+            }
+        }
+
+    private suspend fun recommendationIds(
+        profileId: Long, kind: String, history: List<WatchPreference>, hidden: List<String>,
+    ): List<String> {
+        val excluded = if (kind == "movie") watchedDao.allIds(profileId)
+            .filter { it.startsWith("vod_") }.map { it.removePrefix("vod_") }.toSet() else emptySet()
+        val ranker = RecommendationRanker(profileId, kind, history, System.currentTimeMillis(), excluded)
+        var afterId = ""
+        do {
+            val chunk: List<RecommendationCandidate> = if (kind == "movie")
+                vodDao.recommendationCandidates(afterId, hidden) else seriesDao.recommendationCandidates(afterId, hidden)
+            chunk.forEach(ranker::offer)
+            if (chunk.isEmpty()) break
+            afterId = chunk.last().id
+        } while (chunk.size == 256)
+        return ranker.results(50)
+    }
+
     // ---- Similar / recommended -----------------------------------------
 
     /** Other movies in the same category as [item], for the detail "Similar" rail. */
@@ -2039,10 +2182,10 @@ class IptvRepository(
         if (key.isBlank()) return item
         return runCatching {
             val api = retrofitBuilder.baseUrl(TmdbApi.BASE_URL).build().create(TmdbApi::class.java)
-            val result = item.tmdbId?.takeIf { it.isNotBlank() }?.let { tmdbId ->
+            val result = MetadataPolicy.tmdbId(item.tmdbId)?.let { tmdbId ->
                 if (isMovie) api.movieDetail(tmdbId, key) else api.tvDetail(tmdbId, key)
-            } ?: (if (isMovie) api.searchMovie(key, item.name)
-            else api.searchTv(key, item.name)).results?.firstOrNull() ?: return item
+            } ?: (if (isMovie) api.searchMovie(key, MetadataPolicy.searchTitle(item.name))
+            else api.searchTv(key, MetadataPolicy.searchTitle(item.name))).results?.firstOrNull() ?: return item
             item.copy(
                 posterUrl = TmdbApi.posterUrl(result.posterPath) ?: item.posterUrl,
                 backdropUrl = TmdbApi.backdropUrl(result.backdropPath) ?: item.backdropUrl,
@@ -2051,7 +2194,7 @@ class IptvRepository(
                 releaseDate = item.releaseDate?.takeIf { it.isNotBlank() }
                     ?: result.releaseDate
                     ?: result.firstAirDate,
-                tmdbId = item.tmdbId ?: result.id?.toString(),
+                tmdbId = MetadataPolicy.tmdbId(item.tmdbId) ?: result.id?.toString(),
             )
         }.getOrDefault(item)
     }
@@ -2061,9 +2204,9 @@ class IptvRepository(
         if (key.isBlank()) return item
         return runCatching {
             val api = retrofitBuilder.baseUrl(TmdbApi.BASE_URL).build().create(TmdbApi::class.java)
-            val result = item.tmdbId?.takeIf { it.isNotBlank() }?.let { tmdbId ->
+            val result = MetadataPolicy.tmdbId(item.tmdbId)?.let { tmdbId ->
                 api.tvDetail(tmdbId, key)
-            } ?: api.searchTv(key, item.name).results?.firstOrNull() ?: return item
+            } ?: api.searchTv(key, MetadataPolicy.searchTitle(item.name)).results?.firstOrNull() ?: return item
             item.copy(
                 posterUrl = TmdbApi.posterUrl(result.posterPath) ?: item.posterUrl,
                 backdropUrl = TmdbApi.backdropUrl(result.backdropPath) ?: item.backdropUrl,
@@ -2072,7 +2215,7 @@ class IptvRepository(
                 releaseDate = item.releaseDate?.takeIf { it.isNotBlank() }
                     ?: result.firstAirDate
                     ?: result.releaseDate,
-                tmdbId = item.tmdbId ?: result.id?.toString(),
+                tmdbId = MetadataPolicy.tmdbId(item.tmdbId) ?: result.id?.toString(),
             )
         }.getOrDefault(item)
     }
@@ -2100,9 +2243,9 @@ class IptvRepository(
 
         runCatching {
             val api = retrofitBuilder.baseUrl(TmdbApi.BASE_URL).build().create(TmdbApi::class.java)
-            val id = tmdbId?.takeIf { it.isNotBlank() } ?: run {
-                val results = if (isMovie) api.searchMovie(key, name).results
-                else api.searchTv(key, name).results
+            val id = MetadataPolicy.tmdbId(tmdbId) ?: run {
+                val results = if (isMovie) api.searchMovie(key, MetadataPolicy.searchTitle(name)).results
+                else api.searchTv(key, MetadataPolicy.searchTitle(name)).results
                 results?.firstOrNull()?.id?.toString()
             } ?: return@runCatching fallback
 
@@ -2116,6 +2259,27 @@ class IptvRepository(
                 .take(15)
             if (people.isNotEmpty()) people else fallback
         }.getOrDefault(fallback)
+    }
+
+    /** Fetch the selected season only. Metadata never creates a playable provider episode. */
+    suspend fun enrichSeason(series: Series, season: Season): Season = withContext(Dispatchers.IO) {
+        val key = settings.getTmdbKey()
+        if (key.isBlank()) return@withContext season
+        try {
+            val api = retrofitBuilder.baseUrl(TmdbApi.BASE_URL).build().create(TmdbApi::class.java)
+            val id = MetadataPolicy.tmdbId(series.tmdbId) ?: api.searchTv(
+                key, MetadataPolicy.searchTitle(series.name), Locale.getDefault().toLanguageTag(),
+            ).results?.firstOrNull()?.id?.toString() ?: return@withContext season
+            val metadata = api.seasonDetail(id, season.seasonNumber, key, Locale.getDefault().toLanguageTag())
+                .episodes.orEmpty().associateBy { it.episodeNumber }
+            season.copy(episodes = season.episodes.map { episode ->
+                metadata[episode.episodeNumber]?.let { MetadataPolicy.enrichEpisode(episode, it) } ?: episode
+            })
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            season
+        }
     }
 
     // ---- Mapping helpers ------------------------------------------------
@@ -2159,7 +2323,7 @@ class IptvRepository(
         categoryId = categoryId, categoryName = categoryName, rating = rating,
         plot = plot, cast = cast, director = director, genre = genre,
         releaseDate = releaseDate, durationSecs = durationSecs,
-        trailerUrl = KululuEndpoint.migrateLegacyAssetUrl(trailerUrl), tmdbId = tmdbId
+        trailerUrl = KululuEndpoint.migrateLegacyAssetUrl(trailerUrl), tmdbId = tmdbId, addedAt = addedAt
     )
 
     private fun SeriesEntity.toModel() = Series(
@@ -2170,7 +2334,8 @@ class IptvRepository(
         categoryId = categoryId,
         categoryName = categoryName, rating = rating, plot = plot, cast = cast,
         director = director, genre = genre, releaseDate = releaseDate,
-        trailerUrl = KululuEndpoint.migrateLegacyAssetUrl(trailerUrl), tmdbId = tmdbId
+        trailerUrl = KululuEndpoint.migrateLegacyAssetUrl(trailerUrl), tmdbId = tmdbId,
+        addedAt = MetadataPolicy.seriesFreshness(addedAt, latestEpisodeAt)
     )
 
     private fun EpisodeEntity.toModel() = Episode(

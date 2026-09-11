@@ -1,21 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Cinematic, TV-first VOD player. Controls stay inside the overscan-safe area,
-     expose an explicit D-pad graph and use layered glass surfaces over the video. -->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#000000"
     android:keepScreenOn="true">
-
     <FrameLayout
         android:id="@+id/videoContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:importantForAccessibility="no" />
-
-    <!-- A bounded, readable loading state instead of a lone spinner on black. -->
     <LinearLayout
         android:id="@+id/bufferingOverlay"
         android:layout_width="wrap_content"
@@ -31,13 +27,11 @@
         android:paddingEnd="@dimen/space_l"
         android:paddingBottom="@dimen/space_m"
         android:visibility="gone">
-
         <ProgressBar
             android:id="@+id/bufferingIndicator"
             android:layout_width="38dp"
             android:layout_height="38dp"
             android:indeterminateTint="@color/accent" />
-
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -47,8 +41,6 @@
             android:textSize="@dimen/text_body"
             android:textStyle="bold" />
     </LinearLayout>
-
-    <!-- Terminal playback state: full-screen focus barrier + centered action card. -->
     <FrameLayout
         android:id="@+id/errorOverlay"
         android:layout_width="match_parent"
@@ -58,7 +50,6 @@
         android:clickable="true"
         android:focusable="false"
         android:visibility="gone">
-
         <LinearLayout
             android:layout_width="520dp"
             android:layout_height="wrap_content"
@@ -68,14 +59,12 @@
             android:gravity="center"
             android:orientation="vertical"
             android:padding="@dimen/space_xl">
-
             <ImageView
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_vod_player_error"
                 app:tint="@color/warning" />
-
             <TextView
                 android:id="@+id/errorMessage"
                 android:layout_width="match_parent"
@@ -86,7 +75,6 @@
                 android:text="@string/error_cannot_connect"
                 android:textColor="@color/text_primary"
                 android:textSize="@dimen/text_body" />
-
             <TextView
                 android:id="@+id/retryButton"
                 android:layout_width="220dp"
@@ -102,13 +90,11 @@
                 android:nextFocusRight="@id/retryButton"
                 android:nextFocusUp="@id/retryButton"
                 android:text="@string/action_retry"
-                android:textColor="@color/text_primary"
+                android:textColor="@color/proto_primary_text"
                 android:textSize="@dimen/text_body"
                 android:textStyle="bold" />
         </LinearLayout>
     </FrameLayout>
-
-    <!-- Series completion hand-off: explicit, cancelable and remote-first. -->
     <FrameLayout
         android:id="@+id/nextEpisodeOverlay"
         android:layout_width="match_parent"
@@ -117,7 +103,6 @@
         android:clickable="true"
         android:focusable="false"
         android:visibility="gone">
-
         <LinearLayout
             android:layout_width="560dp"
             android:layout_height="wrap_content"
@@ -127,7 +112,6 @@
             android:gravity="center"
             android:orientation="vertical"
             android:padding="@dimen/space_xl">
-
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -136,7 +120,6 @@
                 android:textColor="@color/accent"
                 android:textSize="@dimen/text_small"
                 android:textStyle="bold" />
-
             <TextView
                 android:id="@+id/nextEpisodeName"
                 android:layout_width="match_parent"
@@ -149,7 +132,6 @@
                 android:textSize="@dimen/text_title"
                 android:textStyle="bold"
                 tools:text="Episode 5" />
-
             <TextView
                 android:id="@+id/nextEpisodeCountdown"
                 android:layout_width="match_parent"
@@ -159,14 +141,12 @@
                 android:textColor="@color/text_secondary"
                 android:textSize="@dimen/text_body"
                 tools:text="Playing automatically in 8 seconds" />
-
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_l"
                 android:gravity="center"
                 android:orientation="horizontal">
-
                 <TextView
                     android:id="@+id/nextEpisodePlayNow"
                     android:layout_width="220dp"
@@ -180,10 +160,9 @@
                     android:nextFocusRight="@id/nextEpisodeCancel"
                     android:nextFocusUp="@id/nextEpisodePlayNow"
                     android:text="@string/next_episode_play_now"
-                    android:textColor="@color/text_primary"
+                    android:textColor="@color/proto_primary_text"
                     android:textSize="@dimen/text_body"
                     android:textStyle="bold" />
-
                 <TextView
                     android:id="@+id/nextEpisodeCancel"
                     android:layout_width="180dp"
@@ -204,7 +183,6 @@
             </LinearLayout>
         </LinearLayout>
     </FrameLayout>
-
     <TextView
         android:id="@+id/debugOverlay"
         android:layout_width="wrap_content"
@@ -218,7 +196,6 @@
         android:textColor="@color/text_primary"
         android:textSize="@dimen/text_caption"
         android:visibility="gone" />
-
     <LinearLayout
         android:id="@+id/trackHintBanner"
         android:layout_width="wrap_content"
@@ -235,7 +212,6 @@
         android:paddingEnd="@dimen/space_l"
         android:paddingBottom="@dimen/space_m"
         android:visibility="gone">
-
         <ImageView
             android:id="@+id/trackHintIcon"
             android:layout_width="30dp"
@@ -243,13 +219,11 @@
             android:contentDescription="@null"
             android:src="@drawable/ic_subtitles"
             app:tint="@color/accent" />
-
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="@dimen/space_m"
             android:orientation="vertical">
-
             <TextView
                 android:id="@+id/trackHintTitle"
                 android:layout_width="wrap_content"
@@ -258,7 +232,6 @@
                 android:textColor="@color/text_primary"
                 android:textSize="@dimen/text_body"
                 android:textStyle="bold" />
-
             <TextView
                 android:id="@+id/trackHintMessage"
                 android:layout_width="wrap_content"
@@ -268,259 +241,264 @@
                 android:textSize="@dimen/text_caption" />
         </LinearLayout>
     </LinearLayout>
-
-    <!-- Top title + compact action island. -->
     <LinearLayout
-        android:id="@+id/topBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top"
-        android:background="@drawable/bg_vod_player_top_scrim"
-        android:gravity="center_vertical"
-        android:layoutDirection="ltr"
-        android:orientation="horizontal"
-        android:paddingStart="@dimen/safe_area_h"
-        android:paddingTop="@dimen/safe_area_v"
-        android:paddingEnd="@dimen/safe_area_h"
-        android:paddingBottom="48dp">
-
-        <ImageButton
-            android:id="@+id/backButton"
-            style="@style/Widget.Iptv.IconButton"
-            android:contentDescription="@string/action_back"
-            android:nextFocusDown="@id/skipBackButton"
-            android:nextFocusRight="@id/audioButton"
-            android:src="@drawable/ic_arrow_back" />
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/space_m"
-            android:layout_marginEnd="@dimen/space_l"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:letterSpacing="0.12"
-                android:text="@string/now_playing"
-                android:textAllCaps="true"
-                android:textColor="@color/accent"
-                android:textSize="@dimen/text_small"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/titleText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:shadowColor="#CC000000"
-                android:shadowDx="0"
-                android:shadowDy="2"
-                android:shadowRadius="6"
-                android:textColor="@color/text_primary"
-                android:textDirection="locale"
-                android:textSize="@dimen/text_title"
-                android:textStyle="bold"
-                tools:text="Keeper · S02 E04" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_vod_player_action_cluster"
-            android:gravity="center_vertical"
-            android:layoutDirection="ltr"
-            android:orientation="horizontal"
-            android:padding="@dimen/space_s">
-
-            <ImageButton
-                android:id="@+id/audioButton"
-                style="@style/Widget.Iptv.IconButton"
-                android:contentDescription="@string/audio_track"
-                android:nextFocusDown="@id/playPauseButton"
-                android:nextFocusLeft="@id/backButton"
-                android:nextFocusRight="@id/subtitleButton"
-                android:src="@drawable/ic_audiotrack" />
-
-            <ImageButton
-                android:id="@+id/subtitleButton"
-                style="@style/Widget.Iptv.IconButton"
-                android:layout_marginStart="@dimen/space_xs"
-                android:contentDescription="@string/subtitle_track"
-                android:nextFocusDown="@id/playPauseButton"
-                android:nextFocusLeft="@id/audioButton"
-                android:nextFocusRight="@id/aspectButton"
-                android:src="@drawable/ic_subtitles" />
-
-            <ImageButton
-                android:id="@+id/aspectButton"
-                style="@style/Widget.Iptv.IconButton"
-                android:layout_marginStart="@dimen/space_xs"
-                android:contentDescription="@string/aspect_ratio"
-                android:nextFocusDown="@id/playPauseButton"
-                android:nextFocusLeft="@id/subtitleButton"
-                android:nextFocusRight="@id/sleepButton"
-                android:src="@drawable/ic_aspect_ratio" />
-
-            <ImageButton
-                android:id="@+id/sleepButton"
-                style="@style/Widget.Iptv.IconButton"
-                android:layout_marginStart="@dimen/space_xs"
-                android:contentDescription="@string/sleep_timer"
-                android:nextFocusDown="@id/playPauseButton"
-                android:nextFocusLeft="@id/aspectButton"
-                android:nextFocusRight="@id/castButton"
-                android:src="@drawable/ic_bedtime" />
-
-            <ImageButton
-                android:id="@+id/castButton"
-                style="@style/Widget.Iptv.IconButton"
-                android:layout_marginStart="@dimen/space_xs"
-                android:contentDescription="@string/cast"
-                android:nextFocusDown="@id/skipForwardButton"
-                android:nextFocusLeft="@id/sleepButton"
-                android:src="@drawable/ic_cast" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <!-- Focused transport island is readable without covering the whole picture. -->
-    <LinearLayout
-        android:id="@+id/transportBar"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:background="@drawable/bg_vod_player_transport"
-        android:elevation="10dp"
-        android:gravity="center_vertical"
-        android:layoutDirection="ltr"
-        android:orientation="horizontal"
-        android:paddingStart="@dimen/space_m"
-        android:paddingTop="@dimen/space_s"
-        android:paddingEnd="@dimen/space_m"
-        android:paddingBottom="@dimen/space_s">
-
-        <ImageButton
-            android:id="@+id/skipBackButton"
-            android:layout_width="60dp"
-            android:layout_height="60dp"
-            android:background="@drawable/bg_vod_player_transport_button"
-            android:contentDescription="@string/skip_back"
-            android:focusable="true"
-            android:nextFocusDown="@id/seekBar"
-            android:nextFocusRight="@id/playPauseButton"
-            android:nextFocusUp="@id/backButton"
-            android:padding="14dp"
-            android:scaleType="centerInside"
-            android:src="@drawable/ic_skip_back" />
-
-        <ImageButton
-            android:id="@+id/playPauseButton"
-            android:layout_width="80dp"
-            android:layout_height="80dp"
-            android:layout_marginStart="@dimen/space_l"
-            android:layout_marginEnd="@dimen/space_l"
-            android:background="@drawable/bg_vod_player_play_button"
-            android:contentDescription="@string/detail_play"
-            android:focusable="true"
-            android:nextFocusDown="@id/seekBar"
-            android:nextFocusLeft="@id/skipBackButton"
-            android:nextFocusRight="@id/skipForwardButton"
-            android:nextFocusUp="@id/aspectButton"
-            android:padding="21dp"
-            android:scaleType="centerInside"
-            android:src="@drawable/ic_play" />
-
-        <ImageButton
-            android:id="@+id/skipForwardButton"
-            android:layout_width="60dp"
-            android:layout_height="60dp"
-            android:background="@drawable/bg_vod_player_transport_button"
-            android:contentDescription="@string/skip_forward"
-            android:focusable="true"
-            android:nextFocusDown="@id/seekBar"
-            android:nextFocusLeft="@id/playPauseButton"
-            android:nextFocusUp="@id/castButton"
-            android:padding="14dp"
-            android:scaleType="centerInside"
-            android:src="@drawable/ic_skip_forward" />
-    </LinearLayout>
-
-    <!-- Bottom progress deck: large seek target and separated time readouts. -->
-    <LinearLayout
-        android:id="@+id/bottomBar"
+        android:id="@+id/playerControls"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:background="@drawable/bg_vod_player_bottom_scrim"
+        android:layout_marginHorizontal="70dp"
+        android:layout_marginBottom="24dp"
         android:orientation="vertical"
-        android:layoutDirection="ltr"
-        android:paddingStart="@dimen/safe_area_h"
-        android:paddingTop="48dp"
-        android:paddingEnd="@dimen/safe_area_h"
-        android:paddingBottom="@dimen/safe_area_v">
-
-        <SeekBar
-            android:id="@+id/seekBar"
-            android:layout_width="match_parent"
-            android:layout_height="40dp"
-            android:contentDescription="@string/player_seek_position"
-            android:focusable="true"
-            android:nextFocusUp="@id/playPauseButton"
-            android:paddingTop="@dimen/space_m"
-            android:paddingBottom="@dimen/space_m"
-            android:progressDrawable="@drawable/seekbar_progress"
-            android:splitTrack="false"
-            android:thumb="@drawable/seekbar_thumb"
-            android:thumbTint="@color/accent" />
-
+        android:padding="20dp"
+        android:background="@drawable/bg_proto_player_controls">
         <LinearLayout
+            android:id="@+id/topBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:background="@android:color/transparent"
             android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/currentTime"
-                android:layout_width="wrap_content"
+            android:layoutDirection="ltr"
+            android:orientation="horizontal"
+            android:paddingStart="0dp"
+            android:paddingTop="0dp"
+            android:paddingEnd="0dp"
+            android:paddingBottom="0dp"
+            android:elevation="0dp">
+            <ImageButton
+                android:id="@+id/backButton"
+                style="@style/Widget.Iptv.IconButton"
+                android:contentDescription="@string/action_back"
+                android:nextFocusDown="@id/seekBar"
+                android:nextFocusRight="@id/audioButton"
+                android:src="@drawable/ic_arrow_back" />
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_vod_player_time_chip"
-                android:fontFamily="monospace"
-                android:paddingStart="@dimen/space_m"
-                android:paddingTop="@dimen/space_s"
-                android:paddingEnd="@dimen/space_m"
-                android:paddingBottom="@dimen/space_s"
-                android:text="00:00"
-                android:textColor="@color/text_primary"
-                android:textSize="@dimen/text_caption"
-                android:textStyle="bold" />
-
-            <View
+                android:layout_marginStart="@dimen/space_m"
+                android:layout_marginEnd="@dimen/space_l"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:letterSpacing="0.12"
+                    android:text="@string/now_playing"
+                    android:textAllCaps="true"
+                    android:textColor="@color/accent"
+                    android:textSize="@dimen/text_small"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/titleText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:shadowColor="#CC000000"
+                    android:shadowDx="0"
+                    android:shadowDy="2"
+                    android:shadowRadius="6"
+                    android:textColor="@color/text_primary"
+                    android:textDirection="locale"
+                    android:textSize="25sp"
+                    android:textStyle="bold"
+                    tools:text="Keeper · S02 E04" />
+            </LinearLayout>
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/bottomBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:background="@android:color/transparent"
+            android:orientation="vertical"
+            android:layoutDirection="ltr"
+            android:paddingStart="0dp"
+            android:paddingTop="0dp"
+            android:paddingEnd="0dp"
+            android:paddingBottom="0dp"
+            android:elevation="0dp">
+            <SeekBar
+                android:id="@+id/seekBar"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:contentDescription="@string/player_seek_position"
+                android:focusable="true"
+                android:nextFocusUp="@id/playPauseButton"
+                android:paddingTop="@dimen/space_m"
+                android:paddingBottom="@dimen/space_m"
+                android:progressDrawable="@drawable/seekbar_progress"
+                android:splitTrack="false"
+                android:thumb="@drawable/seekbar_thumb"
+                android:thumbTint="@color/accent" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <TextView
+                    android:id="@+id/currentTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_vod_player_time_chip"
+                    android:fontFamily="monospace"
+                    android:paddingStart="@dimen/space_m"
+                    android:paddingTop="@dimen/space_s"
+                    android:paddingEnd="@dimen/space_m"
+                    android:paddingBottom="@dimen/space_s"
+                    android:text="00:00"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/text_caption"
+                    android:textStyle="bold" />
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_marginStart="@dimen/space_m"
+                    android:layout_marginEnd="@dimen/space_m"
+                    android:layout_weight="1"
+                    android:alpha="0.45"
+                    android:background="@color/text_muted"
+                    android:importantForAccessibility="no" />
+                <TextView
+                    android:id="@+id/totalTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_vod_player_time_chip"
+                    android:fontFamily="monospace"
+                    android:paddingStart="@dimen/space_m"
+                    android:paddingTop="@dimen/space_s"
+                    android:paddingEnd="@dimen/space_m"
+                    android:paddingBottom="@dimen/space_s"
+                    android:text="00:00"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="@dimen/text_caption" />
+            </LinearLayout>
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/transportBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="@android:color/transparent"
+            android:elevation="0dp"
+            android:gravity="center_vertical"
+            android:layoutDirection="ltr"
+            android:orientation="horizontal"
+            android:paddingStart="0dp"
+            android:paddingTop="0dp"
+            android:paddingEnd="0dp"
+            android:paddingBottom="0dp"
+            android:layout_marginTop="12dp">
+            <ImageButton
+                android:id="@+id/skipBackButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_vod_player_transport_button"
+                android:contentDescription="@string/skip_back"
+                android:focusable="true"
+                android:nextFocusDown="@id/skipBackButton"
+                android:nextFocusRight="@id/playPauseButton"
+                android:nextFocusUp="@id/seekBar"
+                android:padding="12dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_skip_back"
+                android:layout_marginStart="0dp"
+                android:layout_marginEnd="10dp" />
+            <ImageButton
+                android:id="@+id/playPauseButton"
+                app:tint="@color/proto_primary_text"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="0dp"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/bg_vod_player_play_button"
+                android:contentDescription="@string/detail_play"
+                android:focusable="true"
+                android:nextFocusDown="@id/playPauseButton"
+                android:nextFocusLeft="@id/skipBackButton"
+                android:nextFocusRight="@id/skipForwardButton"
+                android:nextFocusUp="@id/seekBar"
+                android:padding="12dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_play" />
+            <ImageButton
+                android:id="@+id/skipForwardButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_vod_player_transport_button"
+                android:contentDescription="@string/skip_forward"
+                android:focusable="true"
+                android:nextFocusDown="@id/skipForwardButton"
+                android:nextFocusLeft="@id/playPauseButton"
+                android:nextFocusUp="@id/seekBar"
+                android:padding="12dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_skip_forward"
+                android:layout_marginStart="0dp"
+                android:layout_marginEnd="10dp"
+                android:nextFocusRight="@id/audioButton" />
+            <Space
                 android:layout_width="0dp"
                 android:layout_height="1dp"
-                android:layout_marginStart="@dimen/space_m"
-                android:layout_marginEnd="@dimen/space_m"
-                android:layout_weight="1"
-                android:alpha="0.45"
-                android:background="@color/text_muted"
-                android:importantForAccessibility="no" />
-
-            <TextView
-                android:id="@+id/totalTime"
+                android:layout_weight="1" />
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_vod_player_time_chip"
-                android:fontFamily="monospace"
-                android:paddingStart="@dimen/space_m"
-                android:paddingTop="@dimen/space_s"
-                android:paddingEnd="@dimen/space_m"
-                android:paddingBottom="@dimen/space_s"
-                android:text="00:00"
-                android:textColor="@color/text_secondary"
-                android:textSize="@dimen/text_caption" />
+                android:background="@android:color/transparent"
+                android:gravity="center_vertical"
+                android:layoutDirection="ltr"
+                android:orientation="horizontal"
+                android:padding="0dp">
+                <ImageButton
+                    android:id="@+id/audioButton"
+                    style="@style/Widget.Iptv.IconButton"
+                    android:contentDescription="@string/audio_track"
+                    android:nextFocusDown="@id/audioButton"
+                    android:nextFocusLeft="@id/skipForwardButton"
+                    android:nextFocusRight="@id/subtitleButton"
+                    android:src="@drawable/ic_audiotrack"
+                    android:nextFocusUp="@id/seekBar" />
+                <ImageButton
+                    android:id="@+id/subtitleButton"
+                    style="@style/Widget.Iptv.IconButton"
+                    android:layout_marginStart="@dimen/space_xs"
+                    android:contentDescription="@string/subtitle_track"
+                    android:nextFocusDown="@id/subtitleButton"
+                    android:nextFocusLeft="@id/audioButton"
+                    android:nextFocusRight="@id/aspectButton"
+                    android:src="@drawable/ic_subtitles"
+                    android:nextFocusUp="@id/seekBar" />
+                <ImageButton
+                    android:id="@+id/aspectButton"
+                    style="@style/Widget.Iptv.IconButton"
+                    android:layout_marginStart="@dimen/space_xs"
+                    android:contentDescription="@string/aspect_ratio"
+                    android:nextFocusDown="@id/aspectButton"
+                    android:nextFocusLeft="@id/subtitleButton"
+                    android:nextFocusRight="@id/sleepButton"
+                    android:src="@drawable/ic_aspect_ratio"
+                    android:nextFocusUp="@id/seekBar" />
+                <ImageButton
+                    android:id="@+id/sleepButton"
+                    style="@style/Widget.Iptv.IconButton"
+                    android:layout_marginStart="@dimen/space_xs"
+                    android:contentDescription="@string/sleep_timer"
+                    android:nextFocusDown="@id/sleepButton"
+                    android:nextFocusLeft="@id/aspectButton"
+                    android:nextFocusRight="@id/castButton"
+                    android:src="@drawable/ic_bedtime"
+                    android:nextFocusUp="@id/seekBar" />
+                <ImageButton
+                    android:id="@+id/castButton"
+                    style="@style/Widget.Iptv.IconButton"
+                    android:layout_marginStart="@dimen/space_xs"
+                    android:contentDescription="@string/cast"
+                    android:nextFocusDown="@id/castButton"
+                    android:nextFocusLeft="@id/sleepButton"
+                    android:src="@drawable/ic_cast"
+                    android:nextFocusUp="@id/seekBar" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

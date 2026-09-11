@@ -25,7 +25,10 @@ data class ServerInfo(
     @SerializedName("url") val url: String?,
     @SerializedName("port") val port: String?,
     @SerializedName("https_port") val httpsPort: String?,
-    @SerializedName("server_protocol") val protocol: String?
+    @SerializedName("server_protocol") val protocol: String?,
+    @SerializedName("timezone") val timezone: String? = null,
+    @SerializedName("timestamp_now") val timestampNow: Long? = null,
+    @SerializedName("time_now") val timeNow: String? = null,
 )
 
 data class XtreamCategory(
@@ -56,7 +59,7 @@ data class XtreamVodStream(
     @SerializedName("stream_icon") val streamIcon: String?,
     @SerializedName("category_id") val categoryId: String?,
     @SerializedName("rating") val rating: String?,
-    @SerializedName(value = "releasedate", alternate = ["releaseDate"]) val releaseDate: String?,
+    @SerializedName(value = "releasedate", alternate = ["releaseDate", "release_date"]) val releaseDate: String?,
     @SerializedName("year") val year: String?,
     @SerializedName("container_extension") val containerExtension: String?,
     // Unix timestamp (seconds, as string) when the movie was added to the catalog.
@@ -74,7 +77,7 @@ data class XtreamVodDetail(
     @SerializedName("cast") val cast: String?,
     @SerializedName("director") val director: String?,
     @SerializedName("genre") val genre: String?,
-    @SerializedName("releasedate") val releaseDate: String?,
+    @SerializedName(value = "releasedate", alternate = ["releaseDate", "release_date"]) val releaseDate: String?,
     @SerializedName("rating") val rating: String?,
     @SerializedName("duration_secs") val durationSecs: Int?,
     @SerializedName("youtube_trailer") val youtubeTrailer: String?,
@@ -105,7 +108,10 @@ data class XtreamSeriesItem(
     @SerializedName("youtube_trailer") val youtubeTrailer: String?,
     // Unix timestamp (seconds, as string) when the series was last updated
     // (e.g. a new episode added). Used to surface freshly-updated series first.
-    @SerializedName("last_modified") val lastModified: String?
+    @SerializedName(value = "last_modified", alternate = ["updated_at", "last_updated"]) val lastModified: String?,
+    @SerializedName("added") val added: String? = null,
+    @SerializedName("last_episode_added") val lastEpisodeAdded: String? = null,
+    @SerializedName(value = "tmdb_id", alternate = ["tmdb"]) val tmdbId: String? = null
 )
 
 data class XtreamSeriesInfo(
@@ -124,7 +130,9 @@ data class XtreamSeriesDetail(
     @SerializedName("rating") val rating: String?,
     @SerializedName("cover") val cover: String?,
     @SerializedName("youtube_trailer") val youtubeTrailer: String?,
-    @SerializedName("tmdb_id") val tmdbId: String?
+    @SerializedName(value = "tmdb_id", alternate = ["tmdb"]) val tmdbId: String?,
+    @SerializedName("last_modified") val lastModified: String? = null,
+    @SerializedName("last_episode_added") val lastEpisodeAdded: String? = null
 )
 
 data class XtreamEpisode(
@@ -134,7 +142,8 @@ data class XtreamEpisode(
     @SerializedName("title") val title: String?,
     @SerializedName("container_extension") val containerExtension: String?,
     @SerializedName("info") val info: XtreamEpisodeInfo?,
-    @SerializedName("direct_source") val directSource: String? = null
+    @SerializedName("direct_source") val directSource: String? = null,
+    @SerializedName("added") val added: String? = null
 )
 
 data class XtreamEpisodeInfo(

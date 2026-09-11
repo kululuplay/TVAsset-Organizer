@@ -17,6 +17,8 @@ import java.util.concurrent.Executors
 object PlaybackQoeRuntime {
 
     private val recorder = PlaybackQoeRecorder()
+    private val diagnostics = com.iptv.player.playback.core.PlaybackDiagnosticState()
+    fun diagnosticSnapshot(): Map<String, String> = diagnostics.snapshot()
     private val collector = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "player-capability").apply { isDaemon = true }
     }
@@ -54,6 +56,7 @@ object PlaybackQoeRuntime {
         transport: PlaybackTransportKind,
     ): PlaybackSessionId {
         val id = PlaybackSessionId.random()
+        diagnostics.start(id, engine, transport, System.currentTimeMillis())
         recorder.start(
             PlaybackSession(
                 id = id,
@@ -68,10 +71,12 @@ object PlaybackQoeRuntime {
     }
 
     fun markEngine(id: PlaybackSessionId?, engine: PlaybackEngineKind) {
+        diagnostics.engine(id, engine)
         id?.let { recorder.markEngine(it, engine) }
     }
 
     fun markTransport(id: PlaybackSessionId?, transport: PlaybackTransportKind) {
+        diagnostics.transport(id, transport)
         id?.let { recorder.markTransport(it, transport) }
     }
 
@@ -88,10 +93,12 @@ object PlaybackQoeRuntime {
     }
 
     fun recordFailure(id: PlaybackSessionId?, failure: PlaybackFailure) {
+        diagnostics.failure(id, failure)
         id?.let { recorder.recordFailure(it, failure) }
     }
 
     fun finish(id: PlaybackSessionId?, reason: PlaybackEndReason) {
+        diagnostics.finish(id)
         val record = id?.let {
             recorder.finish(it, reason, System.currentTimeMillis())
         } ?: return

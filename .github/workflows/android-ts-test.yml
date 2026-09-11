@@ -1,0 +1,62 @@
+name: Android TS test APK
+
+on:
+  push:
+    branches: [test/android-ts-only-20260911]
+    paths:
+      - IptvPlayer/**
+      - .github/workflows/android-ts-test.yml
+      - scripts/verify_ts_test_apk.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-ts-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-apk:
+    if: github.ref == 'refs/heads/test/android-ts-only-20260911'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699
+      - uses: gradle/actions/wrapper-validation@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+      - name: Check source and verifier
+        run: |
+          python3 scripts/scan_secrets.py
+          python3 scripts/test_verify_android_upgrade.py
+      - name: Build isolated TS test package
+        working-directory: IptvPlayer
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --console=plain -PtsOnlyTestBuild=true \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+      - name: Verify APK and stage test files
+        run: python3 scripts/verify_ts_test_apk.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: KululuIPTV-1.5.86-preview1
+          path: ts-test-artifacts/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: ts-test-reports
+          path: |
+            IptvPlayer/app/build/test-results/testDebugUnitTest/*.xml
+            IptvPlayer/app/build/reports/lint-results-debug.*
+          if-no-files-found: ignore
+          retention-days: 14

@@ -13,7 +13,7 @@
     <dimen name="similar_poster_width">108dp</dimen>
     <dimen name="tile_radius">16dp</dimen>
     <dimen name="badge_radius">14dp</dimen>
-    <dimen name="badge_hero">76dp</dimen>
+    <dimen name="badge_hero">40dp</dimen>
     <dimen name="badge_medium">52dp</dimen>
     <dimen name="badge_small">42dp</dimen>
 
@@ -37,7 +37,7 @@
     <!-- Wider category rail for Movies/Series so long category names stay readable. -->
     <dimen name="category_width_wide">292dp</dimen>
     <!-- Compact catalog geometry targets five posters at the 960x540dp TV reference. -->
-    <dimen name="catalog_category_width">236dp</dimen>
+    <dimen name="catalog_category_width">286dp</dimen>
     <dimen name="info_width">268dp</dimen>
     <dimen name="channel_logo">48dp</dimen>
     <dimen name="card_radius">9dp</dimen>

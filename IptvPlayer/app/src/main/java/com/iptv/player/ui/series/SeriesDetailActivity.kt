@@ -14,6 +14,7 @@ import android.view.View
 import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
@@ -86,6 +87,7 @@ class SeriesDetailActivity : BaseActivity() {
     private var resumeJob: Job? = null
     private var castJob: Job? = null
     private var similarJob: Job? = null
+    private var episodeMetadataJob: Job? = null
     private var seasonsLoading = true
     private var resumeLoaded = false
     private var plotExpanded = false
@@ -212,8 +214,7 @@ class SeriesDetailActivity : BaseActivity() {
             },
             onClicked = { playEpisode(it) },
         )
-        binding.episodeList.layoutManager =
-            LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        binding.episodeList.layoutManager = GridLayoutManager(this, 2)
         binding.episodeList.adapter = episodeAdapter
         // Same guard: setWatchState() rebinds visible episode cards via
         // notifyItemRangeChanged; without this it could steal focus from the card
@@ -742,6 +743,7 @@ class SeriesDetailActivity : BaseActivity() {
     }
 
     private fun showSeason(season: Season) {
+        episodeMetadataJob?.cancel()
         currentSeason = season
         seasonAdapter.setSelected(season.seasonNumber)
         episodesReadyForSeason = null
@@ -767,6 +769,15 @@ class SeriesDetailActivity : BaseActivity() {
             if (playableEpisodes.isEmpty()) View.VISIBLE else View.GONE
         updateSeasonFocusLinks()
         renderPlayState()
+        // Enrich only the visible season; late responses must not switch seasons or steal focus.
+        episodeMetadataJob = lifecycleScope.launch {
+            val id = seriesId ?: return@launch
+            val series = repo.getSeriesCached(id) ?: return@launch
+            val enriched = repo.enrichSeason(series, season)
+            if (currentSeason !== season || enriched == season) return@launch
+            currentSeason = enriched
+            episodeAdapter.submitList(enriched.episodes.filter { it.streamUrl.isNotBlank() })
+        }
     }
 
     private fun updateSeasonFocusLinks() {
@@ -862,9 +873,10 @@ class SeriesDetailActivity : BaseActivity() {
                         }
                         return true
                     }
-                    binding.episodeList.hasFocus() &&
-                        binding.similarList.visibility == View.VISIBLE -> {
-                        binding.similarList.requestFocusAt(0)
+                    binding.episodeList.hasFocus() -> {
+                        if (!moveEpisodeRow(down = true) && similarVisible) {
+                            binding.similarList.requestFocusAt(0)
+                        }
                         return true
                     }
                     binding.episodeRetryButton.hasFocus() && similarVisible -> {
@@ -891,7 +903,7 @@ class SeriesDetailActivity : BaseActivity() {
                         return true
                     }
                     binding.episodeList.hasFocus() -> {
-                        focusCurrentSeason()
+                        if (!moveEpisodeRow(down = false)) focusCurrentSeason()
                         return true
                     }
                     binding.similarList.hasFocus() -> {
@@ -932,6 +944,18 @@ class SeriesDetailActivity : BaseActivity() {
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    private fun moveEpisodeRow(down: Boolean): Boolean {
+        val focused = currentFocus?.let(binding.episodeList::findContainingItemView) ?: return false
+        val position = binding.episodeList.getChildAdapterPosition(focused)
+        val target = EpisodeGridNavigation.verticalTarget(
+            position, episodeAdapter.itemCount,
+            (binding.episodeList.layoutManager as GridLayoutManager).spanCount, down,
+        )
+            ?: return false
+        binding.episodeList.requestFocusAt(target)
+        return true
     }
 
     private fun focusCurrentSeason() {

@@ -1,7 +1,7 @@
 /*
  * ProgramAdapter.kt
- * Right-pane EPG schedule list. The current programme gets an emerald surface,
- * LIVE badge and elapsed-time rail. Display only — rows are not focusable.
+ * Focusable EPG schedule. The current programme keeps a cyan outline even
+ * while the viewer browses another row; OK opens the programme description.
  */
 package com.iptv.player.ui.home
 
@@ -21,7 +21,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class ProgramAdapter : ListAdapter<Program, ProgramAdapter.VH>(DIFF) {
+class ProgramAdapter(private val onClicked: (Program) -> Unit = {}) : ListAdapter<Program, ProgramAdapter.VH>(DIFF) {
 
     private val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
 
@@ -51,6 +51,12 @@ class ProgramAdapter : ListAdapter<Program, ProgramAdapter.VH>(DIFF) {
         private val progress: ProgressBar = itemView.findViewById(R.id.programProgress)
 
         fun bind(program: Program) {
+            itemView.setOnClickListener {
+                val position = bindingAdapterPosition
+                if (position != RecyclerView.NO_POSITION) onClicked(getItem(position))
+            }
+            itemView.contentDescription = program.title + ", " +
+                timeFmt.format(Date(program.startMs)) + " – " + timeFmt.format(Date(program.stopMs))
             title.text = program.title
             time.text =
                 "${timeFmt.format(Date(program.startMs))} – ${timeFmt.format(Date(program.stopMs))}"
@@ -66,7 +72,7 @@ class ProgramAdapter : ListAdapter<Program, ProgramAdapter.VH>(DIFF) {
             }
             val tint = ContextCompat.getColor(
                 itemView.context,
-                if (live) R.color.accent_emerald else R.color.text_muted
+                if (live) R.color.accent_cyan else R.color.text_muted
             )
             ViewCompat.setBackgroundTintList(dot, android.content.res.ColorStateList.valueOf(tint))
         }

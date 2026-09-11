@@ -29,7 +29,7 @@ object Logger {
     private const val MAX_BYTES = 512 * 1024 // rotate at ~0.5 MB; keep one previous
 
     private val lock = Any()
-    private val timestamp = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US)
+    private val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSSZ", Locale.US)
     private val fileWriter = Executors.newSingleThreadExecutor { task ->
         Thread(task, "field-log-writer").apply { isDaemon = true }
     }
@@ -88,7 +88,7 @@ object Logger {
 
     private fun write(level: String, tag: String, msg: String, tr: Throwable?) {
         val safeMessage = SensitiveDataRedactor.redact(msg)
-        val safeStack = tr?.let { SensitiveDataRedactor.redact(Log.getStackTraceString(it)) }
+        val safeStack = tr?.let { SensitiveDataRedactor.redact(Log.getStackTraceString(it)).take(12_000) }
         mirrorToLogcat(level, tag, safeMessage, safeStack)
         val dir = logDir ?: return
         // File.length(), rotation and append can take hundreds of milliseconds on
@@ -142,6 +142,7 @@ object Logger {
         if (file.length() > MAX_BYTES) rotate(dir, file)
         FileWriter(file, true).use { writer ->
             writer.append(timestamp.format(Date())).append(' ')
+                .append(DiagnosticRun.marker).append(' ')
                 .append(level).append('/').append(tag).append(": ")
                 .append(safeMessage).append('\n')
             if (safeStack != null) writer.append(safeStack).append('\n')

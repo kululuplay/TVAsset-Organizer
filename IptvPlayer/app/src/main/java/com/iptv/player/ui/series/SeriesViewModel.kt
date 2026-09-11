@@ -55,6 +55,8 @@ class SeriesViewModel(
 
     private val _loadState = MutableStateFlow(CatalogLoadState())
     val loadState: StateFlow<CatalogLoadState> = _loadState
+    private val _episodeDatesUpdating = MutableStateFlow(false)
+    val episodeDatesUpdating: StateFlow<Boolean> = _episodeDatesUpdating
 
     /**
      * Categories with a "Recently added" entry pinned to the top, each with a
@@ -69,20 +71,16 @@ class SeriesViewModel(
                         CAT_ALL,
                         getApplication<Application>().getString(R.string.cat_recently_added),
                         ContentType.SERIES,
-                        // The "Recently added" grid is the whole cache sorted newest
-                        // first (unbounded), so the badge must show the real total —
-                        // capping it to a fixed number made the count contradict the grid.
-                        count = cats.sumOf { it.count ?: 0 }
+                        count = cats.sumOf { it.count ?: 0 }.coerceAtMost(50)
                     )
                 )
-                // "You may like" — top-rated series across the whole catalog, so
-                // every poster is guaranteed playable (no TMDB key / dead links).
+                // Profile preferences rank playable items from the local catalog.
                 add(
                     Category(
                         CAT_POPULAR,
                         getApplication<Application>().getString(R.string.cat_for_you),
                         ContentType.SERIES,
-                        count = cats.sumOf { it.count ?: 0 }
+                        count = cats.sumOf { it.count ?: 0 }.coerceAtMost(50)
                     )
                 )
                 addAll(cats)
@@ -103,6 +101,20 @@ class SeriesViewModel(
 
     private var selectionLoadJob: Job? = null
     private var catalogLoadJob: Job? = null
+    private var episodeDateJob: Job? = null
+    private var browseActive = false
+
+    fun onBrowseStarted() {
+        browseActive = true
+        scheduleSelectedCategoryLoad()
+    }
+
+    fun onBrowseStopped() {
+        browseActive = false
+        episodeDateJob?.cancel()
+    }
+    private val refreshedCategories = mutableSetOf<String>()
+    private var refreshedFullCatalog = false
     private var sortRestoreJob: Job? = null
 
     init {
@@ -137,6 +149,7 @@ class SeriesViewModel(
      */
     fun selectCategory(categoryId: String) {
         if (selectedCategory.value == categoryId) return
+        episodeDateJob?.cancel()
         savedStateHandle[STATE_CATEGORY] = categoryId
         scheduleSelectedCategoryLoad()
     }
@@ -145,6 +158,7 @@ class SeriesViewModel(
         val normalized = text.trim()
         if (query.value == normalized) return
         savedStateHandle[STATE_QUERY] = normalized
+        episodeDateJob?.cancel()
         selectionLoadJob?.cancel()
         if (normalized.isNotEmpty()) {
             ensureFullCatalog()
@@ -169,6 +183,7 @@ class SeriesViewModel(
     }
 
     fun refreshCatalog() {
+        episodeDateJob?.cancel()
         selectionLoadJob?.cancel()
         catalogLoadJob?.cancel()
         catalogLoadJob = viewModelScope.launch {
@@ -187,7 +202,7 @@ class SeriesViewModel(
                 ensureFullCatalog()
             } else {
                 catalogLoadJob?.cancelAndJoin()
-                loadSingleCategory(categoryId)
+                loadSingleCategory(categoryId, force = categoryId !in refreshedCategories)
             }
         }
     }
@@ -195,7 +210,7 @@ class SeriesViewModel(
     private fun ensureFullCatalog() {
         if (catalogLoadJob?.isActive == true) return
         catalogLoadJob = viewModelScope.launch {
-            loadFullCatalog(forceAll = false)
+            loadFullCatalog(forceAll = !refreshedFullCatalog)
         }
     }
 
@@ -207,11 +222,16 @@ class SeriesViewModel(
         }
         if (!force && repo.isSeriesCategoryLoaded(categoryId)) {
             _loadState.value = CatalogLoadState()
+            refreshEpisodeDates(categoryId)
             return
         }
         _loadState.value = CatalogLoadState(loading = true, total = 1)
         when (val result = repo.refreshSeriesCategory(config, categoryId, force)) {
-            is Outcome.Success -> _loadState.value = CatalogLoadState()
+            is Outcome.Success -> {
+                refreshedCategories += categoryId
+                _loadState.value = CatalogLoadState()
+                refreshEpisodeDates(categoryId)
+            }
             is Outcome.Failure -> {
                 _loadState.value = CatalogLoadState(errorRes = result.error.messageRes)
             }
@@ -255,12 +275,14 @@ class SeriesViewModel(
         }
         if (categoryIds.isEmpty()) {
             _loadState.value = CatalogLoadState()
+            refreshEpisodeDates(null)
             return
         }
         _loadState.value = CatalogLoadState(loading = true, total = categoryIds.size)
         categoryIds.forEachIndexed { index, categoryId ->
             when (val result = repo.refreshSeriesCategory(config, categoryId, force = forceAll)) {
                 is Outcome.Success -> {
+                    refreshedCategories += categoryId
                     _loadState.value = CatalogLoadState(
                         loading = true,
                         completed = index + 1,
@@ -277,7 +299,24 @@ class SeriesViewModel(
                 }
             }
         }
+        if (forceAll) refreshedFullCatalog = true
         _loadState.value = CatalogLoadState()
+        val category = selectedCategory.value?.takeUnless { it == CAT_ALL || it == CAT_POPULAR }
+        refreshEpisodeDates(category, forceAll)
+    }
+
+    private fun refreshEpisodeDates(categoryId: String?, force: Boolean = false) {
+        val previous = episodeDateJob
+        previous?.cancel()
+        if (!browseActive) return
+        episodeDateJob = viewModelScope.launch {
+            previous?.join()
+            val config = settings.getSourceConfig() ?: return@launch
+            val hidden = settings.hiddenCategories(ContentType.SERIES).first().toList()
+            _episodeDatesUpdating.value = true
+            try { repo.refreshSeriesEpisodeDates(config, categoryId, hidden, force) }
+            finally { _episodeDatesUpdating.value = false }
+        }
     }
 
     /**
@@ -303,10 +342,9 @@ class SeriesViewModel(
                 val hiddenList = hidden.toList()
                 when {
                     q.isNotEmpty() -> repo.pagingSeriesSearch(q, hiddenList, sort)
-                    // "You may like" always shows highest-rated first, regardless of
-                    // the grid's current sort selection.
-                    catId == CAT_POPULAR -> repo.pagingSeriesAll(ContentSort.RATING, hiddenList)
-                    catId == null || catId == CAT_ALL -> repo.pagingSeriesAll(sort, hiddenList)
+                    // Personal recommendations have their own ranking, independent of sort.
+                    catId == CAT_POPULAR -> repo.pagingRecommendedSeries(hiddenList)
+                    catId == null || catId == CAT_ALL -> repo.pagingRecentSeries(hiddenList)
                     // A selected category that becomes hidden (Content Manager) must
                     // not keep leaking its content through the unfiltered by-category
                     // path; fall back to the filtered "all" grid until reselected.

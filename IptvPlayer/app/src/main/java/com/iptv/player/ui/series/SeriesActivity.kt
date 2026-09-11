@@ -31,7 +31,6 @@ import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.CatalogLoadState
 import com.iptv.player.ui.common.NewContentPopup
 import com.iptv.player.ui.common.PinLockHelper
-import com.iptv.player.ui.common.SafeGridLayoutManager
 import com.iptv.player.util.NewContentNotifier
 import com.iptv.player.ui.common.autoFitColumns
 import com.iptv.player.ui.common.hideSoftKeyboard
@@ -168,6 +167,16 @@ class SeriesActivity : BaseActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        viewModel.onBrowseStarted()
+    }
+
+    override fun onStop() {
+        viewModel.onBrowseStopped()
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         binding.dateText.text = DateFormat
@@ -238,12 +247,15 @@ class SeriesActivity : BaseActivity() {
             }
         )
         seriesAdapter.progressProvider = { id -> progressMap[id] ?: 0 }
-        binding.posterGrid.layoutManager = SafeGridLayoutManager(this, 4)
+        binding.posterGrid.layoutManager = GridLayoutManager(this, 4).apply {
+            // Data prefetch remains enabled in Paging. Speculative holder
+            // prefetch raced category invalidation on the Android TV stick.
+            isItemPrefetchEnabled = false
+        }
         binding.posterGrid.autoFitColumns(min = 4)
         binding.posterGrid.adapter = seriesAdapter
         binding.posterGrid.setHasFixedSize(true)
-        (binding.posterGrid.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
-            ?.supportsChangeAnimations = false
+        binding.posterGrid.setItemViewCacheSize(8)
 
         binding.sortButton.setOnClickListener {
             val next = sortCycle[(sortCycle.indexOf(viewModel.sort.value) + 1) % sortCycle.size]
@@ -396,17 +408,11 @@ class SeriesActivity : BaseActivity() {
         binding.contentTitle.text = when {
             query.isNotEmpty() -> getString(R.string.search_results_title)
             cat == null -> getString(R.string.nav_series)
-            cat.id == SeriesViewModel.CAT_ALL -> {
-                if (viewModel.sort.value == ContentSort.RECENT) {
-                    getString(R.string.cat_recently_added)
-                } else {
-                    getString(R.string.all_series)
-                }
-            }
+            cat.id == SeriesViewModel.CAT_ALL -> getString(R.string.cat_recently_added)
             else -> cat.name
         }
         binding.sortButton.visibility =
-            if (query.isEmpty() && cat?.id == SeriesViewModel.CAT_POPULAR) View.GONE
+            if (query.isEmpty() && cat?.id in setOf(SeriesViewModel.CAT_POPULAR, SeriesViewModel.CAT_ALL)) View.GONE
             else View.VISIBLE
     }
 
@@ -579,6 +585,11 @@ class SeriesActivity : BaseActivity() {
                     viewModel.loadState.collectLatest { state ->
                         catalogLoadState = state
                         renderScreenState()
+                    }
+                }
+                launch {
+                    viewModel.episodeDatesUpdating.collectLatest { updating ->
+                        binding.episodeDatesProgress.visibility = if (updating) View.VISIBLE else View.GONE
                     }
                 }
             }

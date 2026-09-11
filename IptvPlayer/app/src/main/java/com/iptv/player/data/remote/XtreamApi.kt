@@ -32,6 +32,7 @@ interface XtreamApi {
     suspend fun getLiveStreams(
         @Query("username") username: String,
         @Query("password") password: String,
+        @Query("category_id") categoryId: String? = null,
         @Query("action") action: String = "get_live_streams"
     ): List<XtreamLiveStream>
 

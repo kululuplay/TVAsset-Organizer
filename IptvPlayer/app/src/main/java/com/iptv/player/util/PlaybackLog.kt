@@ -34,7 +34,7 @@ object PlaybackLog {
     /** How many recent lines the on-screen Debug overlay keeps/shows. */
     private const val RING_CAPACITY = 16
 
-    private val stamp = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US)
+    private val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSSZ", Locale.US)
     private val shortStamp = SimpleDateFormat("HH:mm:ss", Locale.US)
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -65,7 +65,7 @@ object PlaybackLog {
         if (listeners.isNotEmpty()) {
             mainHandler.post { listeners.forEach { it.onLog(shortLine) } }
         }
-        val persistentLine = "${stamp.format(now)} [$tag] $safeMessage\n"
+        val persistentLine = "${stamp.format(now)} ${DiagnosticRun.marker} [$tag] $safeMessage\n"
         val appContext = context.applicationContext
         // Media3/VLC diagnostics arrive on the main looper. Keep file lookup,
         // length checks and writes on one ordered worker so logging cannot add

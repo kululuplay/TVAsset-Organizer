@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="login_username_no_email">E-posta adresi yerine kullanıcı adınızı girin.</string>
+    <string name="epg_description_unavailable">Bu program için açıklama bulunmuyor.</string>
+    <string name="epg_popup_now">ŞİMDİ</string>
+    <string name="epg_popup_upcoming">SIRADAKİ</string>
+    <string name="epg_popup_finished">BİTTİ</string>
+    <string name="epg_popup_controls">↑↓ Açıklamayı oku · OK / Geri Kapat</string>
+    <string name="content_new">YENİ</string>
+    <string name="settings_player_section">Oynatıcı</string>
+</resources>

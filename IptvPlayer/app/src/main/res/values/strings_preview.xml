@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="login_username_no_email">Use your username, not an email address.</string>
+    <string name="epg_description_unavailable">No description is available for this programme.</string>
+    <string name="epg_popup_now">ON NOW</string>
+    <string name="epg_popup_upcoming">UP NEXT</string>
+    <string name="epg_popup_finished">FINISHED</string>
+    <string name="epg_popup_controls">↑↓ Read description · OK / Back Close</string>
+    <string name="content_new">NEW</string>
+    <string name="settings_player_section">Player</string>
+</resources>

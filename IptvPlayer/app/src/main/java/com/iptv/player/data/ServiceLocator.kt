@@ -85,6 +85,9 @@ object ServiceLocator {
                 // and IPTV requests to use HTTP through this shared client.
                 .addNetworkInterceptor { chain ->
                     val request = chain.request()
+                    if (chain.call().request().url.isHttps && !request.url.isHttps) {
+                        throw javax.net.ssl.SSLException("Refusing HTTPS to HTTP redirect")
+                    }
                     if (request.url.scheme == "http" &&
                         request.header("X-Kululu-Key") != null
                     ) {
@@ -96,7 +99,11 @@ object ServiceLocator {
 
             val retrofitBuilder = Retrofit.Builder()
                 .client(httpClient)
-                .addConverterFactory(GsonConverterFactory.create())
+                .addConverterFactory(GsonConverterFactory.create(
+                    com.iptv.player.data.remote.XtreamJson.create { rejected ->
+                        Logger.w("Xtream", "Rejected $rejected malformed catalogue rows")
+                    },
+                ))
 
             val db = AppDatabase.build(app)
             val secureValues = SecureValueCodec(app)

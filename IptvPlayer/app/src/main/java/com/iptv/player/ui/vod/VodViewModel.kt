@@ -70,10 +70,7 @@ class VodViewModel(
                         CAT_ALL,
                         getApplication<Application>().getString(R.string.cat_recently_added),
                         ContentType.VOD,
-                        // The "Recently added" grid is the whole cache sorted newest
-                        // first (unbounded), so the badge must show the real total —
-                        // capping it to a fixed number made the count contradict the grid.
-                        count = cats.sumOf { it.count ?: 0 }
+                        count = cats.sumOf { it.count ?: 0 }.coerceAtMost(50)
                     )
                 )
                 // "You may like" — top-rated movies across the whole catalog, so
@@ -83,7 +80,7 @@ class VodViewModel(
                         CAT_POPULAR,
                         getApplication<Application>().getString(R.string.cat_for_you),
                         ContentType.VOD,
-                        count = cats.sumOf { it.count ?: 0 }
+                        count = cats.sumOf { it.count ?: 0 }.coerceAtMost(50)
                     )
                 )
                 addAll(cats)
@@ -326,10 +323,9 @@ class VodViewModel(
                 val hiddenList = hidden.toList()
                 when {
                     q.isNotEmpty() -> repo.pagingVodSearch(q, hiddenList, sort)
-                    // "You may like" always shows highest-rated first, regardless of
-                    // the grid's current sort selection.
-                    catId == CAT_POPULAR -> repo.pagingVodAll(ContentSort.RATING, hiddenList)
-                    catId == null || catId == CAT_ALL -> repo.pagingVodAll(sort, hiddenList)
+                    // Personal recommendations have their own ranking, independent of sort.
+                    catId == CAT_POPULAR -> repo.pagingRecommendedVod(hiddenList)
+                    catId == null || catId == CAT_ALL -> repo.pagingRecentVod(hiddenList)
                     // A selected category that becomes hidden (Content Manager) must
                     // not keep leaking its content through the unfiltered by-category
                     // path; fall back to the filtered "all" grid until reselected.

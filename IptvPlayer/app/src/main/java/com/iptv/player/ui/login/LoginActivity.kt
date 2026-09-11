@@ -87,6 +87,11 @@ class LoginActivity : BaseActivity() {
             binding.inputUsername.requestFocus()
             return
         }
+        if (!LoginUsername.isValid(username)) {
+            binding.inputUsername.error = getString(R.string.login_username_no_email)
+            binding.inputUsername.requestFocus()
+            return
+        }
         if (password.isEmpty()) {
             showError(AppError.MISSING_CREDENTIALS)
             binding.inputPassword.requestFocus()

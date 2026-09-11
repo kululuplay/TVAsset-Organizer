@@ -23,7 +23,7 @@ class VodPlaybackRoutingPolicyTest {
                 "https://example.test/movie.mp4?quality=hd",
             ),
         )
-        assertTrue(VodPlaybackRoutingPolicy.isMedia3Preferred("https://x/live.m3u8#fragment"))
+        assertFalse(VodPlaybackRoutingPolicy.isMedia3Preferred("https://x/live.m3u8#fragment"))
         assertTrue(VodPlaybackRoutingPolicy.isMedia3Preferred("https://x/manifest.mpd"))
     }
 
