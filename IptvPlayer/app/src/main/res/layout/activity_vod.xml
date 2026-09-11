@@ -232,7 +232,7 @@
             android:clipChildren="false"
             android:clipToPadding="false">
 
-            <androidx.recyclerview.widget.RecyclerView
+            <com.iptv.player.ui.common.PosterGridView
                 android:id="@+id/posterGrid"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"

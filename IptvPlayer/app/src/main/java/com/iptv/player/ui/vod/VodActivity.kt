@@ -31,7 +31,6 @@ import com.iptv.player.databinding.ActivityVodBinding
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.NewContentPopup
 import com.iptv.player.ui.common.PinLockHelper
-import com.iptv.player.ui.common.SafeGridLayoutManager
 import com.iptv.player.util.NewContentNotifier
 import com.iptv.player.ui.common.autoFitColumns
 import com.iptv.player.ui.common.hideSoftKeyboard
@@ -223,14 +222,17 @@ class VodActivity : BaseActivity() {
         }
         vodAdapter.progressProvider = { id -> progressMap[id] ?: 0 }
         vodAdapter.watchedProvider = { id -> id in watchedSet }
-        binding.posterGrid.layoutManager = SafeGridLayoutManager(this, 4)
+        binding.posterGrid.layoutManager = GridLayoutManager(this, 4).apply {
+            // GapWorker used a stale Paging position during rapid D-pad scroll
+            // on the test stick. Paging still preloads data; avoid speculative
+            // RecyclerView holder creation outside the normal layout pass.
+            isItemPrefetchEnabled = false
+        }
         binding.posterGrid.autoFitColumns(min = 4)
         binding.posterGrid.adapter = vodAdapter
         // A modest cache keeps the immediately adjacent TV row warm without
         // retaining dozens of full-size bitmaps on low-memory streaming sticks.
         binding.posterGrid.setItemViewCacheSize(8)
-        (binding.posterGrid.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
-            ?.supportsChangeAnimations = false
 
         binding.sortButton.setOnClickListener {
             resetPosterAnchor()

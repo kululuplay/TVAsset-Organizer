@@ -207,7 +207,7 @@
             android:layout_height="0dp"
             android:layout_weight="1">
 
-            <androidx.recyclerview.widget.RecyclerView
+            <com.iptv.player.ui.common.PosterGridView
                 android:id="@+id/posterGrid"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"

@@ -190,7 +190,9 @@ class SeriesAdapter(
         private fun currentItem(): Series? {
             val position = bindingAdapterPosition
             if (position == RecyclerView.NO_POSITION || position >= itemCount) return null
-            return getItem(position)
+            // Focus/click callbacks must not start Paging work during layout.
+            // onBindViewHolder already supplies the access hint for prefetch.
+            return peek(position)
         }
     }
 

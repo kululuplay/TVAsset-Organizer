@@ -31,7 +31,6 @@ import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.CatalogLoadState
 import com.iptv.player.ui.common.NewContentPopup
 import com.iptv.player.ui.common.PinLockHelper
-import com.iptv.player.ui.common.SafeGridLayoutManager
 import com.iptv.player.util.NewContentNotifier
 import com.iptv.player.ui.common.autoFitColumns
 import com.iptv.player.ui.common.hideSoftKeyboard
@@ -238,12 +237,15 @@ class SeriesActivity : BaseActivity() {
             }
         )
         seriesAdapter.progressProvider = { id -> progressMap[id] ?: 0 }
-        binding.posterGrid.layoutManager = SafeGridLayoutManager(this, 4)
+        binding.posterGrid.layoutManager = GridLayoutManager(this, 4).apply {
+            // Data prefetch remains enabled in Paging. Speculative holder
+            // prefetch raced category invalidation on the Android TV stick.
+            isItemPrefetchEnabled = false
+        }
         binding.posterGrid.autoFitColumns(min = 4)
         binding.posterGrid.adapter = seriesAdapter
         binding.posterGrid.setHasFixedSize(true)
-        (binding.posterGrid.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
-            ?.supportsChangeAnimations = false
+        binding.posterGrid.setItemViewCacheSize(8)
 
         binding.sortButton.setOnClickListener {
             val next = sortCycle[(sortCycle.indexOf(viewModel.sort.value) + 1) % sortCycle.size]
