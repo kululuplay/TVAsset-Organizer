@@ -511,7 +511,6 @@ class SettingsActivity : BaseActivity() {
     private fun buildPlayerPanel() {
         val c = binding.playerContainer
         addSectionHeader(c, getString(R.string.settings_live_player_header))
-        addPanelDescription(c, getString(R.string.settings_player_scope_desc))
         val modes = listOf(PlayerMode.AUTO, PlayerMode.EXOPLAYER, PlayerMode.VLC)
         val engineButtons = addChoiceGroup(c, "", modes.map { it.name to playerModeLabel(it) },
             { selectedPlayerMode.name }) { selectPlayerMode(PlayerMode.valueOf(it)) }
