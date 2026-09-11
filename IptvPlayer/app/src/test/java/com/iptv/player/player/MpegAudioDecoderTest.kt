@@ -69,6 +69,26 @@ class MpegAudioDecoderTest {
         }
     }
 
+    @Test fun `isolated Layer II damage keeps the decoder and media timestamps advancing`() {
+        withDecoder(channels = 2) { decoder ->
+            val good = MpegFrameRecoveryTest.goodFrame()
+            queue(decoder, good, 7_000_000)
+            awaitOutput(decoder).release()
+            queue(decoder, MpegFrameRecoveryTest.damagedFrame(), 7_024_000)
+            val gap = awaitOutput(decoder)
+            assertEquals(7_024_000, gap.timeUs)
+            assertEquals(2304 * 2, gap.data!!.remaining())
+            assertFalse(gap.shouldBeSkipped)
+            while (gap.data!!.hasRemaining()) assertEquals(0, gap.data!!.short.toInt())
+            gap.release()
+            queue(decoder, good, 7_048_000)
+            val next = awaitOutput(decoder)
+            assertEquals(7_048_000, next.timeUs)
+            assertEquals(2304 * 2, next.data!!.remaining())
+            next.release()
+        }
+    }
+
     private fun queue(decoder: MpegAudioDecoder, bytes: ByteArray, timestamp: Long) {
         val input = requireNotNull(decoder.dequeueInputBuffer())
         input.ensureSpaceForWrite(bytes.size)
@@ -87,8 +107,8 @@ class MpegAudioDecoderTest {
         throw AssertionError("MPEG decoder did not return PCM/EOS within 2s")
     }
 
-    private fun withDecoder(block: (MpegAudioDecoder) -> Unit) {
-        val decoder = MpegAudioDecoder(48000, 1)
+    private fun withDecoder(channels: Int = 1, block: (MpegAudioDecoder) -> Unit) {
+        val decoder = MpegAudioDecoder(48000, channels)
         try { block(decoder) } finally { decoder.release() }
     }
 }

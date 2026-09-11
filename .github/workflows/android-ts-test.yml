@@ -2,7 +2,7 @@ name: Android TS test APK
 
 on:
   push:
-    branches: [test/android-ts-only-20260911]
+    branches: [test/android-ts-only-20260911, fix/mpeg-audio-recovery]
     paths:
       - IptvPlayer/**
       - .github/workflows/android-ts-test.yml
@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   test-apk:
-    if: github.ref == 'refs/heads/test/android-ts-only-20260911'
+    if: github.ref == 'refs/heads/test/android-ts-only-20260911' || github.ref == 'refs/heads/fix/mpeg-audio-recovery'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -43,10 +43,11 @@ jobs:
           ./gradlew --no-daemon --console=plain -PtsOnlyTestBuild=true \
             :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
       - name: Verify APK and stage test files
+        id: verify
         run: python3 scripts/verify_ts_test_apk.py
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: KululuIPTV-1.5.86-preview1
+          name: ${{ steps.verify.outputs.artifact_name }}
           path: ts-test-artifacts/*
           if-no-files-found: error
           retention-days: 14

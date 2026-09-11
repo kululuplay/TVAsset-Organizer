@@ -5,6 +5,7 @@ import androidx.media3.decoder.DecoderInputBuffer
 import androidx.media3.decoder.SimpleDecoder
 import androidx.media3.decoder.SimpleDecoderOutputBuffer
 import java.nio.ByteOrder
+import android.util.Log
 
 @androidx.media3.common.util.UnstableApi
 internal class MpegAudioDecoder(val sampleRate: Int, val channels: Int) :
@@ -32,6 +33,9 @@ internal class MpegAudioDecoder(val sampleRate: Int, val channels: Int) :
         val bytes = ByteArray(input.remaining())
         input.get(bytes)
         val pcm = core.decode(bytes)
+        if (pcm.concealedFrames > 0) {
+            Log.w("KululuMpegAudio", "Concealed ${pcm.concealedFrames} damaged Layer II frame(s); audio decoder reset")
+        }
         val output = outputBuffer.init(inputBuffer.timeUs, pcm.samples.size * 2).order(ByteOrder.nativeOrder())
         for (sample in pcm.samples) output.putShort(sample)
         output.flip()
