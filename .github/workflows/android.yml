@@ -248,6 +248,12 @@ jobs:
           mkdir -p release-assets
           cp app/build/outputs/apk/release/app-release.apk \
             "release-assets/KululuIPTV-v${{ steps.version.outputs.name }}.apk"
+          notes="release-notes/v${{ steps.version.outputs.name }}.md"
+          if [ -f "$notes" ]; then
+            cp "$notes" release-assets/RELEASE_NOTES.md
+          else
+            printf '%s\n' 'Bug fixes and stability improvements.' > release-assets/RELEASE_NOTES.md
+          fi
 
       - name: Publish GitHub release
         if: steps.existing.outputs.exists == 'false'
@@ -255,7 +261,7 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.name }}
           name: Kululu IPTV v${{ steps.version.outputs.name }}
-          body: Bug fixes and stability improvements.
+          body_path: IptvPlayer/release-assets/RELEASE_NOTES.md
           make_latest: true
           files: IptvPlayer/release-assets/*.apk
           fail_on_unmatched_files: true
