@@ -41,8 +41,9 @@ internal class RecommendationRanker(
     private data class Scored(val item: RecommendationCandidate, val score: Double)
     private val order = compareBy<Scored> { it.score }.thenByDescending { it.item.name }
         .thenByDescending { it.item.id }
-    private val personal = PriorityQueue(order)
-    private val discovery = PriorityQueue(order)
+    private val bestFirst = Comparator<Scored> { first, second -> order.compare(second, first) }
+    private val personal = PriorityQueue(201, order)
+    private val discovery = PriorityQueue(101, order)
 
     init {
         val qualified = history.filter {
@@ -83,8 +84,8 @@ internal class RecommendationRanker(
     }
 
     fun results(limit: Int = 50): List<String> {
-        val ranked = personal.sortedWith(order.reversed())
-        val explore = discovery.sortedWith(order.reversed())
+        val ranked = personal.sortedWith(bestFirst)
+        val explore = discovery.sortedWith(bestFirst)
         val selected = linkedSetOf<String>()
         var rankIndex = 0
         var exploreIndex = 0
