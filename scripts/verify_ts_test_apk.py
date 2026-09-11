@@ -10,11 +10,15 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 app = Path('IptvPlayer/app')
+version_match = re.search(r'versionName = "([0-9]+\.[0-9]+\.[0-9]+)"', (app/'build.gradle.kts').read_text())
+assert version_match, 'Missing release version'
+version = version_match.group(1) + '-preview1'
+artifact_name = 'KululuIPTV-' + version
 apk = app / 'build/outputs/apk/debug/app-debug.apk'
 sdk = Path(os.environ['ANDROID_HOME']) / 'build-tools/35.0.0'
 badging = subprocess.check_output([str(sdk/'aapt'), 'dump', 'badging', str(apk)], text=True)
 assert "name='com.iptv.player.preview'" in badging
-assert "versionName='1.5.86-preview1'" in badging
+assert f"versionName='{version}'" in badging
 assert "sdkVersion:'21'" in badging
 assert "application-label:'Kululu IPTV Preview'" in badging
 signature = subprocess.check_output([str(sdk/'apksigner'), 'verify', '--verbose', '--print-certs', str(apk)], text=True)
@@ -40,12 +44,15 @@ lint_counts = {severity: sum(i.get('severity') == severity for i in lint.findall
 assert not lint_counts['Error'] and not lint_counts['Fatal'], lint_counts
 out = Path('ts-test-artifacts')
 out.mkdir(exist_ok=True)
-result = out/'KululuIPTV-1.5.86-preview1.apk'
+result = out/(artifact_name + '.apk')
 shutil.copyfile(apk, result)
 digest = hashlib.sha256(result.read_bytes()).hexdigest()
 (out/'SHA256SUMS.txt').write_text(f'{digest}  {result.name}\n')
 (out/'apk-badging.txt').write_text(badging)
 (out/'apk-imza.txt').write_text(signature)
-metadata = {'apk':result.name, 'bytes':result.stat().st_size, 'sha256':digest, 'package':'com.iptv.player.preview', 'version':'1.5.86-preview1', 'abis':abis, 'tests':counts, 'test_classes':len(suites), 'lint':lint_counts, 'media3_hls_classes':False, 'commit':os.environ.get('GITHUB_SHA'), 'real_device_test':'Pending user Android stick test'}
+metadata = {'apk':result.name, 'bytes':result.stat().st_size, 'sha256':digest, 'package':'com.iptv.player.preview', 'version':version, 'abis':abis, 'tests':counts, 'test_classes':len(suites), 'lint':lint_counts, 'media3_hls_classes':False, 'commit':os.environ.get('GITHUB_SHA'), 'real_device_test':'Pending user Android stick test'}
 (out/'dogrulama.json').write_text(json.dumps(metadata, indent=2)+'\n')
 print(json.dumps(metadata))
+if os.environ.get('GITHUB_OUTPUT'):
+    with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as outputs:
+        outputs.write(f'artifact_name={artifact_name}\n')

@@ -17,16 +17,19 @@ class PlaybackRouteMemoryTest {
         assertFalse(PlaybackRouteMemory.acceptsStoredRoute(5, "VLC_SW"))
         assertTrue(PlaybackRouteMemory.acceptsStoredRoute(5, "EXO"))
         assertTrue(PlaybackRouteMemory.acceptsStoredRoute(5, "VLC_HW"))
+        assertFalse(PlaybackRouteMemory.acceptsStoredRoute(6, "VLC_SW"))
+        assertTrue(PlaybackRouteMemory.acceptsStoredRoute(6, "EXO"))
+        assertTrue(PlaybackRouteMemory.acceptsStoredRoute(6, "VLC_HW"))
     }
 
     @Test
     fun `new proven software fallback can still be remembered`() {
         for (stage in listOf("EXO", "VLC_HW", "VLC_SW")) {
-            assertTrue(PlaybackRouteMemory.acceptsStoredRoute(6, stage))
+            assertTrue(PlaybackRouteMemory.acceptsStoredRoute(7, stage))
             assertFalse(PlaybackRouteMemory.acceptsStoredRoute(3, stage))
-            assertFalse(PlaybackRouteMemory.acceptsStoredRoute(7, stage))
+            assertFalse(PlaybackRouteMemory.acceptsStoredRoute(8, stage))
         }
-        assertFalse(PlaybackRouteMemory.acceptsStoredRoute(6, "unknown"))
+        assertFalse(PlaybackRouteMemory.acceptsStoredRoute(7, "unknown"))
     }
 
     @After

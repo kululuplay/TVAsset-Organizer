@@ -44,11 +44,14 @@ object PlaybackRouteMemory {
     // user settings; newly proven VLC_SW routes may still be remembered.
     // v6 retries pre-MPEG-PCM full-software routes once so the audio-only
     // renderer can keep video in Media3. Preserve working hardware routes.
-    private const val SCHEMA = 6
+    // v7 retries software routes learned before bounded MPEG Layer-II recovery.
+    // Otherwise an old audio glitch could bypass the fixed hardware path for
+    // fourteen days. Existing working hardware routes remain eligible.
+    private const val SCHEMA = 7
 
     internal fun acceptsStoredRoute(version: Int, stage: String): Boolean =
         stage in setOf("EXO", "VLC_HW", "VLC_SW") &&
-            (version == SCHEMA || (version in 4..5 && stage != "VLC_SW"))
+            (version == SCHEMA || (version in 4..6 && stage != "VLC_SW"))
 
     /** Hard cap on remembered channels; the least-recently-used is evicted past this. */
     private const val MAX_ENTRIES = 500

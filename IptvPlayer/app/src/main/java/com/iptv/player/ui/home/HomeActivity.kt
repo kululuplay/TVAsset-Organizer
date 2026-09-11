@@ -828,11 +828,7 @@ class HomeActivity : BaseActivity() {
         channelAdapter.lockedProvider = ::isChannelLocked
         binding.channelList.layoutManager = LinearLayoutManager(this)
         binding.channelList.adapter = channelAdapter
-        // Same fix as the category list: the channel list re-emits on favorite
-        // toggles and lazy content loads, and the default change-animation detaches
-        // the focused row mid-diff, causing D-pad focus loss. Rebind in place.
-        (binding.channelList.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
-            ?.supportsChangeAnimations = false
+        binding.channelList.onNavigateAboveStart = { binding.searchInput.requestFocus() }
 
         epgAdapter = ProgramAdapter { program ->
             EpgInfoDialog.show(this, currentInfoChannel, program)
