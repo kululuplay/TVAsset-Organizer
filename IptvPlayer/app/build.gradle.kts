@@ -29,8 +29,8 @@ android {
         applicationId = "com.iptv.player"
         minSdk = 21
         targetSdk = 34
-        versionCode = 132
-        versionName = "1.5.88"
+        versionCode = 133
+        versionName = "1.5.89"
         manifestPlaceholders["appLabel"] = "@string/app_name"
         buildConfigField("boolean", "TS_ONLY_TEST_BUILD", tsOnlyTestBuild.toString())
         if (livePlaybackDiagnostics) versionNameSuffix = "-diag1"
