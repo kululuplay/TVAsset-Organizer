@@ -60,6 +60,9 @@ so it is approximate and may be absent on radio/unsupported stats paths.
   read permission was granted. This is not a passing test result.
 - Android CI is requested on the isolated fix branch. Its result is tracked in
   the pull request; test XML is retained as an artifact for an auditable count.
+- The first CI attempt stopped before tests because setup-android requested the
+  unavailable legacy `tools` package. CI now explicitly installs platform-tools,
+  Android 35 and build-tools 34.0.0, matching the project's build requirements.
 - Added 19 regression cases covering missing submission, silent retries,
   repeated READY/buffering, simulated delayed start, rapid channel replacement,
   preview/fullscreen rebind, suspension/resume, retry backoff, terminal cleanup,

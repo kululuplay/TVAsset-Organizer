@@ -43,6 +43,9 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          packages: platform-tools platforms;android-35 build-tools;34.0.0
+          log-accepted-android-sdk-licenses: false
 
       - name: Scan current tree for secrets
         working-directory: .
@@ -134,6 +137,9 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          packages: platform-tools platforms;android-35 build-tools;34.0.0
+          log-accepted-android-sdk-licenses: false
 
       - name: Validate release secrets
         run: |
