@@ -26,7 +26,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import com.iptv.player.BuildConfig
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.BufferMode
@@ -42,6 +44,8 @@ import com.iptv.player.ui.diagnostics.DiagnosticsActivity
 import com.iptv.player.ui.login.LoginActivity
 import com.iptv.player.ui.profiles.ProfilesActivity
 import com.iptv.player.ui.splash.SplashPrefetch
+import com.iptv.player.update.UpdateChecker
+import com.iptv.player.update.UpdateResult
 import com.iptv.player.util.LocaleManager
 import com.iptv.player.util.Logger
 import com.iptv.player.util.SupportDiagnosticDialog
@@ -49,6 +53,8 @@ import com.iptv.player.util.PublicIpProvider
 import com.iptv.player.util.SpeedTester
 import com.iptv.player.work.SyncScheduler
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -71,6 +77,7 @@ class SettingsActivity : BaseActivity() {
         PLAYER,
         TIME,
         SPEEDTEST,
+        UPDATES,
         SYSTEM,
     }
 
@@ -112,6 +119,12 @@ class SettingsActivity : BaseActivity() {
     // General-info network fetches (public IP + account); cancelled and relaunched
     // each time the General panel is rebuilt so a D-pad pass doesn't pile up calls.
     private var generalJob: kotlinx.coroutines.Job? = null
+
+    private var updateCheckJob: kotlinx.coroutines.Job? = null
+    private var updateCheckGeneration = 0L
+    private lateinit var updateStatus: TextView
+    private lateinit var checkUpdatesRow: View
+    private lateinit var installUpdateRow: View
 
     // PIN entry state.
     private enum class PinStage { CURRENT, NEW, CONFIRM }
@@ -173,6 +186,7 @@ class SettingsActivity : BaseActivity() {
         // when returning directly to General so placeholder rows cannot remain
         // stuck after Home, the share sheet or another Activity covered Settings.
         if (selectedRow != null && selectedPanel == Panel.GENERAL) loadGeneral()
+        if (selectedRow != null && selectedPanel == Panel.UPDATES) checkForUpdates()
     }
 
     override fun onPause() {
@@ -181,6 +195,7 @@ class SettingsActivity : BaseActivity() {
         cancelSpeedTest()
         generalJob?.cancel()
         generalJob = null
+        cancelUpdateCheck()
     }
 
     // ---- Left rail -----------------------------------------------------
@@ -194,6 +209,7 @@ class SettingsActivity : BaseActivity() {
         addNavRow(c, getString(R.string.settings_player_section), Panel.PLAYER)
         addNavRow(c, getString(R.string.settings_time_sync), Panel.TIME)
         addNavRow(c, getString(R.string.settings_speedtest), Panel.SPEEDTEST)
+        addNavRow(c, getString(R.string.about_update_section), Panel.UPDATES)
         addNavRow(c, getString(R.string.settings_system_support), Panel.SYSTEM)
 
         val initial = panelRows[restorePanel] ?: panelRows.getValue(Panel.GENERAL)
@@ -247,6 +263,7 @@ class SettingsActivity : BaseActivity() {
         buildCategoriesPanel()
         buildPinPanel()
         buildSpeedtestPanel()
+        buildUpdatesPanel()
         buildSystemPanel()
     }
 
@@ -258,12 +275,14 @@ class SettingsActivity : BaseActivity() {
         Panel.PLAYER -> binding.detailPlayer
         Panel.TIME -> binding.detailTime
         Panel.SPEEDTEST -> binding.detailSpeedtest
+        Panel.UPDATES -> binding.detailUpdates
         Panel.SYSTEM -> binding.detailSystem
     }
 
     private fun showPanel(panel: Panel, row: View) {
         // Stop any in-flight speed test when navigating away from its panel.
         if (panel != Panel.SPEEDTEST) cancelSpeedTest()
+        if (panel != Panel.UPDATES) cancelUpdateCheck()
         val panelChanged = panel != selectedPanel || selectedRow == null
         Panel.entries.forEach { detailView(it).visibility = View.GONE }
         detailView(panel).visibility = View.VISIBLE
@@ -284,6 +303,9 @@ class SettingsActivity : BaseActivity() {
         }
         if (panelChanged && panel == Panel.GENERAL) loadGeneral()
         if (panelChanged && panel == Panel.PIN) resetPin()
+        if (panelChanged && panel == Panel.UPDATES &&
+            lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        ) checkForUpdates()
     }
 
     private fun panelTitle(panel: Panel): Int = when (panel) {
@@ -294,6 +316,7 @@ class SettingsActivity : BaseActivity() {
         Panel.PLAYER -> R.string.settings_player_section
         Panel.TIME -> R.string.settings_time_sync
         Panel.SPEEDTEST -> R.string.settings_speedtest
+        Panel.UPDATES -> R.string.about_update_section
         Panel.SYSTEM -> R.string.settings_system_support
     }
 
@@ -305,6 +328,7 @@ class SettingsActivity : BaseActivity() {
         Panel.PLAYER -> R.string.settings_panel_player_desc
         Panel.TIME -> R.string.settings_panel_time_desc
         Panel.SPEEDTEST -> R.string.settings_panel_speed_desc
+        Panel.UPDATES -> R.string.about_update_desc
         Panel.SYSTEM -> R.string.settings_panel_system_desc
     }
 
@@ -316,6 +340,7 @@ class SettingsActivity : BaseActivity() {
         Panel.PLAYER -> R.drawable.ic_play
         Panel.TIME -> R.drawable.ic_clock
         Panel.SPEEDTEST -> R.drawable.ic_signal
+        Panel.UPDATES -> R.drawable.ic_update
         Panel.SYSTEM -> R.drawable.ic_settings
     }
 
@@ -896,6 +921,100 @@ class SettingsActivity : BaseActivity() {
         binding.pinHint.setTextColor(ContextCompat.getColor(this, R.color.danger))
         binding.pinHint.setText(messageRes)
         binding.pinHint.announceForAccessibility(getString(messageRes))
+    }
+
+    private fun buildUpdatesPanel() {
+        val c = binding.updatesContainer
+        addInfoRow(c, getString(R.string.settings_app_version), BuildConfig.VERSION_NAME)
+        updateStatus = TextView(this).apply {
+            setText(R.string.about_checking)
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.text_secondary))
+            textSize = 18f
+            setLineSpacing(0f, 1.15f)
+            setPadding(dp(16), dp(24), dp(16), dp(24))
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }
+        c.addView(updateStatus, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ))
+        checkUpdatesRow = addActionRow(c, getString(R.string.about_check_update)) {
+            checkForUpdates()
+        }
+        installUpdateRow = addActionRow(c, getString(R.string.about_update_now)) {
+            // Reuse the existing checksum/signature-verified download flow. Only
+            // this explicit action may start a download; checking never does.
+            startActivity(Intent(this, AboutActivity::class.java)
+                .putExtra(AboutActivity.EXTRA_AUTO_CHECK, true))
+        }.apply { visibility = View.GONE }
+    }
+
+    private fun checkForUpdates() {
+        if (updateCheckJob != null) return
+        val generation = ++updateCheckGeneration
+        // Keep the focused check control enabled so OEM focus search cannot jump
+        // back to the rail while the request is pending.
+        checkUpdatesRow.isClickable = false
+        checkUpdatesRow.alpha = 0.68f
+        if (installUpdateRow.hasFocus()) checkUpdatesRow.requestFocus()
+        installUpdateRow.visibility = View.GONE
+        updateStatus.setText(R.string.about_checking)
+        updateStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+        updateCheckJob = lifecycleScope.launch(start = CoroutineStart.LAZY) {
+            try {
+                val result = try {
+                    UpdateChecker(ServiceLocator.httpClient, this@SettingsActivity)
+                        .check(BuildConfig.VERSION_NAME)
+                } catch (ce: CancellationException) {
+                    throw ce
+                } catch (_: Exception) {
+                    UpdateResult.Failed
+                }
+                ensureActive()
+                if (generation != updateCheckGeneration || selectedPanel != Panel.UPDATES) {
+                    return@launch
+                }
+                val color = when (result) {
+                    is UpdateResult.Available -> {
+                        updateStatus.text = getString(
+                            R.string.about_update_available, result.info.versionName,
+                        )
+                        installUpdateRow.visibility = View.VISIBLE
+                        R.color.accent
+                    }
+                    UpdateResult.UpToDate -> {
+                        updateStatus.setText(R.string.about_up_to_date)
+                        R.color.success
+                    }
+                    is UpdateResult.Deferred -> {
+                        updateStatus.text = getString(
+                            R.string.about_update_staged, result.targetVersion,
+                        )
+                        R.color.text_secondary
+                    }
+                    UpdateResult.Failed -> {
+                        updateStatus.setText(R.string.about_update_failed)
+                        R.color.danger
+                    }
+                }
+                updateStatus.setTextColor(ContextCompat.getColor(this@SettingsActivity, color))
+                // Do not requestFocus here: the user may still be navigating the rail.
+            } finally {
+                if (generation == updateCheckGeneration) {
+                    updateCheckJob = null
+                    checkUpdatesRow.isClickable = true
+                    checkUpdatesRow.alpha = 1f
+                }
+            }
+        }
+        updateCheckJob?.start()
+    }
+
+    private fun cancelUpdateCheck() {
+        updateCheckGeneration++
+        updateCheckJob?.cancel()
+        updateCheckJob = null
+        checkUpdatesRow.isClickable = true
+        checkUpdatesRow.alpha = 1f
     }
 
     private fun buildSystemPanel() {

@@ -20,8 +20,10 @@ import android.media.MediaCodecList
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.os.Build
 import android.view.ViewGroup
 import com.iptv.player.cast.ProviderConnectionSafety
+import com.iptv.player.BuildConfig
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
@@ -122,6 +124,7 @@ class PlayerController(
             startStage(stage)
             return
         }
+        beginAttempt()
         val generation = ++startGeneration
         // The replay below is a restart boundary for the watchdog: drop the stall
         // poll now — its position baseline belongs to the pre-handoff surface, and
@@ -149,6 +152,8 @@ class PlayerController(
                 playbackBuffering = true
                 stageStartMs = 0L
                 progressPolicy.reset()
+                eng.setListener(engineListener(eng))
+                eng.setPlaybackAttemptId(attemptTrace?.id)
                 eng.play(url, reset = true)
             }
         }, ENGINE_SWAP_DELAY_MS)
@@ -344,12 +349,60 @@ class PlayerController(
     //     if it stops advancing for STALL_TIMEOUT_MS the stream has silently stalled
     //     -> force a fresh reconnect (full release+recreate = new socket).
     //   - startup/reconnect attempt: if a (re)start never reaches confirmed playback
-    //     within STARTUP_TIMEOUT_MS (a connection that opens but delivers no data),
+    //     within the absolute request deadline (a connection that opens but delivers no data),
     //     treat it as an error so the normal ladder/reconnect sequencing runs.
     // Dedicated handler so the controller's other removeCallbacksAndMessages(null)
     // calls can't clobber it. Generation-guarded against an already-dequeued post.
     private val watchdogHandler = Handler(Looper.getMainLooper())
     private var watchdogGen = 0
+    private val deadlineHandler = Handler(Looper.getMainLooper())
+    private var attemptEpoch = 0L
+    private var attemptTrace: PlaybackAttemptTrace? = null
+    private val deadline = LivePlaybackDeadline(
+        nowMs = SystemClock::elapsedRealtime,
+        schedule = { delay, action ->
+            deadlineHandler.removeCallbacksAndMessages(null)
+            deadlineHandler.postDelayed({ action() }, delay)
+        },
+        onTimeout = { terminal ->
+            traceAttempt(PlaybackAttemptTrace.Phase.TIMEOUT)
+            recordStability("start_timeout", "warn", "request deadline terminal=$terminal")
+            notifyPlaybackFailure(failureFor(Reason.STARTUP))
+            if (terminal) failPlayback() else handleEngineFailure(Reason.STARTUP, reportFailure = false)
+        },
+    )
+
+    private fun beginAttempt() {
+        traceAttempt(PlaybackAttemptTrace.Phase.CANCELLED)
+        ++attemptEpoch
+        attemptTrace = PlaybackAttemptTrace(SystemClock.elapsedRealtime())
+        traceAttempt(PlaybackAttemptTrace.Phase.REQUESTED)
+        if (isLive) deadline.beginAttempt()
+    }
+
+    private fun resetDeadline() {
+        deadline.reset()
+        deadlineHandler.removeCallbacksAndMessages(null)
+    }
+
+    private fun traceAttempt(phase: PlaybackAttemptTrace.Phase, httpStatus: Int? = null) {
+        val event = attemptTrace?.event(phase, SystemClock.elapsedRealtime(), httpStatus) ?: return
+        PlaybackLog.log(context, "LiveAttempt", "$event engine=$stage")
+        if (phase == PlaybackAttemptTrace.Phase.REQUESTED) {
+            val device = "${Build.MANUFACTURER}/${Build.MODEL}".replace(Regex("[^A-Za-z0-9._ /-]"), "_").take(80)
+            PlaybackLog.log(context, "LiveAttempt", "attempt=${attemptTrace?.id} version=${BuildConfig.VERSION_NAME}/${BuildConfig.VERSION_CODE} device=$device sdk=${Build.VERSION.SDK_INT}")
+        }
+        if (phase in setOf(PlaybackAttemptTrace.Phase.STABLE, PlaybackAttemptTrace.Phase.TIMEOUT, PlaybackAttemptTrace.Phase.TERMINAL)) {
+            recordStability("playback_attempt", if (phase == PlaybackAttemptTrace.Phase.STABLE) "info" else "warn", event)
+        }
+    }
+
+    /** A fatal outcome owns cleanup too; no queued callback can reopen this session. */
+    private fun failPlayback() {
+        traceAttempt(PlaybackAttemptTrace.Phase.TERMINAL)
+        release()
+        callback.onFatalError()
+    }
 
     /** True when the active engine can apply audio/subtitle delay (libVLC). */
     val supportsDelay: Boolean get() = engine?.supportsDelay == true
@@ -416,6 +469,7 @@ class PlayerController(
         transportKey: String? = null,
     ) {
         suspended = false
+        resetDeadline()
         recoveryNeededOnResume = false
         // A zap can arrive during preview -> fullscreen's delayed surface move.
         // The callback is about to be cleared, so first finish the host move to
@@ -448,8 +502,7 @@ class PlayerController(
         currentTransportFormat = if (isLive) StreamFormat.TS else null
         currentUrl = if (isLive) LiveStreamUrl.applyFormat(url, StreamFormat.TS) else url
         if (MediaTransportPolicy.isHlsUrl(currentUrl.orEmpty())) {
-            release()
-            callback.onFatalError()
+            failPlayback()
             return
         }
         currentTransportFormat?.let(callback::onTransportResolved)
@@ -518,6 +571,9 @@ class PlayerController(
             // the live URL has already been canonicalized to MPEG-TS.
             // Replaying [url] here silently discarded that decision only on the
             // fast-zap path and also desynchronised route/transport memory.
+            beginAttempt()
+            reusable.setListener(engineListener(reusable))
+            reusable.setPlaybackAttemptId(attemptTrace?.id)
             reusable.play(currentUrl ?: url, reset = true)
             return
         }
@@ -568,9 +624,7 @@ class PlayerController(
 
     private fun startStage(target: Stage) {
         callback.onPlaybackRestarting()
-        // Retire the prior stage's startup/stall watchdog now. The replacement
-        // backend re-arms a fresh startup budget through onPlaybackSubmitted()
-        // only after its real decoder/native start path is reached.
+        // Keep the request deadline independent of backend submission and health polls.
         cancelWatchdog()
         // A GENUINE stage change (ladder move / escalation) starts a fresh decoder,
         // so reset the quick-decode-failure count. A reconnect replay of the SAME
@@ -581,6 +635,7 @@ class PlayerController(
         }
         triedStages.add(target)
         stage = target
+        beginAttempt()
         // Fresh (re)start: the new attempt must prove its own frame and progress.
         playbackConfirmed = false
         videoOutputConfirmed = false
@@ -620,10 +675,11 @@ class PlayerController(
                     retryAdvice = PlaybackFailure.RetryAdvice.DO_NOT_RETRY,
                 ),
             )
-            callback.onFatalError()
+            failPlayback()
         }
         create = Runnable {
             if (generation != startGeneration) return@Runnable
+            traceAttempt(PlaybackAttemptTrace.Phase.WAITING_OWNER)
             var safety = ProviderConnectionSafety.snapshot()
             if (!safety.newConnectionAllowed) {
                 if (safety.remoteUncertain) {
@@ -639,7 +695,7 @@ class PlayerController(
                     // release. Wait behind the shared FIFO instead of presenting
                     // an error or opening an overlapping Exo connection.
                     providerDrainAttempted = true
-                    VlcOps.post { mainHandler.post(create) }
+                    VlcOps.awaitProviderDrain { mainHandler.post(create) }
                     return@Runnable
                 }
                 if (
@@ -697,6 +753,7 @@ class PlayerController(
                         )
                     }
                 candidate = newEngine
+                newEngine.setPlaybackAttemptId(attemptTrace?.id)
                 newEngine.bind(container)
                 if (generation != startGeneration) {
                     newEngine.release()
@@ -750,25 +807,34 @@ class PlayerController(
             // engine is created — without ever blocking the main thread. With an
             // idle queue (e.g. old engine was ExoPlayer) the hop is immediate.
             mainHandler.postDelayed({
-                VlcOps.post { mainHandler.post(create) }
+                VlcOps.awaitProviderDrain { mainHandler.post(create) }
             }, ENGINE_SWAP_DELAY_MS)
         } else {
             create.run()
         }
     }
 
-    private fun engineListener(source: PlayerEngine) = object : PlayerListener {
-        override fun onPlaybackSubmitted() = post {
-            if (source !== engine || suspended) return@post
-            if (playbackConfirmed) return@post
-            // A coalesced VLC zap may wait behind a bounded native cleanup before
-            // this callback. Start the budget only now, when this URL has reached
-            // the actual decoder/native start path.
-            armStartupTimeout()
+    private fun engineListener(source: PlayerEngine, epoch: Long = attemptEpoch) = object : PlayerListener {
+        private fun dispatch(action: () -> Unit) = post {
+            if (source === engine && epoch == attemptEpoch) action()
         }
 
-        override fun onBuffering() = post {
-            if (source !== engine || suspended) return@post
+        override fun onTransportConnecting() = dispatch {
+            traceAttempt(PlaybackAttemptTrace.Phase.CONNECTING)
+        }
+        override fun onTransportBytes() = dispatch {
+            traceAttempt(PlaybackAttemptTrace.Phase.FIRST_BYTES)
+        }
+
+        override fun onPlaybackSubmitted() = dispatch {
+            if (source !== engine || suspended) return@dispatch
+            if (playbackConfirmed) return@dispatch
+            // Diagnostic only: callbacks cannot extend the request deadline.
+            traceAttempt(PlaybackAttemptTrace.Phase.SUBMITTED)
+        }
+
+        override fun onBuffering() = dispatch {
+            if (source !== engine || suspended) return@dispatch
             playbackBuffering = true
             progressPolicy.onBuffering()
             if (
@@ -782,20 +848,22 @@ class PlayerController(
             callback.onBuffering()
         }
 
-        override fun onPlaying() = post {
-            if (source !== engine || suspended) return@post
+        override fun onPlaying() = dispatch {
+            if (source !== engine || suspended) return@dispatch
             playbackBuffering = false
             adaptiveBufferingActive = false
+            traceAttempt(PlaybackAttemptTrace.Phase.READY)
             callback.onPlaying(source.engineName)
             if (!expectsVideo) onPlaybackProgress()
         }
 
-        override fun onVideoOutput() = post {
-            if (source !== engine || suspended) return@post
+        override fun onVideoOutput() = dispatch {
+            if (source !== engine || suspended) return@dispatch
             adaptiveBufferingActive = false
             val firstVideoOutput = !videoOutputConfirmed
             videoOutputConfirmed = true
             unconfirmedStartFailures = 0
+            traceAttempt(PlaybackAttemptTrace.Phase.FRAME)
             callback.onVideoResumed()
             if (firstVideoOutput && playbackConfirmed) {
                 // Playing may precede the first real picture by several seconds.
@@ -808,11 +876,11 @@ class PlayerController(
             }
         }
 
-        override fun onEnded() = post {
-            if (source !== engine) return@post
+        override fun onEnded() = dispatch {
+            if (source !== engine) return@dispatch
             if (suspended) {
                 recoveryNeededOnResume = true
-                return@post
+                return@dispatch
             }
             // A live stream should not end; the server closed/restarted it. Treat
             // as a drop and reconnect the same channel. (Non-live ignores it.)
@@ -829,17 +897,18 @@ class PlayerController(
         }
 
         override fun onError(message: String?) =
-            post { if (source === engine) handleEngineFailure(Reason.ERROR) }
+            dispatch { if (source === engine) handleEngineFailure(Reason.ERROR) }
 
         override fun onStartupFailure(message: String?) =
-            post { if (source === engine) handleEngineFailure(Reason.STARTUP) }
+            dispatch { if (source === engine) handleEngineFailure(Reason.STARTUP) }
 
-        override fun onSourceFailure(message: String?, httpStatus: Int?) = post {
-            if (source !== engine) return@post
+        override fun onSourceFailure(message: String?, httpStatus: Int?) = dispatch {
+            if (source !== engine) return@dispatch
             if (suspended) {
                 recoveryNeededOnResume = true
-                return@post
+                return@dispatch
             }
+            traceAttempt(PlaybackAttemptTrace.Phase.FAILURE, httpStatus)
             val manifestFailure = message?.contains("manifest", ignoreCase = true) == true
             notifyPlaybackFailure(
                 when {
@@ -861,28 +930,27 @@ class PlayerController(
             if (LiveTransportPolicy.isAuthoritativeHttpFailure(httpStatus)) {
                 // Authorization/resource rejection cannot be repaired by a decoder swap.
                 PlaybackLog.log(context, "Controller", "terminal source HTTP $httpStatus")
-                release()
-                callback.onFatalError()
-                return@post
+                failPlayback()
+                return@dispatch
             }
             handleEngineFailure(Reason.ERROR, reportFailure = false)
         }
 
         override fun onDecodeError(message: String?) =
-            post { if (source === engine) handleEngineFailure(Reason.DECODE) }
+            dispatch { if (source === engine) handleEngineFailure(Reason.DECODE) }
 
         override fun onAudioUnavailable() =
-            post { if (source === engine) handleEngineFailure(Reason.AUDIO) }
+            dispatch { if (source === engine) handleEngineFailure(Reason.AUDIO) }
 
-        override fun onAudioStall(evidence: AudioFailureEvidence) = post {
+        override fun onAudioStall(evidence: AudioFailureEvidence) = dispatch {
             if (source === engine) handleAudioStall(evidence)
         }
 
         override fun onVideoInvalid() =
-            post { if (source === engine) handleEngineFailure(Reason.VIDEO) }
+            dispatch { if (source === engine) handleEngineFailure(Reason.VIDEO) }
 
         override fun onSoftwareTooSlow() =
-            post { if (source === engine) handleEngineFailure(Reason.SOFTWARE_SLOW) }
+            dispatch { if (source === engine) handleEngineFailure(Reason.SOFTWARE_SLOW) }
     }
 
     private fun handleEngineFailure(
@@ -898,6 +966,7 @@ class PlayerController(
     }
 
     private fun notifyPlaybackFailure(failure: PlaybackFailure) {
+        PlaybackLog.log(context, "LiveAttempt", "attempt=${attemptTrace?.id} engine=$stage failure=${failure.code} phase=${failure.phase}")
         callback.onPlaybackFailure(failure)
     }
 
@@ -935,7 +1004,7 @@ class PlayerController(
             recordStability("audio_stall", "fatal", "bounded PCM rescue exhausted")
             resetReconnect()
             cancelWatchdog()
-            callback.onFatalError()
+            failPlayback()
             return
         }
 
@@ -997,8 +1066,8 @@ class PlayerController(
         if (playbackConfirmed) return
         playbackConfirmed = true
         stageStartMs = SystemClock.elapsedRealtime()
-        // First confirmed progress: swap the startup timeout for the mid-stream
-        // stall poll so a later silent freeze (no EndReached/error) still recovers.
+        // Start the stall poll alongside the request deadline. A single frame
+        // cannot cancel the deadline; sustained output must earn that reset.
         armStallWatchdog()
     }
 
@@ -1008,6 +1077,8 @@ class PlayerController(
         val stableKey = currentRouteKey
         if (suspended || !playbackConfirmed || playbackBuffering) return
         PlaybackLog.log(context, "Controller", "sustained playback progress -> recovered")
+        resetDeadline()
+        traceAttempt(PlaybackAttemptTrace.Phase.STABLE)
         quickDecodeFailures = 0
         unconfirmedStartFailures = 0
         resetReconnect()
@@ -1039,7 +1110,7 @@ class PlayerController(
 
     // ---- Watchdog ---------------------------------------------------------
 
-    /** Stop any armed watchdog (startup timeout or stall poll). The generation
+    /** Stop the stall poll without touching the request deadline. The generation
      *  bump neutralises a post that was already dequeued but not yet run. */
     private fun cancelWatchdog() {
         watchdogHandler.removeCallbacksAndMessages(null)
@@ -1058,32 +1129,6 @@ class PlayerController(
             severity = severity,
             detail = detail,
         )
-    }
-
-    /**
-     * Arm the startup / reconnect-attempt timeout. If this (re)start does not reach
-     * confirmed playback within [STARTUP_TIMEOUT_MS] — a connection that opens but
-     * silently delivers no data, so no error event ever fires — treat it as an
-     * error and let [handleFailure] run the normal decode-ladder / reconnect
-     * sequencing. A real first frame (onPlaybackProgress) or a real error cancels
-     * this first via the generation guard / removeCallbacks.
-     */
-    private fun armStartupTimeout() {
-        if (!isLive) return
-        cancelWatchdog()
-        val gen = watchdogGen
-        watchdogHandler.postDelayed({
-            if (gen != watchdogGen || playbackConfirmed) return@postDelayed
-            PlaybackLog.log(context, "Controller", "no playback within ${STARTUP_TIMEOUT_MS}ms -> treat as error")
-            recordStability("start_timeout", "warn")
-            notifyPlaybackFailure(
-                PlaybackFailureClassifier.classify(
-                    FailureSignal.Timeout(FailureSignal.TimeoutKind.STARTUP),
-                    PlaybackFailure.Phase.STARTUP,
-                ),
-            )
-            handleFailure(Reason.STARTUP)
-        }, STARTUP_TIMEOUT_MS)
     }
 
     /**
@@ -1116,6 +1161,7 @@ class PlayerController(
                 nowMs = now,
                 positionMs = pos,
                 buffering = playbackBuffering,
+                outputHealthy = engine?.hasRecentOutputProgress() == true,
             )
             if (decision == LivePlaybackProgressPolicy.Decision.STABLE) {
                 onStablePlayback()
@@ -1344,7 +1390,7 @@ class PlayerController(
             )
             resetReconnect()
             cancelWatchdog()
-            callback.onFatalError()
+            failPlayback()
             return
         }
 
@@ -1374,9 +1420,8 @@ class PlayerController(
         // evidence before scheduling a replacement so no success callback can
         // erase the pending retry near the stability deadline.
         progressPolicy.reset()
-        // The reconnect attempt's own startup timeout (armed once its replacement
-        // engine actually receives play()) takes over watchdog duty, so drop any
-        // current poll/timeout to avoid overlap.
+        // Retire the old output poll. The separate episode deadline continues
+        // through retry backoff, cleanup and replacement engine submission.
         cancelWatchdog()
         if (suspended) {
             recoveryNeededOnResume = true
@@ -1385,12 +1430,13 @@ class PlayerController(
         if (!isLive) {
             PlaybackLog.log(context, "Controller", "fatal after $stage (non-live, no reconnect)")
             recordStability("fatal", "fatal", "non-live, no further decode path (stage=$stage)")
-            callback.onFatalError()
+            failPlayback()
             return
         }
         // An attempt is already scheduled/in-flight: don't stack a second one
         // (EncounteredError + EndReached can both fire for the same drop).
         if (reconnectPending) return
+        deadline.waitingForRetry()
 
         val now = SystemClock.elapsedRealtime()
         if (!reconnecting) {
@@ -1405,7 +1451,7 @@ class PlayerController(
             PlaybackLog.log(context, "Controller", "reconnect window elapsed -> fatal")
             recordStability("fatal", "fatal", "reconnect window elapsed after $reconnectAttempt attempts (stage=$stage)")
             resetReconnect()
-            callback.onFatalError()
+            failPlayback()
             return
         }
 
@@ -1497,6 +1543,8 @@ class PlayerController(
         // on resume. Also invalidate a delayed engine/surface creation already in
         // flight; its generation guard then prevents a hidden background player.
         suspended = true
+        ++attemptEpoch
+        resetDeadline()
         recoveryNeededOnResume = currentUrl != null
         ++startGeneration
         mainHandler.removeCallbacksAndMessages(null)
@@ -1531,6 +1579,8 @@ class PlayerController(
 
     fun stop() {
         suspended = true
+        ++attemptEpoch
+        resetDeadline()
         recoveryNeededOnResume = false
         ++startGeneration
         mainHandler.removeCallbacksAndMessages(null)
@@ -1547,6 +1597,8 @@ class PlayerController(
         // without this bump a queued create would later pass its generation
         // check, build a ghost engine and play into a destroyed screen.
         suspended = true
+        ++attemptEpoch
+        resetDeadline()
         recoveryNeededOnResume = false
         ++startGeneration
         mainHandler.removeCallbacksAndMessages(null)
@@ -1558,8 +1610,10 @@ class PlayerController(
 
     private fun releaseEngine() {
         videoRebindPending = false
-        engine?.release()
+        val retiring = engine
         engine = null
+        retiring?.setListener(null)
+        retiring?.release()
     }
 
     private fun post(action: () -> Unit) {
@@ -1621,13 +1675,5 @@ class PlayerController(
          * user isn't left staring at a frozen picture.
          */
         private const val STALL_TIMEOUT_MS = 15_000L
-
-        /**
-         * How long a (re)start may run without reaching confirmed playback before
-         * it's treated as a failed attempt. Covers a connection that opens but
-         * delivers no data (so no error fires). Generous so a slow-but-healthy
-         * startup (connect + ~3s caching + first frame) never trips it.
-         */
-        private const val STARTUP_TIMEOUT_MS = 22_000L
     }
 }

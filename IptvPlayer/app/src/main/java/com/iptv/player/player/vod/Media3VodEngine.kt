@@ -25,7 +25,6 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.TransferListener
-import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
@@ -449,15 +448,8 @@ class Media3VodEngine(
         player?.let { return it }
         check(!released) { "Released VOD engine cannot create a player" }
 
-        val buffer = config.buffer
-        val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                buffer.minBufferMs,
-                buffer.maxBufferMs,
-                buffer.playbackBufferMs,
-                buffer.rebufferMs,
-            )
-            .build()
+        val deviceProfile = PlaybackQoeRuntime.devicePlaybackProfile()
+        val loadControl = VodLoadControl.create(config.buffer, deviceProfile.compatibilityMode)
         val httpFactory: DataSource.Factory = UpgradeOnlyHttpDataSourceFactory(
             userAgent = config.userAgent,
             connectTimeoutMs = config.connectTimeoutMs,
@@ -465,7 +457,6 @@ class Media3VodEngine(
             allowHttpToHttpsRedirects = config.allowHttpToHttpsRedirects,
         )
         val mediaSourceFactory = DefaultMediaSourceFactory(DirectMediaDataSource.Factory(httpFactory))
-        val deviceProfile = PlaybackQoeRuntime.devicePlaybackProfile()
         val selector = DefaultTrackSelector(context).apply {
             val parameters = buildUponParameters()
                 .setTunnelingEnabled(false)

@@ -311,4 +311,5 @@
     <string name="support_diagnostic_sending">Preparing and sending your report… Please wait for the support number. You can cancel at any time.</string>
     <string name="support_diagnostic_interrupted">Sending was interrupted. Retry to check delivery and receive your support number; duplicate reports are avoided.</string>
     <string name="support_diagnostic_incomplete">Some logs or settings were unavailable on this device. The available information was sent.</string>
+    <string name="error_live_playback_failed">Playback could not continue. Please try again.</string>
 </resources>

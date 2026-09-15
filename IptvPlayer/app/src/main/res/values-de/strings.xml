@@ -385,4 +385,5 @@
     <string name="support_diagnostic_sending">Bericht wird vorbereitet und gesendet… Bitte auf die Support-Nummer warten. Sie können jederzeit abbrechen.</string>
     <string name="support_diagnostic_interrupted">Das Senden wurde unterbrochen. Erneut versuchen, um den Empfang zu prüfen und die Support-Nummer zu erhalten; doppelte Meldungen werden vermieden.</string>
     <string name="support_diagnostic_incomplete">Einige Protokolle oder Einstellungen waren auf diesem Gerät nicht verfügbar. Die verfügbaren Informationen wurden gesendet.</string>
+    <string name="error_live_playback_failed">Die Wiedergabe konnte nicht fortgesetzt werden. Bitte erneut versuchen.</string>
 </resources>

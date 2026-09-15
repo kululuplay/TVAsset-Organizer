@@ -20,6 +20,7 @@ internal class AudioUnderrunMonitor {
     private var baselineUs: Long? = null
     private var underruns = 0
     private var recovered = false
+    private var lastProgressAtMs: Long? = null
 
     @Synchronized
     fun onPosition(positionUs: Long?, nowMs: Long) {
@@ -29,6 +30,9 @@ internal class AudioUnderrunMonitor {
             this.positionUs?.let { positionUs < it } == true
         ) {
             reset()
+        }
+        if (positionUs != null && this.positionUs?.let { positionUs > it } == true) {
+            lastProgressAtMs = nowMs
         }
         this.positionUs = positionUs?.takeIf { it >= 0L }
         sampledAtMs = this.positionUs?.let { nowMs }
@@ -78,11 +82,16 @@ internal class AudioUnderrunMonitor {
 
     @Synchronized
     fun reset() {
+        lastProgressAtMs = null
         positionUs = null
         sampledAtMs = null
         clearEpisode()
         recovered = false
     }
+
+    @Synchronized
+    fun hasRecentProgress(nowMs: Long): Boolean =
+        lastProgressAtMs?.let { nowMs - it in 0L..6_000L } == true
 
     private fun sampleIsFresh(nowMs: Long): Boolean =
         sampledAtMs?.let { nowMs - it in 0L..MAX_SAMPLE_AGE_MS } == true

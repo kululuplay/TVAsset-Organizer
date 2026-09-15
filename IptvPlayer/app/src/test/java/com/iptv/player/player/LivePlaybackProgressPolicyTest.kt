@@ -7,6 +7,25 @@ import org.junit.Test
 class LivePlaybackProgressPolicyTest {
     private val policy = LivePlaybackProgressPolicy()
 
+    @Test fun `clock alone cannot cover lost surface or a nonadvancing audio sink`() {
+        policy.start(0, 0)
+        for (t in 3_000L..12_000L step 3_000L) {
+            assertEquals(Decision.WAIT, policy.sample(t, t, buffering = false, outputHealthy = false))
+        }
+        assertEquals(Decision.STALLED, policy.sample(15_000, 15_000, false, false))
+    }
+
+    @Test fun `brief output interruption resumes without reopening the connection`() {
+        policy.start(0, 0)
+        assertEquals(Decision.WAIT, policy.sample(3_000, 3_000, false, true))
+        assertEquals(Decision.WAIT, policy.sample(6_000, 6_000, true, false))
+        assertEquals(Decision.WAIT, policy.sample(9_000, 9_000, false, true))
+        for (t in 12_000L..18_000L step 3_000L) {
+            assertEquals(Decision.WAIT, policy.sample(t, t, false, true))
+        }
+        assertEquals(Decision.STABLE, policy.sample(21_000, 21_000, false, true))
+    }
+
     @Test
     fun `EOS near former stability deadline cannot mark ended attempt recovered`() {
         policy.start(nowMs = 0L, positionMs = 0L)
@@ -57,11 +76,12 @@ class LivePlaybackProgressPolicyTest {
     }
 
     @Test
-    fun `source progress while buffering does not qualify as stable playback`() {
+    fun `clock advancing behind permanent buffering cannot keep loading forever`() {
         policy.start(nowMs = 0L, positionMs = 0L)
-        for (timeMs in 3_000L..30_000L step 3_000L) {
+        for (timeMs in 3_000L..12_000L step 3_000L) {
             assertEquals(Decision.WAIT, policy.sample(timeMs, timeMs, buffering = true))
         }
+        assertEquals(Decision.STALLED, policy.sample(15_000, 15_000, buffering = true))
     }
 
     @Test

@@ -44,6 +44,9 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -103,6 +106,11 @@ class ExoPlayerEngine(
     private var playerView: PlayerView? = null
     private val playbackClockWindow = Timeline.Window()
     private var listener: PlayerListener? = null
+    @Volatile private var playbackAttemptId: String? = null
+
+    override fun setPlaybackAttemptId(id: String?) {
+        playbackAttemptId = PlaybackAttemptTrace.safeId(id)
+    }
     private var preferredAudioLanguage: String? = null
     private var subtitlePreference: LiveSubtitlePreference = LiveSubtitlePreference.Auto
 
@@ -240,9 +248,35 @@ class ExoPlayerEngine(
 
         // Identify every HTTP(S) stream pull as KULULUPLAY (some providers gate
         // playback on the User-Agent).
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent(AppInfo.USER_AGENT)
-            .setAllowCrossProtocolRedirects(false)
+        val httpDataSourceFactory = DataSource.Factory {
+            // Snapshot before opening: a retired transfer must keep its old id/listener.
+            val attemptId = playbackAttemptId
+            val observer = listener
+            DefaultHttpDataSource.Factory()
+                .setUserAgent(AppInfo.USER_AGENT)
+                .setAllowCrossProtocolRedirects(false)
+                .setConnectTimeoutMs(30_000)
+                .setReadTimeoutMs(30_000)
+                .setDefaultRequestProperties(attemptId?.let {
+                    mapOf("X-Kululu-Playback-Attempt" to it)
+                } ?: emptyMap())
+                .createDataSource().apply {
+                    addTransferListener(object : TransferListener {
+                        private var receivedBytes = false
+                        override fun onTransferInitializing(source: DataSource, spec: DataSpec, network: Boolean) {
+                            if (network) observer?.onTransportConnecting()
+                        }
+                        override fun onTransferStart(source: DataSource, spec: DataSpec, network: Boolean) = Unit
+                        override fun onBytesTransferred(source: DataSource, spec: DataSpec, network: Boolean, bytes: Int) {
+                            if (network && bytes > 0 && !receivedBytes) {
+                                receivedBytes = true
+                                observer?.onTransportBytes()
+                            }
+                        }
+                        override fun onTransferEnd(source: DataSource, spec: DataSpec, network: Boolean) = Unit
+                    })
+                }
+        }
         val mediaSourceFactory = ProgressiveMediaSource.Factory(
             DirectMediaDataSource.Factory(httpDataSourceFactory),
             ExtractorsFactory { arrayOf(TsExtractor()) },
@@ -1425,6 +1459,15 @@ class ExoPlayerEngine(
     override fun playbackPositionMs(): Long = player?.let {
         exoPlaybackClockPositionMs(it, playbackClockWindow)
     } ?: -1L
+
+    override fun hasRecentOutputProgress(): Boolean {
+        val exo = player ?: return false
+        val now = SystemClock.elapsedRealtime()
+        val videoHealthy = !expectsVideo || (videoOutputReported &&
+            lastVideoFrameAtMs.get() > 0L && now - lastVideoFrameAtMs.get() in 0L..6_000L)
+        val audioHealthy = exo.audioFormat == null || audioUnderrunMonitor.hasRecentProgress(now)
+        return exo.isPlaying && videoHealthy && audioHealthy
+    }
 
     override fun release() {
         cancelPlaybackDiagnosticSampler()

@@ -66,7 +66,6 @@ import com.iptv.player.ui.common.isAdult
 import com.iptv.player.player.LiveStreamUrl
 import com.iptv.player.ui.player.PlayerDialogs
 import com.iptv.player.ui.player.RemoteConfirmPress
-import com.iptv.player.util.AutoRetryPolicy
 import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NewContentNotifier
 import com.iptv.player.util.NowPlaying
@@ -219,10 +218,6 @@ class HomeActivity : BaseActivity() {
             fullscreenEpgHandler.postDelayed(this, FULLSCREEN_EPG_TICK_MS)
         }
     }
-
-    /** Continues a bounded, slow retry schedule after the controller exhausts its own reconnects. */
-    private val autoRetryHandler = Handler(Looper.getMainLooper())
-    private var autoRetryAttempt = 0
 
     private data class BrowseLayoutSnapshot(
         val paddingLeft: Int,
@@ -1880,7 +1875,6 @@ class HomeActivity : BaseActivity() {
         previewingChannel = channel
         fullscreenGuideAdapter.setPlayingChannel(channel.id)
         NowPlaying.set(this, ChannelText.clean(channel.name), if (radioMode) "Radio" else "Canlı")
-        cancelAutoRetry(resetAttempts = true)
         if (!inlineFullscreen && currentChannels.any { it.id == channel.id }) {
             previewChannelScope = currentChannels
             previewChannelScopeLabel =
@@ -1962,7 +1956,7 @@ class HomeActivity : BaseActivity() {
                     },
                 )
                 binding.previewStatus.visibility = View.VISIBLE
-                if (ProviderConnectionSafety.newConnectionAllowed) scheduleAutoRetry()
+                finishPreviewQoe(PlaybackEndReason.FATAL_FAILURE)
                 return
             }
         }
@@ -1993,7 +1987,6 @@ class HomeActivity : BaseActivity() {
     }
 
     private fun markPreviewReady() {
-        cancelAutoRetry(resetAttempts = castOwnsPreviewPlayback)
         previewState = LivePreviewPressPolicy.Phase.READY
         binding.previewPlaybackCover.visibility = View.GONE
         binding.previewLoading.visibility = View.GONE
@@ -2008,15 +2001,9 @@ class HomeActivity : BaseActivity() {
 
     /** UI callback: TV becomes READY only after a real frame; radio on audio playback. */
     private fun buildPreviewCallback() = object : PlayerController.Callback {
-        override fun onStablePlayback() {
-            if (castOwnsPreviewPlayback || castLoadPending) return
-            cancelAutoRetry(resetAttempts = true)
-        }
-
         override fun onBuffering() {
             if (castOwnsPreviewPlayback || castLoadPending) return
             previewLoadingPolicy.onBuffering()
-            cancelAutoRetry(resetAttempts = false)
             previewState = LivePreviewPressPolicy.Phase.STARTING
             binding.previewLoading.visibility = View.VISIBLE
             binding.previewStatus.setText(R.string.buffering)
@@ -2055,7 +2042,6 @@ class HomeActivity : BaseActivity() {
         }
         override fun onPlaybackRestarting() {
             if (castOwnsPreviewPlayback || castLoadPending) return
-            cancelAutoRetry(resetAttempts = false)
             previewState = LivePreviewPressPolicy.Phase.STARTING
             previewLoadingPolicy.requireFreshFrame()
             binding.previewPlaybackCover.visibility = View.VISIBLE
@@ -2118,11 +2104,10 @@ class HomeActivity : BaseActivity() {
             binding.previewStatus.visibility = View.VISIBLE
             PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, false)
             playbackSession.setPlaying(false)
-            scheduleAutoRetry()
+            finishPreviewQoe(PlaybackEndReason.FATAL_FAILURE)
         }
         override fun onRetrying(attempt: Int) {
             if (castOwnsPreviewPlayback || castLoadPending) return
-            cancelAutoRetry(resetAttempts = false)
             previewState = LivePreviewPressPolicy.Phase.STARTING
             previewLoadingPolicy.requireFreshFrame()
             binding.previewPlaybackCover.visibility = View.VISIBLE
@@ -2132,66 +2117,6 @@ class HomeActivity : BaseActivity() {
             binding.previewStatus.visibility = View.VISIBLE
             PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, true)
         }
-    }
-
-    private fun scheduleAutoRetry() {
-        autoRetryHandler.removeCallbacksAndMessages(null)
-        val delayMs = AutoRetryPolicy.delayForAttempt(autoRetryAttempt)
-        if (delayMs == null) {
-            binding.previewStatus.setText(R.string.error_auto_retry_exhausted)
-            finishPreviewQoe(PlaybackEndReason.FATAL_FAILURE)
-            return
-        }
-        tickAutoRetry((delayMs / 1000L).coerceAtLeast(1L))
-    }
-
-    private fun tickAutoRetry(secondsLeft: Long) {
-        if (secondsLeft <= 0L) {
-            if (
-                previewState != LivePreviewPressPolicy.Phase.FAILED ||
-                isFinishing ||
-                isDestroyed ||
-                castOwnsPreviewPlayback ||
-                !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-            ) return
-            autoRetryAttempt++
-            previewState = LivePreviewPressPolicy.Phase.STARTING
-            previewLoadingPolicy.requireFreshFrame()
-            binding.previewLoading.visibility = View.VISIBLE
-            binding.previewStatus.setText(R.string.buffering)
-            val channel = previewingChannel ?: return
-            if (!previewStreamSubmitted || previewController == null) {
-                previewJob?.cancel()
-                previewJob = lifecycleScope.launch { startPreview(channel) }
-            } else {
-                when (preparePreviewPlaybackRequest()) {
-                    ProviderStartGatePolicy.Decision.READY -> {
-                        beginPreviewQoe()
-                        previewController?.retry()
-                    }
-                    ProviderStartGatePolicy.Decision.WAIT_FOR_LOCAL_CLEANUP,
-                    ProviderStartGatePolicy.Decision.RECOVER_LOCAL_PROCESS -> Unit
-                    ProviderStartGatePolicy.Decision.BLOCKED_BY_REMOTE_OWNER,
-                    ProviderStartGatePolicy.Decision.BLOCKED -> {
-                        previewState = LivePreviewPressPolicy.Phase.FAILED
-                        binding.previewLoading.visibility = View.GONE
-                        binding.previewStatus.setText(
-                            R.string.error_playback_ownership_uncertain,
-                        )
-                    }
-                }
-            }
-            return
-        }
-        binding.previewStatus.text =
-            getString(R.string.error_auto_retry_countdown, secondsLeft)
-        binding.previewStatus.visibility = View.VISIBLE
-        autoRetryHandler.postDelayed({ tickAutoRetry(secondsLeft - 1L) }, 1000L)
-    }
-
-    private fun cancelAutoRetry(resetAttempts: Boolean) {
-        autoRetryHandler.removeCallbacksAndMessages(null)
-        if (resetAttempts) autoRetryAttempt = 0
     }
 
     // ---- Platform playback ownership + anonymous QoE -------------------
@@ -2245,7 +2170,7 @@ class HomeActivity : BaseActivity() {
         binding.previewLoading.visibility = View.VISIBLE
         binding.previewStatus.setText(R.string.buffering)
         binding.previewStatus.visibility = View.VISIBLE
-        VlcOps.post {
+        VlcOps.awaitProviderDrain {
             runOnUiThread {
                 providerDrainPending = false
                 if (
@@ -2352,7 +2277,6 @@ class HomeActivity : BaseActivity() {
         if (castOwnsPreviewPlayback) return
         castLoadPending = false
         castOwnsPreviewPlayback = true
-        cancelAutoRetry(resetAttempts = false)
         finishPreviewQoe(PlaybackEndReason.REPLACED)
         // The preflight already confirmed the local provider socket is closed.
         previewState = LivePreviewPressPolicy.Phase.READY
@@ -2387,7 +2311,6 @@ class HomeActivity : BaseActivity() {
         castLoadPending = false
         castOwnsPreviewPlayback = false
         suppressConnectedCastReloadOnce = true
-        cancelAutoRetry(resetAttempts = false)
         finishPreviewQoe(PlaybackEndReason.FATAL_FAILURE)
         previewState = LivePreviewPressPolicy.Phase.FAILED
         binding.previewPlaybackCover.visibility = View.VISIBLE
@@ -3151,7 +3074,6 @@ class HomeActivity : BaseActivity() {
         castController.detach()
         finishPreviewQoe(PlaybackEndReason.APP_SHUTDOWN)
         playbackSession.release()
-        autoRetryHandler.removeCallbacksAndMessages(null)
         fullscreenEpgHandler.removeCallbacksAndMessages(null)
         fullscreenGuideEpgJob?.cancel()
         debugBinder?.release()
@@ -3171,7 +3093,6 @@ class HomeActivity : BaseActivity() {
         captionEpgLoaded = false
         lastCaptionEpgRequestAtMs = 0L
         stopFullscreenEpgTicker()
-        cancelAutoRetry(resetAttempts = true)
         finishPreviewQoe(endReason)
         if (!castLoadPending) {
             // This path permanently retires the preview controller. Do not queue

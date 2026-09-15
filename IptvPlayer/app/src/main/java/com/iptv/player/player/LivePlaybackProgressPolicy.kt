@@ -46,7 +46,7 @@ internal class LivePlaybackProgressPolicy(
         stableSinceMs = null
     }
 
-    fun sample(nowMs: Long, positionMs: Long, buffering: Boolean): Decision {
+    fun sample(nowMs: Long, positionMs: Long, buffering: Boolean, outputHealthy: Boolean = true): Decision {
         if (!active) return Decision.WAIT
 
         var progressed = false
@@ -75,11 +75,13 @@ internal class LivePlaybackProgressPolicy(
         }
 
         val progressGapMs = nowMs - lastProgressAtMs
-        if (progressed) lastProgressAtMs = nowMs
-        if (!progressed || buffering || progressGapMs > maximumSampleGapMs) {
+        // A demux/audio clock can keep advancing behind an endless loading
+        // overlay. Only non-buffering output may extend the liveness deadline.
+        if (progressed && !buffering && outputHealthy) lastProgressAtMs = nowMs
+        if (!progressed || buffering || !outputHealthy || progressGapMs > maximumSampleGapMs) {
             stableSinceMs = null
         }
-        if (progressed && !buffering) {
+        if (progressed && !buffering && outputHealthy) {
             val sinceMs = stableSinceMs ?: nowMs.also { stableSinceMs = it }
             if (!stableReported && nowMs - sinceMs >= stablePlaybackMs) {
                 stableReported = true

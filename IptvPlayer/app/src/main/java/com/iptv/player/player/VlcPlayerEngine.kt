@@ -190,6 +190,10 @@ class VlcPlayerEngine(
             if (mp.currentVideoTrack != null) {
                 val sample = readHealthSample(mp)
                 sample?.let {
+                    if (sample.readBytes > 0L && !transportBytesReported) {
+                        transportBytesReported = true
+                        listener?.onTransportBytes()
+                    }
                     if (
                         sample.decodedVideo > 0L ||
                         sample.displayedPictures > 0L ||
@@ -366,6 +370,8 @@ class VlcPlayerEngine(
     private val opsSeq = AtomicLong(0)
     private val eventSession = AtomicLong(0)
     private val pendingOps = AtomicInteger(0)
+    private var transportBytesReported = false
+    private var recoveryOutputCounters: Pair<Int, Int>? = null
     private data class DeferredPlay(val url: String, val reset: Boolean)
     private var deferredPlay: DeferredPlay? = null
 
@@ -1111,6 +1117,8 @@ class VlcPlayerEngine(
         bufferingActive.set(true)
         voutObserved.set(false)
         playbackHealth.reset()
+        transportBytesReported = false
+        recoveryOutputCounters = null
         resetBufferingProgressProbe()
         healthHandler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()
@@ -1315,9 +1323,10 @@ class VlcPlayerEngine(
         finishPending: () -> Unit,
     ) {
         // This point is reached only after any retired player cleanup and Surface
-        // replacement have completed. The controller's startup budget must begin
-        // here—not when a rapid zap was merely stored in deferredPlay.
+        // replacement have completed. This reports a phase; the controller's
+        // absolute request deadline already covers the wait before this point.
         listener?.onPlaybackSubmitted()
+        val attemptListener = listener
         val startLayout = videoLayout
         VlcOps.postBounded(
             timeoutMs = NATIVE_OPERATION_TIMEOUT_MS,
@@ -1381,6 +1390,7 @@ class VlcPlayerEngine(
                         if (!ProviderConnectionSafety.newConnectionAllowed) {
                             providerBlocked = true
                         } else {
+                            attemptListener?.onTransportConnecting()
                             mp.play()
                         }
                     }
@@ -1566,6 +1576,33 @@ class VlcPlayerEngine(
     override fun playbackPositionMs(): Long {
         if (pendingOps.get() > 0 || nativeHandlesAbandoned.get()) return -1L
         return mediaPlayer?.time ?: -1L
+    }
+
+    override fun hasRecentOutputProgress(): Boolean {
+        if (pendingOps.get() > 0 || nativeHandlesAbandoned.get() || bufferingActive.get()) return false
+        val mp = mediaPlayer ?: return false
+        if (!playingObserved.get()) return false
+        val videoRequired = mp.currentVideoTrack != null
+        if (videoRequired && !videoOutputReported) return false
+        val media = runCatching { mp.media }.getOrNull() ?: return false
+        return try {
+            val stats = runCatching { media.stats }.getOrNull()
+            // Old native builds can omit statistics altogether. In that case the
+            // existing verified surface + controller clock remain the evidence;
+            // a missing statistic is never invented as an advancing counter.
+            if (stats == null) return videoRequired && videoOutputReported
+            val counters = stats.displayedPictures to stats.playedAbuffers
+            val before = recoveryOutputCounters
+            recoveryOutputCounters = counters
+            if (before == null) return false
+            val videoAdvanced = !videoRequired ||
+                (!videoStatsUsable.get() && videoOutputReported) || counters.first > before.first
+            val hasAudio = mp.audioTracks?.any { it.id != -1 } == true
+            val audioAdvanced = !hasAudio || (mp.audioTrack != -1 && counters.second > before.second)
+            videoAdvanced && audioAdvanced
+        } finally {
+            media.release()
+        }
     }
 
     override fun pause() {

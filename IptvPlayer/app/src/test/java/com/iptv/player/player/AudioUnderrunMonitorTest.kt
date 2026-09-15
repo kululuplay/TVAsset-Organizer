@@ -8,6 +8,26 @@ import org.junit.Test
 class AudioUnderrunMonitorTest {
     private val monitor = AudioUnderrunMonitor()
 
+    @Test fun `audio readiness needs advancing sink samples and expires on silent output`() {
+        monitor.onPosition(1_000_000, 1_000)
+        assertFalse(monitor.hasRecentProgress(1_000))
+        monitor.onPosition(1_250_000, 2_000)
+        assertTrue(monitor.hasRecentProgress(2_000))
+        for (t in 3_000L..9_000L step 1_000L) monitor.onPosition(1_250_000, t)
+        assertFalse(monitor.hasRecentProgress(9_000))
+    }
+
+    @Test fun `pause flush and discontinuity cannot preserve old sink progress`() {
+        monitor.onPosition(1_000_000, 1_000)
+        monitor.onPosition(1_250_000, 2_000)
+        monitor.reset()
+        assertFalse(monitor.hasRecentProgress(2_100))
+        monitor.onPosition(1_000_000, 3_000)
+        monitor.onPosition(1_250_000, 4_000)
+        monitor.onPosition(100_000, 5_000)
+        assertFalse(monitor.hasRecentProgress(5_000))
+    }
+
     @Test
     fun `218 ms double underrun followed by playout is recovered without switching`() {
         monitor.onPosition(1_000_000L, 1_000L)

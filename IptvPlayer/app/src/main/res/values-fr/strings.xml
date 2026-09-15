@@ -195,6 +195,7 @@
 
     <string name="error_no_internet">Vérifiez votre connexion Internet.</string>
     <string name="error_cannot_connect">Impossible de se connecter au serveur.</string>
+    <string name="error_live_playback_failed">La lecture n’a pas pu reprendre. Veuillez réessayer.</string>
     <string name="error_cannot_play_content">Impossible de lire ce contenu. Vérifiez la connexion ou essayez un autre décodeur.</string>
     <string name="error_bad_credentials">Nom d\'utilisateur ou mot de passe incorrect.</string>
     <string name="error_subscription_expired">Votre abonnement a expiré.</string>

@@ -195,9 +195,9 @@ class UpdateChecker(
                 .header("X-GitHub-Api-Version", "2022-11-28")
                 .build()
 
-            httpClient.newCall(request).execute().use { resp ->
+            httpClient.newCall(request).awaitUpdateResponse().let { resp ->
                 if (!resp.isSuccessful) return@withContext UpdateResult.Failed
-                val body = resp.body?.string() ?: return@withContext UpdateResult.Failed
+                val body = resp.body ?: return@withContext UpdateResult.Failed
                 val releases = JSONArray(body)
 
                 // Newest published (non-draft) release with a usable version tag.
@@ -266,7 +266,7 @@ class UpdateChecker(
         candidateVersion: String,
     ): RolloutGate {
         val context = appContext ?: return RolloutGate.Allow
-        return runCatching {
+        return try {
             val deviceId = DeviceId.get(context)
             val cacheSlot = System.currentTimeMillis() / POLICY_CACHE_WINDOW_MS
             val request = Request.Builder()
@@ -277,11 +277,11 @@ class UpdateChecker(
                 .header("Accept", "application/json")
                 .header("Cache-Control", "no-cache")
                 .build()
-            httpClient.newCall(request).execute().use { response ->
+            httpClient.newCall(request).awaitUpdateResponse().let { response ->
                 when (
                     val outcome = UpdateRolloutGatePolicy.decide(
                         response.code,
-                        response.body?.string(),
+                        response.body,
                         candidateVersion,
                         deviceId,
                     )
@@ -291,7 +291,11 @@ class UpdateChecker(
                         RolloutGate.Hold(outcome.stableVersion)
                 }
             }
-        }.getOrDefault(RolloutGate.Hold(null))
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (_: Exception) {
+            RolloutGate.Hold(null)
+        }
     }
 
     private companion object {

@@ -227,6 +227,7 @@
 
     <string name="error_no_internet">İnternet bağlantınızı kontrol edin.</string>
     <string name="error_cannot_connect">Sunucuya bağlanılamadı.</string>
+    <string name="error_live_playback_failed">Oynatmaya devam edilemedi. Lütfen yeniden deneyin.</string>
     <string name="error_cannot_play_content">Bu içerik oynatılamadı. Bağlantıyı kontrol edin veya farklı bir decoder deneyin.</string>
     <string name="error_bad_credentials">Kullanıcı adı veya şifre hatalı.</string>
     <string name="error_subscription_expired">Aboneliğinizin süresi doldu.</string>
