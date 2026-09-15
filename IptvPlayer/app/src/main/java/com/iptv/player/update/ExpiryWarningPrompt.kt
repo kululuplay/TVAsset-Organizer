@@ -10,9 +10,9 @@
  *    expiry date only; a later renewal (a different date) re-enables it.
  *
  * Mirrors UpdatePrompt: silent on failure or when nothing is due, shows once per
- * session, and is fully D-pad driven. [onNoPrompt] is invoked (on the main
- * thread) on every path where no dialog is shown, so callers can chain another
- * launch dialog (e.g. the update prompt) without the two overlapping. Expiry is
+ * session, and is fully D-pad driven. [onComplete] is invoked after dismissal or
+ * when no dialog is due, so callers can chain another launch dialog (e.g. the
+ * update prompt) without skipping it or overlapping the two. Expiry is
  * checked first so an already-expired account always sees its notice even when an
  * update is also available.
  */
@@ -24,6 +24,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.withResumed
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import kotlinx.coroutines.CancellationException
@@ -45,11 +46,24 @@ object ExpiryWarningPrompt {
      * dialog: the expired notice when the subscription has ended, otherwise the
      * soft reminder when it ends within [WARN_WITHIN_DAYS] days. Safe to call from
      * any [AppCompatActivity] onCreate. Stays silent on any failure and invokes
-     * [onNoPrompt] whenever no dialog is shown.
+     * [onComplete] after the notice is dismissed, or when no notice is shown.
      */
-    fun maybeShow(activity: AppCompatActivity, onNoPrompt: (() -> Unit)? = null) {
+    fun maybeShow(activity: AppCompatActivity, onComplete: (() -> Unit)? = null) {
+        var completed = false
+        val complete: () -> Unit = {
+            if (!completed && !activity.isFinishing && !activity.isDestroyed) {
+                completed = true
+                activity.lifecycleScope.launch {
+                    // A user may press Home while the account check is running or
+                    // the notice is closing. Wait for the dashboard to be visible.
+                    activity.lifecycle.withResumed {
+                        if (!activity.isFinishing) onComplete?.invoke()
+                    }
+                }
+            }
+        }
         if (shownThisSession) {
-            onNoPrompt?.invoke()
+            complete()
             return
         }
         activity.lifecycleScope.launch {
@@ -57,7 +71,7 @@ object ExpiryWarningPrompt {
                 val config = ServiceLocator.settings.getSourceConfig()
                 val account = config?.let { ServiceLocator.repository.getAccountInfo(it) }
                 if (account == null) {
-                    onNoPrompt?.invoke()
+                    complete()
                     return@launch
                 }
                 account
@@ -65,7 +79,7 @@ object ExpiryWarningPrompt {
                 // Never swallow cancellation: let the caller's coroutine unwind cleanly.
                 throw e
             } catch (e: Exception) {
-                onNoPrompt?.invoke()
+                complete()
                 return@launch
             }
 
@@ -74,14 +88,19 @@ object ExpiryWarningPrompt {
 
             // Don't touch the window once the Activity is going away.
             if (shownThisSession || activity.isFinishing || activity.isDestroyed) {
-                onNoPrompt?.invoke()
+                complete()
                 return@launch
             }
 
             when {
                 expired -> {
-                    shownThisSession = true
-                    showExpiredDialog(activity, info.expiryDateMs)
+                    activity.lifecycle.withResumed {
+                        if (shownThisSession || activity.isFinishing) complete()
+                        else {
+                            shownThisSession = true
+                            showExpiredDialog(activity, info.expiryDateMs, complete)
+                        }
+                    }
                 }
                 days != null && days in 0..WARN_WITHIN_DAYS -> {
                     val expiryMs = info.expiryDateMs
@@ -89,19 +108,28 @@ object ExpiryWarningPrompt {
                     if (expiryMs == null ||
                         ServiceLocator.settings.getSuppressedExpiryWarning() == expiryMs
                     ) {
-                        onNoPrompt?.invoke()
+                        complete()
                         return@launch
                     }
-                    shownThisSession = true
-                    showWarningDialog(activity, expiryMs, days)
+                    activity.lifecycle.withResumed {
+                        if (shownThisSession || activity.isFinishing) complete()
+                        else {
+                            shownThisSession = true
+                            showWarningDialog(activity, expiryMs, days, complete)
+                        }
+                    }
                 }
-                else -> onNoPrompt?.invoke()
+                else -> complete()
             }
         }
     }
 
     /** Hard "subscription expired" notice; non-cancelable, single acknowledge. */
-    private fun showExpiredDialog(activity: AppCompatActivity, expiryMs: Long?) {
+    private fun showExpiredDialog(
+        activity: AppCompatActivity,
+        expiryMs: Long?,
+        onDismiss: () -> Unit,
+    ) {
         val view = LayoutInflater.from(activity).inflate(R.layout.dialog_expiry_expired, null)
 
         val dialog = AlertDialog.Builder(activity, R.style.ThemeOverlay_Iptv_Dialog)
@@ -109,6 +137,7 @@ object ExpiryWarningPrompt {
             .setCancelable(false)
             .create()
         dialog.setCanceledOnTouchOutside(false)
+        dialog.setOnDismissListener { onDismiss() }
 
         val dateView = view.findViewById<TextView>(R.id.expiredDate)
         if (expiryMs != null) {
@@ -129,12 +158,19 @@ object ExpiryWarningPrompt {
     }
 
     /** Soft "expiring soon" reminder with OK + "don't show again". */
-    private fun showWarningDialog(activity: AppCompatActivity, expiryMs: Long, days: Long) {
+    private fun showWarningDialog(
+        activity: AppCompatActivity,
+        expiryMs: Long,
+        days: Long,
+        onDismiss: () -> Unit,
+    ) {
         val view = LayoutInflater.from(activity).inflate(R.layout.dialog_expiry_warning, null)
 
         val dialog = AlertDialog.Builder(activity, R.style.ThemeOverlay_Iptv_Dialog)
             .setView(view)
             .create()
+        // Covers OK, "don't show again", Back and outside-touch cancellation.
+        dialog.setOnDismissListener { onDismiss() }
 
         // Show the real remaining-days count (min 1, so the final <24h window
         // never reads "0 days") instead of the old static "5 days or less" text.

@@ -17,6 +17,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.withResumed
 import com.iptv.player.BuildConfig
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
@@ -59,14 +60,16 @@ object UpdatePrompt {
                 onNoPrompt?.invoke()
                 return@launch
             }
-            // Don't touch the window once the Activity is going away.
-            if (shownThisSession || activity.isFinishing || activity.isDestroyed) {
-                onNoPrompt?.invoke()
-                return@launch
+            // The request can complete after Home/settings/navigation. Present
+            // only on a resumed dashboard; destruction cancels this wait.
+            activity.lifecycle.withResumed {
+                if (shownThisSession || activity.isFinishing || activity.isDestroyed) {
+                    onNoPrompt?.invoke()
+                } else {
+                    shownThisSession = true
+                    showDialog(activity, result.info)
+                }
             }
-            shownThisSession = true
-
-            showDialog(activity, result.info)
         }
     }
 

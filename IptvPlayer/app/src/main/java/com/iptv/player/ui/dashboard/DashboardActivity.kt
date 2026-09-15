@@ -71,8 +71,8 @@ class DashboardActivity : BaseActivity() {
         }
 
         // Subscription state takes priority: an expired account must always see
-        // its notice at launch, even when an update is available. If no expiry
-        // dialog is due, fall back to the update prompt so the two never overlap.
+        // its notice at launch, even when an update is available. Continue with
+        // updates after dismissal (or immediately if no expiry notice is due).
         ExpiryWarningPrompt.maybeShow(this) { UpdatePrompt.maybeShow(this) }
 
         // Clear the launch-crash guard once the home has drawn its first frame

@@ -105,6 +105,46 @@ class DevicePlaybackProfileTest {
         assertEquals(setOf(CompatibilityReason.NO_HARDWARE_AVC), profile.reasons)
     }
 
+    @Test
+    fun `legacy Android and Fire OS API levels with one GiB select compatibility`() {
+        for (sdk in listOf(21, 22, 23, 25, 28, 30)) {
+            val profile = DevicePlaybackProfileResolver.resolve(signals(
+                sdkInt = sdk,
+                abis = listOf("armeabi-v7a"),
+                totalRamMb = 1_024,
+                memoryClassMb = 96,
+            ))
+            assertTrue("API $sdk must use the constrained playback budget", profile.compatibilityMode)
+            assertFalse(profile.allowSoftwareHevcRescue)
+            assertEquals(50, profile.adaptiveMaxFrameRate)
+        }
+    }
+
+    @Test
+    fun `32 bit app on 64 bit capable legacy hardware uses actual runtime bitness`() {
+        val device = signals(
+            sdkInt = 27,
+            abis = listOf("arm64-v8a", "armeabi-v7a"),
+            totalRamMb = 2_048,
+            memoryClassMb = 256,
+        ).copy(runtimeIs64Bit = false)
+        val profile = DevicePlaybackProfileResolver.resolve(device)
+        assertTrue(profile.compatibilityMode)
+        assertEquals(setOf(CompatibilityReason.LEGACY_32_BIT_RUNTIME), profile.reasons)
+    }
+
+    @Test
+    fun `old SDK alone does not restrict capable hardware`() {
+        val profile = DevicePlaybackProfileResolver.resolve(signals(
+            sdkInt = 23,
+            abis = listOf("arm64-v8a"),
+            totalRamMb = 4_096,
+            memoryClassMb = 256,
+        ))
+        assertFalse(profile.compatibilityMode)
+        assertNull(profile.adaptiveMaxHeight)
+    }
+
     private fun signals(
         sdkInt: Int,
         abis: List<String>,
