@@ -195,6 +195,7 @@
 
     <string name="error_no_internet">Controleer je internetverbinding.</string>
     <string name="error_cannot_connect">Kan geen verbinding maken met de server.</string>
+    <string name="error_live_playback_failed">Het afspelen kon niet worden hervat. Probeer het opnieuw.</string>
     <string name="error_cannot_play_content">Deze inhoud kon niet worden afgespeeld. Controleer de verbinding of probeer een andere decoder.</string>
     <string name="error_bad_credentials">Onjuiste gebruikersnaam of wachtwoord.</string>
     <string name="error_subscription_expired">Je abonnement is verlopen.</string>

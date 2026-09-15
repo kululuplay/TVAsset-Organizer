@@ -48,7 +48,6 @@ import com.iptv.player.player.PlayerController
 import com.iptv.player.player.StreamInfo
 import com.iptv.player.player.TvPlaybackSession
 import com.iptv.player.player.VlcOps
-import com.iptv.player.util.AutoRetryPolicy
 import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NowPlaying
 import com.iptv.player.ui.common.BaseActivity
@@ -103,11 +102,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
     private val zapHandler = Handler(Looper.getMainLooper())
     private var pendingZapChannel: Channel? = null
     private val overlayHandler = Handler(Looper.getMainLooper())
-    // Post-fatal automatic retry (see onFatalError / AutoRetryPolicy): countdown
-    // ticks + the pending retry live on this handler; the attempt index picks the
-    // next backoff delay and only resets on success or an explicit user action.
-    private val autoRetryHandler = Handler(Looper.getMainLooper())
-    private var autoRetryAttempt = 0
     private val confirmPress = RemoteConfirmPress()
     private var epgJob: Job? = null
     private val unlockedAdultChannels = mutableSetOf<String>()
@@ -195,7 +189,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
                 castController.reloadCurrentMedia()
                 return@setOnClickListener
             }
-            cancelAutoRetry(resetAttempts = true)
             binding.errorOverlay.visibility = View.GONE
             binding.bufferingLabel.setText(R.string.buffering)
             binding.bufferingIndicator.visibility = View.VISIBLE
@@ -397,9 +390,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         localStreamSubmitted = false
         pendingLocalRestartAfterCast = false
         viewModel.markWatched(channel.id)
-        // A new channel cancels any reconnect-failed state from the previous one,
-        // including a pending automatic retry aimed at the old channel.
-        cancelAutoRetry(resetAttempts = true)
+        // A new channel clears the previous channel's terminal error overlay.
         binding.errorOverlay.visibility = View.GONE
         if (castOwnsPlayback) {
             // The receiver owns the only stream connection. Update it directly;
@@ -805,11 +796,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
     override fun onBuffering() {
         if (castOwnsPlayback || castLoadPending) return
         loadingOverlayPolicy.onBuffering()
-        // A playback attempt is underway (auto retry, manual retry or a zap) —
-        // stop any pending countdown but keep the attempt count: only a real
-        // success (onPlaying/onVideoResumed) forgives past failures, otherwise
-        // a failing retry would reset its own backoff into a 15s hammer-loop.
-        cancelAutoRetry(resetAttempts = false)
+        // A playback attempt is underway (automatic recovery, manual retry or zap).
         binding.errorOverlay.visibility = View.GONE
         binding.bufferingLabel.setText(R.string.buffering)
         binding.bufferingIndicator.visibility = View.VISIBLE
@@ -823,7 +810,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
             engineName = engineName,
             expectsVideo = !viewModel.radioMode,
         )
-        cancelAutoRetry(resetAttempts = false)
         binding.errorOverlay.visibility = View.GONE
         PlaybackQoeRuntime.markEngine(qoeSessionId, LivePlaybackQoePolicy.engine(engineName))
         PlaybackQoeRuntime.markReady(qoeSessionId)
@@ -845,7 +831,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
     override fun onPlaybackRestarting() {
         if (castOwnsPlayback || castLoadPending) return
         loadingOverlayPolicy.requireFreshFrame()
-        cancelAutoRetry(resetAttempts = false)
         binding.errorOverlay.visibility = View.GONE
         binding.playbackCover.visibility = View.VISIBLE
         binding.bufferingLabel.setText(R.string.buffering)
@@ -858,7 +843,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         loadingOverlayPolicy.onVideoResumed()
         // First real frame on the (re)attached surface — clear the hand-off cover
         // and any reconnect indicator the moment playback genuinely resumes.
-        cancelAutoRetry(resetAttempts = false)
         binding.errorOverlay.visibility = View.GONE
         binding.playbackCover.visibility = View.GONE
         binding.bufferingIndicator.visibility = View.GONE
@@ -874,13 +858,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         if (castOwnsPlayback || castLoadPending) return
         loadingOverlayPolicy.onEngineChanged(engineName)
         PlaybackQoeRuntime.markEngine(qoeSessionId, LivePlaybackQoePolicy.engine(engineName))
-    }
-
-    override fun onStablePlayback() {
-        if (castOwnsPlayback || castLoadPending) return
-        // Cache readiness or one frame cannot forgive a repeated playback loop.
-        // The controller confirms sustained clock progress for TV and radio.
-        cancelAutoRetry(resetAttempts = true)
     }
 
     override fun onTransportResolved(format: StreamFormat) {
@@ -904,7 +881,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         // Non-blocking "stream not responding, retrying…" indicator over the
         // picture while the controller re-opens the same channel. Cleared
         // automatically by onPlaying / onVideoResumed once playback resumes.
-        cancelAutoRetry(resetAttempts = false)
         binding.errorOverlay.visibility = View.GONE
         binding.playbackCover.visibility = View.VISIBLE
         binding.bufferingLabel.setText(R.string.error_stream_not_responding)
@@ -914,70 +890,16 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
     override fun onFatalError() {
         if (castOwnsPlayback || castLoadPending) return
         // Reconnect window elapsed with no recovery: replace the spinner with a
-        // clear message and a focusable manual-retry button, then keep retrying
-        // on our own growing schedule so an unattended TV heals by itself once
-        // the provider/network comes back.
+        // clear message and a focusable manual-retry button. The controller owns
+        // the entire automatic recovery budget, including authoritative denials.
         binding.playbackCover.visibility = View.VISIBLE
         binding.bufferingIndicator.visibility = View.GONE
         PlaybackQoeRuntime.setRebuffering(qoeSessionId, false)
         playbackSession.setPlaying(false)
-        binding.errorMessage.setText(R.string.error_cannot_connect)
+        binding.errorMessage.setText(R.string.error_live_playback_failed)
         binding.errorOverlay.visibility = View.VISIBLE
         binding.retryButton.requestFocus()
-        scheduleAutoRetry()
-    }
-
-    // ---- Post-fatal automatic retry --------------------------------------
-
-    /**
-     * Arms the next automatic retry per [AutoRetryPolicy] and shows a live
-     * countdown on the error overlay. When the schedule is exhausted the
-     * overlay switches to a "press retry" message and automatic retrying stops.
-     */
-    private fun scheduleAutoRetry() {
-        autoRetryHandler.removeCallbacksAndMessages(null)
-        val delayMs = AutoRetryPolicy.delayForAttempt(autoRetryAttempt)
-        if (delayMs == null) {
-            binding.errorMessage.setText(R.string.error_auto_retry_exhausted)
-            finishQoeSession(PlaybackEndReason.FATAL_FAILURE)
-            return
-        }
-        tickAutoRetryCountdown((delayMs / 1000L).coerceAtLeast(1L))
-    }
-
-    /** One-second countdown tick; fires the retry when it reaches zero. */
-    private fun tickAutoRetryCountdown(secondsLeft: Long) {
-        if (secondsLeft <= 0L) {
-            autoRetryAttempt++
-            binding.errorOverlay.visibility = View.GONE
-            binding.bufferingLabel.setText(R.string.buffering)
-            binding.bufferingIndicator.visibility = View.VISIBLE
-            if (::controller.isInitialized && !castOwnsPlayback) {
-                if (
-                    prepareLocalPlaybackRequest() ==
-                    ProviderStartGatePolicy.Decision.READY
-                ) {
-                    if (localStreamSubmitted) {
-                        beginQoeSessionIfNeeded()
-                        controller.retry()
-                    } else {
-                        currentChannel?.let(::startChannel)
-                    }
-                }
-            }
-            return
-        }
-        binding.errorMessage.text = getString(R.string.error_auto_retry_countdown, secondsLeft)
-        autoRetryHandler.postDelayed({ tickAutoRetryCountdown(secondsLeft - 1) }, 1000L)
-    }
-
-    /**
-     * Stops any pending automatic retry/countdown. Reset only after sustained
-     * playback or an explicit manual retry/channel change; one frame is not enough.
-     */
-    private fun cancelAutoRetry(resetAttempts: Boolean) {
-        autoRetryHandler.removeCallbacksAndMessages(null)
-        if (resetAttempts) autoRetryAttempt = 0
+        finishQoeSession(PlaybackEndReason.FATAL_FAILURE)
     }
 
     // ---- Platform playback ownership + anonymous QoE -------------------
@@ -1051,7 +973,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         binding.errorOverlay.visibility = View.GONE
         binding.bufferingIndicator.visibility = View.VISIBLE
         binding.bufferingLabel.setText(R.string.buffering)
-        VlcOps.post {
+        VlcOps.awaitProviderDrain {
             runOnUiThread {
                 providerDrainPending = false
                 if (
@@ -1140,7 +1062,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         val replacingLocalPlayback = !castOwnsPlayback
         castLoadPending = false
         castOwnsPlayback = true
-        cancelAutoRetry(resetAttempts = false)
         if (replacingLocalPlayback) finishQoeSession(PlaybackEndReason.REPLACED)
     }
 
@@ -1170,7 +1091,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         castOwnsPlayback = false
         suppressConnectedCastReloadOnce = true
         pendingLocalRestartAfterCast = false
-        cancelAutoRetry(resetAttempts = false)
         binding.playbackCover.visibility = View.VISIBLE
         binding.bufferingIndicator.visibility = View.GONE
         binding.errorMessage.setText(R.string.error_playback_ownership_uncertain)
@@ -1213,7 +1133,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
     }
 
     override fun onLocalProcessRecoveryRequired(): Boolean {
-        cancelAutoRetry(resetAttempts = false)
         val launched = PlaybackProcessRecovery.requestIfRequired(
             this,
             reason = "live_native_owner_unresolved",
@@ -1274,7 +1193,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         // pending automatic retry — it must never start a stream in the background.
         zapHandler.removeCallbacksAndMessages(null)
         pendingZapChannel = null
-        cancelAutoRetry(resetAttempts = false)
         if (!castOwnsPlayback) {
             finishQoeSession(PlaybackEndReason.BACKGROUND)
             if (!castLoadPending) {
@@ -1321,7 +1239,6 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         playbackSession.release()
         zapHandler.removeCallbacksAndMessages(null)
         overlayHandler.removeCallbacksAndMessages(null)
-        autoRetryHandler.removeCallbacksAndMessages(null)
         statsHandler.removeCallbacksAndMessages(null)
         debugBinder?.release()
         if (::controller.isInitialized) controller.release()

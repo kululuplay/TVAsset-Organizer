@@ -196,6 +196,7 @@
 
     <string name="error_no_internet">تحقق من اتصالك بالإنترنت.</string>
     <string name="error_cannot_connect">تعذّر الاتصال بالخادم.</string>
+    <string name="error_live_playback_failed">تعذّر متابعة التشغيل. يُرجى المحاولة مرة أخرى.</string>
     <string name="error_bad_credentials">اسم المستخدم أو كلمة المرور غير صحيحة.</string>
     <string name="error_subscription_expired">انتهى اشتراكك.</string>
     <string name="error_account_in_use">قد يكون هذا الحساب مستخدماً على جهاز آخر.</string>

@@ -63,6 +63,9 @@ interface PlayerEngine {
 
     fun setListener(listener: PlayerListener?)
 
+    /** Opaque per-attempt identifier; no account, channel name or URL. */
+    fun setPlaybackAttemptId(id: String?) {}
+
     /**
      * Audio sync offset in milliseconds (positive = delay audio). Only libVLC
      * supports this; the ExoPlayer backend ignores it (no public offset API).
@@ -83,6 +86,9 @@ interface PlayerEngine {
      * position stops advancing the controller forces a fresh reconnect.
      */
     fun playbackPositionMs(): Long = -1
+
+    /** Output evidence for recovery; READY alone must never forgive the retry budget. */
+    fun hasRecentOutputProgress(): Boolean = false
 
     /**
      * Current video stream technical info for the diagnostics overlay, or null
@@ -144,10 +150,11 @@ data class PlayerTrack(
 interface PlayerListener {
     /**
      * The backend has submitted the current stream to its real decoder/native
-     * start path. The controller starts its live startup deadline here, excluding
-     * any retired-player cleanup or coalesced-zap wait that happened beforehand.
+     * start path. Diagnostic only: the deadline already covers queue/surface wait.
      */
     fun onPlaybackSubmitted() {}
+    fun onTransportConnecting() {}
+    fun onTransportBytes() {}
     fun onBuffering() {}
     fun onPlaying() {}
     /**

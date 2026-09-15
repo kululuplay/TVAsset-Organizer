@@ -35,6 +35,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import com.iptv.player.util.Logger
+import com.iptv.player.cast.ProviderConnectionSafety
 import java.util.ArrayDeque
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
@@ -125,6 +126,30 @@ object VlcOps {
                 onTimedOutActionFinished = {},
             ),
         )
+    }
+
+    /**
+     * UI preflight runs before PlayerController.play, so it needs its own bound.
+     * A queue marker timing out is NOT proof of socket closure. Keep ownership
+     * fail-closed; the caller's existing gate chooses process recovery or error.
+     */
+    fun awaitProviderDrain(onDrained: () -> Unit) {
+        val wait = BoundedPlaybackWait(
+            onComplete = onDrained,
+            onTimeout = {
+                ProviderConnectionSafety.block(ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP)
+                Logger.w(TAG, "provider drain deadline exceeded; ownership remains blocked")
+                onDrained()
+            },
+        )
+        val timeout = Runnable { wait.timeout() }
+        watchdogHandler.postDelayed(timeout, 30_000L)
+        post {
+            watchdogHandler.post {
+                watchdogHandler.removeCallbacks(timeout)
+                wait.complete()
+            }
+        }
     }
 
     /**
