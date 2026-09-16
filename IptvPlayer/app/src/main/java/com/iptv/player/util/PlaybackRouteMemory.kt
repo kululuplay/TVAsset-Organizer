@@ -23,11 +23,15 @@
 package com.iptv.player.util
 
 import android.content.Context
+import com.iptv.player.playback.android.VerifiedCodecStore
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.Executors
 
 object PlaybackRouteMemory {
+    private fun scopedKey(key: String?): String? = key?.let {
+        VerifiedCodecStore.deviceScope + "|" + VerifiedCodecStore.hash(it)
+    }
 
     private const val FILE = "route-memory.jsonl"
 
@@ -97,7 +101,7 @@ object PlaybackRouteMemory {
                     val key = o.optString("k", "")
                     val stage = o.optString("s", "")
                     if (!acceptsStoredRoute(o.optInt("v", 0), stage)) return@forEach
-                    if (key.isEmpty() || stage.isEmpty()) return@forEach
+                    if (!key.startsWith(VerifiedCodecStore.deviceScope + "|") || stage.isEmpty()) return@forEach
                     val usedAt = o.optLong("u", 0L)
                     if (now - usedAt > TTL_MS) return@forEach // drop expired on load
                     synchronized(lock) {
@@ -121,7 +125,7 @@ object PlaybackRouteMemory {
      * usable memory (absent / expired / [key] null). Pure in-memory read.
      */
     fun bestStage(key: String?): String? {
-        val k = key ?: return null
+        val k = scopedKey(key) ?: return null
         return synchronized(lock) {
             val e = routes[k] ?: return@synchronized null
             if (System.currentTimeMillis() - e.usedAt > TTL_MS) {
@@ -135,7 +139,7 @@ object PlaybackRouteMemory {
 
     /** A stage played stably for [key]: remember it as the winner (overwrites any prior). */
     fun markStable(key: String?, stage: String) {
-        val k = key ?: return
+        val k = scopedKey(key) ?: return
         if (stage.isEmpty()) return
         runCatching {
             val now = System.currentTimeMillis()
@@ -160,7 +164,7 @@ object PlaybackRouteMemory {
      * [MAX_FAILURES] the entry is dropped so future launches stop suggesting it.
      */
     fun markFailed(key: String?, stage: String) {
-        val k = key ?: return
+        val k = scopedKey(key) ?: return
         runCatching {
             synchronized(lock) {
                 val e = routes[k] ?: return@synchronized
@@ -178,7 +182,7 @@ object PlaybackRouteMemory {
      * after its earlier stable window (for example periodic severe frame loss).
      */
     fun forget(key: String?, stage: String) {
-        val k = key ?: return
+        val k = scopedKey(key) ?: return
         runCatching {
             val removed = synchronized(lock) {
                 val e = routes[k] ?: return@synchronized false

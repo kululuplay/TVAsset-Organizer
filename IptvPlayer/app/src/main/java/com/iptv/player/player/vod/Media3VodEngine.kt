@@ -40,6 +40,9 @@ import com.iptv.player.player.DirectMediaDataSource
 import com.iptv.player.player.MediaTransportPolicy
 import com.iptv.player.R
 import com.iptv.player.playback.android.PlaybackQoeRuntime
+import com.iptv.player.playback.android.MeasuredPlaybackBuffer
+import com.iptv.player.playback.android.MeasuredPlaybackSession
+import com.iptv.player.playback.android.VerifiedCodecAdapterFactory
 import com.iptv.player.playback.core.FailureSignal
 import com.iptv.player.playback.core.PlaybackFailure
 import com.iptv.player.playback.core.PlaybackFailureClassifier
@@ -67,6 +70,7 @@ data class VodBufferConfig(
 
 data class Media3VodEngineConfig(
     val buffer: VodBufferConfig = VodBufferConfig(),
+    val adaptiveBuffering: Boolean = false,
     val userAgent: String = AppInfo.USER_AGENT,
     val connectTimeoutMs: Int = 15_000,
     val readTimeoutMs: Int = 20_000,
@@ -107,6 +111,9 @@ class Media3VodEngine(
     override val engineName: String = ENGINE_NAME
 
     private var player: ExoPlayer? = null
+    private val measuredBuffer = MeasuredPlaybackBuffer()
+    private val verifiedCodecs = VerifiedCodecAdapterFactory(context)
+    private var measuredSession: MeasuredPlaybackSession? = null
     private var playerView: PlayerView? = null
     private var listener: VodEngine.Listener? = null
     private var generationListener: Player.Listener? = null
@@ -221,6 +228,7 @@ class Media3VodEngine(
         exo.stop()
         exo.clearMediaItems()
 
+        measuredSession?.start(mediaId)
         val boundListener = GenerationListener(token, mediaId)
         generationListener = boundListener
         exo.addListener(boundListener)
@@ -411,6 +419,8 @@ class Media3VodEngine(
 
     @MainThread
     override fun release() {
+        measuredSession?.release()
+        measuredSession = null
         checkMainThread()
         if (released) return
         released = true
@@ -449,14 +459,15 @@ class Media3VodEngine(
         check(!released) { "Released VOD engine cannot create a player" }
 
         val deviceProfile = PlaybackQoeRuntime.devicePlaybackProfile()
-        val loadControl = VodLoadControl.create(config.buffer, deviceProfile.compatibilityMode)
+        val loadControl = VodLoadControl.create(config.buffer, deviceProfile.compatibilityMode,
+            measuredBuffer::snapshot, config.adaptiveBuffering)
         val httpFactory: DataSource.Factory = UpgradeOnlyHttpDataSourceFactory(
             userAgent = config.userAgent,
             connectTimeoutMs = config.connectTimeoutMs,
             readTimeoutMs = config.readTimeoutMs,
             allowHttpToHttpsRedirects = config.allowHttpToHttpsRedirects,
         )
-        val mediaSourceFactory = DefaultMediaSourceFactory(DirectMediaDataSource.Factory(httpFactory))
+        val mediaSourceFactory = DefaultMediaSourceFactory(DirectMediaDataSource.Factory(measuredBuffer.wrap(httpFactory)))
         val selector = DefaultTrackSelector(context).apply {
             val parameters = buildUponParameters()
                 .setTunnelingEnabled(false)
@@ -480,12 +491,16 @@ class Media3VodEngine(
         exo.setVideoFrameMetadataListener(videoFrameMetadataListener)
 
         player = exo
+        measuredSession = MeasuredPlaybackSession(context, exo, measuredBuffer, verifiedCodecs, false) {
+            verifiedFirstFrameGeneration == generation && reportedFailureGeneration != generation
+        }
         applyPreferredLanguages(exo)
         return exo
     }
 
     private fun buildRenderersFactory(): DefaultRenderersFactory =
         object : DefaultRenderersFactory(context) {
+            override fun getCodecAdapterFactory() = verifiedCodecs
             @Suppress("DEPRECATION", "UNUSED_PARAMETER")
             override fun buildAudioSink(
                 context: Context,
@@ -609,6 +624,7 @@ class Media3VodEngine(
     }
 
     private fun invalidateActiveGeneration(clearMedia: Boolean) {
+        measuredSession?.stop()
         generation += 1L
         activeMediaId = null
         reportedFailureGeneration = VodEngine.NO_GENERATION
@@ -640,6 +656,7 @@ class Media3VodEngine(
     }
 
     private fun reportInvalidVideoOutput() {
+        measuredSession?.videoFailure()
         val token = generation
         val mediaId = activeMediaId ?: return
         mainHandler.removeCallbacks(surfaceValidationDeadlineRunnable)

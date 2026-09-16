@@ -68,6 +68,9 @@ import com.iptv.player.BuildConfig
 import com.iptv.player.R
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.playback.android.PlaybackQoeRuntime
+import com.iptv.player.playback.android.MeasuredPlaybackBuffer
+import com.iptv.player.playback.android.MeasuredPlaybackSession
+import com.iptv.player.playback.android.VerifiedCodecAdapterFactory
 import com.iptv.player.playback.core.AudioFailureEvidence
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.PlaybackLog
@@ -103,6 +106,9 @@ class ExoPlayerEngine(
     override val supportsPreciseSourceErrors: Boolean = true
 
     private var player: ExoPlayer? = null
+    private val measuredBuffer = MeasuredPlaybackBuffer()
+    private val verifiedCodecs = VerifiedCodecAdapterFactory(context)
+    private var measuredSession: MeasuredPlaybackSession? = null
     private var playerView: PlayerView? = null
     private val playbackClockWindow = Timeline.Window()
     private var listener: PlayerListener? = null
@@ -240,7 +246,7 @@ class ExoPlayerEngine(
     }
 
     override fun bind(container: ViewGroup) {
-        val loadControl = LiveLoadControl(bufferMode, constrainedDevice, initialRebuffers)
+        val loadControl = LiveLoadControl(bufferMode, constrainedDevice, initialRebuffers, measuredBuffer::snapshot)
         PlaybackLog.log(
             context, engineName,
             "liveBuffer=$bufferMode constrained=$constrainedDevice priorRebuffers=$initialRebuffers",
@@ -278,7 +284,7 @@ class ExoPlayerEngine(
                 }
         }
         val mediaSourceFactory = ProgressiveMediaSource.Factory(
-            DirectMediaDataSource.Factory(httpDataSourceFactory),
+            DirectMediaDataSource.Factory(measuredBuffer.wrap(httpDataSourceFactory)),
             ExtractorsFactory { arrayOf(TsExtractor()) },
         )
 
@@ -752,6 +758,9 @@ class ExoPlayerEngine(
         container.addView(view)
 
         player = exo
+        measuredSession = MeasuredPlaybackSession(context, exo, measuredBuffer, verifiedCodecs, true) {
+            (!expectsVideo || videoOutputReported) && !videoFailureReported
+        }
         playerView = view
         applyPreferredTrackLanguages()
     }
@@ -790,6 +799,7 @@ class ExoPlayerEngine(
      */
     private fun buildRenderersFactory(): DefaultRenderersFactory =
         object : DefaultRenderersFactory(context) {
+            override fun getCodecAdapterFactory() = verifiedCodecs
             override fun buildAudioRenderers(
                 context: Context,
                 extensionRendererMode: Int,
@@ -1329,6 +1339,7 @@ class ExoPlayerEngine(
     }
 
     private fun reportVideoInvalid(detail: String) {
+        measuredSession?.videoFailure()
         if (videoFailureReported) return
         videoFailureReported = true
         cancelAudioClockStallCheck()
@@ -1400,6 +1411,7 @@ class ExoPlayerEngine(
         // zap, but that is far better than a permanently frozen picture on every
         // channel whose resolution differs from the one fullscreen started on.
         if (reset) exo.stop()
+        measuredSession?.start(mediaId)
         exo.setMediaItem(
             MediaItem.Builder()
                 .setUri(url)
@@ -1451,7 +1463,7 @@ class ExoPlayerEngine(
 
     override fun pause() { player?.playWhenReady = false }
     override fun resume() { player?.playWhenReady = true }
-    override fun stop() { player?.stop() }
+    override fun stop() { measuredSession?.stop(); player?.stop() }
 
     // Read on the main thread (Media3 requires it); the controller's stall
     // watchdog polls from a main-looper Handler. Advances during live playback,
@@ -1470,6 +1482,8 @@ class ExoPlayerEngine(
     }
 
     override fun release() {
+        measuredSession?.release()
+        measuredSession = null
         cancelPlaybackDiagnosticSampler()
         handler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()

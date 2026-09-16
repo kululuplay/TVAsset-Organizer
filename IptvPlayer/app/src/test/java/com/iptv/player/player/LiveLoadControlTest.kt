@@ -16,6 +16,40 @@ import org.junit.Test
 @OptIn(markerClass = [UnstableApi::class])
 class LiveLoadControlTest {
     @Test
+    fun `measured starvation increases restart threshold inside the same player`() {
+        var sample = com.iptv.player.playback.core.BufferMeasurements()
+        val control = LiveLoadControl(BufferMode.ADAPTIVE, true, measurements = { sample })
+            .apply { onPrepared(PlayerId.UNSET) }
+        assertTrue(control.shouldStartPlayback(parameters(2_500, rebufferAt = 1)))
+        sample = sample.copy(networkGapMs = 3_000, rebufferMs = 3_000, rebuffers = 1)
+        assertFalse(control.shouldStartPlayback(parameters(2_500, rebufferAt = 2)))
+        assertTrue(control.shouldStartPlayback(parameters(4_000, rebufferAt = 2)))
+    }
+
+    @Test
+    fun `low memory stops extra allocation but still starts with available samples`() {
+        val control = LiveLoadControl(BufferMode.ADAPTIVE, true,
+            measurements = { com.iptv.player.playback.core.BufferMeasurements(memoryPressure = true) })
+            .apply { onPrepared(PlayerId.UNSET) }
+        val allocator = control.allocator
+        val allocations = List(8 * 1_048_576 / C.DEFAULT_BUFFER_SEGMENT_SIZE) { allocator.allocate() }
+        try {
+            assertFalse(control.shouldContinueLoading(parameters(800)))
+            assertTrue(control.shouldStartPlayback(parameters(800, rebufferAt = 1)))
+            assertFalse(control.shouldStartPlayback(parameters(0, rebufferAt = 1)))
+        } finally { allocations.forEach(allocator::release); control.onReleased(PlayerId.UNSET) }
+    }
+
+    @Test
+    fun `explicit buffer duration is preserved despite measured network gaps`() {
+        val control = LiveLoadControl(BufferMode.LOW, true,
+            measurements = { com.iptv.player.playback.core.BufferMeasurements(3_000, 3_000, 3) })
+            .apply { onPrepared(PlayerId.UNSET) }
+        assertTrue(control.shouldStartPlayback(parameters(1_000, rebufferAt = 1)))
+        assertFalse(control.shouldContinueLoading(parameters(4_000)))
+    }
+
+    @Test
     fun `same player grows restart reserve after distinct rebuffer events`() {
         val control = control(BufferMode.ADAPTIVE)
         assertTrue(control.shouldStartPlayback(parameters(500)))
