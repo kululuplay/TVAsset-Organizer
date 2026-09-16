@@ -125,6 +125,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
     /** Opaque, URL/title-free QoE session for the current fullscreen channel. */
     private var qoeSessionId: PlaybackSessionId? = null
     private val loadingOverlayPolicy = LiveLoadingOverlayPolicy()
+    private var playbackConnectivity: com.iptv.player.util.ConnectivityWatcher? = null
+    private var playbackNetworkOnline: Boolean? = null
     private var playbackResourceToken: PlaybackResourceToken? = null
 
     /** Diagnostics overlay state (toggled via the menu / INFO key). */
@@ -443,6 +445,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
             ),
         )
         localStreamSubmitted = true
+        playbackNetworkOnline?.let(controller::onNetworkChanged)
         showOverlay(channel)
         if (statsVisible) refreshStats()
     }
@@ -798,7 +801,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         loadingOverlayPolicy.onBuffering()
         // A playback attempt is underway (automatic recovery, manual retry or zap).
         binding.errorOverlay.visibility = View.GONE
-        binding.bufferingLabel.setText(R.string.buffering)
+        binding.bufferingLabel.text = controller.lastFailure?.let { com.iptv.player.player.LivePlaybackMessages.message(this, it) }
+            ?: getString(R.string.buffering)
         binding.bufferingIndicator.visibility = View.VISIBLE
         PlaybackQoeRuntime.setRebuffering(qoeSessionId, true)
         if (!castOwnsPlayback && localPlaybackRequested) playbackSession.setPlaying(true)
@@ -833,7 +837,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         loadingOverlayPolicy.requireFreshFrame()
         binding.errorOverlay.visibility = View.GONE
         binding.playbackCover.visibility = View.VISIBLE
-        binding.bufferingLabel.setText(R.string.buffering)
+        binding.bufferingLabel.text = controller.lastFailure?.let { com.iptv.player.player.LivePlaybackMessages.message(this, it) }
+            ?: getString(R.string.buffering)
         binding.bufferingIndicator.visibility = View.VISIBLE
         PlaybackQoeRuntime.setRebuffering(qoeSessionId, true)
     }
@@ -883,7 +888,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         // automatically by onPlaying / onVideoResumed once playback resumes.
         binding.errorOverlay.visibility = View.GONE
         binding.playbackCover.visibility = View.VISIBLE
-        binding.bufferingLabel.setText(R.string.error_stream_not_responding)
+        binding.bufferingLabel.text = com.iptv.player.player.LivePlaybackMessages.message(this, controller.lastFailure) +
+            "\n" + getString(R.string.reconnecting, attempt)
         binding.bufferingIndicator.visibility = View.VISIBLE
     }
 
@@ -896,7 +902,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         binding.bufferingIndicator.visibility = View.GONE
         PlaybackQoeRuntime.setRebuffering(qoeSessionId, false)
         playbackSession.setPlaying(false)
-        binding.errorMessage.setText(R.string.error_live_playback_failed)
+        binding.errorMessage.text = com.iptv.player.player.LivePlaybackMessages.message(this, controller.lastFailure)
         binding.errorOverlay.visibility = View.VISIBLE
         binding.retryButton.requestFocus()
         finishQoeSession(PlaybackEndReason.FATAL_FAILURE)
@@ -1181,6 +1187,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
     // ---- Lifecycle ------------------------------------------------------
 
     override fun onStop() {
+        playbackConnectivity?.stop()
+        playbackConnectivity = null
         val resourceToken = playbackResourceToken
         playbackResourceToken = null
         playbackSession.setActive(false)
@@ -1214,6 +1222,16 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
 
     override fun onStart() {
         super.onStart()
+        playbackConnectivity = com.iptv.player.util.ConnectivityWatcher(this) { online ->
+            playbackNetworkOnline = online
+            if (!castOwnsPlayback && !castLoadPending && ::controller.isInitialized &&
+                controller.onNetworkChanged(online) && localPlaybackRequested &&
+                pendingZapChannel == null &&
+                prepareLocalPlaybackRequest() == ProviderStartGatePolicy.Decision.READY) {
+                beginQoeSessionIfNeeded()
+                controller.retry()
+            }
+        }.also { it.start() }
         playbackSession.setActive(true)
         if (::controller.isInitialized && !castOwnsPlayback && !castLoadPending) {
             if (pendingLocalRestartAfterCast) {

@@ -1,0 +1,11 @@
+<resources>
+    <string name="live_error_access">Sunucu bu yayına erişimi reddetti. Hesabınızı kontrol edin veya destek ile iletişime geçin.</string>
+    <string name="live_error_missing">Bu yayın şu anda sunucuda kullanılamıyor.</string>
+    <string name="live_error_busy">Sunucu istekleri sınırlandırıyor. Yeniden denemeden önce biraz bekleyin.</string>
+    <string name="live_error_server">Sunucu hata bildirdi. Lütfen biraz sonra tekrar deneyin.</string>
+    <string name="live_error_secure_connection">Güvenli bağlantı kurulamadı. Cihaz tarihini ve bağlantıyı kontrol edin.</string>
+    <string name="live_error_format">Gelen yayın biçimi oynatılamadı.</string>
+    <string name="live_error_player">Oynatma sırasında ses veya görüntü işleme hatası oluştu.</string>
+    <string name="live_error_timeout">Oynatma zamanında yanıt vermedi. Lütfen tekrar deneyin.</string>
+    <string name="live_retry_hint">Tekrar denemek için OK tuşuna basın.</string>
+</resources>

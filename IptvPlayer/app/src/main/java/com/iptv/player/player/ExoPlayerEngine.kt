@@ -549,8 +549,7 @@ class ExoPlayerEngine(
                     ExoPlaybackFailureClassifier.Failure.ERROR ->
                         if (isSourceOrManifestFailure(error.errorCode)) {
                             listener?.onSourceFailure(
-                                error.errorCodeName,
-                                findHttpStatus(error),
+                                LiveSourceFailureClassifier.classify(error),
                             )
                         } else {
                             listener?.onError(error.errorCodeName)
@@ -1265,16 +1264,7 @@ class ExoPlayerEngine(
         listener?.onAudioStall(evidence)
     }
 
-    private fun isSourceOrManifestFailure(errorCode: Int): Boolean = when (errorCode) {
-        PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
-        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
-        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
-        PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
-        PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
-        PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
-        PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED -> true
-        else -> false
-    }
+    private fun isSourceOrManifestFailure(errorCode: Int): Boolean = errorCode in 2_000..3_999
 
     private fun findHttpStatus(error: Throwable): Int? {
         var cause: Throwable? = error

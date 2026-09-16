@@ -40,6 +40,8 @@
 
         <TextView
             android:id="@+id/bufferingLabel"
+            android:maxWidth="520dp"
+            android:gravity="center"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/buffering"
@@ -65,6 +67,7 @@
 
         <TextView
             android:id="@+id/errorMessage"
+            android:maxWidth="520dp"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/error_cannot_connect"

@@ -29,7 +29,7 @@ internal class DirectMediaDataSource(private val source: DataSource) : DataSourc
             source.uri?.let { MediaTransportPolicy.requireDirectMedia(it.toString()) }
             val mime = source.responseHeaders.entries
                 .firstOrNull { it.key.equals("Content-Type", ignoreCase = true) }?.value?.firstOrNull()
-            if (MediaTransportPolicy.isHlsContentType(mime)) throw IOException("HLS playback is disabled")
+            if (MediaTransportPolicy.isHlsContentType(mime)) throw MediaTransportPolicy.UnsupportedTransportException()
             // Read a tiny prefix from this connection, and return every byte to
             // the extractor. Applies to range requests as well as initial loads.
             while (prefixSize < prefix.size) {
@@ -39,7 +39,7 @@ internal class DirectMediaDataSource(private val source: DataSource) : DataSourc
                 prefixSize += count
             }
             if (MediaTransportPolicy.isPlaylistHeader(prefix, prefixSize)) {
-                throw IOException("HLS playback is disabled")
+                throw MediaTransportPolicy.UnsupportedTransportException()
             }
             return length
         } catch (error: Exception) {

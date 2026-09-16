@@ -1,0 +1,11 @@
+<resources>
+    <string name="live_error_access">De server heeft toegang tot deze stream geweigerd. Controleer uw account of neem contact op met ondersteuning.</string>
+    <string name="live_error_missing">Deze stream is momenteel niet beschikbaar op de server.</string>
+    <string name="live_error_busy">De server beperkt het aantal verzoeken. Wacht even voordat u opnieuw probeert.</string>
+    <string name="live_error_server">De server heeft een fout gemeld. Probeer het zo opnieuw.</string>
+    <string name="live_error_secure_connection">Er kon geen veilige verbinding worden gemaakt. Controleer de apparaatdatum en de verbinding.</string>
+    <string name="live_error_format">Het ontvangen streamformaat kon niet worden afgespeeld.</string>
+    <string name="live_error_player">Er is een fout opgetreden bij de verwerking van beeld of geluid.</string>
+    <string name="live_error_timeout">De weergave reageerde niet op tijd. Probeer het opnieuw.</string>
+    <string name="live_retry_hint">Druk op OK om opnieuw te proberen.</string>
+</resources>

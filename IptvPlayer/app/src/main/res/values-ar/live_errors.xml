@@ -1,0 +1,11 @@
+<resources>
+    <string name="live_error_access">رفض الخادم الوصول إلى هذا البث. تحقق من حسابك أو تواصل مع الدعم.</string>
+    <string name="live_error_missing">هذا البث غير متاح على الخادم حالياً.</string>
+    <string name="live_error_busy">يفرض الخادم حداً للطلبات. انتظر قليلاً قبل المحاولة مجدداً.</string>
+    <string name="live_error_server">أبلغ الخادم عن خطأ. يرجى المحاولة مجدداً بعد قليل.</string>
+    <string name="live_error_secure_connection">تعذر إنشاء اتصال آمن. تحقق من تاريخ الجهاز والاتصال.</string>
+    <string name="live_error_format">تعذر تشغيل صيغة البث المستلمة.</string>
+    <string name="live_error_player">حدث خطأ في معالجة الصوت أو الصورة أثناء التشغيل.</string>
+    <string name="live_error_timeout">لم يستجب التشغيل في الوقت المحدد. يرجى المحاولة مجدداً.</string>
+    <string name="live_retry_hint">اضغط OK للمحاولة مجدداً.</string>
+</resources>

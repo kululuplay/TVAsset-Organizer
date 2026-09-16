@@ -1,0 +1,11 @@
+<resources>
+    <string name="live_error_access">Der Server hat den Zugriff auf diesen Stream abgelehnt. Bitte Konto prüfen oder den Support kontaktieren.</string>
+    <string name="live_error_missing">Dieser Stream ist auf dem Server derzeit nicht verfügbar.</string>
+    <string name="live_error_busy">Der Server begrenzt die Anfragen. Bitte vor dem nächsten Versuch kurz warten.</string>
+    <string name="live_error_server">Der Server hat einen Fehler gemeldet. Bitte in Kürze erneut versuchen.</string>
+    <string name="live_error_secure_connection">Es konnte keine sichere Verbindung hergestellt werden. Bitte Gerätedatum und Verbindung prüfen.</string>
+    <string name="live_error_format">Das empfangene Streamformat konnte nicht wiedergegeben werden.</string>
+    <string name="live_error_player">Bei der Wiedergabe ist ein Fehler bei der Bild- oder Tonverarbeitung aufgetreten.</string>
+    <string name="live_error_timeout">Die Wiedergabe hat nicht rechtzeitig reagiert. Bitte erneut versuchen.</string>
+    <string name="live_retry_hint">Zum Wiederholen OK drücken.</string>
+</resources>

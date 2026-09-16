@@ -339,6 +339,19 @@ class PlayerController(
     // start a hidden reconnect in the background; remember it and recover once the
     // owner resumes instead.
     private var suspended = false
+    private val failureRecovery = LiveFailureRecovery()
+    val lastFailure: PlaybackFailure? get() = failureRecovery.failure
+
+    /** UI owns lifecycle/connection gates and performs the returned retry request. */
+    fun onNetworkChanged(online: Boolean): Boolean {
+        val retry = failureRecovery.networkChanged(online,
+            needsRecovery = suspended || playbackBuffering || !playbackConfirmed)
+        if (!online && !suspended && currentUrl != null) {
+            notifyPlaybackFailure(PlaybackFailureClassifier.classify(
+                FailureSignal.Network(FailureSignal.NetworkKind.UNAVAILABLE), PlaybackFailure.Phase.CONNECT))
+        }
+        return retry
+    }
     private var recoveryNeededOnResume = false
 
     // ---- Stall / startup watchdog -----------------------------------------
@@ -370,7 +383,10 @@ class PlayerController(
             traceAttempt(PlaybackAttemptTrace.Phase.TIMEOUT)
             recordStability("start_timeout", "warn", "request deadline terminal=$terminal")
             notifyPlaybackFailure(failureFor(Reason.STARTUP))
-            if (terminal) failPlayback() else handleEngineFailure(Reason.STARTUP, reportFailure = false)
+            if (terminal) failPlayback()
+            else if (lastFailure?.let(LiveSourceRecoveryPolicy::action) == LiveSourceRecoveryPolicy.Action.RECONNECT_SOURCE) {
+                engageReconnect()
+            } else handleEngineFailure(Reason.STARTUP, reportFailure = false)
         },
     )
 
@@ -403,6 +419,7 @@ class PlayerController(
     private fun failPlayback() {
         traceAttempt(PlaybackAttemptTrace.Phase.TERMINAL)
         release()
+        failureRecovery.terminal()
         callback.onFatalError()
     }
 
@@ -471,6 +488,7 @@ class PlayerController(
         transportKey: String? = null,
     ) {
         suspended = false
+        failureRecovery.beginRequest()
         resetDeadline()
         recoveryNeededOnResume = false
         // A zap can arrive during preview -> fullscreen's delayed surface move.
@@ -925,7 +943,7 @@ class PlayerController(
             }
             traceAttempt(PlaybackAttemptTrace.Phase.FAILURE, httpStatus)
             val manifestFailure = message?.contains("manifest", ignoreCase = true) == true
-            notifyPlaybackFailure(
+            handleSourceFailure(
                 when {
                     httpStatus != null && httpStatus in 400..599 ->
                         PlaybackFailureClassifier.classify(
@@ -937,18 +955,17 @@ class PlayerController(
                         PlaybackFailure.Phase.OPEN_SOURCE,
                     )
                     else -> PlaybackFailureClassifier.classify(
-                        FailureSignal.Network(FailureSignal.NetworkKind.CONNECT),
+                        FailureSignal.Unknown,
                         PlaybackFailure.Phase.OPEN_SOURCE,
                     )
                 },
             )
-            if (LiveTransportPolicy.isAuthoritativeHttpFailure(httpStatus)) {
-                // Authorization/resource rejection cannot be repaired by a decoder swap.
-                PlaybackLog.log(context, "Controller", "terminal source HTTP $httpStatus")
-                failPlayback()
-                return@dispatch
-            }
-            handleEngineFailure(Reason.ERROR, reportFailure = false)
+        }
+
+        override fun onSourceFailure(failure: PlaybackFailure) = dispatch {
+            if (source !== engine || suspended) return@dispatch
+            traceAttempt(PlaybackAttemptTrace.Phase.FAILURE, failure.httpStatus)
+            handleSourceFailure(failure)
         }
 
         override fun onDecodeError(message: String?) =
@@ -981,8 +998,18 @@ class PlayerController(
     }
 
     private fun notifyPlaybackFailure(failure: PlaybackFailure) {
+        failureRecovery.record(failure)
         PlaybackLog.log(context, "LiveAttempt", "attempt=${attemptTrace?.id} engine=$stage failure=${failure.code} phase=${failure.phase}")
         callback.onPlaybackFailure(failure)
+    }
+
+    private fun handleSourceFailure(failure: PlaybackFailure) {
+        notifyPlaybackFailure(failure)
+        when (LiveSourceRecoveryPolicy.action(failure)) {
+            LiveSourceRecoveryPolicy.Action.STOP -> failPlayback()
+            LiveSourceRecoveryPolicy.Action.RECONNECT_SOURCE -> engageReconnect()
+            LiveSourceRecoveryPolicy.Action.RECOVER_PLAYER -> handleEngineFailure(Reason.ERROR, reportFailure = false)
+        }
     }
 
     /**
@@ -1047,11 +1074,7 @@ class PlayerController(
             PlaybackFailure.Phase.STARTUP
         }
         val signal: FailureSignal = when (reason) {
-            Reason.ERROR -> if (playbackConfirmed) {
-                FailureSignal.Network(FailureSignal.NetworkKind.RESET)
-            } else {
-                FailureSignal.Network(FailureSignal.NetworkKind.CONNECT)
-            }
+            Reason.ERROR -> FailureSignal.Unknown
             Reason.STARTUP -> FailureSignal.Timeout(FailureSignal.TimeoutKind.STARTUP)
             Reason.AUDIO -> FailureSignal.Decoder(
                 FailureSignal.DecoderKind.INIT,
@@ -1091,6 +1114,7 @@ class PlayerController(
         val stableStage = stage
         val stableKey = currentRouteKey
         if (suspended || !playbackConfirmed || playbackBuffering) return
+        failureRecovery.stable()
         PlaybackLog.log(context, "Controller", "sustained playback progress -> recovered")
         resetDeadline()
         traceAttempt(PlaybackAttemptTrace.Phase.STABLE)
@@ -1470,7 +1494,8 @@ class PlayerController(
             return
         }
 
-        val delay = RECONNECT_BACKOFF_MS[reconnectAttempt.coerceAtMost(RECONNECT_BACKOFF_MS.size - 1)]
+        val delay = LiveSourceRecoveryPolicy.retryDelayMs(lastFailure,
+            RECONNECT_BACKOFF_MS[reconnectAttempt.coerceAtMost(RECONNECT_BACKOFF_MS.size - 1)])
         reconnectAttempt++
         reconnectPending = true
         PlaybackLog.log(context, "Controller", "reconnect attempt $reconnectAttempt in ${delay}ms (stage=$stage)")
@@ -1554,6 +1579,7 @@ class PlayerController(
 
     /** Close the active provider socket and notify a Cast preflight on completion. */
     fun quiesce(onStopped: (Boolean) -> Unit) {
+        failureRecovery.suspend()
         measuredBufferingAtMs = 0
         // A paused VLC/Exo instance can keep an IPTV subscription socket occupied.
         // Stop it when the owner leaves the foreground and rebuild the same stage
@@ -1584,6 +1610,7 @@ class PlayerController(
         suspended = false
         if (recoveryNeededOnResume) {
             recoveryNeededOnResume = false
+            failureRecovery.beginRequest()
             currentUrl?.let { startStage(stage) }
             return
         }
@@ -1595,6 +1622,7 @@ class PlayerController(
     }
 
     fun stop() {
+        failureRecovery.suspend()
         suspended = true
         ++attemptEpoch
         resetDeadline()
@@ -1608,6 +1636,7 @@ class PlayerController(
     }
 
     fun release() {
+        failureRecovery.suspend()
         // Invalidate any pending engine-create. The swap path trampolines the
         // create through the VLC ops thread, where it can sit for seconds behind
         // a stalled stop — removeCallbacksAndMessages() cannot reach it there, so
