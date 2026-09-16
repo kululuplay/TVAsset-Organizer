@@ -251,7 +251,7 @@ class M3uParserTest {
 
     @Test
     fun crlfAndBomAreTolerated() {
-        val channels = parse("﻿#EXTM3U\r\n#EXTINF:-1 tvg-id=\"a\",A\r\nhttp://stream/a\r\n#EXTINF:-1,B\r\nhttp://stream/b\r\n")
+        val channels = parse("\uFEFF#EXTM3U\r\n#EXTINF:-1 tvg-id=\"a\",A\r\nhttp://stream/a\r\n#EXTINF:-1,B\r\nhttp://stream/b\r\n")
 
         assertEquals(listOf("A", "B"), channels.map { it.name })
         assertEquals("http://stream/a", channels[0].streamUrl)

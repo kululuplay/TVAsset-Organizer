@@ -21,7 +21,7 @@ object M3uParser {
     }.getOrDefault(false)
 
     fun hasPlaylistSignature(prefix: String): Boolean {
-        val first = prefix.trimStart('﻿', ' ', '\t', '\r', '\n').lineSequence().firstOrNull().orEmpty()
+        val first = prefix.trimStart('\uFEFF', ' ', '\t', '\r', '\n').lineSequence().firstOrNull().orEmpty()
         return first.startsWith("#EXTM3U", ignoreCase = true) || isStreamUrl(splitUrlOptions(first).first)
     }
 
@@ -39,7 +39,7 @@ object M3uParser {
         val seenKeys = HashMap<String, Int>()
 
         reader.forEachLine { raw ->
-            val clean = raw.trim().trimStart('﻿').trim()
+            val clean = raw.trim().trimStart('\uFEFF').trim()
             if (clean.isNotBlank() && !clean.startsWith("#")) contentSeen = true
             if (clean.startsWith("<")) throw java.io.IOException("HTML/XML is not a playlist")
             // A single malformed line must never abort parsing the whole playlist.
