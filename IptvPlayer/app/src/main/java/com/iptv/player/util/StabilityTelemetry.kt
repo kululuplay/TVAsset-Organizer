@@ -38,6 +38,14 @@ object StabilityTelemetry {
     /** Hard cap on spooled events; the oldest is dropped past this (and counted). */
     private const val MAX_EVENTS = 50
     private const val MAX_DETAIL = 300
+
+    /**
+     * An ANR main-thread stack is only useful whole: the watchdog already clips
+     * it at 8 KB and the receiver's telemetry store clips ANR detail at 8 KiB,
+     * so that kind gets a larger budget than the one-line details of other events.
+     */
+    private const val MAX_DETAIL_ANR = 8 * 1024
+    private const val TYPE_ANR = "anr"
     private const val MAX_CHANNEL = 200
     private const val EVENT_ID = "event_id"
 
@@ -101,7 +109,7 @@ object StabilityTelemetry {
                 engine?.takeIf { it.isNotBlank() }?.let { put("engine", it) }
                 stage?.takeIf { it.isNotBlank() }?.let { put("stage", it) }
                 severity?.takeIf { it.isNotBlank() }?.let { put("sev", it) }
-                detail?.takeIf { it.isNotBlank() }?.let { put("detail", clip(it, MAX_DETAIL)) }
+                detail?.takeIf { it.isNotBlank() }?.let { put("detail", clip(it, detailBudget(type))) }
             }
             synchronized(lock) {
                 events.addLast(ev)
@@ -211,6 +219,9 @@ object StabilityTelemetry {
             }
         }
     }
+
+    private fun detailBudget(type: String): Int =
+        if (type == TYPE_ANR) MAX_DETAIL_ANR else MAX_DETAIL
 
     private fun clip(s: String, max: Int): String =
         if (s.length <= max) s else s.substring(0, max)

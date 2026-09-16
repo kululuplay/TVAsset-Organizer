@@ -78,4 +78,17 @@
     <string name="about_download_started">Update downloaden…</string>
     <string name="about_install_permission">Sta installatie vanaf deze bron toe om bij te werken.</string>
 
+    <!-- Added by the 2026-09 translation audit -->
+    <string name="about_update_file_missing">Het gedownloade updatebestand ontbreekt. Download het opnieuw.</string>
+    <string name="about_update_file_incomplete">De update is niet volledig gedownload. Probeer het opnieuw.</string>
+    <string name="about_update_storage_low">Er is niet genoeg vrije opslagruimte om de update te installeren. Maak minstens 250 MB vrij en probeer het opnieuw.</string>
+    <string name="about_update_invalid_apk">Het gedownloade bestand is geen geldig Android-updatepakket.</string>
+    <string name="about_update_wrong_package">De gedownloade APK hoort bij een andere app.</string>
+    <string name="about_update_not_newer">Deze APK is niet nieuwer dan de geïnstalleerde app.</string>
+    <string name="about_update_signature_mismatch">De handtekening van de update komt niet overeen met de geïnstalleerde app. Android kan deze installatie niet veilig bijwerken zonder deze eerst te verwijderen.</string>
+    <string name="about_download_preparing">Voorbereiden…</string>
+    <string name="about_download_size">%1$s / %2$s</string>
+    <string name="about_download_meta">%1$s/s · nog %2$s</string>
+    <string name="about_download_complete">Download voltooid. Installatieprogramma wordt geopend…</string>
+    <string name="about_download_cancel">Annuleren</string>
 </resources>

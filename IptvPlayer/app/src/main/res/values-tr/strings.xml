@@ -417,4 +417,18 @@
     <string name="about_update_section">Uygulama güncellemeleri</string>
     <string name="about_update_desc">Hesabınızı veya tercihlerinizi kaybetmeden yeni sürümü denetleyip yükleyin.</string>
     <string name="about_ready">Yüklü sürümünüz hazır.</string>
+    <!-- Added by the 2026-09 translation audit -->
+    <string name="support_diagnostic_title">Tanılama raporu gönder</string>
+    <string name="support_diagnostic_confirm">Cihaz ve uygulama bilgileri, yapılandırılmış oynatma ayarları, test sonuçları ile gizlenmiş oynatma ve uygulama günlükleri doğrudan Kululu Destek ekibine gönderilsin mi? Giriş bilgileri kaldırılır. Günlükler 90 gün saklanır.</string>
+    <string name="support_diagnostic_playback_summary">Uygulama ayarlarından gönderilen oynatma tanılama raporu.</string>
+    <string name="support_diagnostic_send">Gönder</string>
+    <string name="support_diagnostic_cancel">İptal</string>
+    <string name="support_diagnostic_retry">Tekrar dene</string>
+    <string name="support_diagnostic_close">Kapat</string>
+    <string name="support_diagnostic_sending">Raporunuz hazırlanıyor ve gönderiliyor… Lütfen destek numarasını bekleyin. İstediğiniz zaman iptal edebilirsiniz.</string>
+    <string name="support_diagnostic_interrupted">Gönderim kesildi. Teslimatı kontrol etmek ve destek numaranızı almak için tekrar deneyin; raporlar mükerrer gönderilmez.</string>
+    <string name="support_diagnostic_incomplete">Bu cihazda bazı günlükler veya ayarlar kullanılamadı. Mevcut bilgiler gönderildi.</string>
+    <string name="pin_locked_retry">Çok fazla yanlış deneme. %1$d sn sonra tekrar deneyin.</string>
+    <string name="settings_pin_unchanged">PIN kodu henüz değiştirilmedi; varsayılan kod hâlâ geçerli. Kilitli içerikleri korumak için kendi PIN kodunuzu belirleyin.</string>
+    <string name="diag_loss_percent">%%%1$d</string>
 </resources>

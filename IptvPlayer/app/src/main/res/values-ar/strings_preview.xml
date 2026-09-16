@@ -2,4 +2,11 @@
 <resources>
     <string name="login_username_no_email">أدخل اسم المستخدم، وليس البريد الإلكتروني.</string>
     <string name="epg_description_unavailable">لا يوجد وصف متاح لهذا البرنامج.</string>
+    <!-- Added by the 2026-09 translation audit -->
+    <string name="epg_popup_now">يُعرض الآن</string>
+    <string name="epg_popup_upcoming">التالي</string>
+    <string name="epg_popup_finished">انتهى</string>
+    <string name="epg_popup_controls">↑↓ قراءة الوصف · OK / رجوع إغلاق</string>
+    <string name="content_new">جديد</string>
+    <string name="settings_player_section">المشغّل</string>
 </resources>

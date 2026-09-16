@@ -2,4 +2,11 @@
 <resources>
     <string name="login_username_no_email">Vul uw gebruikersnaam in, geen e-mailadres.</string>
     <string name="epg_description_unavailable">Geen beschrijving beschikbaar voor dit programma.</string>
+    <!-- Added by the 2026-09 translation audit -->
+    <string name="epg_popup_now">NU</string>
+    <string name="epg_popup_upcoming">HIERNA</string>
+    <string name="epg_popup_finished">AFGELOPEN</string>
+    <string name="epg_popup_controls">↑↓ Beschrijving lezen · OK / Terug Sluiten</string>
+    <string name="content_new">NIEUW</string>
+    <string name="settings_player_section">Speler</string>
 </resources>

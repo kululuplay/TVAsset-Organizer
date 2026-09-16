@@ -329,7 +329,7 @@ class DiagnosticsActivity : BaseActivity() {
         }
         val healthy = s.reachable && s.lossPct < 5 && s.jitterMs < 40
         val status = row.findViewById<TextView>(R.id.diagStatus)
-        status.text = "%${s.lossPct}"
+        status.text = getString(R.string.diag_loss_percent, s.lossPct)
         status.setTextColor(
             ContextCompat.getColor(this, if (healthy) R.color.success else R.color.danger))
     }

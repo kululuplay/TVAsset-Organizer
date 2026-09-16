@@ -42,7 +42,7 @@ class LoginViewModel : ViewModel() {
         }
         val config = SourceConfig(
             type = SourceType.XTREAM,
-            serverUrl = normalizeUrl(serverUrl),
+            serverUrl = LoginServerUrl.normalize(serverUrl),
             username = username.trim(),
             // Passwords are opaque provider credentials; preserve intentional
             // leading/trailing spaces instead of silently changing the login.
@@ -94,11 +94,5 @@ class LoginViewModel : ViewModel() {
                 _state.value = State.Error(AppError.UNKNOWN)
             }
         }
-    }
-
-    private fun normalizeUrl(url: String): String {
-        val trimmed = url.trim()
-        return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) trimmed
-        else "https://$trimmed"
     }
 }

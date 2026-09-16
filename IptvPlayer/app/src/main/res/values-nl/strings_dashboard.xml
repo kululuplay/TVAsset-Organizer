@@ -50,4 +50,28 @@
     <string name="dash_offline_banner">Geen internetverbinding — opgeslagen inhoud wordt getoond</string>
     <string name="dash_portal_unreachable">Server niet bereikbaar — automatisch opnieuw proberen…</string>
     <string name="dash_reconnected_refreshing">Weer online — inhoud wordt bijgewerkt…</string>
+    <!-- Added by the 2026-09 translation audit -->
+    <string name="dash_prompt_title">Wat wilt u kijken?</string>
+    <string name="dash_prompt_subtitle">Gebruik de pijltoetsen om te bladeren en OK om te openen.</string>
+    <string name="dash_select_hint">Selecteren · OK</string>
+    <string name="dash_sub_live">Zenders &amp; sport</string>
+    <string name="dash_sub_movies">Films op aanvraag</string>
+    <string name="dash_sub_series">Series &amp; afleveringen</string>
+    <string name="dash_sub_settings">Voorkeuren</string>
+    <string name="dash_sub_favorites">Uw bewaarde keuzes</string>
+    <string name="dash_sub_continue">Verder kijken</string>
+    <string name="dash_sub_search">Alles vinden</string>
+    <string name="dash_sub_radio">Radiozenders</string>
+    <string name="weather_unavailable">Weer niet beschikbaar</string>
+    <string name="weather_temp_format">%1$d°</string>
+    <string name="weather_clear">Helder</string>
+    <string name="weather_partly">Half bewolkt</string>
+    <string name="weather_cloudy">Bewolkt</string>
+    <string name="weather_fog">Mist</string>
+    <string name="weather_rain">Regen</string>
+    <string name="weather_snow">Sneeuw</string>
+    <string name="weather_storm">Onweer</string>
+    <string name="signal_good">Goed</string>
+    <string name="signal_weak">Zwak</string>
+    <string name="signal_offline">Offline</string>
 </resources>

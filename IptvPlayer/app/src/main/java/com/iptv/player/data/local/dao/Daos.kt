@@ -66,7 +66,8 @@ interface ChannelDao {
     """)
     fun observeCategories(type: String, radio: Int): Flow<List<CategoryRow>>
 
-    @Query("SELECT * FROM channels WHERE name LIKE '%' || :query || '%' AND type = :type ORDER BY name LIMIT 200")
+    /** [query] must be escaped with [com.iptv.player.data.local.LikeEscape.escape]. */
+    @Query("SELECT * FROM channels WHERE name LIKE '%' || :query || '%' ESCAPE '\\' AND type = :type ORDER BY name LIMIT 200")
     fun search(query: String, type: String): Flow<List<ChannelEntity>>
 
     /** FTS-backed instant search. [query] is a sanitized FTS MATCH expression. */
@@ -156,6 +157,9 @@ interface ChannelOverrideDao {
 
     @Query("SELECT * FROM channel_overrides")
     suspend fun getAll(): List<ChannelOverrideEntity>
+
+    @Query("DELETE FROM channel_overrides")
+    suspend fun clearAll()
 }
 
 @Dao
@@ -166,6 +170,9 @@ interface FavoriteDao {
 
     @Query("DELETE FROM favorites WHERE channelId = :channelId")
     suspend fun remove(channelId: String)
+
+    @Query("DELETE FROM favorites")
+    suspend fun clearAll()
 
     @Query("SELECT channelId FROM favorites")
     fun observeIds(): Flow<List<String>>
@@ -193,6 +200,9 @@ interface RecentDao {
 
     @Query("DELETE FROM recent WHERE channelId NOT IN (SELECT channelId FROM recent ORDER BY watchedAt DESC LIMIT :keep)")
     suspend fun trim(keep: Int)
+
+    @Query("DELETE FROM recent")
+    suspend fun clearAll()
 
     @Query("""
         SELECT c.* FROM channels c

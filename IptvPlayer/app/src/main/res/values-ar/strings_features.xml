@@ -78,4 +78,17 @@
     <string name="about_download_started">جارٍ تنزيل التحديث…</string>
     <string name="about_install_permission">اسمح بتثبيت التطبيقات من هذا المصدر للتحديث.</string>
 
+    <!-- Added by the 2026-09 translation audit -->
+    <string name="about_update_file_missing">ملف التحديث الذي تم تنزيله مفقود. يرجى تنزيله مرة أخرى.</string>
+    <string name="about_update_file_incomplete">لم يكتمل تنزيل التحديث. يرجى المحاولة مجددًا.</string>
+    <string name="about_update_storage_low">لا توجد مساحة تخزين كافية لتثبيت التحديث. حرّر 250 ميغابايت على الأقل وحاول مجددًا.</string>
+    <string name="about_update_invalid_apk">الملف الذي تم تنزيله ليس حزمة تحديث Android صالحة.</string>
+    <string name="about_update_wrong_package">ملف APK الذي تم تنزيله يخص تطبيقًا آخر.</string>
+    <string name="about_update_not_newer">ملف APK هذا ليس أحدث من التطبيق المثبت.</string>
+    <string name="about_update_signature_mismatch">توقيع التحديث لا يطابق التطبيق المثبت. لا يستطيع Android تحديث هذا التثبيت بأمان دون إزالته أولًا.</string>
+    <string name="about_download_preparing">جارٍ التحضير…</string>
+    <string name="about_download_size">%1$s / %2$s</string>
+    <string name="about_download_meta">%1$s/ث · بقي %2$s</string>
+    <string name="about_download_complete">اكتمل التنزيل. جارٍ فتح المثبّت…</string>
+    <string name="about_download_cancel">إلغاء</string>
 </resources>

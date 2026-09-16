@@ -80,7 +80,8 @@ interface VodDao {
     """)
     fun observeCategories(): Flow<List<CategoryRow>>
 
-    @Query("SELECT * FROM vod WHERE name LIKE '%' || :query || '%' ORDER BY addedAt DESC, name LIMIT 200")
+    /** [query] must be escaped with [com.iptv.player.data.local.LikeEscape.escape]. */
+    @Query("SELECT * FROM vod WHERE name LIKE '%' || :query || '%' ESCAPE '\\' ORDER BY addedAt DESC, name LIMIT 200")
     fun search(query: String): Flow<List<VodEntity>>
 
     // ---- Paging 3 sources (bounded, lazily-paged for huge catalogs) -----
@@ -89,8 +90,10 @@ interface VodDao {
      * Whole movie cache, newest first — the "Recently added" default view.
      * [hidden] category ids are excluded so Content Manager hides leak nowhere
      * (empty list = exclude nothing; rows with no category are always kept).
+     * Unbounded: Paging loads it window by window, so no LIMIT is needed and a
+     * cap would silently truncate the "All movies" grid.
      */
-    @Query("SELECT * FROM vod WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY addedAt DESC, name LIMIT 50")
+    @Query("SELECT * FROM vod WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY addedAt DESC, name")
     fun pagingRecent(hidden: List<String>): PagingSource<Int, VodEntity>
 
     @Query("SELECT COUNT(*) FROM vod")
@@ -216,10 +219,15 @@ interface VodCategoryDao {
 
 @Dao
 interface SeriesDao {
+    /**
+     * Series whose episode dates are stale, most relevant first: never-checked
+     * and recently added series before older ones. Bounded by [limit] so one
+     * sweep can never fan out across an entire multi-thousand title catalog.
+     */
     @Query("""SELECT id FROM series WHERE (:categoryId IS NULL OR categoryId = :categoryId)
         AND (categoryId IS NULL OR categoryId NOT IN (:hidden)) AND episodeCheckedAt < :beforeMs
-        ORDER BY episodeCheckedAt, addedAt DESC, id""")
-    suspend fun episodeDatesDue(categoryId: String?, hidden: List<String>, beforeMs: Long): List<String>
+        ORDER BY (episodeCheckedAt = 0) DESC, addedAt DESC, episodeCheckedAt, id LIMIT :limit""")
+    suspend fun episodeDatesDue(categoryId: String?, hidden: List<String>, beforeMs: Long, limit: Int): List<String>
 
     @Query("UPDATE series SET latestEpisodeAt = :latest, episodeCheckedAt = :checkedAt WHERE id = :id")
     suspend fun updateEpisodeDate(id: String, latest: Long, checkedAt: Long)
@@ -252,7 +260,8 @@ interface SeriesDao {
     """)
     fun observeCategories(): Flow<List<CategoryRow>>
 
-    @Query("SELECT * FROM series WHERE name LIKE '%' || :query || '%' ORDER BY COALESCE(NULLIF(latestEpisodeAt, 0), addedAt) DESC, name LIMIT 200")
+    /** [query] must be escaped with [com.iptv.player.data.local.LikeEscape.escape]. */
+    @Query("SELECT * FROM series WHERE name LIKE '%' || :query || '%' ESCAPE '\\' ORDER BY COALESCE(NULLIF(latestEpisodeAt, 0), addedAt) DESC, name LIMIT 200")
     fun search(query: String): Flow<List<SeriesEntity>>
 
     // ---- Paging 3 sources (bounded, lazily-paged for huge catalogs) -----
@@ -261,8 +270,10 @@ interface SeriesDao {
      * Whole series cache, newest first — the "Recently added" default view.
      * [hidden] category ids are excluded so Content Manager hides leak nowhere
      * (empty list = exclude nothing; rows with no category are always kept).
+     * Unbounded: Paging loads it window by window, so no LIMIT is needed and a
+     * cap would silently truncate the "All series" grid.
      */
-    @Query("SELECT * FROM series WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY COALESCE(NULLIF(latestEpisodeAt, 0), addedAt) DESC, name LIMIT 50")
+    @Query("SELECT * FROM series WHERE (categoryId IS NULL OR categoryId NOT IN (:hidden)) ORDER BY COALESCE(NULLIF(latestEpisodeAt, 0), addedAt) DESC, name")
     fun pagingRecent(hidden: List<String>): PagingSource<Int, SeriesEntity>
 
     @Query("SELECT COUNT(*) FROM series")
@@ -471,6 +482,9 @@ interface EpgMappingDao {
 
     @Query("SELECT * FROM epg_mapping")
     suspend fun getAll(): List<EpgMappingEntity>
+
+    @Query("DELETE FROM epg_mapping")
+    suspend fun clearAll()
 }
 
 /**

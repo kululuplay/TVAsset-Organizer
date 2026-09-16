@@ -2,4 +2,11 @@
 <resources>
     <string name="login_username_no_email">Saisissez votre identifiant, pas une adresse e-mail.</string>
     <string name="epg_description_unavailable">Aucune description disponible pour ce programme.</string>
+    <!-- Added by the 2026-09 translation audit -->
+    <string name="epg_popup_now">EN COURS</string>
+    <string name="epg_popup_upcoming">À SUIVRE</string>
+    <string name="epg_popup_finished">TERMINÉ</string>
+    <string name="epg_popup_controls">↑↓ Lire la description · OK / Retour Fermer</string>
+    <string name="content_new">NOUVEAU</string>
+    <string name="settings_player_section">Lecteur</string>
 </resources>

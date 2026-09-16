@@ -2,7 +2,9 @@ package com.iptv.player.data.repository
 
 import com.iptv.player.data.model.SourceConfig
 import com.iptv.player.data.model.SourceType
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -23,6 +25,44 @@ class DatasetRefreshPolicyTest {
             DatasetSnapshot(existingCount = 100, receivedCount = 10, acceptedCount = 10),
         )
         assertTrue(decision is DatasetRefreshDecision.PreserveCache)
+    }
+
+    @Test
+    fun `forced refresh bypasses only the shrink guard`() {
+        val shrink = DatasetSnapshot(existingCount = 100, receivedCount = 10, acceptedCount = 10)
+        assertTrue(DatasetRefreshPolicy.evaluate(CatalogDataset.LIVE, shrink, force = true) is DatasetRefreshDecision.Apply)
+        val empty = DatasetSnapshot(existingCount = 100, receivedCount = 0, acceptedCount = 0)
+        assertTrue(DatasetRefreshPolicy.evaluate(CatalogDataset.LIVE, empty, force = true) is DatasetRefreshDecision.PreserveCache)
+    }
+
+    @Test
+    fun `repeated or day old shrink rejections are eventually accepted`() {
+        val shrink = DatasetSnapshot(existingCount = 100, receivedCount = 10, acceptedCount = 10)
+        val now = 1_000_000L
+        val twice = ShrinkRejection(count = 2, firstRejectedAt = now - 60_000L)
+        assertTrue(DatasetRefreshPolicy.evaluate(CatalogDataset.LIVE, shrink, twice, now) is DatasetRefreshDecision.PreserveCache)
+        val thrice = ShrinkRejection(count = 3, firstRejectedAt = now - 60_000L)
+        assertTrue(DatasetRefreshPolicy.evaluate(CatalogDataset.LIVE, shrink, thrice, now) is DatasetRefreshDecision.Apply)
+        val dayOld = ShrinkRejection(count = 1, firstRejectedAt = now - DatasetRefreshPolicy.SHRINK_OVERRIDE_AFTER_MS)
+        assertTrue(DatasetRefreshPolicy.evaluate(CatalogDataset.LIVE, shrink, dayOld, now) is DatasetRefreshDecision.Apply)
+    }
+
+    @Test
+    fun `shrink ledger persists consecutive rejections and clears on apply`() {
+        val prefs = com.iptv.player.util.FakeSharedPreferences()
+        val ledger = ShrinkGuardLedger(prefs)
+        assertNull(ledger.get("live"))
+        assertEquals(ShrinkRejection(1, 500L), ledger.recordRejection("live", 500L))
+        assertEquals(ShrinkRejection(2, 500L), ledger.recordRejection("live", 900L))
+        // A fresh ledger over the same preferences (process restart) still knows.
+        assertEquals(ShrinkRejection(2, 500L), ShrinkGuardLedger(prefs).get("live"))
+        assertNull(ShrinkGuardLedger(prefs).get("epg"))
+        ledger.clear("live")
+        assertNull(ShrinkGuardLedger(prefs).get("live"))
+        // Without preferences the ledger still works within the process.
+        val memory = ShrinkGuardLedger()
+        memory.recordRejection("live", 1L)
+        assertEquals(1, memory.get("live")?.count)
     }
 
     @Test

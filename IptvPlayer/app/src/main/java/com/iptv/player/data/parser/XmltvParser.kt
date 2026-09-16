@@ -86,7 +86,10 @@ object XmltvParser {
                             // Only capture the first display-name of a channel.
                             if (chanId != null && chanName == null) current = "display-name"
                         }
-                        "title", "desc" -> current = parser.name
+                        // Multi-language guides repeat <title>/<desc> per lang;
+                        // keep the first one instead of gluing them together.
+                        "title" -> if (title == null) { title = ""; current = "title" }
+                        "desc" -> if (desc == null) { desc = ""; current = "desc" }
                     }
                 }
                 XmlPullParser.TEXT -> {

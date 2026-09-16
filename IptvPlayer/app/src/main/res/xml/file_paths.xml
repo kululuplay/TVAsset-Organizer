@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Paths shared via FileProvider. Downloaded update APKs live in the app's
-     external files dir; exposing it lets the system installer read the file. -->
+<!-- Paths shared via FileProvider. Each entry is the narrowest directory that
+     still has to leave the app:
+     - updates/: APKs staged in the app-private cache, handed to the installer.
+     - logs/:    Logger's redacted log snapshot for the recovery share sheet
+                 (external files dir, or the internal files dir fallback). -->
 <paths>
-    <external-files-path
+    <cache-path
         name="updates"
-        path="." />
+        path="updates/" />
+    <external-files-path
+        name="logs"
+        path="logs/" />
+    <files-path
+        name="internal-logs"
+        path="logs/" />
 </paths>

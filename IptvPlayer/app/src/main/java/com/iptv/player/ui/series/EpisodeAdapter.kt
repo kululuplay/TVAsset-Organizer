@@ -18,6 +18,7 @@ import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.iptv.player.R
 import com.iptv.player.data.model.Episode
+import com.iptv.player.ui.common.DurationFormat
 import com.iptv.player.ui.common.LogoPlaceholder
 
 class EpisodeAdapter(
@@ -86,9 +87,9 @@ class EpisodeAdapter(
             title.text = episode.title
             description.text = episode.plot.orEmpty()
             description.visibility = if (episode.plot.isNullOrBlank()) View.GONE else View.VISIBLE
-            duration.text = episode.durationSecs?.takeIf { it > 0 }?.let {
-                String.format(java.util.Locale.getDefault(), "%d:%02d", it / 60, it % 60)
-            }.orEmpty()
+            duration.text = episode.durationSecs?.takeIf { it > 0 }
+                ?.let(DurationFormat::seconds)
+                .orEmpty()
             duration.visibility = if (duration.text.isEmpty()) View.GONE else View.VISIBLE
 
             bindArtwork(episode)

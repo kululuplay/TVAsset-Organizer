@@ -24,6 +24,7 @@ package com.iptv.player.player
 
 import android.content.Context
 import android.app.ActivityManager
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -72,7 +73,9 @@ import com.iptv.player.playback.core.AudioFailureEvidence
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.PlaybackLog
 import com.iptv.player.util.PlaybackRemotePolicy
+import java.io.IOException
 import java.util.Locale
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
 @OptIn(markerClass = [UnstableApi::class])
@@ -158,6 +161,9 @@ class ExoPlayerEngine(
     private var lastSurfaceHeight = 0
     private val droppedFrameHealth = DroppedFrameRecoveryGate()
     private val surfaceReadbackPolicy = SurfaceReadbackPolicy(constrainedDevice)
+    // Own handler: [handler] is cleared on every zap/release, but a pending
+    // socket-close completion must still reach the controller.
+    private val providerConnection = ExoProviderConnection(Handler(Looper.getMainLooper()))
 
     private val surfaceFrameHealth = SurfaceFrameHealthMonitor(
         handler = handler,
@@ -252,7 +258,7 @@ class ExoPlayerEngine(
             // Snapshot before opening: a retired transfer must keep its old id/listener.
             val attemptId = playbackAttemptId
             val observer = listener
-            DefaultHttpDataSource.Factory()
+            val http = DefaultHttpDataSource.Factory()
                 .setUserAgent(AppInfo.USER_AGENT)
                 .setAllowCrossProtocolRedirects(false)
                 .setConnectTimeoutMs(30_000)
@@ -276,6 +282,9 @@ class ExoPlayerEngine(
                         override fun onTransferEnd(source: DataSource, spec: DataSpec, network: Boolean) = Unit
                     })
                 }
+            // Track the provider socket so stop/release can force-close it and
+            // wait for the real close boundary (Media3 only cancels the Loader).
+            providerConnection.wrap(http)
         }
         val mediaSourceFactory = ProgressiveMediaSource.Factory(
             DirectMediaDataSource.Factory(httpDataSourceFactory),
@@ -389,6 +398,9 @@ class ExoPlayerEngine(
                         cancelNoFrameCheck()
                         cancelAudioClockStallCheck()
                         cancelAudioUnderrunCheck()
+                        // A quiesced player must not keep polling video liveness
+                        // or sampling the surface every 2 s.
+                        cancelStreamHealthChecks()
                     }
                 }
             }
@@ -1399,7 +1411,32 @@ class ExoPlayerEngine(
         // The codec reconfigure costs a short black gap (~600ms on Amlogic OMX) on a
         // zap, but that is far better than a permanently frozen picture on every
         // channel whose resolution differs from the one fullscreen started on.
-        if (reset) exo.stop()
+        if (reset) {
+            exo.stop()
+            // stop() only cancels the Loader: the old channel's socket closes
+            // later on the loader thread (never while a read is blocked). Force
+            // it closed and prepare the new item only after that boundary, so a
+            // zap never holds two provider connections. Bounded, then proceed.
+            if (providerConnection.retireAndClose()) {
+                val generation = streamGeneration
+                providerConnection.awaitClosed(PROVIDER_CLOSE_TIMEOUT_MS) { closed ->
+                    if (generation != streamGeneration || player !== exo) return@awaitClosed
+                    if (!closed) {
+                        PlaybackLog.log(
+                            context,
+                            engineName,
+                            "provider socket close unproven after ${PROVIDER_CLOSE_TIMEOUT_MS}ms -> zap anyway",
+                        )
+                    }
+                    submitMedia(exo, url, mediaId)
+                }
+                return
+            }
+        }
+        submitMedia(exo, url, mediaId)
+    }
+
+    private fun submitMedia(exo: ExoPlayer, url: String, mediaId: String) {
         exo.setMediaItem(
             MediaItem.Builder()
                 .setUri(url)
@@ -1451,7 +1488,41 @@ class ExoPlayerEngine(
 
     override fun pause() { player?.playWhenReady = false }
     override fun resume() { player?.playWhenReady = true }
-    override fun stop() { player?.stop() }
+
+    override fun stop() {
+        player?.stop()
+        // Media3 stop() is not a socket close: cancel the Loader, then force the
+        // blocked HTTP read to unwind now instead of at the 30 s read timeout.
+        providerConnection.retireAndClose()
+        cancelStreamHealthChecks()
+        // Late load errors from the force-closed transfer belong to no stream.
+        // Also retire the generation so a zap whose submitMedia() is still
+        // waiting on the previous socket close (play(reset=true)) cannot resume
+        // playback after this stop.
+        streamGeneration += 1
+        activeMediaId = null
+    }
+
+    override fun stopAndThen(onStopped: (Boolean) -> Unit) {
+        stop()
+        providerConnection.awaitClosed(PROVIDER_CLOSE_TIMEOUT_MS) { closed ->
+            if (!closed) {
+                PlaybackLog.log(
+                    context,
+                    engineName,
+                    "provider socket close unproven after ${PROVIDER_CLOSE_TIMEOUT_MS}ms",
+                )
+            }
+            onStopped(closed)
+        }
+    }
+
+    /** Health polls that STATE_IDLE/stop must retire along with the stream. */
+    private fun cancelStreamHealthChecks() {
+        handler.removeCallbacks(videoProgressRunnable)
+        handler.removeCallbacks(surfaceValidationDeadlineRunnable)
+        surfaceFrameHealth.reset()
+    }
 
     // Read on the main thread (Media3 requires it); the controller's stall
     // watchdog polls from a main-looper Handler. Advances during live playback,
@@ -1483,11 +1554,28 @@ class ExoPlayerEngine(
         // vendor MediaCodec implementations otherwise retain a destroyed view
         // across the next engine/channel and fail configure with BAD_VALUE.
         retiredView?.player = null
+        // Force the socket closed before the (bounded, blocking) player release
+        // so a read stuck in HttpURLConnection unwinds in parallel with it.
+        providerConnection.retireAndClose()
         player?.release()
         (retiredView?.parent as? ViewGroup)?.removeView(retiredView)
         player = null
         playerView = null
         listener = null
+    }
+
+    override fun releaseAndThen(onReleased: (Boolean) -> Unit) {
+        release()
+        providerConnection.awaitClosed(PROVIDER_CLOSE_TIMEOUT_MS) { closed ->
+            if (!closed) {
+                PlaybackLog.log(
+                    context,
+                    engineName,
+                    "provider socket close unproven after ${PROVIDER_CLOSE_TIMEOUT_MS}ms",
+                )
+            }
+            onReleased(closed)
+        }
     }
 
     override fun setListener(listener: PlayerListener?) {
@@ -1635,5 +1723,145 @@ class ExoPlayerEngine(
         private const val MIN_BUFFER_PROGRESS_EVIDENCE_MS = 250L
         private const val PIXEL_VALIDATION_DEADLINE_MS = 9_000L
         private const val PLAYBACK_DIAGNOSTIC_POLL_MS = 1_000L
+        /** Bound on waiting for the loader thread to close the provider socket. */
+        private const val PROVIDER_CLOSE_TIMEOUT_MS = 1_500L
+    }
+}
+
+/**
+ * Tracks the live Media3 provider connection.
+ *
+ * ExoPlayer.stop()/release() only cancel the Loader; the HTTP socket is closed
+ * later on the loader thread, and a read blocked inside HttpURLConnection is
+ * not interruptible, so the next channel could overlap the old connection for
+ * up to the read timeout. Every HTTP DataSource is wrapped so the engine can
+ * (1) refuse a late open() from an already-cancelled load, (2) force the open
+ * socket closed from another thread and (3) report the real close boundary.
+ * Framework-light on purpose: JVM tests drive it with a mocked Handler.
+ */
+@OptIn(markerClass = [UnstableApi::class])
+internal class ExoProviderConnection(
+    private val mainHandler: Handler,
+    private val closeExecutor: (Runnable) -> Unit = { SHARED_CLOSE_EXECUTOR.execute(it) },
+) {
+    private class Waiter(val onClosed: (Boolean) -> Unit, val timeout: Runnable)
+
+    private val lock = Any()
+    private var generation = 0L
+    private val openSources = LinkedHashSet<Tracked>()
+    private val waiters = ArrayList<Waiter>()
+
+    fun wrap(source: DataSource): DataSource = synchronized(lock) { Tracked(source, generation) }
+
+    /** True while a retired (stopped) connection has not closed yet. */
+    fun hasRetiredOpenConnection(): Boolean = synchronized(lock) { hasRetiredOpenLocked() }
+
+    /**
+     * Retire every DataSource created so far and force-close the open ones off
+     * the caller's thread. Returns true when a close is still pending.
+     */
+    fun retireAndClose(): Boolean {
+        val targets = synchronized(lock) {
+            generation++
+            openSources.toList()
+        }
+        if (targets.isEmpty()) return false
+        closeExecutor(Runnable { targets.forEach { runCatching(it::close) } })
+        return true
+    }
+
+    /**
+     * Invoke [onClosed] on the main thread with true once every retired
+     * connection has closed, or with false after [timeoutMs]. Runs inline when
+     * nothing is pending.
+     */
+    fun awaitClosed(timeoutMs: Long, onClosed: (Boolean) -> Unit) {
+        val waiter = synchronized(lock) {
+            if (!hasRetiredOpenLocked()) return@synchronized null
+            Waiter(onClosed, Runnable { expire() }).also { waiters += it }
+        }
+        if (waiter == null) {
+            onClosed(true)
+            return
+        }
+        mainHandler.postDelayed(waiter.timeout, timeoutMs)
+    }
+
+    private fun hasRetiredOpenLocked(): Boolean = openSources.any { it.generation != generation }
+
+    private fun expire() {
+        val expired = synchronized(lock) {
+            if (!hasRetiredOpenLocked()) return
+            waiters.toList().also { waiters.clear() }
+        }
+        expired.forEach { it.onClosed(false) }
+    }
+
+    private fun onSourceClosed(source: Tracked) {
+        val done = synchronized(lock) {
+            openSources.remove(source)
+            if (hasRetiredOpenLocked() || waiters.isEmpty()) return
+            waiters.toList().also { waiters.clear() }
+        }
+        mainHandler.post {
+            done.forEach {
+                mainHandler.removeCallbacks(it.timeout)
+                it.onClosed(true)
+            }
+        }
+    }
+
+    private inner class Tracked(
+        private val delegate: DataSource,
+        val generation: Long,
+    ) : DataSource {
+        override fun open(dataSpec: DataSpec): Long {
+            synchronized(lock) {
+                // A cancelled Loader can still reach open(); never let a
+                // stopped stream open a second provider connection.
+                if (generation != this@ExoProviderConnection.generation) {
+                    throw IOException("provider connection retired")
+                }
+                openSources += this
+            }
+            val length = try {
+                delegate.open(dataSpec)
+            } catch (error: Exception) {
+                onSourceClosed(this)
+                throw error
+            }
+            // Retired while the connect was in flight: the force-close may have
+            // run before the connection existed, so close it here instead.
+            if (synchronized(lock) { generation != this@ExoProviderConnection.generation }) {
+                close()
+                throw IOException("provider connection retired")
+            }
+            return length
+        }
+
+        override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+            delegate.read(buffer, offset, length)
+
+        override fun addTransferListener(listener: TransferListener) =
+            delegate.addTransferListener(listener)
+
+        override fun getUri(): Uri? = delegate.uri
+        override fun getResponseHeaders(): Map<String, List<String>> = delegate.responseHeaders
+
+        // Idempotent: the force-close and the loader's own finally-close may
+        // both run; DefaultHttpDataSource tolerates a second close.
+        override fun close() {
+            try {
+                delegate.close()
+            } finally {
+                onSourceClosed(this)
+            }
+        }
+    }
+
+    private companion object {
+        private val SHARED_CLOSE_EXECUTOR = Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "exo-provider-close").apply { isDaemon = true }
+        }
     }
 }

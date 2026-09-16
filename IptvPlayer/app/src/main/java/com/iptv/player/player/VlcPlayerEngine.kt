@@ -33,6 +33,7 @@ import android.os.Looper
 import android.os.StrictMode
 import android.os.SystemClock
 import android.view.ViewGroup
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -372,6 +373,9 @@ class VlcPlayerEngine(
     private val pendingOps = AtomicInteger(0)
     private var transportBytesReported = false
     private var recoveryOutputCounters: Pair<Int, Int>? = null
+    private var recoveryPlaybackTimeMs = -1L
+    // Audio twin of videoStatsUsable: playedAbuffers can stay at zero forever.
+    private val audioOutputEvidence = VlcAudioOutputEvidence()
     private data class DeferredPlay(val url: String, val reset: Boolean)
     private var deferredPlay: DeferredPlay? = null
 
@@ -426,39 +430,15 @@ class VlcPlayerEngine(
     }
 
     override fun bind(container: ViewGroup) {
-        // Keep VLC close to its proven defaults. The old global clock overrides,
-        // unsafe avcodec-fast mode, skipped loop filter and forced bob
-        // deinterlacing caused timestamp stalls, macroblocking and CPU overload
-        // on real live MPEG-TS channels.
-        val options = arrayListOf(
-            "--network-caching=$vlcCachingMs",
-            "--live-caching=$vlcCachingMs",
-            "--stats",
-            // Auto-reconnect when an HTTP segment/stream connection drops.
-            "--http-reconnect",
-            // Report KULULUPLAY instead of the default "VLC/3.0.x LibVLC/3.0.x".
-            "--http-user-agent=${AppInfo.USER_AGENT}"
-        )
-        if (forceSoftware) options.add("--avcodec-hw=none")
-        // Default = decode audio to PCM (no passthrough). Disable SPDIF so AC-3/
-        // E-AC-3/DTS are software-decoded to PCM that any HDMI sink plays, and
-        // force a STEREO downmix so the output is 2.0.
-        //
-        // Field log (Amlogic box, 4K HEVC channel): the audio was 5.1 (6-channel,
-        // AudioTrack channelMask 0x3f). The AudioTrack output could not open a
-        // 6-channel PCM track ("too low audio sample frequency (0)" then "module
-        // not functional"), so the 4K video played but there was NO sound. libVLC
-        // raises no error for an audio-only output failure, so the controller's
-        // fallback ladder never fires and the stream stays silent. Requesting
-        // stereo makes libVLC downmix 5.1 -> 2.0 PCM that the box's AudioTrack
-        // accepts; genuinely-stereo channels are unaffected (already 2.0).
-        if (!allowPassthrough) {
-            options.add("--no-spdif")
-            options.add("--stereo-mode=1")
-        }
+        // LibVLC mutates the list it is given (adds aout/chroma), so hand it a
+        // copy of the memoized option set for this configuration.
+        val options = ArrayList(libVlcOptions(vlcCachingMs, forceSoftware, allowPassthrough))
         // LibVLC lazily reads its native plugin cache during construction. Scope
         // that known, bounded read so debug StrictMode does not misclassify the
-        // library bootstrap as an accidental app disk access.
+        // library bootstrap as an accidental app disk access. Construction stays
+        // on main: bind() is synchronous by contract and attachViews() below must
+        // run on main; moving LibVLC/MediaPlayer to VlcOps would need an async
+        // bind lifecycle (fields set later, release racing construction).
         val previousThreadPolicy = StrictMode.allowThreadDiskReads()
         val vlc = try {
             LibVLC(context, options)
@@ -1119,6 +1099,8 @@ class VlcPlayerEngine(
         playbackHealth.reset()
         transportBytesReported = false
         recoveryOutputCounters = null
+        recoveryPlaybackTimeMs = -1L
+        audioOutputEvidence.reset()
         resetBufferingProgressProbe()
         healthHandler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()
@@ -1592,13 +1574,32 @@ class VlcPlayerEngine(
             // a missing statistic is never invented as an advancing counter.
             if (stats == null) return videoRequired && videoOutputReported
             val counters = stats.displayedPictures to stats.playedAbuffers
+            val timeMs = runCatching { mp.time }.getOrDefault(-1L)
             val before = recoveryOutputCounters
+            val timeBefore = recoveryPlaybackTimeMs
             recoveryOutputCounters = counters
+            recoveryPlaybackTimeMs = timeMs
             if (before == null) return false
             val videoAdvanced = !videoRequired ||
                 (!videoStatsUsable.get() && videoOutputReported) || counters.first > before.first
             val hasAudio = mp.audioTracks?.any { it.id != -1 } == true
-            val audioAdvanced = !hasAudio || (mp.audioTrack != -1 && counters.second > before.second)
+            // Some libVLC/device builds never advance playedAbuffers even while
+            // audio is audible; requiring it made this check permanently false.
+            val counterWasDead = audioOutputEvidence.counterDead
+            val audioAdvanced = audioOutputEvidence.evaluate(
+                hasAudio = hasAudio,
+                audioSelected = mp.audioTrack != -1,
+                playedAbuffers = counters.second,
+                playedAdvanced = counters.second > before.second,
+                timeAdvanced = timeBefore >= 0L && timeMs > timeBefore,
+            )
+            if (audioOutputEvidence.counterDead && !counterWasDead) {
+                PlaybackLog.log(
+                    context,
+                    engineName,
+                    "audio stats counters dead -> playback clock stands in as audio evidence",
+                )
+            }
             videoAdvanced && audioAdvanced
         } finally {
             media.release()
@@ -1883,13 +1884,17 @@ class VlcPlayerEngine(
                 }
                 if (result.ownershipDefinitivelyReleased) {
                     nativeOwnershipDefinitivelyReleased.set(true)
-                    retirement.ownershipReleased()
                     resolveProviderConnectionUncertainty()
                 } else {
+                    // A release boundary threw but RETURNED: no worker is stuck
+                    // in JNI, so socket closure stays unproven (process recovery
+                    // signal kept) while the engine itself is still gone. The
+                    // retired SurfaceView must not leak in the container forever.
                     requireProviderProcessRecovery(releaseUncertaintyToken)
                 }
-                // Late successful release must also drain the retained view.
-                if (result.ownershipDefinitivelyReleased) {
+                retirement.ownershipReleased()
+                // A late (or failed) release must also drain the retained view.
+                run {
                     // Keep the shared VlcOps FIFO occupied until main has removed
                     // the now-retired SurfaceView. The next engine's play cannot
                     // race a still-visible old native window.
@@ -2077,5 +2082,102 @@ class VlcPlayerEngine(
         private const val GREEN_PRONE_MIN_HEIGHT = 1080
         private const val GREEN_PRONE_MIN_WIDTH = 1920
         private const val GREEN_PRONE_MIN_FPS = 49f
+
+        private val libVlcOptionsCache = ConcurrentHashMap<Triple<Int, Boolean, Boolean>, List<String>>()
+
+        /**
+         * Keep VLC close to its proven defaults. The old global clock overrides,
+         * unsafe avcodec-fast mode, skipped loop filter and forced bob
+         * deinterlacing caused timestamp stalls, macroblocking and CPU overload
+         * on real live MPEG-TS channels. Memoized per configuration; the
+         * reconnect ladder rebuilds engines every few seconds on a bad network.
+         */
+        private fun libVlcOptions(
+            cachingMs: Int,
+            forceSoftware: Boolean,
+            allowPassthrough: Boolean,
+        ): List<String> = libVlcOptionsCache.getOrPut(Triple(cachingMs, forceSoftware, allowPassthrough)) {
+            val options = arrayListOf(
+                "--network-caching=$cachingMs",
+                "--live-caching=$cachingMs",
+                "--stats",
+                // Auto-reconnect when an HTTP segment/stream connection drops.
+                "--http-reconnect",
+                // Report KULULUPLAY instead of the default "VLC/3.0.x LibVLC/3.0.x".
+                "--http-user-agent=${AppInfo.USER_AGENT}",
+            )
+            if (forceSoftware) options.add("--avcodec-hw=none")
+            // Default = decode audio to PCM (no passthrough). Disable SPDIF so AC-3/
+            // E-AC-3/DTS are software-decoded to PCM that any HDMI sink plays, and
+            // force a STEREO downmix so the output is 2.0.
+            //
+            // Field log (Amlogic box, 4K HEVC channel): the audio was 5.1 (6-channel,
+            // AudioTrack channelMask 0x3f). The AudioTrack output could not open a
+            // 6-channel PCM track ("too low audio sample frequency (0)" then "module
+            // not functional"), so the 4K video played but there was NO sound. libVLC
+            // raises no error for an audio-only output failure, so the controller's
+            // fallback ladder never fires and the stream stays silent. Requesting
+            // stereo makes libVLC downmix 5.1 -> 2.0 PCM that the box's AudioTrack
+            // accepts; genuinely-stereo channels are unaffected (already 2.0).
+            if (!allowPassthrough) {
+                options.add("--no-spdif")
+                options.add("--stereo-mode=1")
+            }
+            options
+        }
+    }
+}
+
+/**
+ * Audio-output evidence for [VlcPlayerEngine.hasRecentOutputProgress].
+ *
+ * Some libVLC/device builds expose a stats object whose playedAbuffers counter
+ * stays at zero forever while audio is audibly playing (the audio twin of the
+ * dead video counters guarded by videoStatsUsable). Requiring that counter to
+ * advance made the output check permanently false on those builds, so the
+ * controller could never earn STABLE playback. After the counter has stayed at
+ * zero for [deadAfterChecks] consecutive polls with a selected audio track and
+ * an advancing playback clock, it is declared dead and the clock stands in as
+ * audio evidence. A counter that ever moves is authoritative again. Pure state
+ * so JVM tests cover the policy.
+ */
+internal class VlcAudioOutputEvidence(private val deadAfterChecks: Int = 3) {
+    private var zeroChecks = 0
+
+    /** playedAbuffers has been observed above zero for this stream. */
+    var counterUsable = false
+        private set
+
+    /** playedAbuffers is treated as unusable; the clock proves audio instead. */
+    var counterDead = false
+        private set
+
+    fun reset() {
+        zeroChecks = 0
+        counterUsable = false
+        counterDead = false
+    }
+
+    /** True when audio output progressed since the previous poll. */
+    fun evaluate(
+        hasAudio: Boolean,
+        audioSelected: Boolean,
+        playedAbuffers: Int,
+        playedAdvanced: Boolean,
+        timeAdvanced: Boolean,
+    ): Boolean {
+        if (!hasAudio) return true
+        if (!audioSelected) return false
+        if (playedAbuffers > 0) {
+            counterUsable = true
+            counterDead = false
+            zeroChecks = 0
+        }
+        if (playedAdvanced) return true
+        if (counterUsable) return false
+        // A stalled clock is a whole-pipeline stall, not proof of dead counters.
+        if (timeAdvanced && zeroChecks < deadAfterChecks) zeroChecks++
+        if (zeroChecks >= deadAfterChecks) counterDead = true
+        return counterDead && timeAdvanced
     }
 }

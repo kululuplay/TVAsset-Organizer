@@ -220,11 +220,14 @@ internal class VodPlaybackCoordinator(
             val selection = state.selection ?: return unchanged(state)
             val route = state.route ?: return unchanged(state)
             val routingFailure = VodPlaybackRoutingPolicy.routeFailure(failure)
+            // DO_NOT_RETRY (auth, DRM, policy) is terminal for EVERY failure kind.
+            // Re-opening on another decoder route would only repeat the refused
+            // request and burn another provider connection.
+            if (failure.retryAdvice == PlaybackFailure.RetryAdvice.DO_NOT_RETRY) {
+                return terminal(state, failure)
+            }
 
             if (routingFailure == VodPlaybackRoutingPolicy.Failure.SOURCE) {
-                if (failure.retryAdvice == PlaybackFailure.RetryAdvice.DO_NOT_RETRY) {
-                    return terminal(state, failure)
-                }
                 // The alternate engine is a one-shot compatibility probe. It is
                 // not retried again, keeping the provider connection ladder small.
                 if (state.sourceEngineFallbackAttempted) return terminal(state, failure)

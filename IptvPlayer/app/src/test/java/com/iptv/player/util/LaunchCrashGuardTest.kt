@@ -73,6 +73,39 @@ class LaunchCrashGuardTest {
     }
 
     @Test
+    fun `clean exit disarms the guard so the next launch is not a crash`() = runBlocking {
+        LaunchCrashGuard.markLaunchStarted(context)
+        // User pressed Back/Home on the splash, or the OS reclaimed the process.
+        LaunchCrashGuard.markCleanExit(context)
+        assertFalse(LaunchCrashGuard.previousLaunchCrashed(context))
+        assertEquals(0, LaunchCrashGuard.crashStreak(context))
+    }
+
+    @Test
+    fun `clean exit keeps an existing streak but does not grow it`() = runBlocking {
+        LaunchCrashGuard.markLaunchStarted(context)
+        LaunchCrashGuard.consumeCrashAndCountStreak(context)
+        LaunchCrashGuard.markLaunchStarted(context)
+        LaunchCrashGuard.markCleanExit(context)
+        assertFalse(LaunchCrashGuard.previousLaunchCrashed(context))
+        // Not a healthy launch either: the streak is neither bumped nor reset.
+        assertEquals(1, LaunchCrashGuard.crashStreak(context))
+        // Two benign exits in a row never reach the safe-mode threshold.
+        LaunchCrashGuard.markLaunchStarted(context)
+        LaunchCrashGuard.markCleanExit(context)
+        assertFalse(LaunchCrashGuard.previousLaunchCrashed(context))
+        assertTrue(LaunchCrashGuard.crashStreak(context) < LaunchCrashGuard.SAFE_MODE_THRESHOLD)
+    }
+
+    @Test
+    fun `re-arming after a clean exit guards the hand-off again`() = runBlocking {
+        LaunchCrashGuard.markLaunchStarted(context)
+        LaunchCrashGuard.markCleanExit(context)
+        LaunchCrashGuard.markLaunchStarted(context)
+        assertTrue(LaunchCrashGuard.previousLaunchCrashed(context))
+    }
+
+    @Test
     fun `healthy launch between crashes breaks the streak`() = runBlocking {
         LaunchCrashGuard.markLaunchStarted(context)
         LaunchCrashGuard.consumeCrashAndCountStreak(context)

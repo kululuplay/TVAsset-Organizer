@@ -174,7 +174,7 @@ class ContinueWatchingActivity : BaseActivity() {
         val lookupKey = when (item.kind) {
             ResumeKind.MOVIE -> "movie:${item.vodId ?: item.contentId}"
             ResumeKind.EPISODE -> "series:${item.seriesId ?: item.contentId}"
-            ResumeKind.CATCHUP -> return false
+            ResumeKind.CATCHUP -> "channel:${catchupChannelId(item) ?: item.contentId}"
         }
         adultClassificationCache[lookupKey]?.let { return it }
 
@@ -191,7 +191,11 @@ class ContinueWatchingActivity : BaseActivity() {
                 ResumeKind.EPISODE -> item.seriesId
                     ?.let { ServiceLocator.repository.getSeriesCached(it)?.isAdult() }
                     ?: true
-                ResumeKind.CATCHUP -> false
+                // Catch-up rows carry no category of their own; the archive is
+                // gated on the channel, so classify through the cached channel.
+                ResumeKind.CATCHUP -> catchupChannelId(item)
+                    ?.let { ServiceLocator.repository.getChannel(it)?.isAdult() }
+                    ?: true
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -202,6 +206,17 @@ class ContinueWatchingActivity : BaseActivity() {
         }
         adultClassificationCache[lookupKey] = classified
         return classified
+    }
+
+    /**
+     * Catch-up resume ids are "catchup_<channelId>_<startMs>" (CatchupActivity).
+     * Channel ids may themselves contain underscores, so split at the last one.
+     */
+    private fun catchupChannelId(item: ContinueItem): String? {
+        val body = item.contentId.removePrefix(CATCHUP_ID_PREFIX)
+        if (body == item.contentId) return null
+        return body.substringBeforeLast('_', missingDelimiterValue = "")
+            .takeIf { it.isNotBlank() }
     }
 
     private fun renderItems(items: List<ContinueItem>) {
@@ -426,6 +441,7 @@ class ContinueWatchingActivity : BaseActivity() {
 
     private companion object {
         const val TAG = "ContinueWatching"
+        const val CATCHUP_ID_PREFIX = "catchup_"
         const val DEFAULT_SPAN_COUNT = 5
         const val MIN_SPAN_COUNT = 3
         const val MAX_SPAN_COUNT = 6

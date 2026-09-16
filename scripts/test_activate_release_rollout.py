@@ -16,29 +16,58 @@ from activate_release_rollout import enabled_policy, github, main
 class ReleaseRolloutTest(unittest.TestCase):
     def setUp(self):
         self.digest = "a" * 64
-        self.policy = dict(schema=1, targetVersion="1.5.88", stableVersion="1.5.86",
-                           rolloutPercent=0, paused=True, emergency=False, salt="release-1.5.88")
+        # The previous production release, fully distributed (the default state).
+        self.policy = dict(schema=1, targetVersion="1.5.87", stableVersion="1.5.86",
+                           rolloutPercent=100, paused=False, emergency=False, salt="release-1.5.87")
         self.release = dict(tag_name="v1.5.88", draft=False, prerelease=False,
                             published_at="2026-09-11T19:23:12Z", assets=[dict(
                                 name="KululuIPTV-v1.5.88.apk", state="uploaded", size=93_000_000,
                                 digest=f"sha256:{self.digest}")])
         self.latest = copy.deepcopy(self.release)
 
-    def activate(self, version="1.5.88"):
-        return enabled_policy(self.policy, self.release, self.latest, version, self.digest)
+    def activate(self, version="1.5.88", **kwargs):
+        return enabled_policy(self.policy, self.release, self.latest, version, self.digest,
+                              **kwargs)
 
     def test_public_verified_apk_opens_all_cohorts(self):
         actual = self.activate()
         self.assertEqual((actual["rolloutPercent"], actual["paused"], actual["emergency"]),
                          (100, False, False))
-        self.assertEqual(actual["stableVersion"], "1.5.86")
-        self.assertTrue(self.policy["paused"])
-
-    def test_new_release_advances_an_older_policy(self):
-        self.policy.update(targetVersion="1.5.87", salt="release-1.5.87")
-        actual = self.activate()
         self.assertEqual(actual["targetVersion"], "1.5.88")
         self.assertEqual(actual["salt"], "release-1.5.88")
+        self.assertEqual(self.policy["targetVersion"], "1.5.87")
+
+    def test_previous_target_becomes_the_stable_fallback(self):
+        actual = self.activate()
+        self.assertEqual(actual["stableVersion"], "1.5.87")
+        # Re-activating the same version keeps the fallback it already has.
+        self.policy = actual
+        self.assertEqual(self.activate()["stableVersion"], "1.5.87")
+
+    def test_operator_pause_on_the_same_version_survives_a_rerun(self):
+        for field in ("paused", "emergency"):
+            with self.subTest(field=field):
+                self.policy.update(targetVersion="1.5.88", salt="release-1.5.88",
+                                   rolloutPercent=0, paused=False, emergency=False)
+                self.policy[field] = True
+                with self.assertRaisesRegex(ValueError, "--force"):
+                    self.activate()
+                forced = self.activate(force=True)
+                self.assertEqual((forced["rolloutPercent"], forced["paused"], forced["emergency"]),
+                                 (100, False, False))
+                self.assertEqual(forced["stableVersion"], "1.5.86")
+
+    def test_pause_on_an_older_target_does_not_block_a_new_release(self):
+        self.policy.update(paused=True)
+        actual = self.activate()
+        self.assertEqual((actual["targetVersion"], actual["paused"]), ("1.5.88", False))
+
+    def test_percent_stages_the_cohort_and_is_validated(self):
+        self.assertEqual(self.activate(percent=25)["rolloutPercent"], 25)
+        self.assertEqual(self.activate(percent=0)["rolloutPercent"], 0)
+        for percent in (-1, 101, "50", True, None):
+            with self.subTest(percent=percent), self.assertRaises(ValueError):
+                self.activate(percent=percent)
 
     def test_idempotent_activation(self):
         self.policy = self.activate()
@@ -81,17 +110,19 @@ class ReleaseRolloutTest(unittest.TestCase):
     def test_invalid_policy_and_preview_are_rejected(self):
         with self.assertRaises(ValueError):
             self.activate("1.5.88-preview1")
-        self.policy["stableVersion"] = "1.5.88"
+        self.policy.update(targetVersion="1.5.88", stableVersion="1.5.88", salt="release-1.5.88")
         with self.assertRaises(ValueError):
             self.activate()
 
-    def run_publication(self, conflict=False, changed_after_write=False):
+    def run_publication(self, conflict=False, changed_after_write=False, extra_args=(),
+                        **activation):
         self.digest = hashlib.sha256(b"verified APK").hexdigest()
         self.release["assets"][0]["digest"] = f"sha256:{self.digest}"
         self.latest = copy.deepcopy(self.release)
         old = dict(sha="original-file-sha", content=base64.b64encode(
             json.dumps(self.policy).encode()).decode())
-        updated = dict(content=base64.b64encode(json.dumps(self.activate()).encode()).decode())
+        updated = dict(content=base64.b64encode(
+            json.dumps(self.activate(**activation)).encode()).decode())
         responses = [self.release, self.latest, old,
                      RuntimeError("GitHub conflict") if conflict else {},
                      old if changed_after_write else updated]
@@ -99,7 +130,7 @@ class ReleaseRolloutTest(unittest.TestCase):
             apk = Path(directory) / "verified.apk"
             apk.write_bytes(b"verified APK")
             argv = ["activate_release_rollout.py", "--repo", "kululuplay/TVAsset-Organizer",
-                    "--version", "1.5.88", "--verified-apk", str(apk)]
+                    "--version", "1.5.88", "--verified-apk", str(apk), *extra_args]
             with patch("sys.argv", argv), patch("activate_release_rollout.github",
                                                side_effect=responses) as api:
                 if conflict or changed_after_write:
@@ -118,6 +149,31 @@ class ReleaseRolloutTest(unittest.TestCase):
         self.assertTrue(calls[2].args[1].endswith("?ref=main"))
         self.assertEqual(json.loads(base64.b64decode(payload["content"]))["rolloutPercent"], 100)
         self.assertEqual(calls[4].args[0], "GET")
+
+    def test_percent_and_force_flags_reach_the_policy(self):
+        self.policy.update(targetVersion="1.5.88", salt="release-1.5.88", paused=True)
+        calls = self.run_publication(extra_args=["--percent", "25", "--force"],
+                                     percent=25, force=True)
+        payload = calls[3].args[2]
+        self.assertEqual(json.loads(base64.b64decode(payload["content"]))["rolloutPercent"], 25)
+        self.assertIn("25%", payload["message"])
+
+    def test_held_policy_is_left_untouched_without_force(self):
+        self.policy.update(targetVersion="1.5.88", salt="release-1.5.88", paused=True)
+        old = dict(sha="original-file-sha", content=base64.b64encode(
+            json.dumps(self.policy).encode()).decode())
+        with tempfile.TemporaryDirectory() as directory:
+            apk = Path(directory) / "verified.apk"
+            apk.write_bytes(b"verified APK")
+            self.release["assets"][0]["digest"] = "sha256:" + hashlib.sha256(b"verified APK").hexdigest()
+            self.latest = copy.deepcopy(self.release)
+            argv = ["activate_release_rollout.py", "--repo", "kululuplay/TVAsset-Organizer",
+                    "--version", "1.5.88", "--verified-apk", str(apk)]
+            with patch("sys.argv", argv), patch("activate_release_rollout.github",
+                                               side_effect=[self.release, self.latest, old]) as api:
+                with self.assertRaises(ValueError):
+                    main()
+        self.assertEqual([call.args[0] for call in api.call_args_list], ["GET"] * 3)
 
     def test_concurrent_policy_edit_fails_without_forcing_an_update(self):
         self.assertEqual(len(self.run_publication(conflict=True)), 4)

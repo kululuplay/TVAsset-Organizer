@@ -44,6 +44,11 @@ internal class SurfaceFrameHealthMonitor(
     private var generation = 0
     private var started = false
     private var sampleInFlight = false
+    // Identifies the in-flight request so a stale timeout cannot expire a
+    // newer sample. A PixelCopy that never calls back used to leave
+    // sampleInFlight set forever, and the engine's 9 s deadline then reported
+    // "invalid video" for a surface that was merely unsampleable.
+    private var sampleRequestId = 0L
     private var classifiedFrame = false
     private var samplingUnavailable = false
     private var surfaceProvider: (() -> SurfaceView?)? = null
@@ -237,9 +242,11 @@ internal class SurfaceFrameHealthMonitor(
                     return@synchronized null
                 }
                 sampleInFlight = true
+                sampleRequestId++
                 surfaceProvider
             }
         } ?: return
+        val requestId = synchronized(lock) { sampleRequestId }
         val surface = runCatching { provider.invoke() }.getOrNull()
         if (surface == null) {
             retryAfterUnavailableSurface(sampleGeneration)
@@ -251,11 +258,13 @@ internal class SurfaceFrameHealthMonitor(
         }
 
         val bitmap = Bitmap.createBitmap(SAMPLE_WIDTH, SAMPLE_HEIGHT, Bitmap.Config.ARGB_8888)
+        val timeout = Runnable { onSampleTimedOut(sampleGeneration, requestId) }
         runCatching {
             PixelCopy.request(
                 surface,
                 bitmap,
                 { result ->
+                    handler.removeCallbacks(timeout)
                     var decision = GreenFrameRecoveryGate.Decision.WAIT
                     var nextDelayMs: Long? = null
                     if (result == PixelCopy.SUCCESS) {
@@ -320,10 +329,37 @@ internal class SurfaceFrameHealthMonitor(
                 },
                 copyResultHandler,
             )
+            handler.postDelayed(timeout, SAMPLE_TIMEOUT_MS)
         }.onFailure {
             bitmap.recycle()
             retryAfterUnavailableSurface(sampleGeneration)
         }
+    }
+
+    /**
+     * PixelCopy never called back (protected/vendor output can hang the request
+     * forever). That is a capability failure, not decoder evidence: retire the
+     * sample and hand readiness to the engine's native frame proof, exactly as
+     * an exhausted error-retry budget does. A late callback is ignored by the
+     * generation bump and only recycles its bitmap.
+     */
+    private fun onSampleTimedOut(sampleGeneration: Int, requestId: Long) {
+        val expired = synchronized(lock) {
+            if (
+                sampleGeneration != generation ||
+                !started ||
+                !sampleInFlight ||
+                requestId != sampleRequestId
+            ) {
+                return@synchronized false
+            }
+            sampleInFlight = false
+            started = false
+            samplingUnavailable = true
+            generation++
+            true
+        }
+        if (expired) onSamplingUnavailable()
     }
 
     /** Caller holds lock. Existing green/blank suspicion must resolve first. */
@@ -368,6 +404,9 @@ internal class SurfaceFrameHealthMonitor(
         private const val STARTUP_SAMPLE_INTERVAL_MS = 220L
         private const val PROBE_SAMPLE_INTERVAL_MS = 200L
         private const val PROBE_DEADLINE_MS = 1_500L
+        // Longer than any observed slow-but-successful gralloc readback (~3 s on
+        // old Amlogic), shorter than the engines' 9 s surface validation deadline.
+        private const val SAMPLE_TIMEOUT_MS = 4_000L
         // PixelCopy is serialized: the next capture is scheduled only after the
         // previous callback completes. This prevents a delayed old green capture
         // from racing a newer healthy one and restarting an already-correct image.

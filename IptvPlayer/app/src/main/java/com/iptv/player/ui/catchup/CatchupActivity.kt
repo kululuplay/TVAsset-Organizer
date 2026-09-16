@@ -12,8 +12,10 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
@@ -86,31 +88,39 @@ class CatchupActivity : BaseActivity() {
 
     private fun observe() {
         lifecycleScope.launch {
-            val settings = ServiceLocator.settings
-            adultLockEnabled = settings.lockAdult.first() && settings.hasPin()
-            viewModel.channels.collectLatest { channels ->
-                channelAdapter.submitList(channels)
-                binding.emptyChannels.visibility =
-                    if (channels.isEmpty()) View.VISIBLE else View.GONE
-                if (!didInitialFocus && channels.isNotEmpty()) {
-                    didInitialFocus = true
-                    val target = channels.firstOrNull { it.id == requestedChannelId }
-                        ?: channels.first()
-                    val idx = channels.indexOf(target).coerceAtLeast(0)
-                    onChannelFocused(target)
-                    binding.channelList.post {
-                        binding.channelList.scrollToPosition(idx)
-                        (binding.channelList.findViewHolderForAdapterPosition(idx)?.itemView
-                            ?: binding.channelList).requestFocus()
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { observeChannels() }
+                launch {
+                    viewModel.programs.collectLatest { programs ->
+                        programAdapter.submitList(programs)
+                        binding.emptyPrograms.visibility =
+                            if (programs.isEmpty()) View.VISIBLE else View.GONE
                     }
                 }
             }
         }
-        lifecycleScope.launch {
-            viewModel.programs.collectLatest { programs ->
-                programAdapter.submitList(programs)
-                binding.emptyPrograms.visibility =
-                    if (programs.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    private suspend fun observeChannels() {
+        // Re-read on every restart so a lock/PIN change made in Settings applies
+        // when the user comes back to this screen.
+        val settings = ServiceLocator.settings
+        adultLockEnabled = settings.lockAdult.first() && settings.hasPin()
+        viewModel.channels.collectLatest { channels ->
+            channelAdapter.submitList(channels)
+            binding.emptyChannels.visibility =
+                if (channels.isEmpty()) View.VISIBLE else View.GONE
+            if (!didInitialFocus && channels.isNotEmpty()) {
+                didInitialFocus = true
+                val target = channels.firstOrNull { it.id == requestedChannelId }
+                    ?: channels.first()
+                val idx = channels.indexOf(target).coerceAtLeast(0)
+                onChannelFocused(target)
+                binding.channelList.post {
+                    binding.channelList.scrollToPosition(idx)
+                    (binding.channelList.findViewHolderForAdapterPosition(idx)?.itemView
+                        ?: binding.channelList).requestFocus()
+                }
             }
         }
     }

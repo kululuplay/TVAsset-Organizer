@@ -68,8 +68,10 @@ import com.iptv.player.data.local.dao.WatchSignalEntity
         WatchedEntity::class,
         WatchSignalEntity::class
     ],
-    version = 14,
-    exportSchema = false
+    version = 15,
+    // Schema JSON lives under app/schemas (room.schemaLocation) so migrations
+    // can be reviewed and tested against the real previous layout.
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
 
@@ -247,6 +249,28 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v14 -> v15: rebuilds the three FTS4 search indexes with the unicode61
+         * tokenizer (non-ASCII case folding) and re-fills them from the content
+         * tables, so search works immediately and nothing is re-downloaded.
+         * The CREATE statements mirror what Room generates for the entities.
+         */
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                for ((fts, source) in listOf("vod_fts" to "vod", "series_fts" to "series", "channels_fts" to "channels")) {
+                    db.execSQL("DROP TABLE IF EXISTS `$fts`")
+                    db.execSQL(
+                        "CREATE VIRTUAL TABLE IF NOT EXISTS `$fts` USING FTS4(" +
+                            "`id` TEXT NOT NULL, `name` TEXT NOT NULL, tokenize=unicode61)"
+                    )
+                    db.execSQL("INSERT INTO `$fts` (`id`, `name`) SELECT `id`, `name` FROM `$source`")
+                }
+            }
+        }
+
+        /** Versions before 8 were dev-only builds without real migrations. */
+        private val PRE_MIGRATION_VERSIONS = intArrayOf(1, 2, 3, 4, 5, 6, 7)
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(
                 context.applicationContext,
@@ -260,10 +284,13 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_11_12,
                     MIGRATION_12_13,
                     MIGRATION_13_14,
+                    MIGRATION_14_15,
                 )
-                // Safety net for upgrades from versions older than 8 (dev-only
-                // builds that predate real migrations); v8 -> v9 is non-destructive.
-                .fallbackToDestructiveMigration()
+                // Only pre-v8 dev builds and downgrades may wipe the cache. A
+                // missing forward migration must fail loudly in development
+                // instead of silently deleting favorites and history.
+                .fallbackToDestructiveMigrationFrom(*PRE_MIGRATION_VERSIONS)
+                .fallbackToDestructiveMigrationOnDowngrade()
                 .build()
     }
 }

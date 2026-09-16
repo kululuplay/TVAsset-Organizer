@@ -78,4 +78,17 @@
     <string name="about_download_started">Téléchargement de la mise à jour…</string>
     <string name="about_install_permission">Autorisez l\'installation depuis cette source pour mettre à jour.</string>
 
+    <!-- Added by the 2026-09 translation audit -->
+    <string name="about_update_file_missing">Le fichier de mise à jour téléchargé est introuvable. Veuillez le télécharger à nouveau.</string>
+    <string name="about_update_file_incomplete">La mise à jour n’a pas été entièrement téléchargée. Veuillez réessayer.</string>
+    <string name="about_update_storage_low">Espace de stockage insuffisant pour installer la mise à jour. Libérez au moins 250 Mo et réessayez.</string>
+    <string name="about_update_invalid_apk">Le fichier téléchargé n’est pas un paquet de mise à jour Android valide.</string>
+    <string name="about_update_wrong_package">L’APK téléchargé appartient à une autre application.</string>
+    <string name="about_update_not_newer">Cet APK n’est pas plus récent que l’application installée.</string>
+    <string name="about_update_signature_mismatch">La signature de la mise à jour ne correspond pas à l’application installée. Android ne peut pas mettre à jour cette installation en toute sécurité sans la supprimer d’abord.</string>
+    <string name="about_download_preparing">Préparation…</string>
+    <string name="about_download_size">%1$s / %2$s</string>
+    <string name="about_download_meta">%1$s/s · %2$s restant</string>
+    <string name="about_download_complete">Téléchargement terminé. Ouverture de l’installateur…</string>
+    <string name="about_download_cancel">Annuler</string>
 </resources>

@@ -2,11 +2,21 @@
 <network-security-config>
     <!-- IPTV portals frequently redirect to HTTP subdomains, CDN hosts or raw IP
          addresses. Permit those user-supplied playback/login endpoints so Media3
-         and libVLC follow the same network policy. App-owned URLs are HTTPS. -->
+         and libVLC follow the same network policy. -->
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
 
+    <!-- App-owned hosts never need HTTP: update metadata and APKs (GitHub),
+         the rollout policy (raw.githubusercontent.com), the crash/heartbeat
+         receiver (Replit) and the Kululu portal. A downgraded or redirected
+         plain-HTTP request to any of them fails instead of leaking data. -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">github.com</domain>
+        <domain includeSubdomains="true">githubusercontent.com</domain>
+        <domain includeSubdomains="false">asset-organizer-kululuaydin.replit.app</domain>
+        <domain includeSubdomains="true">kululu.live</domain>
+    </domain-config>
 </network-security-config>

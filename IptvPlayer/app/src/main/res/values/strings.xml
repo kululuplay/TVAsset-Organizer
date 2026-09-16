@@ -312,4 +312,6 @@
     <string name="support_diagnostic_interrupted">Sending was interrupted. Retry to check delivery and receive your support number; duplicate reports are avoided.</string>
     <string name="support_diagnostic_incomplete">Some logs or settings were unavailable on this device. The available information was sent.</string>
     <string name="error_live_playback_failed">Playback could not continue. Please try again.</string>
+    <!-- Parental PIN lockout + diagnostics (2026-09 audit) -->
+    <string name="diag_loss_percent">%1$d%%</string>
 </resources>

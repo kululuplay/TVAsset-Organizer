@@ -14,8 +14,10 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
 import androidx.core.view.ViewCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.R
 import com.iptv.player.data.model.ManagedChannel
@@ -67,13 +69,19 @@ class ChannelManagerActivity : BaseActivity() {
         binding.channelList.itemAnimator = null
 
         lifecycleScope.launch {
-            viewModel.allChannels.collectLatest { all -> fullIds = all.map { it.channel.id } }
-        }
-        lifecycleScope.launch {
-            viewModel.channels.collectLatest { list ->
-                if (movingId != null) return@collectLatest
-                items = list.toMutableList()
-                submit()
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    viewModel.allChannels.collectLatest { all ->
+                        fullIds = all.map { it.channel.id }
+                    }
+                }
+                launch {
+                    viewModel.channels.collectLatest { list ->
+                        if (movingId != null) return@collectLatest
+                        items = list.toMutableList()
+                        submit()
+                    }
+                }
             }
         }
     }

@@ -18,6 +18,11 @@ val livePlaybackDiagnostics = System.getenv("LIVE_PLAYBACK_DIAGNOSTICS") == "1"
 val tsOnlyTestBuild = providers.gradleProperty("tsOnlyTestBuild").orNull == "true"
 val compatibilityTestBuild = providers.gradleProperty("compatibilityTestBuild").orNull == "true"
 
+ksp {
+    // Room schema history lives in git so migrations can be diffed and tested.
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 android {
     namespace = "com.iptv.player"
     // Media3 1.8.x is compiled against Android 15 APIs. compileSdk only affects

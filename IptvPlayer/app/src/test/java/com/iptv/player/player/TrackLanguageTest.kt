@@ -19,4 +19,14 @@ class TrackLanguageTest {
         assertNull(TrackLanguage.normalize("Track principal"))
         assertNull(TrackLanguage.normalize(null))
     }
+
+    @Test
+    fun `two letter label tokens must be real iso languages`() {
+        assertNull(TrackLanguage.normalize("Audio HD"))
+        assertNull(TrackLanguage.normalize("hd"))
+        assertNull(TrackLanguage.normalize("AC 5.1"))
+        assertEquals("en", TrackLanguage.normalize("HD English"))
+        assertEquals("de", TrackLanguage.normalize("Audio 2 - de"))
+        assertEquals("pl", TrackLanguage.normalize("pl"))
+    }
 }

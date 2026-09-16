@@ -417,8 +417,15 @@ class HomeActivity : BaseActivity() {
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.keyCode in consumedUntilUp) {
-            if (event.action == KeyEvent.ACTION_UP) consumedUntilUp.remove(event.keyCode)
-            return true
+            // A fresh DOWN means the matching UP went to another window (a PIN
+            // dialog opened by the consumed press). Drop the stale entry and let
+            // this press through instead of swallowing it.
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                consumedUntilUp.remove(event.keyCode)
+            } else {
+                if (event.action == KeyEvent.ACTION_UP) consumedUntilUp.remove(event.keyCode)
+                return true
+            }
         }
 
         // RecyclerView rows normally consume OK before Activity.onKeyDown. Commit a
@@ -3154,6 +3161,13 @@ class HomeActivity : BaseActivity() {
         // Coming back from Settings/Catch-up: restore the channel row after the
         // lifecycle-scoped list collector re-subscribes.
         if (inChannelView) pendingChannelFocusRestore = true
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // The key UP for a consumed DOWN is delivered to whichever window has
+        // focus. Once a dialog takes it, this Activity never sees that UP.
+        if (!hasFocus) consumedUntilUp.clear()
     }
 
     override fun onStop() {

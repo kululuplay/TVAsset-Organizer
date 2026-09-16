@@ -13,9 +13,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import com.iptv.player.databinding.ActivityScreensaverBinding
 import com.iptv.player.ui.common.BaseActivity
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.iptv.player.ui.common.TimeFormat
 import kotlin.random.Random
 
 class ScreensaverActivity : BaseActivity() {
@@ -26,7 +24,6 @@ class ScreensaverActivity : BaseActivity() {
 
     private lateinit var binding: ActivityScreensaverBinding
     private val handler = Handler(Looper.getMainLooper())
-    private val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
 
     companion object {
         private const val MOVE_INTERVAL_MS = 8000L
@@ -42,7 +39,7 @@ class ScreensaverActivity : BaseActivity() {
 
     private val clockRunnable = object : Runnable {
         override fun run() {
-            binding.screensaverClock.text = formatter.format(Date())
+            renderClock()
             handler.postDelayed(this, CLOCK_INTERVAL_MS)
         }
     }
@@ -51,7 +48,11 @@ class ScreensaverActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityScreensaverBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        binding.screensaverClock.text = formatter.format(Date())
+        renderClock()
+    }
+
+    private fun renderClock() {
+        binding.screensaverClock.text = TimeFormat.clock(this, System.currentTimeMillis())
     }
 
     override fun onResume() {

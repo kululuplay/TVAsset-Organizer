@@ -46,8 +46,9 @@ interface PlayerEngine {
 
     /**
      * Stop the provider connection and report when backend shutdown really
-     * completed. Media3 is synchronous; libVLC overrides this because its JNI stop
-     * is bounded on a worker. Cast handoff must wait for this boundary.
+     * completed. Neither backend is synchronous here: libVLC's JNI stop is
+     * bounded on a worker, and Media3's stop only cancels its Loader (the socket
+     * closes later on the loader thread). Cast handoff must wait for this boundary.
      */
     fun stopAndThen(onStopped: (Boolean) -> Unit) {
         stop()
@@ -60,6 +61,18 @@ interface PlayerEngine {
      * backend order Surface destruction after its native decoder has stopped.
      */
     fun release()
+
+    /**
+     * [release], then report when the provider socket has really closed so the
+     * next engine never overlaps it. libVLC keeps this default: its release is
+     * serialized on the VlcOps FIFO, which the controller drains before the next
+     * engine. Media3 overrides it because release() returns before the loader
+     * thread has closed the HTTP connection.
+     */
+    fun releaseAndThen(onReleased: (Boolean) -> Unit) {
+        release()
+        onReleased(true)
+    }
 
     fun setListener(listener: PlayerListener?)
 

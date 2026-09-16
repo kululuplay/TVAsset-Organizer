@@ -26,6 +26,7 @@ import androidx.paging.map
 import androidx.room.withTransaction
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.iptv.player.data.local.AppDatabase
+import com.iptv.player.data.local.LikeEscape
 import com.iptv.player.data.local.entity.ChannelEntity
 import com.iptv.player.data.local.entity.ChannelFtsEntity
 import com.iptv.player.data.local.entity.ChannelOverrideEntity
@@ -81,6 +82,9 @@ import com.iptv.player.util.KululuEndpoint
 import com.iptv.player.util.Outcome
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -108,6 +112,7 @@ class IptvRepository(
     private val retrofitBuilder: Retrofit.Builder,
     private val settings: SettingsStore,
     private val secureValues: SecureValueCodec,
+    private val shrinkLedger: ShrinkGuardLedger = ShrinkGuardLedger(),
 ) {
 
     private val channelDao = db.channelDao()
@@ -129,6 +134,9 @@ class IptvRepository(
     private val refreshGenerations = DatasetGenerationGate()
     private val epgSyncMutex = Mutex()
     private val panelTimezones = java.util.concurrent.ConcurrentHashMap<String, String>()
+    /** Episode-date sweeps pause until this instant after a 429/5xx from the panel. */
+    @Volatile
+    private var seriesDatesBackoffUntil = 0L
     /** Process-local fast path; guarded exclusively by [playbackStateMigrationMutex]. */
     private val claimedLegacyPlaybackProfiles = mutableSetOf<Long>()
 
@@ -221,7 +229,8 @@ class IptvRepository(
     /**
      * Turns raw user input into a safe FTS4 MATCH expression: splits on
      * non-alphanumerics and appends a prefix wildcard to each token, AND-ed
-     * together (e.g. "harry pot" -> "harry* pot*"). Returns "" when there's
+     * together (e.g. "harry pot" -> "name:harry* name:pot*"). The column filter
+     * keeps id fragments ("xt_live_12") from matching. Returns "" when there's
      * nothing to match so callers can short-circuit to an empty result instead
      * of issuing an invalid empty MATCH (which SQLite rejects).
      */
@@ -229,7 +238,7 @@ class IptvRepository(
         raw.trim().lowercase()
             .split(Regex("[^\\p{L}\\p{N}]+"))
             .filter { it.isNotBlank() }
-            .joinToString(" ") { "$it*" }
+            .joinToString(" ") { "name:$it*" }
 
     // ---- Reactive reads (UI layer) --------------------------------------
 
@@ -250,8 +259,15 @@ class IptvRepository(
             rows.associate { it.categoryId to it.count }
         }
 
+    /** Favorite live channels, minus those in categories hidden by Content Manager. */
     fun observeFavorites(): Flow<List<Channel>> =
-        favoriteDao.observeFavoriteChannels().map { list -> list.map { it.toModel(isFav = true) } }
+        combine(
+            favoriteDao.observeFavoriteChannels(),
+            settings.hiddenCategories(ContentType.LIVE),
+        ) { list, hidden ->
+            list.filter { it.categoryId == null || it.categoryId !in hidden }
+                .map { it.toModel(isFav = true) }
+        }
 
     /**
      * All favorites across every content type (live channels, movies, series),
@@ -294,10 +310,18 @@ class IptvRepository(
         channelDao.countByType(ContentType.LIVE.name)
     }
 
-    /** Live channels that advertise a catch-up / timeshift archive. */
+    /**
+     * Live channels that advertise a catch-up / timeshift archive. Hidden
+     * categories are excluded here so the catch-up screen matches Live TV.
+     */
     fun observeCatchupChannels(): Flow<List<Channel>> =
-        channelDao.observeByType(ContentType.LIVE.name, 0)
-            .map { list -> list.map { it.toModel() }.filter { it.catchupDays > 0 } }
+        combine(
+            channelDao.observeByType(ContentType.LIVE.name, 0),
+            settings.hiddenCategories(ContentType.LIVE),
+        ) { list, hidden ->
+            list.filter { it.catchupDays > 0 && (it.categoryId == null || it.categoryId !in hidden) }
+                .map { it.toModel() }
+        }
 
     /**
      * Channels of a type (including hidden) plus their manager state, in the
@@ -474,7 +498,11 @@ class IptvRepository(
         }
     }
 
-    suspend fun refreshLive(config: SourceConfig): Outcome<Int> = withContext(Dispatchers.IO) {
+    /**
+     * Replaces the live channel snapshot. [force] (a manual user refresh) trusts
+     * a much smaller server list that the shrink guard would otherwise reject.
+     */
+    suspend fun refreshLive(config: SourceConfig, force: Boolean = false): Outcome<Int> = withContext(Dispatchers.IO) {
         val generation = refreshGenerations.begin("live", config)
         try {
             val staged = when (config.type) {
@@ -486,23 +514,25 @@ class IptvRepository(
             // Stamp each channel with its index in the source list so the visible
             // order matches what the server delivered.
             val ordered = channels.mapIndexed { index, ch -> ch.copy(position = index) }
-            // Count genuinely-new live channels (Xtream ids are stable) so the Live
-            // screen can flash a "N new channels" notice. Captured before the wipe
-            // below; skipped on the very first load (no prior data) to avoid a
-            // false popup, and skipped for M3U whose ids aren't refresh-stable.
-            val newLiveCount = if (config.type == SourceType.XTREAM) {
-                val existing = channelDao.idsForType(ContentType.LIVE.name).toSet()
-                if (existing.isEmpty()) 0 else ordered.count { it.id !in existing }
-            } else 0
-            val existingCount = channelDao.idsForType(ContentType.LIVE.name).size
+            // Count genuinely-new live channels (Xtream ids and M3U tvg-id/URL-hash
+            // ids are refresh-stable) so the Live screen can flash a "N new
+            // channels" notice. Captured before the wipe below; skipped on the very
+            // first load (no prior data) and when nothing overlaps at all (an id
+            // scheme or source change, not new content) to avoid a false popup.
+            val existing = channelDao.idsForType(ContentType.LIVE.name).toSet()
+            val newLiveCount = if (existing.isEmpty()) 0 else {
+                ordered.count { it.id !in existing }.let { if (it == ordered.size) 0 else it }
+            }
             when (
-                val decision = DatasetRefreshPolicy.evaluate(
+                val decision = evaluateRefresh(
                     CatalogDataset.LIVE,
+                    generation,
                     DatasetSnapshot(
-                        generation.policyExistingCount(existingCount),
+                        generation.policyExistingCount(existing.size),
                         staged.receivedCount,
                         ordered.size,
                     ),
+                    force = force,
                 )
             ) {
                 DatasetRefreshDecision.Apply -> Unit
@@ -611,7 +641,7 @@ class IptvRepository(
         vodDao.observeCategoryCounts().map { rows -> rows.associate { it.categoryId to it.count } }
 
     fun searchVod(query: String): Flow<List<VodItem>> =
-        vodDao.search(query).map { it.map { e -> e.toModel() } }
+        vodDao.search(LikeEscape.escape(query)).map { it.map { e -> e.toModel() } }
 
     // ---- Paging 3 (bounded movie lists) ---------------------------------
 
@@ -703,8 +733,9 @@ class IptvRepository(
                 )
             }.distinctBy { it.id }
             when (
-                val decision = DatasetRefreshPolicy.evaluate(
+                val decision = evaluateRefresh(
                     CatalogDataset.VOD_CATEGORIES,
+                    generation,
                     DatasetSnapshot(
                         generation.policyExistingCount(cachedCategories.size),
                         catList.size,
@@ -818,8 +849,9 @@ class IptvRepository(
                     )
                 }
             when (
-                val decision = DatasetRefreshPolicy.evaluate(
+                val decision = evaluateRefresh(
                     CatalogDataset.VOD_CATEGORY,
+                    generation,
                     DatasetSnapshot(
                         generation.policyExistingCount(existing.size),
                         scoped.size,
@@ -1004,7 +1036,7 @@ class IptvRepository(
         seriesDao.observeCategoryCounts().map { rows -> rows.associate { it.categoryId to it.count } }
 
     fun searchSeries(query: String): Flow<List<Series>> =
-        seriesDao.search(query).map { it.map { e -> e.toModel() } }
+        seriesDao.search(LikeEscape.escape(query)).map { it.map { e -> e.toModel() } }
 
     // ---- Paging 3 (bounded series lists) --------------------------------
 
@@ -1097,8 +1129,9 @@ class IptvRepository(
                 )
             }.distinctBy { it.id }
             when (
-                val decision = DatasetRefreshPolicy.evaluate(
+                val decision = evaluateRefresh(
                     CatalogDataset.SERIES_CATEGORIES,
+                    generation,
                     DatasetSnapshot(
                         generation.policyExistingCount(cachedCategories.size),
                         catList.size,
@@ -1162,36 +1195,48 @@ class IptvRepository(
      * is set. Keeps the FTS index in lockstep and marks the category loaded.
      */
     /** Some panels never update get_series.last_modified when adding episodes.
-     * Check only the visible category (or visible catalog), with two requests in
-     * flight and a 15-minute cache. No TMDB, posters, playback or episode writes.
-     * One batch commit keeps Paging focus stable while dates arrive.
+     * Check the visible category every 15 minutes, or the whole visible catalog
+     * every 6 hours per series, at most [SERIES_DATES_PER_CALL] series per call
+     * with two requests in flight, so a 5,000-title catalog never turns into a
+     * request storm. A 429/5xx aborts the sweep and backs off. No TMDB, posters,
+     * playback or episode writes. One batch commit keeps Paging focus stable.
      */
     suspend fun refreshSeriesEpisodeDates(
         config: SourceConfig, categoryId: String?, hidden: List<String>, force: Boolean = false,
     ): Outcome<Int> = withContext(Dispatchers.IO) {
         if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
         val now = System.currentTimeMillis()
-        val ids = seriesDao.episodeDatesDue(categoryId, hidden, if (force) now + 1 else now - 900_000L)
+        if (now < seriesDatesBackoffUntil) return@withContext Outcome.Success(0)
+        val minInterval = if (categoryId == null) SERIES_DATES_CATALOG_INTERVAL_MS else SERIES_DATES_CATEGORY_INTERVAL_MS
+        val ids = seriesDao.episodeDatesDue(
+            categoryId, hidden, if (force) now + 1 else now - minInterval, SERIES_DATES_PER_CALL,
+        )
         if (ids.isEmpty()) return@withContext Outcome.Success(0)
         val generation = refreshGenerations.begin("series_dates:${categoryId ?: "all"}", config)
         val api = buildXtreamApi(config.serverUrl)
         var applied = 0
+        // First 429/5xx status seen; the panel is asking us to stop, not retry.
+        val throttledStatus = java.util.concurrent.atomic.AtomicInteger(0)
         try {
             // Small categories commit together so posters do not jump every time
             // one response arrives. Large categories publish bounded batches.
-            ids.chunked(50).forEach { batch ->
+            ids.chunked(20).forEach { batch ->
                 val updates = mutableListOf<Pair<String, Long>>()
                 coroutineScope {
                     batch.chunked(2).forEach { pair ->
+                        if (throttledStatus.get() != 0) return@forEach
                         pair.map { id -> async {
                             try {
                                 val info = api.getSeriesInfo(config.username, config.password, id)
                                 val episodes = info.episodes ?: return@async null
-                                if (info.info == null) return@async null
                                 id to MetadataPolicy.episodeTimestamp(
-                                    episodes.values.flatten().map { it.added } + info.info.lastEpisodeAdded, now,
+                                    episodes.values.flatten().map { it.added } + info.info?.lastEpisodeAdded, now,
                                 )
                             } catch (e: CancellationException) { throw e }
+                            catch (e: HttpException) {
+                                if (e.code() == 429 || e.code() in 500..599) throttledStatus.compareAndSet(0, e.code())
+                                null
+                            }
                             catch (_: Exception) { null }
                         } }.awaitAll().filterNotNull().let(updates::addAll)
                     }
@@ -1201,6 +1246,13 @@ class IptvRepository(
                 }
                 if (!committed) return@withContext staleDataset(CatalogDataset.SERIES_CATEGORY)
                 applied += updates.size
+                val status = throttledStatus.get()
+                if (status != 0) {
+                    val backoff = if (status == 429) SERIES_DATES_BACKOFF_429_MS else SERIES_DATES_BACKOFF_5XX_MS
+                    seriesDatesBackoffUntil = System.currentTimeMillis() + backoff
+                    Logger.w("CatalogSync", "episode date sweep paused ${backoff / 60_000} min after HTTP $status")
+                    return@withContext Outcome.Success(applied)
+                }
             }
             Outcome.Success(applied)
         } catch (e: CancellationException) { throw e }
@@ -1253,8 +1305,9 @@ class IptvRepository(
                     )
                 }
             when (
-                val decision = DatasetRefreshPolicy.evaluate(
+                val decision = evaluateRefresh(
                     CatalogDataset.SERIES_CATEGORY,
+                    generation,
                     DatasetSnapshot(
                         generation.policyExistingCount(existing.size),
                         scoped.size,
@@ -1382,8 +1435,9 @@ class IptvRepository(
             }.sortedBy { it.seasonNumber }
             val receivedEpisodeCount = info.episodes?.values?.sumOf { it.size } ?: 0
             when (
-                val decision = DatasetRefreshPolicy.evaluate(
+                val decision = evaluateRefresh(
                     CatalogDataset.SERIES_EPISODES,
+                    generation,
                     DatasetSnapshot(
                         generation.policyExistingCount(cachedEpisodeEntities.size),
                         receivedEpisodeCount,
@@ -1497,6 +1551,10 @@ class IptvRepository(
                     val batch = ArrayList<ProgramEntity>(500)
                     var total = 0
                     val nameIndex = HashMap<String, String>()
+                    // The parser callback is synchronous; keep a handle on the job
+                    // so a cancelled sync stops between batches instead of
+                    // grinding through the whole guide.
+                    val job = currentCoroutineContext()[Job]
                     body.byteStream().use { stream ->
                         XmltvParser.parse(
                             stream,
@@ -1518,23 +1576,25 @@ class IptvRepository(
                                 stopMs = p.stopMs,
                             )
                             if (batch.size >= 500) {
-                                // The parser callback is synchronous. Stage each bounded
-                                // batch in Room's IO transaction without touching live EPG.
-                                kotlinx.coroutines.runBlocking { insertEpgStaging(batch.toList()) }
+                                // Stage each bounded batch on this IO thread with a plain
+                                // SQLite transaction (no runBlocking) without touching live EPG.
+                                job?.ensureActive()
+                                insertEpgStaging(batch)
                                 total += batch.size
                                 batch.clear()
                             }
                         }
                     }
                     if (batch.isNotEmpty()) {
-                        insertEpgStaging(batch.toList())
+                        insertEpgStaging(batch)
                         total += batch.size
                     }
 
                     val existingCount = epgDao.count()
                     when (
-                        val decision = DatasetRefreshPolicy.evaluate(
+                        val decision = evaluateRefresh(
                             CatalogDataset.EPG,
+                            generation,
                             DatasetSnapshot(
                                 generation.policyExistingCount(existingCount),
                                 total,
@@ -1845,6 +1905,15 @@ class IptvRepository(
             watchedDao.clearProfile(id)
             recommendationDao.clearProfile(id)
             profileDao.remove(id)
+            // Favorites, recents, overrides and EPG mappings carry no profile
+            // column and their ids collide across providers, so they can only
+            // be attributed (and dropped) once no profile remains at all.
+            if (profileDao.getAll().isEmpty()) {
+                favoriteDao.clearAll()
+                recentDao.clearAll()
+                channelOverrideDao.clearAll()
+                epgMappingDao.clearAll()
+            }
         }
     }
 
@@ -2397,6 +2466,32 @@ class IptvRepository(
     private fun DatasetGenerationGate.Token.policyExistingCount(physicalCount: Int): Int =
         if (sourceChanged) 0 else physicalCount
 
+    /**
+     * Runs the refresh gate and keeps the persisted shrink ledger in step: a
+     * shrink rejection is counted, any accepted snapshot resets the count, so a
+     * provider that really shrank stops being refused after a few syncs.
+     */
+    private fun evaluateRefresh(
+        dataset: CatalogDataset,
+        generation: DatasetGenerationGate.Token,
+        snapshot: DatasetSnapshot,
+        force: Boolean = false,
+    ): DatasetRefreshDecision {
+        val now = System.currentTimeMillis()
+        val decision = DatasetRefreshPolicy.evaluate(
+            dataset, snapshot, shrinkLedger.get(generation.key), now, force,
+        )
+        when {
+            decision is DatasetRefreshDecision.PreserveCache &&
+                decision.reason == DatasetRefreshPolicy.REASON_SHRINK -> {
+                val rejection = shrinkLedger.recordRejection(generation.key, now)
+                Logger.w("CatalogSync", "$dataset shrink rejected ${rejection.count}x since ${rejection.firstRejectedAt}")
+            }
+            decision is DatasetRefreshDecision.Apply -> shrinkLedger.clear(generation.key)
+        }
+        return decision
+    }
+
     private fun preservedDataset(
         dataset: CatalogDataset,
         reason: String,
@@ -2423,10 +2518,17 @@ class IptvRepository(
         )
     }
 
-    private suspend fun insertEpgStaging(batch: List<ProgramEntity>) {
+    /**
+     * Synchronous on purpose: it runs inside the XMLTV parser callback. The
+     * staging table is not a Room entity, so a raw SQLite transaction is enough
+     * and no invalidation tracking is needed.
+     */
+    private fun insertEpgStaging(batch: List<ProgramEntity>) {
         if (batch.isEmpty()) return
-        db.withTransaction {
-            val statement = db.openHelper.writableDatabase.compileStatement(
+        val sql = db.openHelper.writableDatabase
+        sql.beginTransaction()
+        try {
+            val statement = sql.compileStatement(
                 "INSERT INTO $EPG_STAGING_TABLE " +
                     "(epgChannelId, title, description, startMs, stopMs) VALUES (?, ?, ?, ?, ?)",
             )
@@ -2444,6 +2546,9 @@ class IptvRepository(
             } finally {
                 statement.close()
             }
+            sql.setTransactionSuccessful()
+        } finally {
+            sql.endTransaction()
         }
     }
 
@@ -2505,5 +2610,10 @@ class IptvRepository(
     private companion object {
         const val EPG_STAGING_TABLE = "epg_sync_staging"
         const val MAX_CAUSE_DEPTH = 8
+        const val SERIES_DATES_PER_CALL = 40
+        const val SERIES_DATES_CATEGORY_INTERVAL_MS = 15L * 60_000L
+        const val SERIES_DATES_CATALOG_INTERVAL_MS = 6L * 60L * 60_000L
+        const val SERIES_DATES_BACKOFF_429_MS = 15L * 60_000L
+        const val SERIES_DATES_BACKOFF_5XX_MS = 5L * 60_000L
     }
 }

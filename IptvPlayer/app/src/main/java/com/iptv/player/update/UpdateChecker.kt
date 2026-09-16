@@ -23,10 +23,10 @@ object UpdateConfig {
     const val REPO = "TVAsset-Organizer"
 
     /**
-     * List endpoint (newest first) instead of `/releases/latest`: the latter only
-     * returns full, non-prerelease releases and 404s when the newest publish is a
-     * prerelease or when no full release exists yet. Listing lets us pick the most
-     * recent published (non-draft) release, including prereleases.
+     * List endpoint (newest first) instead of `/releases/latest`: the latter 404s
+     * when no full release exists yet and hides the ordering. Listing lets us walk
+     * the recent releases and pick the newest published production one, skipping
+     * drafts, prereleases and non-version tags (there is no preview opt-in).
      */
     const val RELEASES_API =
         "https://api.github.com/repos/$OWNER/$REPO/releases?per_page=10"
@@ -91,8 +91,15 @@ internal object UpdateRolloutGatePolicy {
             require(deviceId.isNotBlank())
 
             when (compareVersions(candidateVersion, targetVersion)) {
-                // Policy can be safely pre-armed before its release exists.
-                -1 -> Outcome.Allow
+                // Policy pre-armed before its release exists: only the last
+                // known-good release (and anything older) is open. A paused or
+                // partial target must not leak an ungated older build, and an
+                // emergency admits nothing but the exact target.
+                -1 -> {
+                    val knownGood = stableVersion != null &&
+                        compareVersions(candidateVersion, stableVersion) <= 0
+                    if (knownGood) Outcome.Allow else Outcome.Hold(stableVersion)
+                }
                 // A newer release without a matching policy is held fail-closed.
                 1 -> Outcome.Hold(stableVersion)
                 else -> {
@@ -157,7 +164,9 @@ internal object UpdateRolloutGatePolicy {
 
     private const val POLICY_SCHEMA = 1
     private const val MAX_POLICY_BYTES = 4_096
-    private val VERSION = Regex("^\\d+(?:\\.\\d+){1,3}$")
+
+    /** Production version tags only; prerelease suffixes never pass the gate. */
+    val VERSION = Regex("^\\d+(?:\\.\\d+){1,3}$")
     private val ALLOWED_KEYS = setOf(
         "schema",
         "targetVersion",
@@ -171,9 +180,10 @@ internal object UpdateRolloutGatePolicy {
 
 class UpdateChecker(
     private val httpClient: OkHttpClient,
-    context: Context? = null,
+    context: Context,
 ) {
-    private val appContext = context?.applicationContext
+    /** Non-null by construction so the rollout gate can never fail open. */
+    private val appContext: Context = context.applicationContext
 
     private data class ReleaseRecord(
         val versionName: String,
@@ -200,16 +210,19 @@ class UpdateChecker(
                 val body = resp.body ?: return@withContext UpdateResult.Failed
                 val releases = JSONArray(body)
 
-                // Newest published (non-draft) release with a usable version tag.
-                // The list is ordered newest first; skip drafts and malformed
-                // entries (blank tag/name) instead of failing on the first one.
+                // Newest published production release with a usable version tag.
+                // The list is ordered newest first; skip drafts, prereleases and
+                // malformed entries (blank or non-x.y.z tag) instead of letting a
+                // preview or a stray tag mask the newest hotfix behind it.
                 val records = (0 until releases.length())
                     .asSequence()
                     .map { releases.getJSONObject(it) }
                     .filterNot { it.optBoolean("draft", false) }
+                    .filterNot { it.optBoolean("prerelease", false) }
                     .map { it to it.optString("tag_name").ifBlank { it.optString("name") } }
                     .filter { (_, tag) -> tag.isNotBlank() }
                     .map { (json, tag) -> releaseRecord(json, tag) }
+                    .filter { UpdateRolloutGatePolicy.VERSION.matches(it.versionName) }
                     .toList()
                 val candidate = records.firstOrNull()
                     ?: return@withContext UpdateResult.Failed
@@ -219,6 +232,9 @@ class UpdateChecker(
                 when (val gate = rolloutGate(candidate.versionName)) {
                     RolloutGate.Allow -> UpdateResult.Available(candidate.info)
                     is RolloutGate.Hold -> {
+                        // The fallback comes from the verified policy itself: the
+                        // gate admits any release at or below stableVersion, so
+                        // offering it here is consistent with a second gate call.
                         val stable = gate.stableVersion?.let { version ->
                             records.firstOrNull { it.versionName == version }
                         }
@@ -265,7 +281,7 @@ class UpdateChecker(
     private suspend fun rolloutGate(
         candidateVersion: String,
     ): RolloutGate {
-        val context = appContext ?: return RolloutGate.Allow
+        val context = appContext
         return try {
             val deviceId = DeviceId.get(context)
             val cacheSlot = System.currentTimeMillis() / POLICY_CACHE_WINDOW_MS

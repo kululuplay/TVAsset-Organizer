@@ -41,11 +41,11 @@ import com.iptv.player.util.LiveTransportMemory
 import com.iptv.player.util.StabilityTelemetry
 
 class PlayerController(
-    // var (not val) so a handed-over controller can be re-homed onto the
-    // fullscreen player: context + container are reassigned on rebind() and the
-    // callback is swapped via setCallback() when ownership transfers.
-    private var context: Context,
-    private var container: ViewGroup,
+    // The callback is swapped via setCallback() when a preview controller is
+    // adopted by the fullscreen player. (The old rebind() re-homing path was
+    // removed: it had no callers and dropped engine events during its 250 ms gap.)
+    private val context: Context,
+    private val container: ViewGroup,
     private val mode: PlayerMode,
     private val decoderMode: DecoderMode = DecoderMode.AUTO,
     private val allowPassthrough: Boolean = false,
@@ -65,99 +65,6 @@ class PlayerController(
 
     /** Swap the UI callback (used when a preview controller is adopted by the player). */
     fun setCallback(cb: Callback) { callback = cb }
-
-    /**
-     * Re-home the currently running engine onto [newContainer] for a live
-     * preview <-> fullscreen hand-off, then restart the stream so the picture
-     * reliably reappears on the new surface. Amlogic Exo uses a complete cold
-     * engine restart because same-codec stop/prepare can freeze after one frame.
-     *
-     * The detach -> delay -> attach sequence mirrors the engine-swap timing: a
-     * SurfaceView's underlying surface is torn down asynchronously, so adding the
-     * surface to the new container in the same pass would race that teardown and
-     * green the fresh surface on Amlogic. Deferring the re-attach clears it.
-     *
-     * A bare re-attach (no new play) was NOT enough: the decoder's video output
-     * stayed bound to the old, now-destroyed surface, so audio kept playing but no
-     * frames composited (black video, esp. the Amlogic MediaCodec underlay) and no
-     * fresh Vout/first-frame event fired — leaving the hand-off cover / preview
-     * logo stuck until a timeout. Re-issuing play() on the SAME engine recreates
-     * the output on the new surface and emits a frame event (this is exactly why a
-     * channel zap already "fixed" the black picture). Single-connection is
-     * preserved: every engine.play() stops the current stream before starting.
-     *
-     * Rapid back-and-forth hand-offs (preview -> fullscreen -> BACK within the
-     * ENGINE_SWAP_DELAY_MS window) would otherwise stack two delayed re-attaches
-     * that both run, churning surface ownership. We reuse the startGeneration token:
-     * each rebind bumps it, so only the latest delayed runnable executes, and we
-     * re-check the engine is still the active one before touching it. (A play() in
-     * between already clears the handler, so that path is covered too.)
-     */
-    fun rebind(newContainer: ViewGroup) {
-        context = newContainer.context
-        container = newContainer
-        val eng = engine ?: return
-        val url = currentUrl
-        if (
-            url != null &&
-            !VlcHardwareDevicePolicy.canReuseEngineForStreamChange(
-                stage = stage,
-                bypassVlcHardware = bypassVlcHardware,
-            )
-        ) {
-            // Moving a running Amlogic Exo Surface and stop/prepare-reusing the
-            // same codec has the same one-frame-then-freeze signature as a zap.
-            // Retire the complete engine and bind a fresh codec to the new host.
-            PlaybackLog.log(
-                context,
-                "Controller",
-                "Amlogic EXO handoff -> cold engine restart",
-            )
-            videoRebindPending = false
-            playbackConfirmed = false
-            videoOutputConfirmed = false
-            stageStartMs = 0L
-            mainHandler.removeCallbacksAndMessages(null)
-            progressPolicy.reset()
-            resetReconnect()
-            cancelWatchdog()
-            startStage(stage)
-            return
-        }
-        beginAttempt()
-        val generation = ++startGeneration
-        // The replay below is a restart boundary for the watchdog: drop the stall
-        // poll now — its position baseline belongs to the pre-handoff surface, and
-        // the reissued play() resets the engine clock toward 0, which the old
-        // baseline would read as "no progress" and false-trigger a reconnect.
-        cancelWatchdog()
-        videoRebindPending = true
-        eng.detachVideo()
-        mainHandler.postDelayed({
-            if (generation != startGeneration || eng !== engine) {
-                if (generation == startGeneration) videoRebindPending = false
-                return@postDelayed
-            }
-            videoRebindPending = false
-            eng.attachVideo(newContainer)
-            // reset=true: hand-off needs a deterministic decoder/renderer reset
-            // onto the re-attached surface (bare re-add can stall video).
-            if (url != null) {
-                // Re-baseline as a fresh (re)start: clear the prior confirmation +
-                // stability evidence so the next real frame runs onPlaybackProgress and
-                // re-arms the stall poll against the new clock; the startup timeout
-                // covers the replay until that frame arrives.
-                playbackConfirmed = false
-                videoOutputConfirmed = false
-                playbackBuffering = true
-                stageStartMs = 0L
-                progressPolicy.reset()
-                eng.setListener(engineListener(eng))
-                eng.setPlaybackAttemptId(attemptTrace?.id)
-                eng.play(url, reset = true)
-            }
-        }, ENGINE_SWAP_DELAY_MS)
-    }
 
     /** UI-facing events from the controller (already engine-agnostic). */
     interface Callback {
@@ -197,26 +104,11 @@ class PlayerController(
     /**
      * The supplied Xiaomi/Amlogic logs prove that libVLC's direct-rendering
      * MediaCodec surface is corrupt on this decoder family while Media3's
-     * hardware SurfaceView path is healthy. Probe decoder names once per
-     * controller and treat only VLC hardware as unavailable on those devices.
+     * hardware SurfaceView path is healthy. The decoder-name probe is memoized
+     * process-wide (see [bypassVlcHardwareForDevice]): controllers are built on
+     * the main thread and MediaCodecList enumeration is slow on vendor builds.
      */
-    private val bypassVlcHardware: Boolean = runCatching {
-        val videoDecoderNames = MediaCodecList(MediaCodecList.ALL_CODECS)
-            .codecInfos
-            .asSequence()
-            .filterNot { it.isEncoder }
-            .mapNotNull { codec ->
-                runCatching {
-                    codec.name.takeIf {
-                        codec.supportedTypes.any { type ->
-                            type.startsWith("video/", ignoreCase = true)
-                        }
-                    }
-                }.getOrNull()
-            }
-            .toList()
-        VlcHardwareDevicePolicy.shouldBypassVlcHardware(videoDecoderNames)
-    }.getOrDefault(false)
+    private val bypassVlcHardware: Boolean = bypassVlcHardwareForDevice
 
     private var engine: PlayerEngine? = null
     private var currentUrl: String? = null
@@ -656,7 +548,6 @@ class PlayerController(
         // during the swap gap (that path does NOT clear the handler), so a token
         // check stops a second, overlapping engine from being created.
         val generation = ++startGeneration
-        releaseEngine()
 
         var providerDrainAttempted = false
         lateinit var create: Runnable
@@ -800,16 +691,33 @@ class PlayerController(
             // compositor teardown and produce a green first frame on Amlogic.
             // Deferring the new engine gives that teardown a bounded gap.
             //
-            // Trampoline through the shared VLC ops thread: the old engine's
-            // blocking stop/release now runs there asynchronously (ANR fix), so
-            // FIFO ordering guarantees the old libVLC instance has fully released
-            // its network connection (single-connection contract) before the next
-            // engine is created — without ever blocking the main thread. With an
-            // idle queue (e.g. old engine was ExoPlayer) the hop is immediate.
-            mainHandler.postDelayed({
-                VlcOps.awaitProviderDrain { mainHandler.post(create) }
-            }, ENGINE_SWAP_DELAY_MS)
+            // Single-connection contract: the retired engine reports when its
+            // provider socket has really closed (Media3 only cancels the Loader;
+            // a fixed 250 ms gap used to let the next engine open a second
+            // connection while the old read was still blocked). Then trampoline
+            // through the shared VLC ops thread: the old libVLC stop/release runs
+            // there asynchronously (ANR fix), so FIFO ordering guarantees it has
+            // released its network connection before the next engine is created
+            // — without ever blocking the main thread. With an idle queue (e.g.
+            // old engine was ExoPlayer) the hop is immediate.
+            val retireStartedMs = SystemClock.elapsedRealtime()
+            releaseEngine { released ->
+                if (generation != startGeneration) return@releaseEngine
+                if (!released) {
+                    PlaybackLog.log(
+                        context,
+                        "Controller",
+                        "retired engine socket close unproven -> continue swap",
+                    )
+                }
+                val elapsed = SystemClock.elapsedRealtime() - retireStartedMs
+                val gap = (ENGINE_SWAP_DELAY_MS - elapsed).coerceIn(0L, ENGINE_SWAP_DELAY_MS)
+                mainHandler.postDelayed({
+                    VlcOps.awaitProviderDrain { mainHandler.post(create) }
+                }, gap)
+            }
         } else {
+            releaseEngine()
             create.run()
         }
     }
@@ -1577,19 +1485,6 @@ class PlayerController(
         if (playbackConfirmed) armStallWatchdog()
     }
 
-    fun stop() {
-        suspended = true
-        ++attemptEpoch
-        resetDeadline()
-        recoveryNeededOnResume = false
-        ++startGeneration
-        mainHandler.removeCallbacksAndMessages(null)
-        progressPolicy.reset()
-        resetReconnect()
-        cancelWatchdog()
-        engine?.stop()
-    }
-
     fun release() {
         // Invalidate any pending engine-create. The swap path trampolines the
         // create through the VLC ops thread, where it can sit for seconds behind
@@ -1608,12 +1503,21 @@ class PlayerController(
         releaseEngine()
     }
 
-    private fun releaseEngine() {
+    /**
+     * Retire the active engine. With [onReleased] the caller is told (on main)
+     * when the engine's provider socket has actually closed, so a replacement
+     * engine never opens a second connection; false means the bound elapsed.
+     */
+    private fun releaseEngine(onReleased: ((Boolean) -> Unit)? = null) {
         videoRebindPending = false
         val retiring = engine
         engine = null
         retiring?.setListener(null)
-        retiring?.release()
+        when {
+            retiring == null -> onReleased?.invoke(true)
+            onReleased == null -> retiring.release()
+            else -> retiring.releaseAndThen { released -> post { onReleased(released) } }
+        }
     }
 
     private fun post(action: () -> Unit) {
@@ -1623,10 +1527,37 @@ class PlayerController(
 
     private companion object {
         /**
+         * One MediaCodecList(ALL_CODECS) scan per process. Decoder names are a
+         * firmware property; every controller construction used to repeat the
+         * (main-thread, vendor-slow) enumeration.
+         */
+        private val bypassVlcHardwareForDevice: Boolean by lazy {
+            runCatching {
+                val videoDecoderNames = MediaCodecList(MediaCodecList.ALL_CODECS)
+                    .codecInfos
+                    .asSequence()
+                    .filterNot { it.isEncoder }
+                    .mapNotNull { codec ->
+                        runCatching {
+                            codec.name.takeIf {
+                                codec.supportedTypes.any { type ->
+                                    type.startsWith("video/", ignoreCase = true)
+                                }
+                            }
+                        }.getOrNull()
+                    }
+                    .toList()
+                VlcHardwareDevicePolicy.shouldBypassVlcHardware(videoDecoderNames)
+            }.getOrDefault(false)
+        }
+
+        /**
          * Gap between asking an engine to retire and creating the next one. Each
          * backend removes its SurfaceView only after native decoder shutdown;
          * this extra compositor gap prevents the freshly-added surface from
-         * inheriting a green frame on Amlogic. Short enough to stay snappy.
+         * inheriting a green frame on Amlogic. Short enough to stay snappy. The
+         * retired engine's socket-close boundary is awaited first; this gap is
+         * the minimum that still elapses after retirement was requested.
          */
         private const val ENGINE_SWAP_DELAY_MS = 250L
 

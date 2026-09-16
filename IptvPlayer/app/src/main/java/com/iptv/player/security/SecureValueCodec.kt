@@ -9,9 +9,11 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import com.iptv.player.util.Logger
 import java.math.BigInteger
+import java.security.Key
 import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.SecureRandom
+import java.security.UnrecoverableKeyException
 import java.util.Calendar
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
@@ -92,7 +94,32 @@ class SecureValueCodec(context: Context) {
     private fun getOrCreateWrappedKey(): SecretKey {
         val wrapped = legacyPrefs.getString(LEGACY_WRAPPED_KEY, null)
         if (!wrapped.isNullOrBlank()) {
-            return SecretKeySpec(rsaDecrypt(decode(wrapped)), "AES")
+            // The Keystore alias can vanish (factory reset restore, vendor
+            // keystore wipe) while the wrapped blob survives in prefs. Without
+            // recovery every encrypt() would fail forever.
+            val privateKey = try {
+                androidKeyStore().getKey(RSA_ALIAS, null)
+            } catch (e: UnrecoverableKeyException) {
+                null
+            }
+            var failure: Throwable? = null
+            if (privateKey != null) {
+                try {
+                    return SecretKeySpec(rsaDecrypt(privateKey, decode(wrapped)), "AES")
+                } catch (t: Throwable) {
+                    failure = t
+                }
+            }
+            if (!SecureKeyRecovery.shouldReplaceWrappedKey(privateKey != null, failure)) {
+                throw failure ?: IllegalStateException("Secure storage key unavailable")
+            }
+            Logger.e(
+                TAG,
+                "secure storage key unusable (alias present=${privateKey != null}); " +
+                    "regenerating, previously encrypted values are lost",
+                failure,
+            )
+            resetKeyMaterial()
         }
 
         ensureRsaKeyPair()
@@ -154,8 +181,16 @@ class SecureValueCodec(context: Context) {
         }
     }
 
-    private fun rsaDecrypt(wrapped: ByteArray): ByteArray {
-        val privateKey = androidKeyStore().getKey(RSA_ALIAS, null)
+    /** Drops the stale blob and alias so the next call mints a fresh pair. */
+    private fun resetKeyMaterial() {
+        cachedKey = null
+        check(legacyPrefs.edit().remove(LEGACY_WRAPPED_KEY).commit()) {
+            "Unable to discard stale secure-storage key"
+        }
+        runCatching { androidKeyStore().deleteEntry(RSA_ALIAS) }
+    }
+
+    private fun rsaDecrypt(privateKey: Key, wrapped: ByteArray): ByteArray {
         return Cipher.getInstance(RSA_TRANSFORMATION).run {
             init(Cipher.DECRYPT_MODE, privateKey)
             doFinal(wrapped)

@@ -6,6 +6,7 @@
     "start": "node crash-receiver/server.js",
     "test": "npm run test:server",
     "test:server": "node --test crash-receiver/*.test.js support-desk/*.test.js",
+    "test:crash-receiver": "node --test crash-receiver/*.test.js",
     "start:support": "node support-desk/server.js"
   },
   "keywords": [],

@@ -1,8 +1,9 @@
 /*
  * ClockView.kt
- * A self-contained TextView that shows the current time as HH:mm and refreshes
- * once per minute (aligned to the minute boundary so it ticks on time). Its
- * visibility is gated by settings.showClock. Drop it into any layout corner.
+ * A self-contained TextView that shows the current time (device 12/24h setting,
+ * current zone and locale) and refreshes once per minute, aligned to the minute
+ * boundary so it ticks on time. Its visibility is gated by settings.showClock.
+ * Drop it into any layout corner.
  */
 package com.iptv.player.ui.common
 
@@ -18,9 +19,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class ClockView @JvmOverloads constructor(
     context: Context,
@@ -29,7 +27,6 @@ class ClockView @JvmOverloads constructor(
 ) : AppCompatTextView(context, attrs, defStyleAttr) {
 
     private val handler = Handler(Looper.getMainLooper())
-    private val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
     private var scope: CoroutineScope? = null
     private var clockEnabled = true
 
@@ -73,6 +70,7 @@ class ClockView @JvmOverloads constructor(
     }
 
     private fun updateTime() {
-        text = formatter.format(Date())
+        // Re-resolved on every tick so a zone/locale/12h change shows within a minute.
+        text = TimeFormat.clock(context, System.currentTimeMillis())
     }
 }

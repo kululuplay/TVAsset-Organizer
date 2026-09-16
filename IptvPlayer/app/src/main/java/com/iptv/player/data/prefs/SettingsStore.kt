@@ -366,6 +366,26 @@ class SettingsStore(
 
     suspend fun hasPin(): Boolean = !getPin().isNullOrEmpty()
 
+    // ---- PIN attempt throttling -----------------------------------------
+    // Wrong-attempt counter and lockout deadline (wall clock, ms). Kept in a tiny
+    // SharedPreferences file (same approach as the locale mirror) so the PIN
+    // dialog can read it synchronously on the main thread when it opens.
+
+    fun pinFailureCount(): Int = pinGuardPrefs.getInt(PIN_GUARD_FAILURES, 0)
+
+    fun pinLockedUntilMs(): Long = pinGuardPrefs.getLong(PIN_GUARD_LOCKED_UNTIL, 0L)
+
+    fun setPinAttemptState(failures: Int, lockedUntilMs: Long) {
+        pinGuardPrefs.edit()
+            .putInt(PIN_GUARD_FAILURES, failures)
+            .putLong(PIN_GUARD_LOCKED_UNTIL, lockedUntilMs)
+            .apply()
+    }
+
+    private val pinGuardPrefs by lazy {
+        context.getSharedPreferences("pin_guard", Context.MODE_PRIVATE)
+    }
+
     // ---- TMDB -----------------------------------------------------------
 
     // Preserve a key saved by an older app version; otherwise use the
@@ -585,6 +605,9 @@ class SettingsStore(
     companion object {
         /** Default parental PIN used until the user sets their own. */
         const val DEFAULT_PIN = "0000"
+
+        private const val PIN_GUARD_FAILURES = "failures"
+        private const val PIN_GUARD_LOCKED_UNTIL = "locked_until"
 
         /** CI-injected TMDB key; older encrypted overrides remain compatible. */
         val DEFAULT_TMDB_KEY: String = BuildConfig.TMDB_API_KEY

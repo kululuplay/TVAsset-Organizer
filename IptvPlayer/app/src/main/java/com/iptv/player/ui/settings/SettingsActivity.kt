@@ -28,6 +28,7 @@ import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.iptv.player.BuildConfig
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
@@ -39,6 +40,7 @@ import com.iptv.player.data.prefs.SettingsStore
 import com.iptv.player.databinding.ActivitySettingsBinding
 import com.iptv.player.ui.content.ContentManagerActivity
 import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.ui.common.PinAttemptGuard
 import com.iptv.player.ui.common.PinPromptDialog
 import com.iptv.player.ui.diagnostics.DiagnosticsActivity
 import com.iptv.player.ui.login.LoginActivity
@@ -55,6 +57,7 @@ import com.iptv.player.work.SyncScheduler
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -806,6 +809,10 @@ class SettingsActivity : BaseActivity() {
 
     private fun onPinDigit(d: String) {
         if (pinEntry.length >= 4) return
+        if (pinStage == PinStage.CURRENT && PinAttemptGuard.isLocked()) {
+            showPinLocked()
+            return
+        }
         if (pinErrorVisible) {
             pinErrorVisible = false
             renderPinHint()
@@ -831,8 +838,14 @@ class SettingsActivity : BaseActivity() {
         val entered = pinEntry.toString()
         when (pinStage) {
             PinStage.CURRENT -> lifecycleScope.launch {
+                if (PinAttemptGuard.isLocked()) {
+                    clearPinEntry()
+                    showPinLocked()
+                    return@launch
+                }
                 val stored = ServiceLocator.settings.getPin() ?: SettingsStore.DEFAULT_PIN
                 if (entered == stored) {
+                    PinAttemptGuard.reset()
                     pinStage = PinStage.NEW
                     pinEntry.setLength(0)
                     binding.pinPrompt.setText(R.string.settings_enter_new_pin)
@@ -841,12 +854,16 @@ class SettingsActivity : BaseActivity() {
                     updatePinBoxes()
                     binding.pinPrompt.announceForAccessibility(binding.pinPrompt.text)
                 } else {
+                    clearPinEntry()
+                    if (PinAttemptGuard.registerFailure()) {
+                        showPinLocked()
+                        return@launch
+                    }
                     Toast.makeText(
                         this@SettingsActivity,
                         R.string.pin_wrong,
                         Toast.LENGTH_SHORT,
                     ).show()
-                    clearPinEntry()
                     showPinError(R.string.pin_wrong)
                 }
             }
@@ -900,13 +917,22 @@ class SettingsActivity : BaseActivity() {
         binding.pinHint.setTextColor(
             ContextCompat.getColor(this, R.color.text_secondary),
         )
-        binding.pinHint.text = if (usesDefaultPin && pinStage == PinStage.CURRENT) {
+        // The panel is reachable without a PIN, so the digits are only revealed
+        // after the user has entered the current (default) PIN and is choosing a
+        // new one; before that the hint just says the PIN is still the default.
+        val hintRes = when {
+            !usesDefaultPin -> null
+            pinStage == PinStage.CURRENT -> R.string.settings_pin_unchanged
+            else -> R.string.settings_default_pin
+        }
+        binding.pinHint.text = if (hintRes != null) {
             buildString {
                 append(
-                    getString(
-                        R.string.settings_default_pin,
-                        SettingsStore.DEFAULT_PIN,
-                    ),
+                    if (hintRes == R.string.settings_default_pin) {
+                        getString(hintRes, SettingsStore.DEFAULT_PIN)
+                    } else {
+                        getString(hintRes)
+                    },
                 )
                 append('\n')
                 append(getString(R.string.settings_pin_remote_hint))
@@ -921,6 +947,21 @@ class SettingsActivity : BaseActivity() {
         binding.pinHint.setTextColor(ContextCompat.getColor(this, R.color.danger))
         binding.pinHint.setText(messageRes)
         binding.pinHint.announceForAccessibility(getString(messageRes))
+    }
+
+    /** Too many wrong PINs: show the remaining lockout as an inline error. */
+    private fun showPinLocked() {
+        val seconds = PinAttemptGuard.remainingLockSeconds()
+        if (seconds <= 0) {
+            if (pinErrorVisible) {
+                pinErrorVisible = false
+                renderPinHint()
+            }
+            return
+        }
+        pinErrorVisible = true
+        binding.pinHint.setTextColor(ContextCompat.getColor(this, R.color.danger))
+        binding.pinHint.text = getString(R.string.pin_locked_retry, seconds)
     }
 
     private fun buildUpdatesPanel() {
@@ -1440,6 +1481,14 @@ class SettingsActivity : BaseActivity() {
 
     private fun observe() {
         lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { observeWhileStarted() }
+        }
+    }
+
+    // All of these are StateFlows of persisted preferences: re-collecting after
+    // a restart simply re-renders the current value, so nothing is double-fired.
+    private fun CoroutineScope.observeWhileStarted() {
+        launch {
             viewModel.lockAdult.collectLatest { enabled ->
                 lockAdultSwitch?.isChecked = enabled
                 lockAdultRow?.contentDescription = getString(
@@ -1449,10 +1498,10 @@ class SettingsActivity : BaseActivity() {
                 )
             }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.showClock.collectLatest { clockSwitch?.isChecked = it }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.screensaverMinutes.collectLatest {
                 selectedScreensaverMinutes = it
                 screensaverValue?.text = if (it <= 0) getString(R.string.settings_screensaver_off)
@@ -1460,20 +1509,20 @@ class SettingsActivity : BaseActivity() {
                 inlineSelections.forEach { it() }
             }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.autoSyncEnabled.collectLatest {
                 autoSyncEnabled = it
                 autoSyncSwitch?.isChecked = it
             }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.autoSyncHours.collectLatest {
                 autoSyncHours = it
                 autoSyncIntervalValue?.text = getString(R.string.settings_every_hours, it)
                 inlineSelections.forEach { it() }
             }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.languageTag.collectLatest { tag ->
                 languageRows.forEach { (t, row) ->
                     row.isSelected = t == tag
@@ -1488,7 +1537,7 @@ class SettingsActivity : BaseActivity() {
                 }
             }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.playbackSelection.collectLatest { selection ->
                 selectedPlayerMode = selection.player
                 selectedDecoderMode = selection.decoder
@@ -1504,22 +1553,22 @@ class SettingsActivity : BaseActivity() {
                 inlineSelections.forEach { it() }
             }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.streamFormat.collectLatest {
                 streamFormatValue?.text = streamFormatLabel(it)
             }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.bufferMode.collectLatest {
                 selectedBufferMode = it
                 bufferModeValue?.text = bufferModeLabel(it)
                 inlineSelections.forEach { it() }
             }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.audioPassthrough.collectLatest { passthroughSwitch?.isChecked = it }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.debugOverlay.collectLatest { debugOverlaySwitch?.isChecked = it }
         }
     }
