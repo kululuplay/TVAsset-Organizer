@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="catalog_refresh_incomplete">Film yenilemesi tamamlanamadı. Bazı içerikler güncellenemedi.</string>
+    <string name="catalog_refresh_details">Yenileme hatalarını göster</string>
+    <string name="catalog_movie_index_failed">Film kategori listesi güncellenemedi</string>
+    <string name="catalog_refresh_no_visible_movies">Yenilenecek görünür film kategorisi bulunamadı.</string>
+</resources>

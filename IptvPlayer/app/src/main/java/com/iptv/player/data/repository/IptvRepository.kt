@@ -741,6 +741,33 @@ class IptvRepository(
         }
     }
 
+    /** Used by both the Movies reload button and the explicit dashboard refresh. */
+    suspend fun refreshMovieCatalog(
+        config: SourceConfig,
+        forceAll: Boolean,
+        onProgress: suspend (Int, Int) -> Unit = { _, _ -> },
+    ): MovieCatalogRefreshReport = withContext(Dispatchers.IO) {
+        if (config.type != SourceType.XTREAM) {
+            return@withContext MovieCatalogRefreshReport(0, 0, emptyList())
+        }
+        var indexFailure: Outcome.Failure? = null
+        if (forceAll || vodCategoryDao.getAll().isEmpty()) {
+            when (val result = refreshVodCategories(config)) {
+                is Outcome.Success -> Unit
+                is Outcome.Failure -> indexFailure = result
+            }
+        }
+        // An unavailable index must not prevent refreshing the known categories.
+        // Keep its failure in the final report: a partial sweep is not success.
+        val hidden = settings.hiddenCategories(ContentType.VOD).first()
+        val categories = vodCategoryDao.getAll()
+            .filter { it.id !in hidden && (forceAll || !it.loaded) }
+            .map { MovieRefreshCategory(it.id, it.name) }
+        MovieCatalogRefresh.run(categories, indexFailure, onProgress) { id ->
+            refreshVodCategory(config, id, force = forceAll)
+        }
+    }
+
     /** True if this category's movies have already been downloaded into the cache. */
     suspend fun isVodCategoryLoaded(categoryId: String): Boolean = withContext(Dispatchers.IO) {
         vodCategoryDao.getById(categoryId)?.loaded == true
@@ -1654,8 +1681,12 @@ class IptvRepository(
      * legacy Boolean, this distinguishes a successful refresh from a failed fetch
      * whose previous cache was deliberately preserved.
      */
-    suspend fun syncAllReport(config: SourceConfig): SyncReport = withContext(Dispatchers.IO) {
+    suspend fun syncAllReport(
+        config: SourceConfig,
+        includeMovieContents: Boolean = false,
+    ): SyncReport = withContext(Dispatchers.IO) {
         val results = mutableListOf<DatasetSyncResult>()
+        var movieContents: MovieCatalogRefreshReport? = null
 
         val liveCached = channelDao.idsForType(ContentType.LIVE.name).size
         results += datasetSyncResult("live", liveCached, refreshLive(config))
@@ -1664,14 +1695,14 @@ class IptvRepository(
             val epgCached = epgDao.count()
             results += datasetSyncResult("epg", epgCached, refreshEpg(config))
 
-            // Movies and series remain lazy per category: only the cheap category
-            // snapshots are refreshed here, never the complete catalogs.
+            // Background sync stays lightweight; explicit refresh waits for movies.
             val vodCached = vodCategoryDao.getAll().size
-            results += datasetSyncResult(
-                "vod_categories",
-                vodCached,
-                refreshVodCategories(config),
-            )
+            val movieIndex = if (includeMovieContents) {
+                val report = refreshMovieCatalog(config, forceAll = true)
+                movieContents = report
+                report.indexFailure ?: Outcome.Success(report.total)
+            } else refreshVodCategories(config)
+            results += datasetSyncResult("vod_categories", vodCached, movieIndex)
 
             val seriesCached = seriesCategoryDao.getAll().size
             results += datasetSyncResult(
@@ -1680,7 +1711,7 @@ class IptvRepository(
                 refreshSeriesCategories(config),
             )
         }
-        SyncReport(results)
+        SyncReport(results, movieContents)
     }
 
     private fun datasetSyncResult(

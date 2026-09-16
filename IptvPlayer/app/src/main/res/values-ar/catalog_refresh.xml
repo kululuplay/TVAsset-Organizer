@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="catalog_refresh_incomplete">لم يكتمل تحديث الأفلام. تعذر تحديث بعض المحتوى.</string>
+    <string name="catalog_refresh_details">عرض أخطاء التحديث</string>
+    <string name="catalog_movie_index_failed">تعذر تحديث قائمة فئات الأفلام</string>
+    <string name="catalog_refresh_no_visible_movies">لا توجد فئات أفلام ظاهرة لتحديثها.</string>
+</resources>

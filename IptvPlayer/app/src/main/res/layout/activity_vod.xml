@@ -323,6 +323,15 @@
                     android:textSize="@dimen/text_body" />
 
                 <Button
+                    android:id="@+id/refreshDetailsButton"
+                    style="@style/Widget.Iptv.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_m"
+                    android:visibility="gone"
+                    android:text="@string/catalog_refresh_details" />
+
+                <Button
                     android:id="@+id/retryButton"
                     style="@style/Widget.Iptv.Button"
                     android:layout_width="wrap_content"

@@ -12,4 +12,5 @@ data class CatalogLoadState(
     val completed: Int = 0,
     val total: Int = 0,
     @StringRes val errorRes: Int? = null,
+    val movieRefreshReport: com.iptv.player.data.repository.MovieCatalogRefreshReport? = null,
 )
