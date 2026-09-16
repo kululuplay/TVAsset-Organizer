@@ -151,7 +151,7 @@ enum class BufferMode(
 
     companion object {
         fun fromName(value: String?): BufferMode =
-            entries.firstOrNull { it.name == value } ?: NORMAL
+            entries.firstOrNull { it.name == value } ?: ADAPTIVE
     }
 }
 

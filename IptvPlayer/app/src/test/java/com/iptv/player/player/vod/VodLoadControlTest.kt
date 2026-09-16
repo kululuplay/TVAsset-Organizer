@@ -22,6 +22,34 @@ import org.junit.Test
 @OptIn(markerClass = [UnstableApi::class])
 class VodLoadControlTest {
     @Test
+    fun `measured VOD rebuffer reserve changes without seeking or replacing the player`() {
+        var sample = com.iptv.player.playback.core.BufferMeasurements()
+        val control = VodLoadControl.create(VodBufferConfig(), true, { sample }, true)
+            .apply { onPrepared(PlayerId.UNSET) }
+        assertTrue(control.shouldStartPlayback(parameters(2_500, rebuffering = true)))
+        sample = sample.copy(rebufferMs = 3_000, rebuffers = 1)
+        assertFalse(control.shouldStartPlayback(parameters(2_500, rebuffering = true)))
+        assertTrue(control.shouldStartPlayback(parameters(3_500, rebuffering = true)))
+        // A seek keeps the initial playback threshold, not the network restart target.
+        assertTrue(control.shouldStartPlayback(parameters(1_200)))
+    }
+
+    @Test
+    fun `measured VOD handles pressure and recovery without an unreachable buffer target`() {
+        var sample = com.iptv.player.playback.core.BufferMeasurements(memoryPressure = true)
+        val control = VodLoadControl.create(VodBufferConfig(), true, { sample }, true)
+            .apply { onPrepared(PlayerId.UNSET) }
+        withAllocatedMiB(control, 8) {
+            assertFalse(control.shouldContinueLoading(parameters(800)))
+            assertTrue(control.shouldStartPlayback(parameters(800, rebuffering = true)))
+            assertFalse(control.shouldStartPlayback(parameters(0, rebuffering = true)))
+        }
+        sample = sample.copy(memoryPressure = false)
+        assertTrue(control.shouldContinueLoading(parameters(800)))
+        assertFalse(control.shouldStartPlayback(parameters(800, rebuffering = true)))
+    }
+
+    @Test
     fun `legacy budget stops loading and permits high bitrate startup and rebuffer`() {
         val control = control(constrained = true)
         withAllocatedMiB(control, 24) {

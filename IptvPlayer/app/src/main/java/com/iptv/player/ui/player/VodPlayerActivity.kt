@@ -244,6 +244,20 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     private var decoderMode = DecoderMode.AUTO
     private var playerMode = PlayerMode.AUTO
     private var bufferMode = BufferMode.NORMAL
+    private val measuredNativeBuffer = com.iptv.player.playback.core.BufferMeasurementWindow()
+    private var nativeBufferSeekCooldownMs = 0L
+    private var nativeMeasuredBufferingAtMs = 0L
+    private var nativeMeasurementPaused = false
+
+    private fun measuredNativeCachingMs(): Int {
+        com.iptv.player.playback.android.PlaybackMemoryPressure.sample(this)
+        return com.iptv.player.playback.core.MeasuredBufferPolicy.nativeCacheMs(
+            bufferMode.vodNetworkCachingMs, bufferMode == BufferMode.ADAPTIVE,
+            PlaybackQoeRuntime.devicePlaybackProfile().compatibilityMode, false,
+            measuredNativeBuffer.snapshot(SystemClock.uptimeMillis(),
+                com.iptv.player.playback.android.PlaybackMemoryPressure.pressured()),
+        )
+    }
     private var playbackResourceToken: PlaybackResourceToken? = null
     private var allowPassthrough = false
 
@@ -568,6 +582,8 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
 
     private fun pauseForExternalPlayback() {
         if (!activeIsPlaying()) return
+        nativeMeasurementPaused = true
+        nativeMeasuredBufferingAtMs = 0L
         handler.removeCallbacks(stablePlaybackRunnable)
         if (isMedia3Route()) {
             media3VodEngine?.pause()
@@ -1453,6 +1469,15 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
 
     private fun setBuffering(visible: Boolean) {
         val wasBuffering = bufferingSinceMs > 0L
+        val measurementNow = SystemClock.uptimeMillis()
+        val measurementEligible = playbackStarted && foreground && !nativeMeasurementPaused &&
+            !userSeeking && seekTimeline.targetMs == null && measurementNow >= nativeBufferSeekCooldownMs
+        if (!measurementEligible) nativeMeasuredBufferingAtMs = 0L
+        else if (visible && nativeMeasuredBufferingAtMs == 0L) nativeMeasuredBufferingAtMs = measurementNow
+        else if (!visible && nativeMeasuredBufferingAtMs > 0L) {
+            measuredNativeBuffer.rebuffer(measurementNow - nativeMeasuredBufferingAtMs)
+            nativeMeasuredBufferingAtMs = 0L
+        }
         binding.bufferingOverlay.visibility = if (visible) View.VISIBLE else View.GONE
         PlaybackQoeRuntime.setRebuffering(qoeSessionId, visible)
         if (visible && playbackStarted) {
@@ -2020,6 +2045,10 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     }
 
     private fun resetRoutingForCurrentItem() {
+        nativeMeasurementPaused = false
+        nativeMeasuredBufferingAtMs = 0L
+        measuredNativeBuffer.reset()
+        nativeBufferSeekCooldownMs = SystemClock.uptimeMillis() + 10_000
         val url = streamUrl.orEmpty()
         val remotePolicy = PlaybackRemotePolicy.snapshot()
         vodRouteKey = VodRouteKey.create(
@@ -2075,6 +2104,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         val engine = Media3VodEngine(
             context = this,
             config = Media3VodEngineConfig(
+                adaptiveBuffering = bufferMode == BufferMode.ADAPTIVE,
                 buffer = VodBufferConfig(
                     minBufferMs = bufferMode.exoMinBufferMs,
                     maxBufferMs = bufferMode.exoMaxBufferMs,
@@ -2259,7 +2289,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         // Mirror live TV (VlcPlayerEngine): keep VLC's proven decode defaults.
         // avcodec-fast and skipped loop filtering caused macroblocking/pixel rain
         // on real H.264/H.265 content, so neither is enabled here.
-        val cachingMs = bufferMode.vodNetworkCachingMs
+        val cachingMs = measuredNativeCachingMs()
         val options = arrayListOf(
             "--network-caching=$cachingMs",
             "--file-caching=$cachingMs",
@@ -2426,6 +2456,11 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                 setBuffering(isVlcBuffering(bufferingPercent))
             }
             MediaPlayer.Event.Playing -> {
+                if (nativeMeasurementPaused) {
+                    nativeMeasuredBufferingAtMs = 0L
+                    nativeBufferSeekCooldownMs = SystemClock.uptimeMillis() + 10_000
+                }
+                nativeMeasurementPaused = false
                 setVlcPlayingSnapshot(mp, true)
                 if (vodCoordinator.state.phase == VodPlaybackCoordinator.Phase.STARTING) {
                     if (
@@ -2518,6 +2553,8 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                 }
             }
             MediaPlayer.Event.Paused -> {
+                nativeMeasurementPaused = true
+                nativeMeasuredBufferingAtMs = 0L
                 setVlcPlayingSnapshot(mp, false)
                 playbackSession.setPlaying(false, bestResumePosition(null))
                 handler.removeCallbacks(stablePlaybackRunnable)
@@ -2531,6 +2568,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                 setControlsVisible(true)
             }
             MediaPlayer.Event.Stopped -> {
+                nativeMeasuredBufferingAtMs = 0L
                 setVlcPlayingSnapshot(mp, false)
                 playbackSession.setPlaying(false, bestResumePosition())
                 binding.playPauseButton.setImageResource(R.drawable.ic_play)
@@ -2739,7 +2777,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         binding.errorOverlay.visibility = View.GONE
         setBuffering(true)
         updateTrackButtons()
-        val cachingMs = bufferMode.vodNetworkCachingMs
+        val cachingMs = measuredNativeCachingMs()
         val media = try {
             Media(vlc, android.net.Uri.parse(url)).apply {
                 MediaTransportPolicy.requireDirectMedia(url)
@@ -3439,6 +3477,8 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                 rebuildRoute(resumeAt = 0L, targetRoute = activeVodRoute)
             }
             activeIsPlaying() -> {
+                nativeMeasurementPaused = true
+                nativeMeasuredBufferingAtMs = 0L
                 if (isMedia3Route()) {
                     media3VodEngine?.pause()
                     handler.removeCallbacks(stablePlaybackRunnable)
@@ -3455,6 +3495,9 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
             }
             else -> {
                 pauseAfterBackgroundRestore = false
+                nativeMeasurementPaused = false
+                nativeMeasuredBufferingAtMs = 0L
+                nativeBufferSeekCooldownMs = SystemClock.uptimeMillis() + 10_000
                 if (isMedia3Route()) {
                     media3VodEngine?.resume()
                     val resumedAtMs = activePositionMs()
@@ -3479,6 +3522,9 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     }
 
     private fun requestSeek(targetMs: Long) {
+        nativeMeasuredBufferingAtMs = 0L
+        nativeBufferSeekCooldownMs = SystemClock.uptimeMillis() + 10_000
+        measuredNativeBuffer.reset()
         if (!foreground || castHandoffStopped) return
         val duration = maxOf(activeDurationMs(), lastKnownDurationMs)
         if (duration <= 0L) return
@@ -3953,6 +3999,8 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     }
 
     override fun onStop() {
+        nativeMeasuredBufferingAtMs = 0L
+        nativeBufferSeekCooldownMs = SystemClock.uptimeMillis() + 10_000
         sampleWatchTime()
         flushWatchTime()
         watchTime.sample(SystemClock.elapsedRealtime(), 0, false)

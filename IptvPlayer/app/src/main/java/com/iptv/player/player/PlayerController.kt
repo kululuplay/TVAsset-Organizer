@@ -294,6 +294,8 @@ class PlayerController(
     // Preserve this across same-stage reconnects and route after the second one.
     private var unconfirmedStartFailures = 0
     private var adaptiveRebuffers = 0
+    private val measuredNativeBuffer = com.iptv.player.playback.core.BufferMeasurementWindow()
+    private var measuredBufferingAtMs = 0L
     private var adaptiveBufferingActive = false
     private val devicePlaybackProfile
         get() = PlaybackQoeRuntime.devicePlaybackProfile()
@@ -493,6 +495,9 @@ class PlayerController(
         ac3PcmFallbackUsed = false
         unconfirmedStartFailures = 0
         adaptiveRebuffers = 0
+        measuredNativeBuffer.reset()
+        measuredBufferingAtMs = 0
+        com.iptv.player.playback.android.PlaybackMemoryPressure.sample(context)
         adaptiveBufferingActive = false
         // Tear down the previous channel's stall/startup watchdog; the (re)start
         // path below re-arms it for this channel.
@@ -638,6 +643,7 @@ class PlayerController(
         beginAttempt()
         // Fresh (re)start: the new attempt must prove its own frame and progress.
         playbackConfirmed = false
+        measuredBufferingAtMs = 0
         videoOutputConfirmed = false
         progressPolicy.reset()
         playbackBuffering = true
@@ -729,7 +735,12 @@ class PlayerController(
                             context,
                             forceSoftware,
                             allowPassthrough,
-                            effectiveBuffer.networkCachingMs,
+                            com.iptv.player.playback.core.MeasuredBufferPolicy.nativeCacheMs(
+                                effectiveBuffer.networkCachingMs, bufferMode == BufferMode.ADAPTIVE,
+                                lowRamDevice || devicePlaybackProfile.compatibilityMode, true,
+                                measuredNativeBuffer.snapshot(SystemClock.elapsedRealtime(),
+                                    com.iptv.player.playback.android.PlaybackMemoryPressure.pressured()),
+                            ),
                         )
                     } else {
                         val effectiveBuffer = AdaptiveBufferPolicy.resolve(
@@ -835,6 +846,8 @@ class PlayerController(
 
         override fun onBuffering() = dispatch {
             if (source !== engine || suspended) return@dispatch
+            com.iptv.player.playback.android.PlaybackMemoryPressure.sample(context)
+            if (playbackConfirmed && measuredBufferingAtMs == 0L) measuredBufferingAtMs = SystemClock.elapsedRealtime()
             playbackBuffering = true
             progressPolicy.onBuffering()
             if (
@@ -850,6 +863,8 @@ class PlayerController(
 
         override fun onPlaying() = dispatch {
             if (source !== engine || suspended) return@dispatch
+            if (measuredBufferingAtMs > 0) measuredNativeBuffer.rebuffer(SystemClock.elapsedRealtime() - measuredBufferingAtMs)
+            measuredBufferingAtMs = 0
             playbackBuffering = false
             adaptiveBufferingActive = false
             traceAttempt(PlaybackAttemptTrace.Phase.READY)
@@ -1533,11 +1548,13 @@ class PlayerController(
     }
 
     fun pause() {
+        measuredBufferingAtMs = 0
         quiesce { }
     }
 
     /** Close the active provider socket and notify a Cast preflight on completion. */
     fun quiesce(onStopped: (Boolean) -> Unit) {
+        measuredBufferingAtMs = 0
         // A paused VLC/Exo instance can keep an IPTV subscription socket occupied.
         // Stop it when the owner leaves the foreground and rebuild the same stage
         // on resume. Also invalidate a delayed engine/surface creation already in

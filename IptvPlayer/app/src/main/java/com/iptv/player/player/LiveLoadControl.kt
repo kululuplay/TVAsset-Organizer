@@ -9,6 +9,8 @@ import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.analytics.PlayerId
 import androidx.media3.exoplayer.upstream.DefaultAllocator
 import com.iptv.player.data.model.BufferMode
+import com.iptv.player.playback.core.BufferMeasurements
+import com.iptv.player.playback.core.MeasuredBufferPolicy
 
 /**
  * Grows ADAPTIVE's restart reserve on the playback thread without replacing the
@@ -21,6 +23,7 @@ internal class LiveLoadControl(
     private val configured: BufferMode,
     private val constrainedDevice: Boolean,
     initialRebuffers: Int = 0,
+    private val measurements: (() -> BufferMeasurements)? = null,
 ) : DefaultLoadControl(
     DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE),
     reserve(configured, constrainedDevice).exoMinBufferMs,
@@ -35,6 +38,7 @@ internal class LiveLoadControl(
     private var rebuffers = initialRebuffers.coerceIn(0, MAX_REBUFFERS)
     private var initialRebufferSeed = rebuffers
     private var lastRebufferRealtimeMs = C.TIME_UNSET
+    private var measuredLoading = false
 
     override fun onPrepared(playerId: PlayerId) {
         super.onPrepared(playerId)
@@ -43,9 +47,29 @@ internal class LiveLoadControl(
         rebuffers = initialRebufferSeed
         initialRebufferSeed = 0
         lastRebufferRealtimeMs = C.TIME_UNSET
+        measuredLoading = false
+    }
+
+    override fun shouldContinueLoading(parameters: LoadControl.Parameters): Boolean {
+        val sample = measurements?.invoke() ?: return super.shouldContinueLoading(parameters)
+        val target = MeasuredBufferPolicy.target(constrainedDevice, true, sample)
+        (allocator as DefaultAllocator).setTargetBufferSize(target.bytes)
+        if (allocator.totalBytesAllocated >= target.bytes) { measuredLoading = false; return false }
+        if (configured != BufferMode.ADAPTIVE) return super.shouldContinueLoading(parameters)
+        val duration = Util.getPlayoutDurationForMediaDuration(parameters.bufferedDurationUs, parameters.playbackSpeed)
+        measuredLoading = when {
+            duration < (target.reserveMs / 2) * 1_000L -> true
+            duration >= target.reserveMs * 1_000L -> false
+            else -> measuredLoading
+        }
+        return measuredLoading
     }
 
     override fun shouldStartPlayback(parameters: LoadControl.Parameters): Boolean {
+        if (parameters.bufferedDurationUs <= 0) return false
+        val sample = measurements?.invoke()
+        val measured = sample?.let { MeasuredBufferPolicy.target(constrainedDevice, true, it) }
+        if (measured != null && parameters.bufferedDurationUs > 0 && allocator.totalBytesAllocated >= measured.bytes) return true
         if (configured != BufferMode.ADAPTIVE) return super.shouldStartPlayback(parameters)
 
         // shouldStartPlayback is polled repeatedly during the same rebuffer.
@@ -60,7 +84,8 @@ internal class LiveLoadControl(
         }
         val effective = AdaptiveBufferPolicy.resolve(configured, constrainedDevice, rebuffers)
         var requiredUs = 1_000L * if (parameters.rebuffering) {
-            effective.exoRebufferMs
+            if (measured != null && (sample.rebuffers > 0 || sample.networkGapMs > 0)) measured.restartMs
+            else effective.exoRebufferMs
         } else {
             effective.exoPlaybackMs
         }
