@@ -100,6 +100,15 @@ interface PlayerEngine {
      */
     fun playbackPositionMs(): Long = -1
 
+    /**
+     * Monotonic buffer-fill marker, or -1 when unknown: Media3 reports its
+     * buffered position (ms), libVLC the bytes its demuxer has read. Only growth
+     * is compared, never the unit. While the engine reports BUFFERING and this
+     * value stays flat, no data is arriving at all, which the controller treats
+     * as a stall well before the playback clock watchdog would.
+     */
+    fun bufferFillMarker(): Long = -1
+
     /** Output evidence for recovery; READY alone must never forgive the retry budget. */
     fun hasRecentOutputProgress(): Boolean = false
 
@@ -226,6 +235,20 @@ interface PlayerListener {
      * controller falls back to a software decode path.
      */
     fun onVideoInvalid() {}
+
+    /**
+     * Tunneled video (remote opt-in only) reached READY but never rendered a
+     * first frame. Distinct from [onVideoInvalid] so the controller can retry
+     * the same stream once with tunneling off before escalating the ladder.
+     */
+    fun onTunnelingNoFrame() {}
+
+    /**
+     * Sustained frame loss confirmed by [DroppedFrameRecoveryGate]. Quality
+     * evidence only: the controller records it against the channel so the next
+     * visit can start with a larger buffer; it never triggers a fallback here.
+     */
+    fun onDroppedFrameBreach() {}
 
     /**
      * We are software-decoding but the stream is UHD/4K (≥1440p). No TV box CPU can

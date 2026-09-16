@@ -65,6 +65,7 @@ class SettingsStore(
         val BUFFER_MODE = stringPreferencesKey("buffer_mode")
         val AUDIO_PASSTHROUGH = booleanPreferencesKey("audio_passthrough")
         val DEBUG_OVERLAY = booleanPreferencesKey("debug_overlay")
+        val LIVE_PREVIEW = booleanPreferencesKey("live_preview")
         val LAST_CHANNEL = stringPreferencesKey("last_channel")
         val RESUME_ON_LAUNCH = booleanPreferencesKey("resume_on_launch")
         val LANGUAGE = stringPreferencesKey("language")
@@ -249,6 +250,18 @@ class SettingsStore(
 
     suspend fun setDebugOverlay(enabled: Boolean) =
         dataStore.edit { it[Keys.DEBUG_OVERLAY] = enabled }
+
+    /**
+     * Inline live preview on the Home screen. Null = never chosen: the UI then
+     * falls back to the device default (on, unless the compatibility profile or
+     * a remote override says otherwise). An explicit choice always wins.
+     */
+    val livePreviewChoice: Flow<Boolean?> = dataStore.data.map {
+        it[Keys.LIVE_PREVIEW]
+    }
+
+    suspend fun setLivePreview(enabled: Boolean) =
+        dataStore.edit { it[Keys.LIVE_PREVIEW] = enabled }
 
     val aspectRatio: Flow<AspectRatio> = dataStore.data.map { prefs ->
         runCatching { AspectRatio.valueOf(prefs[Keys.ASPECT] ?: "") }

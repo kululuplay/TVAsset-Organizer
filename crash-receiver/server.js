@@ -28,6 +28,8 @@
  *   GET  /api/devices             JSON device list (auth)
  *   POST /api/announcement        publish an announcement, optionally targeted (auth)
  *   POST /api/announcement/clear  retire one announcement by id, or all (auth)
+ *   POST /api/playback-policy     save the playbackPolicy JSON served to devices (auth)
+ *   POST /api/playback-policy/clear  drop the stored policy (env fallback) (auth)
  *   POST /api/crashes/:id/delete  delete one crash (auth)
  *   POST /api/crashes/clear       delete all crashes (auth)
  *   POST /api/devices/clear       delete all devices (auth)
@@ -42,6 +44,8 @@ const crypto = require("crypto");
 const fs = require("fs");
 const {
   parsePlaybackPolicy,
+  validatePlaybackPolicyText,
+  deviceMatchesRule,
   sanitizeSupportChecks,
   persistTelemetryEvents,
 } = require("./telemetry-store");
@@ -131,7 +135,16 @@ const RETENTION_LOG_DAYS = intEnv("RETENTION_LOG_DAYS", 30);
 // Optional server-side kill switches/timeouts. The parser is deliberately a
 // closed schema: malformed JSON, unknown keys and out-of-range values can never
 // reach a device. Restart the service after changing the environment value.
+// The env value is only the FALLBACK: a policy saved from the panel (settings
+// table, key playback_policy) takes precedence and needs no restart. See
+// docs/playback-policy.md for the schema incl. per-device-class overrides.
 const PLAYBACK_POLICY = parsePlaybackPolicy(process.env.PLAYBACK_POLICY_JSON);
+const SETTING_PLAYBACK_POLICY = "playback_policy";
+// In-memory mirror of the stored policy so heartbeats never read the DB for it.
+let storedPlaybackPolicy = null; // parsed + frozen, or null
+let storedPlaybackPolicyText = null; // exact text the operator saved, or null
+let storedPlaybackPolicyAt = null;
+const effectivePlaybackPolicy = () => storedPlaybackPolicy || PLAYBACK_POLICY;
 
 // Postgres TLS: verify the server certificate by default. PGSSL_CA=<path> pins
 // a custom CA bundle; PGSSL_INSECURE=1 disables verification (logged loudly).
@@ -239,6 +252,24 @@ async function initDb() {
   await pool.query(
     `ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_nettest_at TIMESTAMPTZ;`,
   );
+  // Device-class facts (heartbeat) that playbackPolicy.deviceOverrides rules
+  // match against, so an operator can write a rule from what the panel shows.
+  await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS hardware TEXT;`);
+  await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS board TEXT;`);
+  await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS soc_model TEXT;`);
+  await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS low_ram BOOLEAN;`);
+  await pool.query(
+    `ALTER TABLE devices ADD COLUMN IF NOT EXISTS total_ram_mb INTEGER;`,
+  );
+  // Small key/value store for operator settings edited in the panel (currently
+  // only the playback policy JSON). Brand new table, no ALTER backfill needed.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
   // Operator announcement pushed to every device via the heartbeat response.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS announcements (
@@ -386,6 +417,28 @@ async function initDb() {
     `CREATE INDEX IF NOT EXISTS idx_requests_device ON requests(device_id, created_at DESC);`,
   );
   await refreshAnnouncementCache();
+  await refreshPlaybackPolicyCache();
+}
+
+// Load the operator-saved playback policy (if any) into memory. A stored text
+// that no longer parses (schema tightened after it was saved) is ignored with a
+// log line rather than served, so devices fall back to the env policy.
+async function refreshPlaybackPolicyCache() {
+  try {
+    const { rows } = await pool.query(
+      `SELECT value, updated_at FROM settings WHERE key = $1`,
+      [SETTING_PLAYBACK_POLICY],
+    );
+    const text = rows[0]?.value || null;
+    storedPlaybackPolicyText = text;
+    storedPlaybackPolicyAt = rows[0]?.updated_at || null;
+    storedPlaybackPolicy = text ? parsePlaybackPolicy(text) : null;
+    if (text && !storedPlaybackPolicy) {
+      console.error("[crash-receiver] stored playback policy is invalid; using env fallback");
+    }
+  } catch (e) {
+    console.error("playback policy cache refresh failed", e);
+  }
 }
 
 async function refreshAnnouncementCache() {
@@ -664,8 +717,10 @@ app.post("/api/heartbeat", rateLimited("heartbeat"), async (req, res) => {
       `INSERT INTO devices
         (device_id, last_seen, ip, manufacturer, model, device,
          android_version, api_level, app_version, version_code,
-         now_playing, now_playing_kind, username, audio_passthrough, player_settings)
-       VALUES ($1, now(), $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         now_playing, now_playing_kind, username, audio_passthrough, player_settings,
+         hardware, board, soc_model, low_ram, total_ram_mb)
+       VALUES ($1, now(), $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
+               $15,$16,$17,$18,$19)
        ON CONFLICT (device_id) DO UPDATE SET
          last_seen = now(),
          ip = EXCLUDED.ip,
@@ -684,7 +739,13 @@ app.post("/api/heartbeat", rateLimited("heartbeat"), async (req, res) => {
          -- Older app versions don't send the settings snapshot; keep the last
          -- known values instead of wiping them on every beat.
          audio_passthrough = COALESCE(EXCLUDED.audio_passthrough, devices.audio_passthrough),
-         player_settings = COALESCE(EXCLUDED.player_settings, devices.player_settings)
+         player_settings = COALESCE(EXCLUDED.player_settings, devices.player_settings),
+         -- Device-class facts: static per box, older apps omit them.
+         hardware = COALESCE(EXCLUDED.hardware, devices.hardware),
+         board = COALESCE(EXCLUDED.board, devices.board),
+         soc_model = COALESCE(EXCLUDED.soc_model, devices.soc_model),
+         low_ram = COALESCE(EXCLUDED.low_ram, devices.low_ram),
+         total_ram_mb = COALESCE(EXCLUDED.total_ram_mb, devices.total_ram_mb)
        RETURNING username`,
       [
         deviceId,
@@ -703,6 +764,11 @@ app.post("/api/heartbeat", rateLimited("heartbeat"), async (req, res) => {
         uname,
         typeof b.audioPassthrough === "boolean" ? b.audioPassthrough : null,
         clip(b.playerSettings, 200),
+        clip(b.hardware, 64),
+        clip(b.board, 64),
+        clip(b.socModel, 64),
+        typeof b.lowRam === "boolean" ? b.lowRam : null,
+        toInt(b.totalRamMb),
       ],
     );
     // Account-targeted announcements must reach a device whose beat omits the
@@ -789,8 +855,9 @@ app.post("/api/heartbeat", rateLimited("heartbeat"), async (req, res) => {
       ackedEventIds,
       eventsDroppedAccepted,
     };
-    if (PLAYBACK_POLICY) {
-      const { ttlSeconds, ...values } = PLAYBACK_POLICY;
+    const playbackPolicy = effectivePlaybackPolicy();
+    if (playbackPolicy) {
+      const { ttlSeconds, ...values } = playbackPolicy;
       payload.playbackPolicy = {
         ...values,
         expiresAtEpochMs: Date.now() + ttlSeconds * 1000,
@@ -1270,6 +1337,32 @@ app.post("/api/announcement/clear", adminWrite, async (req, res) => {
   res.redirect("/");
 });
 
+// ---- Playback policy (panel-managed playbackPolicy JSON) ----
+// Validated with the same closed schema the heartbeat serves; a rejected body
+// never touches the DB. The env PLAYBACK_POLICY_JSON stays the fallback once
+// the stored policy is cleared.
+app.post("/api/playback-policy", adminWrite, async (req, res) => {
+  const text = String((req.body && req.body.policy) || "").trim();
+  const result = validatePlaybackPolicyText(text);
+  if (!result.ok) {
+    return res.redirect(`/?policy_error=${encodeURIComponent(result.error)}#playback-policy`);
+  }
+  await pool.query(
+    `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, now())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [SETTING_PLAYBACK_POLICY, text],
+  );
+  await refreshPlaybackPolicyCache();
+  const note = result.dropped > 0 ? `?policy_dropped=${result.dropped}` : "";
+  res.redirect(`/${note}#playback-policy`);
+});
+
+app.post("/api/playback-policy/clear", adminWrite, async (req, res) => {
+  await pool.query(`DELETE FROM settings WHERE key = $1`, [SETTING_PLAYBACK_POLICY]);
+  await refreshPlaybackPolicyCache();
+  res.redirect("/#playback-policy");
+});
+
 app.post("/api/crashes/:id/delete", adminWrite, async (req, res) => {
   await pool.query(`DELETE FROM crash_reports WHERE id = $1`, [
     toInt(req.params.id),
@@ -1542,6 +1635,47 @@ app.get("/", auth, async (req, res) => {
   const dayAgo = Date.now() - 24 * 3600 * 1000;
   const last24 = rows.filter((r) => new Date(r.received_at).getTime() > dayAgo).length;
   const onlineCount = devices.filter((d) => d.online).length;
+
+  // ---- Playback policy editor ----
+  // Text shown = what the operator saved, else the env fallback pretty-printed,
+  // else a commented starter. Rule preview counts run in memory over the device
+  // rows already fetched for this page (<= 500), so no extra query.
+  const envPolicyText = PLAYBACK_POLICY ? JSON.stringify(PLAYBACK_POLICY, null, 2) : "";
+  const policyText = storedPlaybackPolicyText || envPolicyText;
+  const policySource = storedPlaybackPolicyText
+    ? `Kaynak: <b>panel</b> (kaydedildi ${esc(ago(storedPlaybackPolicyAt))})`
+    : PLAYBACK_POLICY
+      ? "Kaynak: <b>PLAYBACK_POLICY_JSON</b> ortam değişkeni (henüz panelden kaydedilmedi)"
+      : "Şu an cihazlara politika gönderilmiyor.";
+  const activePolicy = effectivePlaybackPolicy();
+  const policyRules = (activePolicy && activePolicy.deviceOverrides) || [];
+  const policyRulePreview = policyRules.length
+    ? `<table class="policy-rules"><thead><tr><th>#</th><th>Eşleşme</th><th>Ayar</th><th>Eşleşen cihaz</th></tr></thead><tbody>${policyRules
+        .map((rule, i) => {
+          let n = 0;
+          for (const d of devices) {
+            try {
+              if (deviceMatchesRule(rule, d)) n++;
+            } catch (_) {
+              /* never let a preview break the panel */
+            }
+          }
+          return `<tr>
+        <td class="muted">${i + 1}</td>
+        <td class="mono">${esc(JSON.stringify(rule.match))}</td>
+        <td class="mono">${esc(JSON.stringify(rule.set))}</td>
+        <td><b>${n}</b> / ${devices.length}</td>
+      </tr>`;
+        })
+        .join("")}</tbody></table>`
+    : "";
+  const policyError = clip(req.query.policy_error, 300);
+  const policyDropped = toInt(req.query.policy_dropped);
+  const policyNotice = policyError
+    ? `<div class="policy-err">Kaydedilmedi: ${esc(policyError)}</div>`
+    : policyDropped
+      ? `<div class="policy-warn">Kaydedildi; ${policyDropped} geçersiz kural atlandı (regex/alan adlarını kontrol edin).</div>`
+      : "";
 
   // Same-IP grouping = likely same household/account (multi-TV). Not proof of
   // cross-home credential sharing, but a useful "this account is on N boxes" flag.
@@ -1985,6 +2119,11 @@ app.get("/", auth, async (req, res) => {
   .ann { background:#161B22; border:1px solid #1C232D; border-radius:12px; padding:14px 16px; }
   .ann textarea { width:100%; box-sizing:border-box; background:#0E1116; color:#F5F7FA; border:1px solid #2A3340; border-radius:8px; padding:10px; font:13px/1.4 system-ui, sans-serif; resize:vertical; min-height:54px; }
   .ann .sendbtn { margin-top:8px; background:#1f5a35; color:#D6FBE5; border:1px solid #2FBF71; padding:8px 16px; border-radius:8px; cursor:pointer; font-size:13px; }
+  .ann textarea.policy { font-family:monospace; min-height:180px; white-space:pre; }
+  .policy-err { background:#3a1714; color:#F2766A; border:1px solid #6a201a; border-radius:8px; padding:8px 12px; margin-bottom:10px; font-size:13px; }
+  .policy-warn { background:#3a2f10; color:#FFC93C; border:1px solid #6a5410; border-radius:8px; padding:8px 12px; margin-bottom:10px; font-size:13px; }
+  .policy-rules { margin-top:12px; }
+  .policy-rules td.mono { font-size:11px; word-break:break-all; }
   .ann-current { display:flex; align-items:center; gap:12px; background:#23301c; border:1px solid #3a5a2a; border-radius:10px; padding:10px 14px; margin-bottom:12px; }
   .ann-label { color:#9fe6b8; font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
   .ann-msg { flex:1; color:#EAF7EE; }
@@ -2097,6 +2236,22 @@ app.get("/", auth, async (req, res) => {
       <button class="sendbtn" type="submit">Duyuruyu yayınla</button>
       <div class="muted" style="margin-top:6px">Uygulama her cihaza yalnızca <b>en son yayınlanan</b> ilgili mesajı gösterir. Bu yüzden hedefli duyuruyu, genel duyurudan <b>sonra</b> yayınlayın — aksi halde sonradan yayınlanan genel duyuru hedefli mesajı gölgeler.</div>
     </form>
+  </section>
+  <section id="playback-policy">
+    <h2>Oynatma politikası <span class="muted">(playbackPolicy)</span></h2>
+    ${policyNotice}
+    <form class="ann" method="post" action="/api/playback-policy">
+      ${CSRF.field}
+      <div class="muted" style="margin-bottom:8px">${policySource}</div>
+      <textarea class="policy" name="policy" maxlength="32768" spellcheck="false" placeholder='{"ttlSeconds":7200,"deviceOverrides":[{"match":{"model":"AFTM|AFTT"},"set":{"bufferMode":"HIGH","startEngine":"EXOPLAYER"}}]}'>${esc(policyText)}</textarea>
+      <button class="sendbtn" type="submit">Politikayı kaydet</button>
+      <div class="muted" style="margin-top:6px">Her kalp atışında (dakikada bir) cihazlara gönderilir; <b>ttlSeconds</b> dolunca cihaz varsayılana döner. En fazla 32 KB, 32 kural, regex ≤ 128 karakter. Şema ve örnekler: <span class="mono">docs/playback-policy.md</span>. Kural alanları cihaz sayfasındaki <b>Donanım / Kart / SoC / RAM</b> değerleriyle eşleşir.</div>
+      ${policyRulePreview}
+    </form>
+    ${storedPlaybackPolicyText ? `<form method="post" action="/api/playback-policy/clear" style="margin-top:8px" onsubmit="return confirm('Panelde kayıtlı politika silinsin mi? (Ortam değişkeni varsa ona dönülür.)')">
+      ${CSRF.field}
+      <button class="clearbtn" type="submit">Kayıtlı politikayı sil</button>
+    </form>` : ""}
   </section>
   <section>
     <h2>Destek Kodu Ara</h2>
@@ -2454,6 +2609,9 @@ app.get("/device/:id", auth, async (req, res) => {
             : "—"
       }</div></div>
       <div><div class="k">Oynatıcı ayarları</div><div class="v mono">${esc(d.player_settings || "—")}</div></div>
+      <div><div class="k">Donanım / Kart</div><div class="v mono" title="playbackPolicy.deviceOverrides: match.hardware / match.board">${esc(d.hardware || "—")} / ${esc(d.board || "—")}</div></div>
+      <div><div class="k">SoC</div><div class="v mono" title="match.socModel (Android 12+)">${esc(d.soc_model || "—")}</div></div>
+      <div><div class="k">RAM</div><div class="v" title="match.totalRamMaxMb / match.lowRam">${d.total_ram_mb ? esc(d.total_ram_mb) + " MB" : "—"}${d.low_ram === true ? ' <span class="badge warn">lowRam</span>' : ""}</div></div>
       <div><div class="k">İlk görülme</div><div class="v">${esc(fmt(d.first_seen))}</div></div>
       <div><div class="k">Son görülme</div><div class="v">${esc(ago(d.last_seen))}</div></div>
     </div>

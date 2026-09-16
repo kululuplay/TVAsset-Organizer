@@ -196,6 +196,7 @@
     <string name="error_no_internet">Controleer je internetverbinding.</string>
     <string name="error_cannot_connect">Kan geen verbinding maken met de server.</string>
     <string name="error_live_playback_failed">Het afspelen kon niet worden hervat. Probeer het opnieuw.</string>
+    <string name="playback_too_heavy_for_device">Deze zender is te zwaar voor dit apparaat. Kies de SD-versie als je provider die aanbiedt.</string>
     <string name="error_cannot_play_content">Deze inhoud kon niet worden afgespeeld. Controleer de verbinding of probeer een andere decoder.</string>
     <string name="error_bad_credentials">Onjuiste gebruikersnaam of wachtwoord.</string>
     <string name="error_subscription_expired">Je abonnement is verlopen.</string>
@@ -308,6 +309,16 @@
     <string name="settings_audio_passthrough">Audio-passthrough (voor AV-receivers)</string>
     <string name="settings_audio_passthrough_warning">Schakel dit alleen in als er een AV-receiver of soundbar met Dolby/DTS-decodering is aangesloten. Op tv\'s en beamers zonder decoder speelt het beeld af, maar is er GEEN geluid. Ontbreekt het geluid, zet deze optie dan uit.</string>
     <string name="settings_debug_overlay">Debug-overlay (speler en voorbeeld)</string>
+    <string name="settings_live_preview">Live-voorbeeld</string>
+    <string name="settings_playback_profile">Afspeelprofiel</string>
+    <string name="settings_playback_profile_standard">Standaard</string>
+    <string name="settings_playback_profile_compat">Compatibiliteit (%1$s)</string>
+    <string name="settings_profile_reason_user">door jou gekozen</string>
+    <string name="settings_profile_reason_low_ram">weinig RAM</string>
+    <string name="settings_profile_reason_small_heap">klein app-geheugen</string>
+    <string name="settings_profile_reason_limited_ram">beperkt totaal RAM</string>
+    <string name="settings_profile_reason_legacy_32">ouder 32-bits systeem</string>
+    <string name="settings_profile_reason_no_hw_avc">geen hardware-H.264-decoder</string>
 
     <!-- Updatemelding (wordt automatisch bij het opstarten getoond) -->
     <string name="update_available_title">Update beschikbaar</string>

@@ -144,6 +144,16 @@
     <string name="settings_buffer_normal">عادي (متوازن)</string>
     <string name="settings_buffer_high">مرتفع (توقفات أقل)</string>
     <string name="settings_debug_overlay">طبقة التصحيح (المشغّل والمعاينة)</string>
+    <string name="settings_live_preview">المعاينة المباشرة</string>
+    <string name="settings_playback_profile">ملف التشغيل</string>
+    <string name="settings_playback_profile_standard">قياسي</string>
+    <string name="settings_playback_profile_compat">التوافق (%1$s)</string>
+    <string name="settings_profile_reason_user">من اختيارك</string>
+    <string name="settings_profile_reason_low_ram">ذاكرة RAM منخفضة</string>
+    <string name="settings_profile_reason_small_heap">ذاكرة تطبيق صغيرة</string>
+    <string name="settings_profile_reason_limited_ram">ذاكرة RAM إجمالية محدودة</string>
+    <string name="settings_profile_reason_legacy_32">نظام 32 بت قديم</string>
+    <string name="settings_profile_reason_no_hw_avc">لا يوجد فك ترميز H.264 بالعتاد</string>
     <string name="settings_language">اللغة</string>
     <string name="settings_general">عام</string>
     <string name="settings_account">الحساب</string>
@@ -197,6 +207,7 @@
     <string name="error_no_internet">تحقق من اتصالك بالإنترنت.</string>
     <string name="error_cannot_connect">تعذّر الاتصال بالخادم.</string>
     <string name="error_live_playback_failed">تعذّر متابعة التشغيل. يُرجى المحاولة مرة أخرى.</string>
+    <string name="playback_too_heavy_for_device">هذه القناة ثقيلة جدًا على هذا الجهاز. اختر نسخة SD إذا كان مزوّدك يوفرها.</string>
     <string name="error_bad_credentials">اسم المستخدم أو كلمة المرور غير صحيحة.</string>
     <string name="error_subscription_expired">انتهى اشتراكك.</string>
     <string name="error_account_in_use">قد يكون هذا الحساب مستخدماً على جهاز آخر.</string>

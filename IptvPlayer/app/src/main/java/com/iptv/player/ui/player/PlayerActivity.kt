@@ -52,6 +52,7 @@ import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NowPlaying
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
+import com.iptv.player.ui.common.LowEndUiBudget
 import com.iptv.player.ui.common.PinLockHelper
 import com.iptv.player.ui.common.SleepTimer
 import com.iptv.player.ui.common.isAdult
@@ -130,6 +131,12 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
 
     /** Diagnostics overlay state (toggled via the menu / INFO key). */
     private val statsHandler = Handler(Looper.getMainLooper())
+
+    /** Compatibility profile: overlays repaint half as often to spare the decoder. */
+    private val compatMode: Boolean by lazy {
+        runCatching { PlaybackQoeRuntime.devicePlaybackProfile().compatibilityMode }
+            .getOrDefault(false)
+    }
     private var statsVisible = false
 
     private val sleepTimer = SleepTimer { finish() }
@@ -904,6 +911,13 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         binding.bufferingIndicator.visibility = View.VISIBLE
     }
 
+    override fun onStreamTooHeavyForDevice(width: Int, height: Int, codec: String?) {
+        if (castOwnsPlayback || castLoadPending) return
+        // Advisory only. The controller keeps its own recovery budget; a toast
+        // never takes D-pad focus and vanishes on its own, unlike the retry card.
+        Toast.makeText(this, R.string.playback_too_heavy_for_device, Toast.LENGTH_LONG).show()
+    }
+
     override fun onFatalError() {
         if (castOwnsPlayback || castLoadPending) return
         // Reconnect window elapsed with no recovery: replace the spinner with a
@@ -1288,7 +1302,10 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         if (!statsVisible || !::controller.isInitialized) return
         binding.statsOverlay.text = formatStats(controller.streamInfo())
         statsHandler.removeCallbacksAndMessages(null)
-        statsHandler.postDelayed({ refreshStats() }, STATS_REFRESH_MS)
+        statsHandler.postDelayed(
+            { refreshStats() },
+            LowEndUiBudget.refreshIntervalMs(STATS_REFRESH_MS, compatMode),
+        )
     }
 
     private fun formatStats(info: StreamInfo?): String {

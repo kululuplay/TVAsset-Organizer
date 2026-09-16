@@ -38,11 +38,15 @@ import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.data.prefs.SettingsStore
 import com.iptv.player.databinding.ActivitySettingsBinding
+import com.iptv.player.playback.android.PlaybackQoeRuntime
+import com.iptv.player.playback.core.CompatibilityReason
+import com.iptv.player.playback.core.DevicePlaybackProfile
 import com.iptv.player.ui.content.ContentManagerActivity
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.PinAttemptGuard
 import com.iptv.player.ui.common.PinPromptDialog
 import com.iptv.player.ui.diagnostics.DiagnosticsActivity
+import com.iptv.player.ui.home.LivePreviewPolicy
 import com.iptv.player.ui.login.LoginActivity
 import com.iptv.player.ui.profiles.ProfilesActivity
 import com.iptv.player.ui.splash.SplashPrefetch
@@ -50,6 +54,7 @@ import com.iptv.player.update.UpdateChecker
 import com.iptv.player.update.UpdateResult
 import com.iptv.player.util.LocaleManager
 import com.iptv.player.util.Logger
+import com.iptv.player.util.PlaybackRemotePolicy
 import com.iptv.player.util.SupportDiagnosticDialog
 import com.iptv.player.util.PublicIpProvider
 import com.iptv.player.util.SpeedTester
@@ -107,6 +112,7 @@ class SettingsActivity : BaseActivity() {
     private var bufferModeValue: TextView? = null
     private var passthroughSwitch: SwitchCompat? = null
     private var debugOverlaySwitch: SwitchCompat? = null
+    private var livePreviewSwitch: SwitchCompat? = null
     private var selectedPlayerMode = PlayerMode.AUTO
     private var selectedDecoderMode = DecoderMode.AUTO
     private var selectedBufferMode = BufferMode.NORMAL
@@ -588,6 +594,25 @@ class SettingsActivity : BaseActivity() {
             }
         }
         c.addView(passthroughRow)
+
+        // Inline live preview on Home. The switch shows the EFFECTIVE value: an
+        // explicit choice, else the device default (off on weak sticks / remote
+        // override). Clicking always persists an explicit choice.
+        val previewRow = inflateMaster(c, getString(R.string.settings_live_preview))
+        livePreviewSwitch = previewRow.findViewById<SwitchCompat>(R.id.mSwitch)
+            .also { it.visibility = View.VISIBLE }
+        configureToggleRow(
+            previewRow,
+            getString(R.string.settings_live_preview),
+            livePreviewSwitch!!,
+        )
+        previewRow.setOnClickListener {
+            viewModel.setLivePreview(!livePreviewSwitch!!.isChecked)
+        }
+        c.addView(previewRow)
+
+        // Effective playback profile, so support can ask "what does it say?".
+        addInfoRow(c, getString(R.string.settings_playback_profile), playbackProfileLabel())
 
         // On-screen Debug overlay toggle (engine/stage/resolution + live log tail).
         val debugRow = inflateMaster(c, getString(R.string.settings_debug_overlay))
@@ -1363,6 +1388,28 @@ class SettingsActivity : BaseActivity() {
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
+    private fun devicePlaybackProfile(): DevicePlaybackProfile =
+        PlaybackQoeRuntime.devicePlaybackProfile()
+
+    /** "Standard" or "Compatibility (low RAM, ...)" from the resolved profile. */
+    private fun playbackProfileLabel(): String {
+        val profile = devicePlaybackProfile()
+        if (!profile.compatibilityMode) return getString(R.string.settings_playback_profile_standard)
+        val reasons = profile.reasons.joinToString(", ") { reason ->
+            getString(
+                when (reason) {
+                    CompatibilityReason.USER_SELECTED -> R.string.settings_profile_reason_user
+                    CompatibilityReason.ANDROID_LOW_RAM -> R.string.settings_profile_reason_low_ram
+                    CompatibilityReason.SMALL_APP_HEAP -> R.string.settings_profile_reason_small_heap
+                    CompatibilityReason.LIMITED_TOTAL_RAM -> R.string.settings_profile_reason_limited_ram
+                    CompatibilityReason.LEGACY_32_BIT_RUNTIME -> R.string.settings_profile_reason_legacy_32
+                    CompatibilityReason.NO_HARDWARE_AVC -> R.string.settings_profile_reason_no_hw_avc
+                },
+            )
+        }
+        return getString(R.string.settings_playback_profile_compat, reasons)
+    }
+
     private fun addChoiceGroup(
         container: LinearLayout, title: String, options: List<Pair<String, String>>,
         selected: () -> String, onSelect: (String) -> Unit,
@@ -1570,6 +1617,18 @@ class SettingsActivity : BaseActivity() {
         }
         launch {
             viewModel.debugOverlay.collectLatest { debugOverlaySwitch?.isChecked = it }
+        }
+        launch {
+            viewModel.livePreviewChoice.collectLatest { choice ->
+                val remote = runCatching {
+                    PlaybackRemotePolicy.deviceOverrides().livePreviewEnabled
+                }.getOrNull()
+                livePreviewSwitch?.isChecked = LivePreviewPolicy.enabled(
+                    userChoice = choice,
+                    remote = remote,
+                    compat = devicePlaybackProfile().compatibilityMode,
+                )
+            }
         }
     }
 

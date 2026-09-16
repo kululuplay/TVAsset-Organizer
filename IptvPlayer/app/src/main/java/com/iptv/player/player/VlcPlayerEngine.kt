@@ -1560,6 +1560,21 @@ class VlcPlayerEngine(
         return mediaPlayer?.time ?: -1L
     }
 
+    // libVLC exposes no buffered position; the demuxer's read-byte counter is
+    // the equivalent monotonic "data is still arriving" marker. Same retained
+    // Media discipline as readHealthSample; -1 whenever stats are unavailable.
+    override fun bufferFillMarker(): Long {
+        if (pendingOps.get() > 0 || nativeHandlesAbandoned.get()) return -1L
+        val mp = mediaPlayer ?: return -1L
+        val media = runCatching { mp.media }.getOrNull() ?: return -1L
+        return try {
+            val stats = runCatching { media.stats }.getOrNull() ?: return -1L
+            maxOf(stats.readBytes, stats.demuxReadBytes).toLong().coerceAtLeast(-1L)
+        } finally {
+            media.release()
+        }
+    }
+
     override fun hasRecentOutputProgress(): Boolean {
         if (pendingOps.get() > 0 || nativeHandlesAbandoned.get() || bufferingActive.get()) return false
         val mp = mediaPlayer ?: return false

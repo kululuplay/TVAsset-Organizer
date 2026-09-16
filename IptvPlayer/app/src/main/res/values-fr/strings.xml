@@ -196,6 +196,7 @@
     <string name="error_no_internet">Vérifiez votre connexion Internet.</string>
     <string name="error_cannot_connect">Impossible de se connecter au serveur.</string>
     <string name="error_live_playback_failed">La lecture n’a pas pu reprendre. Veuillez réessayer.</string>
+    <string name="playback_too_heavy_for_device">Cette chaîne est trop lourde pour cet appareil. Choisissez la version SD si votre fournisseur en propose une.</string>
     <string name="error_cannot_play_content">Impossible de lire ce contenu. Vérifiez la connexion ou essayez un autre décodeur.</string>
     <string name="error_bad_credentials">Nom d\'utilisateur ou mot de passe incorrect.</string>
     <string name="error_subscription_expired">Votre abonnement a expiré.</string>
@@ -308,6 +309,16 @@
     <string name="settings_audio_passthrough">Passthrough audio (pour amplis AV)</string>
     <string name="settings_audio_passthrough_warning">N\'activez cette option que si un ampli AV ou une barre de son avec décodage Dolby/DTS est connecté. Sur les téléviseurs et vidéoprojecteurs sans décodeur, l\'image fonctionne mais il n\'y a AUCUN son. Si le son manque, désactivez cette option.</string>
     <string name="settings_debug_overlay">Superposition de débogage (lecteur et aperçu)</string>
+    <string name="settings_live_preview">Aperçu en direct</string>
+    <string name="settings_playback_profile">Profil de lecture</string>
+    <string name="settings_playback_profile_standard">Standard</string>
+    <string name="settings_playback_profile_compat">Compatibilité (%1$s)</string>
+    <string name="settings_profile_reason_user">choisi par vous</string>
+    <string name="settings_profile_reason_low_ram">RAM faible</string>
+    <string name="settings_profile_reason_small_heap">mémoire d’application réduite</string>
+    <string name="settings_profile_reason_limited_ram">RAM totale limitée</string>
+    <string name="settings_profile_reason_legacy_32">ancien système 32 bits</string>
+    <string name="settings_profile_reason_no_hw_avc">pas de décodeur H.264 matériel</string>
 
     <!-- Invite de mise à jour (affichée automatiquement au démarrage) -->
     <string name="update_available_title">Mise à jour disponible</string>

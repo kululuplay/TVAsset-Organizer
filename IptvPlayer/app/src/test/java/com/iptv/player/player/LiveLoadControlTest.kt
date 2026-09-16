@@ -27,13 +27,17 @@ class LiveLoadControlTest {
     }
 
     @Test
-    fun `legacy adaptive reserves enough from startup but never requires high buffer`() {
+    fun `legacy adaptive reserves normal from startup and high only after repeated rebuffers`() {
         val control = control(BufferMode.ADAPTIVE, constrained = true)
         assertFalse(control.shouldStartPlayback(parameters(500)))
         assertTrue(control.shouldStartPlayback(parameters(1_500)))
-        repeat(10) { index ->
+        // First two rebuffers keep the NORMAL 2.5 s restart reserve.
+        repeat(2) { index ->
             assertTrue(control.shouldStartPlayback(parameters(2_500, rebufferAt = index.toLong())))
         }
+        // The third proves a weak link: HIGH's 5 s reserve is now required.
+        assertFalse(control.shouldStartPlayback(parameters(2_500, rebufferAt = 2)))
+        assertTrue(control.shouldStartPlayback(parameters(5_000, rebufferAt = 2)))
     }
 
     @Test
@@ -73,7 +77,7 @@ class LiveLoadControlTest {
     fun `hitting sample memory target stops loading and allows playback at high bitrate`() {
         val control = control(BufferMode.ADAPTIVE, constrained = true)
         val allocator = control.allocator
-        val allocations = List(24 * 1_048_576 / C.DEFAULT_BUFFER_SEGMENT_SIZE) { allocator.allocate() }
+        val allocations = List(32 * 1_048_576 / C.DEFAULT_BUFFER_SEGMENT_SIZE) { allocator.allocate() }
         assertFalse(control.shouldContinueLoading(parameters(800)))
         assertTrue(control.shouldStartPlayback(parameters(800, rebufferAt = 1)))
         allocations.forEach(allocator::release)

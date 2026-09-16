@@ -90,6 +90,38 @@ class DevicePlaybackProfileTest {
     }
 
     @Test
+    fun `remote compatibility verdict decides AUTO but never an explicit user choice`() {
+        assertEquals(
+            PlaybackProfilePreference.COMPATIBILITY,
+            DevicePlaybackProfileResolver.preferenceWithOverride(PlaybackProfilePreference.AUTO, true),
+        )
+        assertEquals(
+            PlaybackProfilePreference.STANDARD,
+            DevicePlaybackProfileResolver.preferenceWithOverride(PlaybackProfilePreference.AUTO, false),
+        )
+        assertEquals(
+            PlaybackProfilePreference.AUTO,
+            DevicePlaybackProfileResolver.preferenceWithOverride(PlaybackProfilePreference.AUTO, null),
+        )
+        assertEquals(
+            PlaybackProfilePreference.STANDARD,
+            DevicePlaybackProfileResolver.preferenceWithOverride(PlaybackProfilePreference.STANDARD, true),
+        )
+        assertEquals(
+            PlaybackProfilePreference.COMPATIBILITY,
+            DevicePlaybackProfileResolver.preferenceWithOverride(PlaybackProfilePreference.COMPATIBILITY, false),
+        )
+        // A remote STANDARD verdict lifts the automatic caps on a weak box.
+        val weak = signals(sdkInt = 25, abis = listOf("armeabi-v7a"), totalRamMb = 1_024, memoryClassMb = 96)
+        assertFalse(
+            DevicePlaybackProfileResolver.resolve(
+                weak,
+                DevicePlaybackProfileResolver.preferenceWithOverride(PlaybackProfilePreference.AUTO, false),
+            ).compatibilityMode,
+        )
+    }
+
+    @Test
     fun `missing hardware AVC decoder chooses safe compatibility path`() {
         val profile = DevicePlaybackProfileResolver.resolve(
             signals(

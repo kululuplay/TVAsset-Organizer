@@ -29,6 +29,9 @@ class FullscreenChannelGuideAdapter(
 
     var lockedProvider: (Channel) -> Boolean = { false }
 
+    /** Compatibility devices skip logo loads while the decoder owns the CPU. */
+    var suppressLogos: Boolean = false
+
     private var playingChannelId: String? = null
 
     fun setPlayingChannel(channelId: String?) {
@@ -109,7 +112,7 @@ class FullscreenChannelGuideAdapter(
             favorite.visibility = if (channel.isFavorite) View.VISIBLE else View.GONE
             catchup.visibility = if (channel.catchupDays > 0) View.VISIBLE else View.GONE
             val placeholder = LogoPlaceholder.forName(itemView.context, channel.name)
-            if (channel.logoUrl.isNullOrBlank()) {
+            if (channel.logoUrl.isNullOrBlank() || suppressLogos) {
                 logo.load(placeholder) { crossfade(false) }
             } else {
                 logo.load(channel.logoUrl) {

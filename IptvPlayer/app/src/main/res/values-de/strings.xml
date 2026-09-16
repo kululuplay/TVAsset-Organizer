@@ -310,6 +310,16 @@
     <string name="settings_audio_passthrough">Audio-Passthrough (für AV-Receiver)</string>
     <string name="settings_audio_passthrough_warning">Nur aktivieren, wenn ein AV-Receiver oder eine Soundbar mit Dolby/DTS-Dekodierung angeschlossen ist. Auf Fernsehern und Beamern ohne Dekoder läuft das Bild, aber es gibt KEINEN Ton. Wenn der Ton fehlt, diese Option ausschalten.</string>
     <string name="settings_debug_overlay">Debug-Anzeige (Player und Vorschau)</string>
+    <string name="settings_live_preview">Live-Vorschau</string>
+    <string name="settings_playback_profile">Wiedergabeprofil</string>
+    <string name="settings_playback_profile_standard">Standard</string>
+    <string name="settings_playback_profile_compat">Kompatibilität (%1$s)</string>
+    <string name="settings_profile_reason_user">von Ihnen gewählt</string>
+    <string name="settings_profile_reason_low_ram">wenig RAM</string>
+    <string name="settings_profile_reason_small_heap">kleiner App-Speicher</string>
+    <string name="settings_profile_reason_limited_ram">begrenzter Gesamt-RAM</string>
+    <string name="settings_profile_reason_legacy_32">älteres 32-Bit-System</string>
+    <string name="settings_profile_reason_no_hw_avc">kein Hardware-H.264-Decoder</string>
 
     <!-- Update-Hinweis (wird beim Start automatisch angezeigt) -->
     <string name="update_available_title">Update verfügbar</string>
@@ -386,6 +396,7 @@
     <string name="support_diagnostic_interrupted">Das Senden wurde unterbrochen. Erneut versuchen, um den Empfang zu prüfen und die Support-Nummer zu erhalten; doppelte Meldungen werden vermieden.</string>
     <string name="support_diagnostic_incomplete">Einige Protokolle oder Einstellungen waren auf diesem Gerät nicht verfügbar. Die verfügbaren Informationen wurden gesendet.</string>
     <string name="error_live_playback_failed">Die Wiedergabe konnte nicht fortgesetzt werden. Bitte erneut versuchen.</string>
+    <string name="playback_too_heavy_for_device">Dieser Sender ist zu anspruchsvoll für dieses Gerät. Wählen Sie die SD-Version, falls Ihr Anbieter eine anbietet.</string>
     <!-- Added by the 2026-09 translation audit -->
     <string name="splash_status_starting">Alles wird vorbereitet…</string>
     <string name="splash_status_live">Sender werden geladen…</string>

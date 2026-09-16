@@ -57,6 +57,7 @@ import com.iptv.player.ui.catchup.CatchupActivity
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.ChannelText
 import com.iptv.player.ui.common.LogoPlaceholder
+import com.iptv.player.ui.common.LowEndUiBudget
 import com.iptv.player.ui.common.NewContentPopup
 import com.iptv.player.ui.common.NumberZapInputHelper
 import com.iptv.player.ui.common.PinLockHelper
@@ -69,6 +70,7 @@ import com.iptv.player.ui.player.RemoteConfirmPress
 import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NewContentNotifier
 import com.iptv.player.util.NowPlaying
+import com.iptv.player.util.PlaybackRemotePolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -173,6 +175,22 @@ class HomeActivity : BaseActivity() {
     private var inlineFullscreen = false
     private var pendingFullscreenChannelId: String? = null
 
+    /**
+     * Compatibility playback profile (weak stick). While it plays fullscreen the
+     * browse UI drops logo loads + list animations and halves its timer rates.
+     */
+    private val compatMode: Boolean by lazy {
+        runCatching { PlaybackQoeRuntime.devicePlaybackProfile().compatibilityMode }
+            .getOrDefault(false)
+    }
+
+    /**
+     * Whether OK on a channel starts the in-panel preview. When off (weak devices
+     * by default, or the user's choice), OK goes straight to fullscreen through the
+     * very same controller path and the card shows now/next text instead of video.
+     */
+    private var livePreviewEnabled = true
+
     /** Fullscreen OK guide state; browsing it never changes the playing stream. */
     private var fullscreenGuideVisible = false
     private var fullscreenGuideFocusedChannel: Channel? = null
@@ -215,7 +233,10 @@ class HomeActivity : BaseActivity() {
             if (captionEpgLoaded) {
                 maybeRefreshExpiredCaptionEpg(now)
             }
-            fullscreenEpgHandler.postDelayed(this, FULLSCREEN_EPG_TICK_MS)
+            fullscreenEpgHandler.postDelayed(
+                this,
+                LowEndUiBudget.refreshIntervalMs(FULLSCREEN_EPG_TICK_MS, compatMode),
+            )
         }
     }
 
@@ -339,6 +360,13 @@ class HomeActivity : BaseActivity() {
         binding = ActivityHomeBinding.inflate(layoutInflater)
         browseLayoutSnapshot = captureBrowseLayout()
         setContentView(binding.root)
+        // Device default until the persisted choice arrives (collector below), so
+        // a weak stick never runs an inline preview during the first OK press.
+        livePreviewEnabled = LivePreviewPolicy.defaultEnabled(
+            remote = runCatching { PlaybackRemotePolicy.deviceOverrides().livePreviewEnabled }
+                .getOrNull(),
+            compat = compatMode,
+        )
         playbackSession = TvPlaybackSession(
             context = this,
             tag = "KULULUPLAY-Live-Home",
@@ -768,6 +796,9 @@ class HomeActivity : BaseActivity() {
         // that channel is still buffering cancels the deferred transition.
         if (pendingFullscreenChannelId != null) {
             pendingFullscreenChannelId = null
+            // No inline preview wanted: cancelling the deferred fullscreen must
+            // not leave the stream running inside the card.
+            if (!livePreviewEnabled) previewingChannel?.let { stopPreview(); showInfo(it) }
             return
         }
         if (viewModel.query.value.isNotEmpty()) {
@@ -815,7 +846,16 @@ class HomeActivity : BaseActivity() {
             // panel (the stop-if-different guard lives in showInfo so every
             // selection path is covered, not just row focus).
             onFocused = {
-                if (it.id != previewingChannel?.id) pendingFullscreenChannelId = null
+                if (it.id != previewingChannel?.id) {
+                    val abandonedFullscreen = pendingFullscreenChannelId != null
+                    pendingFullscreenChannelId = null
+                    // With live preview off the stream only exists to become
+                    // fullscreen; abandoning that intent must not leave an inline
+                    // preview playing behind the list.
+                    if (abandonedFullscreen && !livePreviewEnabled && previewingChannel != null) {
+                        stopPreview()
+                    }
+                }
                 lastFocusedChannelId = it.id
                 showInfo(it)
             },
@@ -831,6 +871,8 @@ class HomeActivity : BaseActivity() {
         binding.channelList.layoutManager = LinearLayoutManager(this)
         binding.channelList.adapter = channelAdapter
         binding.channelList.onNavigateAboveStart = { binding.searchInput.requestFocus() }
+        // Weak sticks: no row animations at all, the decoder needs the CPU.
+        if (compatMode) binding.channelList.itemAnimator = null
 
         epgAdapter = ProgramAdapter { program ->
             EpgInfoDialog.show(this, currentInfoChannel, program)
@@ -849,6 +891,7 @@ class HomeActivity : BaseActivity() {
         binding.fullscreenGuideList.adapter = fullscreenGuideAdapter
         (binding.fullscreenGuideList.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
             ?.supportsChangeAnimations = false
+        if (compatMode) binding.fullscreenGuideList.itemAnimator = null
         binding.fullscreenGuideIcon.setImageResource(
             if (radioMode) R.drawable.ic_radio else R.drawable.ic_tv,
         )
@@ -1113,7 +1156,19 @@ class HomeActivity : BaseActivity() {
                 // STOPPED (repeatOnLifecycle), so no off-screen ticking.
                 launch {
                     while (true) {
-                        delay(NOW_NEXT_REFRESH_MS)
+                        delay(LowEndUiBudget.refreshIntervalMs(NOW_NEXT_REFRESH_MS, compatMode))
+                        refreshNowNext()
+                    }
+                }
+                // Live preview on/off: explicit user choice > remote override > profile.
+                launch {
+                    ServiceLocator.settings.livePreviewChoice.collectLatest { choice ->
+                        val remote = runCatching {
+                            PlaybackRemotePolicy.deviceOverrides().livePreviewEnabled
+                        }.getOrNull()
+                        livePreviewEnabled = LivePreviewPolicy.enabled(choice, remote, compatMode)
+                        // Without video the card has room for the following program too.
+                        binding.previewProgram.maxLines = if (livePreviewEnabled) 1 else 2
                         refreshNowNext()
                     }
                 }
@@ -1242,7 +1297,7 @@ class HomeActivity : BaseActivity() {
                 val now = System.currentTimeMillis()
                 // Caption now-playing follows focus only when nothing is previewing.
                 if (previewingChannel == null) {
-                    binding.previewProgram.text = nowPlayingLabel(programs, now)
+                    binding.previewProgram.text = captionProgramLabel(programs, now)
                 }
                 epgAdapter.submitList(programs) {
                     val idx = programs.indexOfFirst { it.isLiveAt(now) }
@@ -1321,6 +1376,19 @@ class HomeActivity : BaseActivity() {
                 size(160, 120)
             }
         }
+    }
+
+    /**
+     * Caption text under the card: the live program, plus the following one when
+     * no preview video will fill the card (preview disabled and nothing playing).
+     */
+    private fun captionProgramLabel(programs: List<Program>, now: Long): String {
+        val nowLine = nowPlayingLabel(programs, now)
+        if (livePreviewEnabled || previewingChannel != null) return nowLine
+        val next = programs.firstOrNull { it.startMs > now } ?: return nowLine
+        val nextLine = "${getString(R.string.next_label)}: " +
+            "${timeFmt.format(Date(next.startMs))}  ${next.title}"
+        return if (nowLine.isEmpty()) nextLine else "$nowLine\n$nextLine"
     }
 
     /** Formats the "now playing" caption line from [programs], or "" if none is live. */
@@ -1562,7 +1630,7 @@ class HomeActivity : BaseActivity() {
         val now = System.currentTimeMillis()
         val captionSource = if (previewingChannel != null) captionPrograms else currentPrograms
         if (captionSource.isNotEmpty()) {
-            binding.previewProgram.text = nowPlayingLabel(captionSource, now)
+            binding.previewProgram.text = captionProgramLabel(captionSource, now)
         }
         if (currentPrograms.isNotEmpty()) epgAdapter.refreshLiveState()
     }
@@ -1792,8 +1860,10 @@ class HomeActivity : BaseActivity() {
                 // it with the existing decoder/socket.
                 pendingFullscreenChannelId = channel.id
             }
+            // Preview disabled: the same controller/socket path, but the card only
+            // hosts the stream until its first frame, then expands (no second play).
             LivePreviewPressPolicy.Action.START_PREVIEW ->
-                requestChannelPlayback(channel, enterFullscreenWhenReady = false)
+                requestChannelPlayback(channel, enterFullscreenWhenReady = !livePreviewEnabled)
         }
     }
 
@@ -2113,6 +2183,14 @@ class HomeActivity : BaseActivity() {
             playbackSession.setPlaying(false)
             finishPreviewQoe(PlaybackEndReason.FATAL_FAILURE)
         }
+        override fun onStreamTooHeavyForDevice(width: Int, height: Int, codec: String?) {
+            if (castOwnsPreviewPlayback || castLoadPending) return
+            // Notice only: same status line as other preview failures, no focus
+            // change, so the channel list keeps the D-pad.
+            binding.previewLoading.visibility = View.GONE
+            binding.previewStatus.setText(R.string.playback_too_heavy_for_device)
+            binding.previewStatus.visibility = View.VISIBLE
+        }
         override fun onRetrying(attempt: Int) {
             if (castOwnsPreviewPlayback || castLoadPending) return
             previewState = LivePreviewPressPolicy.Phase.STARTING
@@ -2412,6 +2490,10 @@ class HomeActivity : BaseActivity() {
         inlineFullscreen = true
         fullscreenGuideVisible = false
         fullscreenConfirmPress.clear()
+        // Compatibility devices: guide rows bind placeholders only while the
+        // decoder owns the CPU (restored, and visible rows rebound, on exit).
+        channelAdapter.suppressLogos = compatMode
+        fullscreenGuideAdapter.suppressLogos = compatMode
         focusRequestGeneration++
         binding.previewCard.clearFocus()
         binding.previewCard.isFocusable = false
@@ -2451,6 +2533,11 @@ class HomeActivity : BaseActivity() {
         inlineFullscreen = false
         pendingFullscreenChannelId = null
         fullscreenConfirmPress.clear()
+        if (channelAdapter.suppressLogos) {
+            channelAdapter.suppressLogos = false
+            fullscreenGuideAdapter.suppressLogos = false
+            channelAdapter.refreshVisible(binding.channelList)
+        }
         cancelFullscreenZap()
         stopFullscreenEpgTicker()
         focusRequestGeneration++
@@ -2482,7 +2569,8 @@ class HomeActivity : BaseActivity() {
         binding.previewCard.isFocusable = snapshot.previewFocusable
 
         if (!restoreFocus) return
-        val playingId = previewingChannel?.id
+        val playing = previewingChannel
+        val playingId = playing?.id
         val position = currentChannels.indexOfFirst { it.id == playingId }
         when {
             inChannelView && position >= 0 -> {
@@ -2495,6 +2583,12 @@ class HomeActivity : BaseActivity() {
                 if (categoryId != null) focusCategory(categoryId)
                 else focusRow(binding.categoryList, 0)
             }
+        }
+        // No inline preview wanted: leaving fullscreen ends the stream (focus is
+        // already on the playing row above) and the card shows now/next text.
+        if (!livePreviewEnabled && playing != null) {
+            stopPreview()
+            showInfo(playing)
         }
     }
 

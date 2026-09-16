@@ -5,8 +5,8 @@
  *
  * Real-stick hardening (emulator hides these because it decodes in software):
  *   - Audio prefers decoded PCM (passthrough disabled by default); codec
- *     availability is checked below. Tunneling is disabled (a common
- *     green/black frame cause on cheap sticks).
+ *     availability is checked below. Tunneling is off unless ExoTunnelingPolicy
+ *     enables it (remote opt-in, never Amlogic: a common green/black cause).
  *   - A bundled MPEG-1 audio-only renderer covers missing Layer-I/II/III codecs
  *     while keeping hardware video. Other unsupported codecs (e.g. AC-3/E-AC-3)
  *     still report onAudioUnavailable so the controller can fall back to libVLC.
@@ -100,6 +100,11 @@ class ExoPlayerEngine(
             }.getOrDefault(false),
     /** Audio-only preference on constrained or known Amlogic compatibility paths. */
     private val preferSoftwareAudio: Boolean = constrainedDevice,
+    /**
+     * Video tunneling. Off by default and off on every Amlogic decoder (green/
+     * black frames); only [ExoTunnelingPolicy] may turn it on per device.
+     */
+    private val tunnelingEnabled: Boolean = false,
 ) : PlayerEngine {
 
     override val engineName: String = "ExoPlayer"
@@ -291,12 +296,14 @@ class ExoPlayerEngine(
             ExtractorsFactory { arrayOf(TsExtractor()) },
         )
 
-        // Explicitly disable video tunneling — it commonly causes green/black
-        // frames on cheap Android TV sticks.
+        // Video tunneling stays off unless a remote per-device opt-in AND a
+        // non-Amlogic decoder were both proven (ExoTunnelingPolicy); it commonly
+        // causes green/black frames on cheap Android TV sticks.
         val deviceProfile = PlaybackQoeRuntime.devicePlaybackProfile()
+        if (tunnelingEnabled) PlaybackLog.log(context, engineName, "video tunneling enabled (remote opt-in)")
         val trackSelector = DefaultTrackSelector(context).apply {
             val parameters = buildUponParameters()
-                .setTunnelingEnabled(false)
+                .setTunnelingEnabled(tunnelingEnabled)
                 .apply {
                     // These are adaptive preferences, not hard source rejection:
                     // DefaultTrackSelector's exceed-video-constraints fallback
@@ -739,6 +746,7 @@ class ExoPlayerEngine(
                         "sustained frame loss ${breach.droppedFrames}/${breach.windowMs}ms; " +
                             "await output evidence before decoder fallback",
                     )
+                    listener?.onDroppedFrameBreach()
                 }
             }
 
@@ -1323,11 +1331,35 @@ class ExoPlayerEngine(
             // requires a video frame, even when Media3 exposes no videoFormat
             // because the device could not select a video decoder at all.
             if (player?.playbackState == Player.STATE_READY) {
-                reportVideoInvalid("no first frame for expected video")
+                if (tunnelingEnabled) {
+                    reportTunnelingNoFrame()
+                } else {
+                    reportVideoInvalid("no first frame for expected video")
+                }
             }
         }
         noFrameCheckRunnable = check
         handler.postDelayed(check, NO_FRAME_TIMEOUT_MS)
+    }
+
+    /**
+     * Same teardown as [reportVideoInvalid], different verdict: a tunneled
+     * decoder that never surfaces a frame is first retried untunneled by the
+     * controller, since tunneling itself is the most likely culprit.
+     */
+    private fun reportTunnelingNoFrame() {
+        if (videoFailureReported) return
+        videoFailureReported = true
+        cancelAudioClockStallCheck()
+        cancelAudioUnderrunCheck()
+        surfaceFrameHealth.reset()
+        droppedFrameHealth.reset()
+        cancelTrackSupportCheck()
+        cancelNoFrameCheck()
+        handler.removeCallbacks(surfaceValidationDeadlineRunnable)
+        handler.removeCallbacks(videoProgressRunnable)
+        PlaybackLog.log(context, engineName, "no first frame with tunneling -> retry untunneled")
+        listener?.onTunnelingNoFrame()
     }
 
     private fun cancelNoFrameCheck() {
@@ -1530,6 +1562,10 @@ class ExoPlayerEngine(
     override fun playbackPositionMs(): Long = player?.let {
         exoPlaybackClockPositionMs(it, playbackClockWindow)
     } ?: -1L
+
+    // Progressive TS has no sliding window, so the raw buffered position is a
+    // monotonic fill marker for the starvation check (main thread, like above).
+    override fun bufferFillMarker(): Long = player?.bufferedPosition ?: -1L
 
     override fun hasRecentOutputProgress(): Boolean {
         val exo = player ?: return false
