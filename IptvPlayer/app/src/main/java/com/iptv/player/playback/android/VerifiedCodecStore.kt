@@ -1,9 +1,12 @@
 package com.iptv.player.playback.android
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.os.Build
 import android.os.Process
+import androidx.annotation.OptIn
 import androidx.media3.common.MediaLibraryInfo
+import androidx.media3.common.util.UnstableApi
 import com.iptv.player.playback.core.CodecEvidence
 import com.iptv.player.playback.core.CodecQueueMode
 import com.iptv.player.playback.core.VerifiedCodecPolicy
@@ -12,12 +15,13 @@ import java.security.MessageDigest
 import java.util.concurrent.Executors
 
 /** Device-local observations. Keys contain hashes, never account/content identifiers. */
+@OptIn(markerClass = [UnstableApi::class])
 internal object VerifiedCodecStore {
     private val entries = LinkedHashMap<String, CodecEvidence>()
     private val worker = Executors.newSingleThreadExecutor { task -> Thread(task, "verified-codecs").apply { isDaemon = true } }
     @Volatile private var ready = false
     @Volatile private var loading = false
-    private var app: Context? = null
+    @Volatile private var preferences: SharedPreferences? = null
     val deviceScope: String by lazy {
         hash("queue-v1|${MediaLibraryInfo.VERSION}|${Build.FINGERPRINT}|${Build.VERSION.SDK_INT}|${Build.SUPPORTED_ABIS.orEmpty().joinToString()}|" +
             if (Build.VERSION.SDK_INT >= 23) Process.is64Bit() else false)
@@ -26,10 +30,11 @@ internal object VerifiedCodecStore {
     @Synchronized fun init(context: Context) {
         if (loading) return
         loading = true
-        app = context.applicationContext
+        val app = context.applicationContext
         worker.execute {
             val loaded = runCatching {
-                val prefs = app!!.getSharedPreferences("verified_codec_queue_v1", Context.MODE_PRIVATE)
+                val prefs = app.getSharedPreferences("verified_codec_queue_v1", Context.MODE_PRIVATE)
+                preferences = prefs
                 if (prefs.getString("device", null) != deviceScope) emptyMap() else {
                     val root = JSONObject(prefs.getString("evidence", "{}") ?: "{}")
                     val now = System.currentTimeMillis()
@@ -66,14 +71,14 @@ internal object VerifiedCodecStore {
         entries[key] = evidence
         while (entries.size > 128) entries.remove(entries.minBy { it.value.updatedAtMs }.key)
         val snapshot = entries.toMap()
-        val context = app ?: return
+        val prefs = preferences ?: return
         worker.execute {
             runCatching {
                 val root = JSONObject()
                 snapshot.forEach { (k, e) -> root.put(k, JSONObject().put("bad", e.baselineBadWindows)
                     .put("rate", e.baselineDropPermille).put("good", e.asyncGoodSessions)
                     .put("blocked", e.blockedUntilMs).put("at", e.updatedAtMs)) }
-                context.getSharedPreferences("verified_codec_queue_v1", Context.MODE_PRIVATE).edit()
+                prefs.edit()
                     .putString("device", deviceScope).putString("evidence", root.toString()).apply()
             }
         }
