@@ -180,6 +180,9 @@ interface PlayerListener {
      * backend exposes it so auth/not-found responses never trigger TS/HLS probing.
      */
     fun onSourceFailure(message: String?, httpStatus: Int? = null) {}
+    fun onSourceFailure(failure: com.iptv.player.playback.core.PlaybackFailure) {
+        onSourceFailure(null, failure.httpStatus)
+    }
 
 
     /**

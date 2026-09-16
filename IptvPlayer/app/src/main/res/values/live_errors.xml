@@ -1,0 +1,11 @@
+<resources>
+    <string name="live_error_access">The server denied access to this stream. Check your account or contact support.</string>
+    <string name="live_error_missing">This stream is currently unavailable on the server.</string>
+    <string name="live_error_busy">The server is limiting requests. Please wait before trying again.</string>
+    <string name="live_error_server">The server reported an error. Please try again shortly.</string>
+    <string name="live_error_secure_connection">A secure connection could not be established. Check the device date and connection.</string>
+    <string name="live_error_format">The received stream format could not be played.</string>
+    <string name="live_error_player">Playback encountered an audio or video processing error.</string>
+    <string name="live_error_timeout">Playback did not respond in time. Please try again.</string>
+    <string name="live_retry_hint">Press OK to retry.</string>
+</resources>

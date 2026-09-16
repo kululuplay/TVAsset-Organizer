@@ -149,6 +149,8 @@ class HomeActivity : BaseActivity() {
     private var debugBinder: DebugOverlayBinder? = null
     private lateinit var playbackSession: TvPlaybackSession
     private var localPreviewPlaybackRequested = false
+    private var playbackConnectivity: com.iptv.player.util.ConnectivityWatcher? = null
+    private var playbackNetworkOnline: Boolean? = null
     private var previewStreamSubmitted = false
     private var castOwnsPreviewPlayback = false
     private var providerDrainPending = false
@@ -1984,6 +1986,7 @@ class HomeActivity : BaseActivity() {
             ),
         )
         previewStreamSubmitted = true
+        playbackNetworkOnline?.let { previewController?.onNetworkChanged(it) }
     }
 
     private fun markPreviewReady() {
@@ -2006,7 +2009,9 @@ class HomeActivity : BaseActivity() {
             previewLoadingPolicy.onBuffering()
             previewState = LivePreviewPressPolicy.Phase.STARTING
             binding.previewLoading.visibility = View.VISIBLE
-            binding.previewStatus.setText(R.string.buffering)
+            binding.previewStatus.text = previewController?.lastFailure?.let {
+                com.iptv.player.player.LivePlaybackMessages.message(this@HomeActivity, it)
+            } ?: getString(R.string.buffering)
             binding.previewStatus.visibility = View.VISIBLE
             PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, true)
             if (!castOwnsPreviewPlayback && localPreviewPlaybackRequested) {
@@ -2047,7 +2052,9 @@ class HomeActivity : BaseActivity() {
             binding.previewPlaybackCover.visibility = View.VISIBLE
             if (!radioMode) showPreviewIdentityPlaceholder()
             binding.previewLoading.visibility = View.VISIBLE
-            binding.previewStatus.setText(R.string.buffering)
+            binding.previewStatus.text = previewController?.lastFailure?.let {
+                com.iptv.player.player.LivePlaybackMessages.message(this@HomeActivity, it)
+            } ?: getString(R.string.buffering)
             binding.previewStatus.visibility = View.VISIBLE
             PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, true)
         }
@@ -2100,7 +2107,8 @@ class HomeActivity : BaseActivity() {
             previewState = LivePreviewPressPolicy.Phase.FAILED
             pendingFullscreenChannelId = null
             binding.previewLoading.visibility = View.GONE
-            binding.previewStatus.setText(R.string.preview_playback_failed)
+            binding.previewStatus.text = com.iptv.player.player.LivePlaybackMessages.message(this@HomeActivity, previewController?.lastFailure) +
+                "\n" + getString(R.string.live_retry_hint)
             binding.previewStatus.visibility = View.VISIBLE
             PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, false)
             playbackSession.setPlaying(false)
@@ -2113,7 +2121,8 @@ class HomeActivity : BaseActivity() {
             binding.previewPlaybackCover.visibility = View.VISIBLE
             if (!radioMode) showPreviewIdentityPlaceholder()
             binding.previewLoading.visibility = View.VISIBLE
-            binding.previewStatus.text = getString(R.string.reconnecting, attempt)
+            binding.previewStatus.text = com.iptv.player.player.LivePlaybackMessages.message(this@HomeActivity, previewController?.lastFailure) +
+                "\n" + getString(R.string.reconnecting, attempt)
             binding.previewStatus.visibility = View.VISIBLE
             PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, true)
         }
@@ -3149,6 +3158,16 @@ class HomeActivity : BaseActivity() {
 
     override fun onStart() {
         super.onStart()
+        playbackConnectivity = com.iptv.player.util.ConnectivityWatcher(this) { online ->
+            playbackNetworkOnline = online
+            if (!castOwnsPreviewPlayback && !castLoadPending &&
+                previewController?.onNetworkChanged(online) == true && localPreviewPlaybackRequested &&
+                previewJob?.isActive != true &&
+                preparePreviewPlaybackRequest() == ProviderStartGatePolicy.Decision.READY) {
+                beginPreviewQoe()
+                previewController?.retry()
+            }
+        }.also { it.start() }
         playbackSession.setActive(true)
         externalNavigationInFlight = false
         // Coming back from Settings/Catch-up: restore the channel row after the
@@ -3157,6 +3176,8 @@ class HomeActivity : BaseActivity() {
     }
 
     override fun onStop() {
+        playbackConnectivity?.stop()
+        playbackConnectivity = null
         playbackSession.setActive(false)
         super.onStop()
         // External navigation really leaves Home, so restore its browse layout for

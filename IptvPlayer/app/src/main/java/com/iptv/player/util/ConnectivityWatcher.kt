@@ -35,6 +35,7 @@ class ConnectivityWatcher(
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 main.post {
+                    if (callback !== this) return@post
                     val wasEmpty = networks.isEmpty()
                     networks.add(network)
                     if (wasEmpty) onChange(true)
@@ -43,6 +44,7 @@ class ConnectivityWatcher(
 
             override fun onLost(network: Network) {
                 main.post {
+                    if (callback !== this) return@post
                     networks.remove(network)
                     if (networks.isEmpty()) onChange(false)
                 }
@@ -52,7 +54,22 @@ class ConnectivityWatcher(
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
         runCatching { cm.registerNetworkCallback(request, cb) }
-            .onSuccess { callback = cb }
+            .onSuccess {
+                callback = cb
+                // A registration made while already offline produces no onLost.
+                // Seed that state so the later onAvailable is a real return edge.
+                main.post {
+                    if (callback !== cb) return@post
+                    val current = runCatching {
+                        cm.allNetworks.filter { network ->
+                            cm.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+                        }
+                    }.getOrNull() ?: return@post
+                    networks.clear()
+                    networks.addAll(current)
+                    onChange(networks.isNotEmpty())
+                }
+            }
             .onFailure { Logger.w("Connectivity", "registerNetworkCallback failed: ${it.message}") }
     }
 

@@ -1,0 +1,11 @@
+<resources>
+    <string name="live_error_access">Le serveur a refusé l’accès à ce flux. Vérifiez votre compte ou contactez le support.</string>
+    <string name="live_error_missing">Ce flux est actuellement indisponible sur le serveur.</string>
+    <string name="live_error_busy">Le serveur limite les requêtes. Veuillez patienter avant de réessayer.</string>
+    <string name="live_error_server">Le serveur a signalé une erreur. Veuillez réessayer dans un instant.</string>
+    <string name="live_error_secure_connection">Impossible d’établir une connexion sécurisée. Vérifiez la date de l’appareil et la connexion.</string>
+    <string name="live_error_format">Le format du flux reçu ne peut pas être lu.</string>
+    <string name="live_error_player">Une erreur de traitement audio ou vidéo est survenue pendant la lecture.</string>
+    <string name="live_error_timeout">La lecture n’a pas répondu à temps. Veuillez réessayer.</string>
+    <string name="live_retry_hint">Appuyez sur OK pour réessayer.</string>
+</resources>

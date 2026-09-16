@@ -7,6 +7,7 @@ import java.util.Locale
 
 /** Playback policy shared by live, VOD and Cast; playlist imports are separate. */
 object MediaTransportPolicy {
+    class UnsupportedTransportException : IOException("HLS playback is disabled")
     fun isHlsUrl(url: String): Boolean {
         val uri = runCatching { URI(url) }.getOrNull()
         val path = (uri?.path ?: url.substringBefore('?').substringBefore('#')).lowercase(Locale.US)
@@ -29,7 +30,7 @@ object MediaTransportPolicy {
             .startsWith("#EXTM3U")
 
     fun requireDirectMedia(url: String) {
-        if (isHlsUrl(url)) throw IOException("HLS playback is disabled")
+        if (isHlsUrl(url)) throw UnsupportedTransportException()
     }
 
     // VLC's final 'none' stops module selection. Never let adaptive or playlist
