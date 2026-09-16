@@ -102,6 +102,7 @@ class VodViewModel(
     private var selectionLoadJob: Job? = null
     private var catalogLoadJob: Job? = null
     private var sortRestoreJob: Job? = null
+    private var explicitRefreshRunning = false
 
     init {
         // Restore the user's last-used sort so it survives process death.
@@ -163,10 +164,11 @@ class VodViewModel(
     /** Retries whichever single-category or whole-catalog request is visible. */
     fun retryLoad() {
         val categoryId = selectedCategory.value
-        if (query.value.isNotEmpty() || categoryId == null ||
+        if (_loadState.value.movieRefreshReport?.successful == false ||
+            query.value.isNotEmpty() || categoryId == null ||
             categoryId == CAT_ALL || categoryId == CAT_POPULAR
         ) {
-            ensureFullCatalog()
+            refreshCatalog()
             return
         }
         selectionLoadJob?.cancel()
@@ -178,14 +180,23 @@ class VodViewModel(
 
     /** Explicit user refresh: re-sync category membership and every visible row. */
     fun refreshCatalog() {
-        selectionLoadJob?.cancel()
-        catalogLoadJob?.cancel()
+        if (explicitRefreshRunning) return
+        explicitRefreshRunning = true
+        val previousSelection = selectionLoadJob
+        val previousCatalog = catalogLoadJob
         catalogLoadJob = viewModelScope.launch {
-            loadFullCatalog(forceAll = true)
+            try {
+                previousSelection?.cancelAndJoin()
+                previousCatalog?.cancelAndJoin()
+                loadFullCatalog(forceAll = true)
+            } finally {
+                explicitRefreshRunning = false
+            }
         }
     }
 
     private fun scheduleSelectedCategoryLoad() {
+        if (explicitRefreshRunning) return
         val categoryId = selectedCategory.value ?: return
         selectionLoadJob?.cancel()
         selectionLoadJob = viewModelScope.launch {
@@ -233,71 +244,21 @@ class VodViewModel(
      * overwhelming small providers and low-memory TV devices.
      */
     private suspend fun loadFullCatalog(forceAll: Boolean) {
-        // Full/search hydration may need to fetch the category index before the
-        // per-category total is known. Surface activity immediately instead of
-        // leaving a cold screen apparently frozen during that network call.
         _loadState.value = CatalogLoadState(loading = true)
         val config = settings.getSourceConfig()
         if (config == null) {
             _loadState.value = CatalogLoadState(errorRes = R.string.error_unknown)
             return
         }
-        if (forceAll) {
-            when (val categories = repo.refreshVodCategories(config)) {
-                is Outcome.Success -> Unit
-                is Outcome.Failure -> {
-                    _loadState.value =
-                        CatalogLoadState(errorRes = categories.error.messageRes)
-                    return
-                }
-            }
+        val report = repo.refreshMovieCatalog(config, forceAll) { completed, total ->
+            _loadState.value = CatalogLoadState(loading = true, completed = completed, total = total)
         }
-        val hidden = settings.hiddenCategories(ContentType.VOD).first()
-        var categoryIds = if (forceAll) {
-            repo.vodCategoryIds(hidden)
-        } else {
-            repo.unloadedVodCategoryIds(hidden)
-        }
-        // A cold cache can reach this screen before splash completes. Fetch the
-        // lightweight category list once, then continue catalog hydration.
-        if (categoryIds.isEmpty() && categories.value.size <= 2) {
-            when (val categoriesResult = repo.refreshVodCategories(config)) {
-                is Outcome.Success -> {
-                    categoryIds = if (forceAll) repo.vodCategoryIds(hidden)
-                    else repo.unloadedVodCategoryIds(hidden)
-                }
-                is Outcome.Failure -> {
-                    _loadState.value =
-                        CatalogLoadState(errorRes = categoriesResult.error.messageRes)
-                    return
-                }
-            }
-        }
-        if (categoryIds.isEmpty()) {
-            _loadState.value = CatalogLoadState()
-            return
-        }
-        _loadState.value = CatalogLoadState(loading = true, total = categoryIds.size)
-        categoryIds.forEachIndexed { index, categoryId ->
-            when (val result = repo.refreshVodCategory(config, categoryId, force = forceAll)) {
-                is Outcome.Success -> {
-                    _loadState.value = CatalogLoadState(
-                        loading = true,
-                        completed = index + 1,
-                        total = categoryIds.size,
-                    )
-                }
-                is Outcome.Failure -> {
-                    _loadState.value = CatalogLoadState(
-                        completed = index,
-                        total = categoryIds.size,
-                        errorRes = result.error.messageRes,
-                    )
-                    return
-                }
-            }
-        }
-        _loadState.value = CatalogLoadState()
+        _loadState.value = CatalogLoadState(
+            completed = report.completed,
+            total = report.total,
+            errorRes = if (report.successful) null else R.string.catalog_refresh_incomplete,
+            movieRefreshReport = report,
+        )
     }
 
     /**

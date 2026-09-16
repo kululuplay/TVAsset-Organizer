@@ -240,6 +240,11 @@ class VodActivity : BaseActivity() {
             adapterRefreshSettled = false
             viewModel.setSort(next)
         }
+        binding.refreshDetailsButton.setOnClickListener {
+            viewModel.loadState.value.movieRefreshReport?.let {
+                com.iptv.player.ui.common.MovieRefreshFeedback.show(this, it)
+            }
+        }
         binding.refreshButton.setOnClickListener {
             if (!viewModel.loadState.value.loading) {
                 resetPosterAnchor()
@@ -444,7 +449,13 @@ class VodActivity : BaseActivity() {
             )
         } else getString(R.string.loading)
         binding.loadErrorContainer.visibility = if (failed) View.VISIBLE else View.GONE
-        errorRes?.let { binding.loadErrorText.setText(it) }
+        val report = state.movieRefreshReport?.takeIf { !it.successful }
+        binding.refreshDetailsButton.visibility = if (report != null) View.VISIBLE else View.GONE
+        if (report != null) {
+            val names = report.failures.take(2).joinToString("\n") { it.category.name }
+            binding.loadErrorText.text = getString(R.string.catalog_refresh_incomplete) +
+                (if (names.isEmpty()) "" else "\n$names")
+        } else errorRes?.let { binding.loadErrorText.setText(it) }
         // Keep an already-focused refresh control in the D-pad graph while the
         // request runs; clickability still prevents duplicate refreshes.
         binding.refreshButton.isClickable = !state.loading

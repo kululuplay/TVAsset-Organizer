@@ -151,9 +151,16 @@ data class DatasetSyncResult(
 }
 
 /** Detailed replacement for the legacy one-bit background-sync result. */
-data class SyncReport(val datasets: List<DatasetSyncResult>) {
+data class SyncReport(
+    val datasets: List<DatasetSyncResult>,
+    val movieContents: MovieCatalogRefreshReport? = null,
+) {
     val live: DatasetSyncResult? get() = datasets.firstOrNull { it.dataset == "live" }
     val liveRefreshSucceeded: Boolean get() = live?.refreshed == true
     val allRefreshSucceeded: Boolean
-        get() = datasets.isNotEmpty() && datasets.all { it.refreshed }
+        get() = datasets.isNotEmpty() && datasets.all { it.refreshed } && movieContents?.successful != false
+
+    /** A category-index-only sync must never claim that movie contents refreshed. */
+    val manualRefreshSucceeded: Boolean
+        get() = allRefreshSucceeded && movieContents?.let { it.successful && it.total > 0 } == true
 }
