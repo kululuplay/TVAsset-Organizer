@@ -17,6 +17,7 @@ import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.Program
 import com.iptv.player.util.Outcome
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -77,15 +78,20 @@ class GuideViewModel : ViewModel() {
     private val _refresh = MutableStateFlow<RefreshState>(RefreshState.Idle)
     val refresh: StateFlow<RefreshState> = _refresh
 
+    private var refreshJob: Job? = null
+
     fun refreshGuide() {
-        if (_refresh.value is RefreshState.Loading) return
-        viewModelScope.launch {
+        // Flip to Loading synchronously: the button is only disabled once the
+        // Activity observes Loading, so a second click arriving before the
+        // first suspend returned used to start a second download.
+        if (refreshJob?.isActive == true || _refresh.value is RefreshState.Loading) return
+        _refresh.value = RefreshState.Loading
+        refreshJob = viewModelScope.launch {
             val config = settings.getSourceConfig()
             if (config == null) {
                 _refresh.value = RefreshState.Failed(R.string.guide_no_source)
                 return@launch
             }
-            _refresh.value = RefreshState.Loading
             _refresh.value = when (val r = repo.refreshEpg(config)) {
                 is Outcome.Success -> RefreshState.Done(r.data)
                 is Outcome.Failure -> RefreshState.Failed(r.error.messageRes)

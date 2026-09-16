@@ -12,12 +12,17 @@ import com.iptv.player.playback.core.DevicePlaybackProfile
 import com.iptv.player.playback.core.DevicePlaybackProfileResolver
 import com.iptv.player.playback.core.DevicePlaybackSignals
 import com.iptv.player.playback.core.PlaybackProfilePreference
+import com.iptv.player.util.PlaybackRemotePolicy
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
 internal data class AndroidDevicePlaybackSnapshot(
     val profile: DevicePlaybackProfile,
     val capabilityFingerprint: CapabilityFingerprint?,
+    // Retained so a remote compatibility verdict that lands after the scan (the
+    // heartbeat response) can be re-applied without another MediaCodec pass.
+    val signals: DevicePlaybackSignals? = null,
+    val userPreference: PlaybackProfilePreference = PlaybackProfilePreference.AUTO,
 )
 
 /**
@@ -28,12 +33,43 @@ internal data class AndroidDevicePlaybackSnapshot(
 internal object AndroidDevicePlaybackProfileCache {
 
     @Volatile
-    private var current: AndroidDevicePlaybackSnapshot = AndroidDevicePlaybackSnapshot(
-        profile = DevicePlaybackProfileResolver.resolve(fallbackSignals()),
-        capabilityFingerprint = null,
-    )
+    private var current: AndroidDevicePlaybackSnapshot = fallbackSignals().let { signals ->
+        AndroidDevicePlaybackSnapshot(
+            profile = DevicePlaybackProfileResolver.resolve(signals),
+            capabilityFingerprint = null,
+            signals = signals,
+        )
+    }
 
-    fun currentProfile(): DevicePlaybackProfile = current.profile
+    /**
+     * The cached profile with the current remote compatibility verdict applied.
+     * Re-resolved only when that verdict changes; resolve() is a handful of
+     * comparisons, but this getter sits on hot controller/engine paths.
+     */
+    fun currentProfile(): DevicePlaybackProfile {
+        val snapshot = current
+        val override = runCatching { PlaybackRemotePolicy.deviceOverrides().compatibilityProfile }
+            .getOrNull()
+        val signals = snapshot.signals ?: return snapshot.profile
+        val effective = DevicePlaybackProfileResolver.preferenceWithOverride(
+            snapshot.userPreference,
+            override,
+        )
+        if (effective == snapshot.profile.preference) return snapshot.profile
+        val resolved = DevicePlaybackProfileResolver.resolve(signals, effective)
+        // Never let a re-resolve of the startup fallback snapshot overwrite a
+        // scan result that loadOrCollect published concurrently: only replace
+        // the snapshot this call actually derived from.
+        synchronized(this) {
+            if (current === snapshot) current = snapshot.copy(profile = resolved)
+        }
+        return resolved
+    }
+
+    /** loadOrCollect results are authoritative; publish them under the same lock. */
+    private fun publish(snapshot: AndroidDevicePlaybackSnapshot) {
+        synchronized(this) { current = snapshot }
+    }
 
     fun loadOrCollect(
         context: Context,
@@ -51,7 +87,7 @@ internal object AndroidDevicePlaybackProfileCache {
             null
         }
         if (cached != null) {
-            current = cached
+            publish(cached)
             return cached
         }
 
@@ -62,11 +98,13 @@ internal object AndroidDevicePlaybackProfileCache {
             abis = abis,
         )
         val collected = AndroidDevicePlaybackSnapshot(
-            profile = DevicePlaybackProfileResolver.resolve(signals, preference),
+            profile = DevicePlaybackProfileResolver.resolve(signals, effectivePreference(preference)),
             capabilityFingerprint = runCatching { capabilityProfile.fingerprint() }.getOrNull(),
+            signals = signals,
+            userPreference = preference,
         )
         persist(prefs, cacheKey, signals, collected.capabilityFingerprint)
-        current = collected
+        publish(collected)
         return collected
     }
 
@@ -92,10 +130,19 @@ internal object AndroidDevicePlaybackProfileCache {
         val fingerprint = prefs.getString(KEY_CAPABILITY_FINGERPRINT, null)
             ?.let { value -> runCatching { CapabilityFingerprint(value) }.getOrNull() }
         return AndroidDevicePlaybackSnapshot(
-            profile = DevicePlaybackProfileResolver.resolve(signals, preference),
+            profile = DevicePlaybackProfileResolver.resolve(signals, effectivePreference(preference)),
             capabilityFingerprint = fingerprint,
+            signals = signals,
+            userPreference = preference,
         )
     }
+
+    /** User choice first; a remote per-device verdict only decides AUTO. */
+    private fun effectivePreference(user: PlaybackProfilePreference): PlaybackProfilePreference =
+        DevicePlaybackProfileResolver.preferenceWithOverride(
+            user,
+            runCatching { PlaybackRemotePolicy.deviceOverrides().compatibilityProfile }.getOrNull(),
+        )
 
     private fun signalsFrom(
         capabilityProfile: DeviceCapabilityProfile,

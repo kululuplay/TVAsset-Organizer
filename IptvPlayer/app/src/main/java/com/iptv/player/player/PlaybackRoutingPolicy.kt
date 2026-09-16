@@ -34,7 +34,13 @@ internal object PlaybackRoutingPolicy {
      * the app's documented policy and the latest real-device result: Media3's
      * MediaCodec -> SurfaceView path is the most reliable Amlogic hardware route.
      */
-    fun initialStage(mode: PlayerMode, decoderMode: DecoderMode): Stage = when (mode) {
+    fun initialStage(
+        mode: PlayerMode,
+        decoderMode: DecoderMode,
+        // Remote per-device start engine; consulted only while the user left the
+        // engine on AUTO. It changes the first rung, never the AUTO ladder itself.
+        startEngineOverride: PlayerMode? = null,
+    ): Stage = when (if (mode == PlayerMode.AUTO) startEngineOverride ?: mode else mode) {
         PlayerMode.AUTO -> when (decoderMode) {
             DecoderMode.SOFTWARE -> Stage.VLC_SW
             DecoderMode.AUTO,

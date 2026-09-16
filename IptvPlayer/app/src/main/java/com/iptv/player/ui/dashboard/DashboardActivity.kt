@@ -34,6 +34,7 @@ import com.iptv.player.util.LaunchCrashGuard
 import com.iptv.player.util.Logger
 import com.iptv.player.util.NetworkSignal
 import com.iptv.player.util.WeatherProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -50,6 +51,7 @@ class DashboardActivity : BaseActivity() {
     private var connectivity: ConnectivityWatcher? = null
     private var autoResyncJob: Job? = null
     private var manualRefreshJob: Job? = null
+    private var weatherJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,6 +95,7 @@ class DashboardActivity : BaseActivity() {
             DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date())
         updateSignal()
         loadFooter()
+        loadWeather()
     }
 
     override fun onStart() {
@@ -374,9 +377,17 @@ class DashboardActivity : BaseActivity() {
         binding.signalIcon.setColorFilter(color)
     }
 
+    /**
+     * Keyless weather for the brand bar. WeatherProvider caches for 30 min and
+     * fetches on IO, so calling this from every onResume is cheap and never
+     * blocks the UI; a failed lookup just renders the "unavailable" state.
+     */
     private fun loadWeather() {
-        lifecycleScope.launch {
-            val weather = WeatherProvider.fetch()
+        if (weatherJob?.isActive == true) return
+        weatherJob = lifecycleScope.launch {
+            val weather = runCatching { WeatherProvider.fetch() }
+                .onFailure { if (it is CancellationException) throw it }
+                .getOrNull()
             if (weather == null) {
                 binding.weatherIcon.setImageResource(R.drawable.ic_weather_clouds)
                 binding.weatherIcon.setColorFilter(

@@ -9,6 +9,7 @@ import android.content.Context
 import com.iptv.player.data.local.AppDatabase
 import com.iptv.player.data.prefs.SettingsStore
 import com.iptv.player.data.repository.IptvRepository
+import com.iptv.player.data.repository.ShrinkGuardLedger
 import com.iptv.player.security.SecureValueCodec
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.Logger
@@ -114,6 +115,9 @@ object ServiceLocator {
                 retrofitBuilder,
                 settings,
                 secureValues,
+                // Shrink-guard memory must outlive the process or a stale
+                // snapshot could be pinned forever.
+                ShrinkGuardLedger(app.getSharedPreferences("catalog_refresh_guard", Context.MODE_PRIVATE)),
             )
             initialized = true
             appScope.launch {

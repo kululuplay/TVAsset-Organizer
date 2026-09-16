@@ -1,5 +1,6 @@
 package com.iptv.player.data.repository
 
+import android.content.SharedPreferences
 import com.iptv.player.data.model.SourceConfig
 import com.iptv.player.data.model.SourceType
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -31,6 +32,12 @@ internal sealed interface DatasetRefreshDecision {
     data class PreserveCache(val reason: String) : DatasetRefreshDecision
 }
 
+/** Consecutive shrink rejections recorded for one dataset key. */
+data class ShrinkRejection(
+    val count: Int,
+    val firstRejectedAt: Long,
+)
+
 /**
  * Rejects response shapes that commonly mean a truncated/error payload was
  * deserialized as a valid (but incomplete) Xtream snapshot.  Deleting stale rows
@@ -40,9 +47,22 @@ internal object DatasetRefreshPolicy {
     private const val MIN_VALID_PERCENT = 80
     private const val MAX_REMAINING_PERCENT = 25
 
+    const val REASON_SHRINK = "suspicious_snapshot_shrink"
+
+    /**
+     * A provider that genuinely dropped most of its catalog keeps answering with
+     * the same small snapshot. After this many consecutive rejections, or once
+     * the first rejection is a day old, the shrink is accepted as real.
+     */
+    const val SHRINK_OVERRIDE_AFTER_REJECTIONS = 3
+    const val SHRINK_OVERRIDE_AFTER_MS = 24L * 60L * 60L * 1000L
+
     fun evaluate(
         dataset: CatalogDataset,
         snapshot: DatasetSnapshot,
+        priorRejections: ShrinkRejection? = null,
+        nowMs: Long = 0L,
+        force: Boolean = false,
     ): DatasetRefreshDecision {
         val existing = snapshot.existingCount.coerceAtLeast(0)
         val received = snapshot.receivedCount.coerceAtLeast(0)
@@ -69,10 +89,58 @@ internal object DatasetRefreshPolicy {
             existing >= shrinkGuardAt &&
             accepted * 100 < existing * MAX_REMAINING_PERCENT
         ) {
-            return DatasetRefreshDecision.PreserveCache("suspicious_snapshot_shrink")
+            // A manual refresh is the user saying "trust the server"; a repeated
+            // or day-old rejection means the shrink is the new truth.
+            if (force) return DatasetRefreshDecision.Apply
+            if (priorRejections != null && (
+                    priorRejections.count >= SHRINK_OVERRIDE_AFTER_REJECTIONS ||
+                        nowMs - priorRejections.firstRejectedAt >= SHRINK_OVERRIDE_AFTER_MS
+                    )
+            ) {
+                return DatasetRefreshDecision.Apply
+            }
+            return DatasetRefreshDecision.PreserveCache(REASON_SHRINK)
         }
         return DatasetRefreshDecision.Apply
     }
+}
+
+/**
+ * Remembers shrink rejections per dataset key across process restarts (when
+ * backed by [SharedPreferences]) so the guard cannot pin a source to a stale
+ * snapshot forever. Without preferences it degrades to process memory.
+ */
+class ShrinkGuardLedger(private val prefs: SharedPreferences? = null) {
+    private val memory = HashMap<String, ShrinkRejection>()
+
+    @Synchronized
+    fun get(key: String): ShrinkRejection? {
+        memory[key]?.let { return it }
+        val count = prefs?.getInt(countKey(key), 0) ?: 0
+        if (count <= 0) return null
+        return ShrinkRejection(count, prefs?.getLong(sinceKey(key), 0L) ?: 0L).also { memory[key] = it }
+    }
+
+    @Synchronized
+    fun recordRejection(key: String, nowMs: Long): ShrinkRejection {
+        val previous = get(key)
+        val next = ShrinkRejection(
+            count = (previous?.count ?: 0) + 1,
+            firstRejectedAt = previous?.firstRejectedAt?.takeIf { it > 0L } ?: nowMs,
+        )
+        memory[key] = next
+        prefs?.edit()?.putInt(countKey(key), next.count)?.putLong(sinceKey(key), next.firstRejectedAt)?.apply()
+        return next
+    }
+
+    @Synchronized
+    fun clear(key: String) {
+        if (memory.remove(key) == null && prefs?.contains(countKey(key)) != true) return
+        prefs?.edit()?.remove(countKey(key))?.remove(sinceKey(key))?.apply()
+    }
+
+    private fun countKey(key: String) = "shrink_count:$key"
+    private fun sinceKey(key: String) = "shrink_since:$key"
 }
 
 /**

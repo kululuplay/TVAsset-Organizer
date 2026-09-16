@@ -50,4 +50,28 @@
     <string name="dash_offline_banner">لا يوجد اتصال بالإنترنت — يتم عرض المحتوى المحفوظ</string>
     <string name="dash_portal_unreachable">يتعذر الوصول إلى الخادم — تتم إعادة المحاولة تلقائيًا…</string>
     <string name="dash_reconnected_refreshing">عاد الاتصال — يتم تحديث المحتوى…</string>
+    <!-- Added by the 2026-09 translation audit -->
+    <string name="dash_prompt_title">ماذا تريد أن تشاهد؟</string>
+    <string name="dash_prompt_subtitle">استخدم مفاتيح الأسهم للتصفح واضغط OK للفتح.</string>
+    <string name="dash_select_hint">اختيار · OK</string>
+    <string name="dash_sub_live">القنوات والرياضة</string>
+    <string name="dash_sub_movies">أفلام عند الطلب</string>
+    <string name="dash_sub_series">المسلسلات والحلقات</string>
+    <string name="dash_sub_settings">التفضيلات</string>
+    <string name="dash_sub_favorites">اختياراتك المحفوظة</string>
+    <string name="dash_sub_continue">متابعة المشاهدة</string>
+    <string name="dash_sub_search">ابحث عن أي شيء</string>
+    <string name="dash_sub_radio">محطات الراديو</string>
+    <string name="weather_unavailable">الطقس غير متاح</string>
+    <string name="weather_temp_format">%1$d°</string>
+    <string name="weather_clear">صافٍ</string>
+    <string name="weather_partly">غائم جزئيًا</string>
+    <string name="weather_cloudy">غائم</string>
+    <string name="weather_fog">ضباب</string>
+    <string name="weather_rain">مطر</string>
+    <string name="weather_snow">ثلج</string>
+    <string name="weather_storm">عاصفة</string>
+    <string name="signal_good">جيدة</string>
+    <string name="signal_weak">ضعيفة</string>
+    <string name="signal_offline">غير متصل</string>
 </resources>

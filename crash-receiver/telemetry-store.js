@@ -163,7 +163,137 @@ function parsePlaybackPolicy(raw) {
     "vodReadTimeoutMs",
     integer(source.vodReadTimeoutMs, 5_000, 60_000),
   );
+  const overrides = sanitizeDeviceOverrides(source.deviceOverrides);
+  if (overrides.length) policy.deviceOverrides = overrides;
   return Object.keys(policy).length > 2 ? Object.freeze(policy) : null;
+}
+
+// ---- Device-class overrides (playbackPolicy.deviceOverrides) ----
+// Mirrors the client's DeviceOverrideMatcher limits so a rule the panel accepts
+// is exactly what the app honours: at most 32 rules, regexes <= 128 chars that
+// compile, closed sets of match keys and set values. Anything else is dropped
+// per rule (never fails the whole policy) — the app applies the same tolerance.
+const POLICY_MAX_CHARS = 32 * 1024;
+const OVERRIDE_MAX_RULES = 32;
+const OVERRIDE_MAX_REGEX_CHARS = 128;
+const OVERRIDE_REGEX_KEYS = ["manufacturer", "model", "hardware", "board", "socModel"];
+const BUFFER_MODES = new Set(["ADAPTIVE", "LOW", "NORMAL", "HIGH"]);
+const PLAYER_MODES = new Set(["AUTO", "EXOPLAYER", "VLC"]);
+const OVERRIDE_BOOL_SETS = [
+  "tunneling",
+  "livePreview",
+  "allowSoftwareHdFallback",
+  "compatibilityProfile",
+];
+
+function sanitizeOverrideRule(rule) {
+  if (!rule || typeof rule !== "object" || Array.isArray(rule)) return null;
+  const matchSrc = rule.match && typeof rule.match === "object" ? rule.match : {};
+  const setSrc = rule.set && typeof rule.set === "object" ? rule.set : {};
+  const match = {};
+  for (const key of OVERRIDE_REGEX_KEYS) {
+    if (matchSrc[key] === undefined) continue;
+    const pattern = matchSrc[key];
+    if (typeof pattern !== "string" || !pattern || pattern.length > OVERRIDE_MAX_REGEX_CHARS) {
+      return null;
+    }
+    try {
+      new RegExp(pattern, "i");
+    } catch (_) {
+      return null;
+    }
+    match[key] = pattern;
+  }
+  putIf(match, "sdkMin", integer(matchSrc.sdkMin, 1, 99));
+  putIf(match, "sdkMax", integer(matchSrc.sdkMax, 1, 99));
+  if (typeof matchSrc.lowRam === "boolean") match.lowRam = matchSrc.lowRam;
+  putIf(match, "totalRamMaxMb", integer(matchSrc.totalRamMaxMb, 1, 1_000_000));
+  const set = {};
+  const bufferMode = typeof setSrc.bufferMode === "string" ? setSrc.bufferMode.toUpperCase() : null;
+  if (bufferMode && BUFFER_MODES.has(bufferMode)) set.bufferMode = bufferMode;
+  const startEngine = typeof setSrc.startEngine === "string" ? setSrc.startEngine.toUpperCase() : null;
+  if (startEngine && PLAYER_MODES.has(startEngine)) set.startEngine = startEngine;
+  for (const key of OVERRIDE_BOOL_SETS) {
+    if (typeof setSrc[key] === "boolean") set[key] = setSrc[key];
+  }
+  if (!Object.keys(set).length) return null;
+  return { match, set };
+}
+
+/** Closed-schema list of device override rules; invalid rules are dropped. */
+function sanitizeDeviceOverrides(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, OVERRIDE_MAX_RULES).map(sanitizeOverrideRule).filter(Boolean);
+}
+
+/**
+ * Validate operator-entered policy text for the panel form. Unlike the lenient
+ * env parser this explains WHY input is rejected, so a typo cannot be saved as
+ * an (accidentally empty) policy. Returns { ok, policy, error, dropped }.
+ */
+function validatePlaybackPolicyText(raw) {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (!text) return { ok: false, error: "empty" };
+  if (text.length > POLICY_MAX_CHARS) {
+    return { ok: false, error: `too large (${text.length} > ${POLICY_MAX_CHARS} chars)` };
+  }
+  let source;
+  try {
+    source = JSON.parse(text);
+  } catch (e) {
+    return { ok: false, error: `invalid JSON: ${e.message}` };
+  }
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    return { ok: false, error: "top level must be a JSON object" };
+  }
+  if (source.deviceOverrides !== undefined) {
+    if (!Array.isArray(source.deviceOverrides)) {
+      return { ok: false, error: "deviceOverrides must be an array" };
+    }
+    if (source.deviceOverrides.length > OVERRIDE_MAX_RULES) {
+      return {
+        ok: false,
+        error: `too many deviceOverrides rules (${source.deviceOverrides.length} > ${OVERRIDE_MAX_RULES})`,
+      };
+    }
+  }
+  const policy = parsePlaybackPolicy(text);
+  if (!policy) {
+    return { ok: false, error: "no valid policy fields (check key names, ranges and rules)" };
+  }
+  const wanted = Array.isArray(source.deviceOverrides) ? source.deviceOverrides.length : 0;
+  const kept = policy.deviceOverrides ? policy.deviceOverrides.length : 0;
+  return { ok: true, policy, dropped: wanted - kept };
+}
+
+/**
+ * Same predicate the app's DeviceOverrideMatcher applies, over a devices row as
+ * the heartbeat stored it. Used only for the panel's "N devices match" preview.
+ */
+function deviceMatchesRule(rule, d) {
+  const m = rule.match || {};
+  const facts = {
+    manufacturer: d.manufacturer,
+    model: d.model,
+    hardware: d.hardware,
+    board: d.board,
+    socModel: d.soc_model,
+  };
+  for (const key of OVERRIDE_REGEX_KEYS) {
+    if (m[key] === undefined) continue;
+    const value = facts[key];
+    if (value == null) return false;
+    if (!new RegExp(m[key], "i").test(String(value))) return false;
+  }
+  const sdk = Number(d.api_level);
+  if (m.sdkMin !== undefined && !(sdk >= m.sdkMin)) return false;
+  if (m.sdkMax !== undefined && !(sdk <= m.sdkMax)) return false;
+  if (m.lowRam !== undefined && d.low_ram !== m.lowRam) return false;
+  if (m.totalRamMaxMb !== undefined) {
+    const ram = Number(d.total_ram_mb);
+    if (!(ram > 0) || ram > m.totalRamMaxMb) return false;
+  }
+  return true;
 }
 
 /** Closed-schema staged update configuration supplied through deployment env. */
@@ -455,6 +585,9 @@ async function persistTelemetryEvents(db, events, context) {
 module.exports = {
   eventId,
   parsePlaybackPolicy,
+  sanitizeDeviceOverrides,
+  validatePlaybackPolicyText,
+  deviceMatchesRule,
   parseUpdateRolloutPolicy,
   decideUpdateRollout,
   sanitizeSupportChecks,

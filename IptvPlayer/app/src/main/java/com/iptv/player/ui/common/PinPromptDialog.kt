@@ -9,10 +9,15 @@
  * that PIN works. (The built-in "0000" only unlocks while no custom PIN has
  * been set, because callers pass it as [expectedPin] in that unset state.)
  * A wrong code shows an inline "incorrect" hint and clears the boxes to retry.
+ * Verification prompts are throttled through PinAttemptGuard: after five wrong
+ * codes the keypad is locked for 30 s (doubling up to 5 min), and the lockout
+ * deadline is persisted so closing and re-opening the dialog does not reset it.
  */
 package com.iptv.player.ui.common
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.view.LayoutInflater
 import android.view.KeyEvent
 import android.view.View
@@ -37,11 +42,14 @@ object PinPromptDialog {
         isValid = { entered -> expectedPin != null && entered == expectedPin },
         invalidMessageRes = R.string.pin_wrong,
         onCancel = onCancel,
+        throttle = true,
     )
 
     /**
      * Reusable TV-first 4-digit entry surface. [isValid] keeps the dialog open and
      * renders [invalidMessageRes] inline when confirmation/validation fails.
+     * [throttle] enables the persisted wrong-attempt lockout (verification only;
+     * "set a new PIN" flows must never lock the user out of their own choice).
      */
     fun showEntry(
         context: Context,
@@ -50,6 +58,7 @@ object PinPromptDialog {
         isValid: (String) -> Boolean = { true },
         invalidMessageRes: Int = R.string.pin_wrong,
         onCancel: () -> Unit = {},
+        throttle: Boolean = false,
     ): AlertDialog {
         val view = LayoutInflater.from(context).inflate(R.layout.dialog_pin, null, false)
         val title = view.findViewById<TextView>(R.id.pinTitle)
@@ -76,6 +85,35 @@ object PinPromptDialog {
             .setOnCancelListener { onCancel() }
             .create()
 
+        // ---- Wrong-attempt lockout (verification prompts only) ----------
+        val lockHandler = Handler(Looper.getMainLooper())
+        var lockShowing = false
+        fun isLocked(): Boolean = throttle && PinAttemptGuard.isLocked()
+        // lockHandler is private to this dialog, so clearing all of its callbacks
+        // is the same as cancelling the pending countdown tick.
+        fun renderLock() {
+            lockHandler.removeCallbacksAndMessages(null)
+            val seconds = if (throttle) PinAttemptGuard.remainingLockSeconds() else 0
+            if (seconds > 0) {
+                val message = context.getString(R.string.pin_locked_retry, seconds)
+                error.text = message
+                error.visibility = View.VISIBLE
+                if (!lockShowing) error.announceForAccessibility(message)
+                lockShowing = true
+                // Keys stay focusable (D-pad focus must not escape the modal);
+                // digits are simply ignored while locked, see onDigit().
+                keysCol.alpha = LOCKED_KEYPAD_ALPHA
+                val remainingMs = PinAttemptGuard.remainingLockMs()
+                lockHandler.postDelayed({ renderLock() }, ((remainingMs - 1L) % 1000L) + 1L)
+            } else if (lockShowing) {
+                lockShowing = false
+                error.setText(invalidMessageRes)
+                error.visibility = View.INVISIBLE
+                keysCol.alpha = 1f
+            }
+        }
+        dialog.setOnDismissListener { lockHandler.removeCallbacksAndMessages(null) }
+
         fun refreshBoxes() {
             boxViews.forEachIndexed { i, box ->
                 box.text = if (i < entry.length) "\u25CF" else ""
@@ -89,22 +127,37 @@ object PinPromptDialog {
 
         fun submit() {
             val entered = entry.toString()
+            if (isLocked()) {
+                entry.setLength(0)
+                refreshBoxes()
+                renderLock()
+                return
+            }
             if (isValid(entered)) {
+                if (throttle) PinAttemptGuard.reset()
                 dialog.setOnCancelListener(null)
                 dialog.dismiss()
                 onValue(entered)
             } else {
+                entry.setLength(0)
+                refreshBoxes()
+                if (throttle && PinAttemptGuard.registerFailure()) {
+                    renderLock()
+                    return
+                }
                 error.setText(invalidMessageRes)
                 error.visibility = View.VISIBLE
                 error.announceForAccessibility(context.getString(invalidMessageRes))
-                entry.setLength(0)
-                refreshBoxes()
             }
         }
 
         fun onDigit(d: String) {
             if (entry.length >= 4) return
-            error.visibility = View.INVISIBLE
+            if (isLocked()) {
+                renderLock()
+                return
+            }
+            if (!lockShowing) error.visibility = View.INVISIBLE
             entry.append(d)
             refreshBoxes()
             if (entry.length == 4) submit()
@@ -120,7 +173,7 @@ object PinPromptDialog {
         fun clearEntry() {
             if (entry.isEmpty()) return
             entry.setLength(0)
-            error.visibility = View.INVISIBLE
+            if (!lockShowing) error.visibility = View.INVISIBLE
             refreshBoxes()
         }
 
@@ -254,7 +307,12 @@ object PinPromptDialog {
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         (context as? BaseActivity)?.trackIdleInteractions(dialog)
         refreshBoxes()
+        // A lockout started by an earlier prompt (or before an app restart) is
+        // still in force: show the countdown immediately instead of a fresh keypad.
+        renderLock()
         keyViews.firstOrNull()?.post { keyViews.firstOrNull()?.requestFocus() }
         return dialog
     }
+
+    private const val LOCKED_KEYPAD_ALPHA = 0.4f
 }

@@ -11,6 +11,35 @@ import org.junit.Test
 class PlaybackRoutingPolicyTest {
 
     @Test
+    fun `remote start engine applies only while the user engine is AUTO`() {
+        assertEquals(
+            Stage.VLC_HW,
+            PlaybackRoutingPolicy.initialStage(PlayerMode.AUTO, DecoderMode.AUTO, PlayerMode.VLC),
+        )
+        assertEquals(
+            Stage.VLC_SW,
+            PlaybackRoutingPolicy.initialStage(PlayerMode.AUTO, DecoderMode.SOFTWARE, PlayerMode.VLC),
+        )
+        assertEquals(
+            Stage.EXO,
+            PlaybackRoutingPolicy.initialStage(PlayerMode.AUTO, DecoderMode.AUTO, PlayerMode.EXOPLAYER),
+        )
+        assertEquals(
+            Stage.EXO,
+            PlaybackRoutingPolicy.initialStage(PlayerMode.AUTO, DecoderMode.AUTO, PlayerMode.AUTO),
+        )
+        // Explicit user engines are never overridden.
+        assertEquals(
+            Stage.EXO,
+            PlaybackRoutingPolicy.initialStage(PlayerMode.EXOPLAYER, DecoderMode.AUTO, PlayerMode.VLC),
+        )
+        assertEquals(
+            Stage.VLC_HW,
+            PlaybackRoutingPolicy.initialStage(PlayerMode.VLC, DecoderMode.AUTO, PlayerMode.EXOPLAYER),
+        )
+    }
+
+    @Test
     fun `automatic playback starts Exo hardware`() {
         assertEquals(
             Stage.EXO,

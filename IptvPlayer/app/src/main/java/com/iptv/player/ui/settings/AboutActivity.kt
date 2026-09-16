@@ -64,6 +64,14 @@ class AboutActivity : BaseActivity() {
     companion object {
         /** When passed as true, the screen runs the update check immediately on open. */
         const val EXTRA_AUTO_CHECK = "extra_auto_check"
+
+        /**
+         * App-private staging dir for downloaded APKs (`cacheDir/updates`, exposed
+         * to the installer through the FileProvider `cache-path`). External
+         * storage is world-writable on API 21-28, so staging there would let
+         * another app swap the file between validation and install.
+         */
+        private const val UPDATE_DIR = "updates"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -183,13 +191,13 @@ class AboutActivity : BaseActivity() {
     }
 
     /**
-     * Streams the APK over OkHttp into the app's external files dir, publishing
+     * Streams the APK over OkHttp into the app-private update cache, publishing
      * live progress to [showProgress]. Runs blocking IO on Dispatchers.IO; UI
      * updates hop back to the main thread. The active call + job are cancelled in
      * [cancelDownload] / onDestroy, and any partial file is deleted.
      */
     private fun downloadApk(info: UpdateInfo) {
-        val dir = getExternalFilesDir(null)
+        val dir = File(cacheDir, UPDATE_DIR).takeIf { it.isDirectory || it.mkdirs() }
         if (dir == null) {
             binding.aboutUpdateStatus.visibility = View.VISIBLE
             binding.aboutUpdateStatus.setText(R.string.about_update_failed)
@@ -201,11 +209,14 @@ class AboutActivity : BaseActivity() {
 
         // Delete APKs left behind by previous updates. A successful download is
         // kept (it is handed to the system installer) but never cleaned up after,
-        // so without this purge every update added another ~30-40 MB file to the
-        // app's external storage and its on-device size kept swelling.
+        // so without this purge every update added another ~30-40 MB file and
+        // the app's on-device size kept swelling. Older builds staged in the
+        // external files dir, so sweep that location once as well.
         runCatching {
-            dir.listFiles { f -> f.name.startsWith("update-") && f.name.endsWith(".apk") }
-                ?.forEach { it.delete() }
+            listOfNotNull(dir, getExternalFilesDir(null)).forEach { location ->
+                location.listFiles { f -> f.name.startsWith("update-") && f.name.endsWith(".apk") }
+                    ?.forEach { it.delete() }
+            }
         }
 
         binding.btnUpdateNow.visibility = View.GONE

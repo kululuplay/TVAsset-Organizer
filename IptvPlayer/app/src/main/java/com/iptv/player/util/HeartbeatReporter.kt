@@ -81,13 +81,28 @@ object HeartbeatReporter {
             put("device", Build.DEVICE)
             put("androidVersion", Build.VERSION.RELEASE)
             put("apiLevel", Build.VERSION.SDK_INT)
+            // Device-class facts the operator writes playbackPolicy.deviceOverrides
+            // rules against (see PlaybackRemotePolicy / docs/playback-policy.md).
+            // Static per device, so the panel can show exactly what a rule sees.
+            runCatching {
+                val facts = PlaybackRemotePolicy.deviceFacts(context)
+                put("hardware", facts.hardware)
+                put("board", facts.board)
+                facts.socModel?.let { put("socModel", it) }
+                put("sdk", facts.sdk)
+                facts.lowRam?.let { put("lowRam", it) }
+                facts.totalRamMb?.let { put("totalRamMb", it) }
+            }
             NowPlaying.title?.let { put("nowPlaying", it) }
             NowPlaying.kind?.let { put("nowPlayingKind", it) }
-            // The portal login this box is connected with, so the ops panel can tie
-            // a live device to an account. Blank for M3U-URL sources (no login).
+            // An opaque token for the portal login this box is connected with, so
+            // the ops panel can tell that two live devices share one account. The
+            // clear-text username never leaves the device (see AccountToken); the
+            // field keeps its historical name because the server compares it for
+            // equality only. Absent for M3U-URL sources (no login).
             runCatching { ServiceLocator.settings.getSourceConfig()?.username }
                 .getOrNull()
-                ?.takeIf { it.isNotBlank() }
+                ?.let { AccountToken.of(it) }
                 ?.let { put("username", it) }
             // Player audio/engine settings snapshot so the ops panel can remotely
             // spot risky configs (e.g. HDMI passthrough ON silences projector/TV

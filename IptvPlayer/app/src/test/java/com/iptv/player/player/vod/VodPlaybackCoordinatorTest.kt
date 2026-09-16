@@ -306,6 +306,40 @@ class VodPlaybackCoordinatorTest {
     }
 
     @Test
+    fun `do not retry is terminal for decoder and drm failures too`() {
+        listOf(
+            PlaybackFailure(
+                category = PlaybackFailure.Category.DRM,
+                code = PlaybackFailure.Code.DRM_LICENSE_FAILED,
+                phase = PlaybackFailure.Phase.PLAYBACK,
+                component = PlaybackFailure.Component.VIDEO,
+                retryAdvice = PlaybackFailure.RetryAdvice.DO_NOT_RETRY,
+            ),
+            PlaybackFailure(
+                category = PlaybackFailure.Category.DECODER,
+                code = PlaybackFailure.Code.DECODER_RUNTIME_FAILED,
+                phase = PlaybackFailure.Phase.PLAYBACK,
+                component = PlaybackFailure.Component.VIDEO,
+                retryAdvice = PlaybackFailure.RetryAdvice.DO_NOT_RETRY,
+            ),
+        ).forEach { failure ->
+            val coordinator = VodPlaybackCoordinator()
+            val start = start(coordinator)
+            val actions = coordinator.dispatch(
+                VodPlaybackCoordinator.Event.Failed(start.generation, failure),
+            )
+            assertTrue(actions.none { it is VodPlaybackCoordinator.Action.Start })
+            assertEquals(
+                failure,
+                actions.filterIsInstance<VodPlaybackCoordinator.Action.TerminalFailure>()
+                    .single()
+                    .failure,
+            )
+            assertEquals(VodPlaybackCoordinator.Phase.TERMINAL_FAILURE, coordinator.state.phase)
+        }
+    }
+
+    @Test
     fun `explicit stop invalidates active phase and ignores late callbacks`() {
         val coordinator = VodPlaybackCoordinator()
         val start = start(coordinator)

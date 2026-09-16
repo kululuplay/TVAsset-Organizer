@@ -16,7 +16,6 @@ package com.iptv.player.player
 
 import android.app.ActivityManager
 import android.content.Context
-import android.media.MediaCodecList
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -36,16 +35,17 @@ import com.iptv.player.playback.core.PlaybackFailureClassifier
 import com.iptv.player.player.PlaybackRoutingPolicy.Failure as Reason
 import com.iptv.player.player.PlaybackRoutingPolicy.Stage
 import com.iptv.player.util.PlaybackLog
+import com.iptv.player.util.PlaybackRemotePolicy
 import com.iptv.player.util.PlaybackRouteMemory
 import com.iptv.player.util.LiveTransportMemory
 import com.iptv.player.util.StabilityTelemetry
 
 class PlayerController(
-    // var (not val) so a handed-over controller can be re-homed onto the
-    // fullscreen player: context + container are reassigned on rebind() and the
-    // callback is swapped via setCallback() when ownership transfers.
-    private var context: Context,
-    private var container: ViewGroup,
+    // The callback is swapped via setCallback() when a preview controller is
+    // adopted by the fullscreen player. (The old rebind() re-homing path was
+    // removed: it had no callers and dropped engine events during its 250 ms gap.)
+    private val context: Context,
+    private val container: ViewGroup,
     private val mode: PlayerMode,
     private val decoderMode: DecoderMode = DecoderMode.AUTO,
     private val allowPassthrough: Boolean = false,
@@ -65,99 +65,6 @@ class PlayerController(
 
     /** Swap the UI callback (used when a preview controller is adopted by the player). */
     fun setCallback(cb: Callback) { callback = cb }
-
-    /**
-     * Re-home the currently running engine onto [newContainer] for a live
-     * preview <-> fullscreen hand-off, then restart the stream so the picture
-     * reliably reappears on the new surface. Amlogic Exo uses a complete cold
-     * engine restart because same-codec stop/prepare can freeze after one frame.
-     *
-     * The detach -> delay -> attach sequence mirrors the engine-swap timing: a
-     * SurfaceView's underlying surface is torn down asynchronously, so adding the
-     * surface to the new container in the same pass would race that teardown and
-     * green the fresh surface on Amlogic. Deferring the re-attach clears it.
-     *
-     * A bare re-attach (no new play) was NOT enough: the decoder's video output
-     * stayed bound to the old, now-destroyed surface, so audio kept playing but no
-     * frames composited (black video, esp. the Amlogic MediaCodec underlay) and no
-     * fresh Vout/first-frame event fired — leaving the hand-off cover / preview
-     * logo stuck until a timeout. Re-issuing play() on the SAME engine recreates
-     * the output on the new surface and emits a frame event (this is exactly why a
-     * channel zap already "fixed" the black picture). Single-connection is
-     * preserved: every engine.play() stops the current stream before starting.
-     *
-     * Rapid back-and-forth hand-offs (preview -> fullscreen -> BACK within the
-     * ENGINE_SWAP_DELAY_MS window) would otherwise stack two delayed re-attaches
-     * that both run, churning surface ownership. We reuse the startGeneration token:
-     * each rebind bumps it, so only the latest delayed runnable executes, and we
-     * re-check the engine is still the active one before touching it. (A play() in
-     * between already clears the handler, so that path is covered too.)
-     */
-    fun rebind(newContainer: ViewGroup) {
-        context = newContainer.context
-        container = newContainer
-        val eng = engine ?: return
-        val url = currentUrl
-        if (
-            url != null &&
-            !VlcHardwareDevicePolicy.canReuseEngineForStreamChange(
-                stage = stage,
-                bypassVlcHardware = bypassVlcHardware,
-            )
-        ) {
-            // Moving a running Amlogic Exo Surface and stop/prepare-reusing the
-            // same codec has the same one-frame-then-freeze signature as a zap.
-            // Retire the complete engine and bind a fresh codec to the new host.
-            PlaybackLog.log(
-                context,
-                "Controller",
-                "Amlogic EXO handoff -> cold engine restart",
-            )
-            videoRebindPending = false
-            playbackConfirmed = false
-            videoOutputConfirmed = false
-            stageStartMs = 0L
-            mainHandler.removeCallbacksAndMessages(null)
-            progressPolicy.reset()
-            resetReconnect()
-            cancelWatchdog()
-            startStage(stage)
-            return
-        }
-        beginAttempt()
-        val generation = ++startGeneration
-        // The replay below is a restart boundary for the watchdog: drop the stall
-        // poll now — its position baseline belongs to the pre-handoff surface, and
-        // the reissued play() resets the engine clock toward 0, which the old
-        // baseline would read as "no progress" and false-trigger a reconnect.
-        cancelWatchdog()
-        videoRebindPending = true
-        eng.detachVideo()
-        mainHandler.postDelayed({
-            if (generation != startGeneration || eng !== engine) {
-                if (generation == startGeneration) videoRebindPending = false
-                return@postDelayed
-            }
-            videoRebindPending = false
-            eng.attachVideo(newContainer)
-            // reset=true: hand-off needs a deterministic decoder/renderer reset
-            // onto the re-attached surface (bare re-add can stall video).
-            if (url != null) {
-                // Re-baseline as a fresh (re)start: clear the prior confirmation +
-                // stability evidence so the next real frame runs onPlaybackProgress and
-                // re-arms the stall poll against the new clock; the startup timeout
-                // covers the replay until that frame arrives.
-                playbackConfirmed = false
-                videoOutputConfirmed = false
-                playbackBuffering = true
-                stageStartMs = 0L
-                progressPolicy.reset()
-                eng.setListener(engineListener(eng))
-                eng.setPlaybackAttemptId(attemptTrace?.id)
-                eng.play(url, reset = true)
-            }
-        }, ENGINE_SWAP_DELAY_MS)
-    }
 
     /** UI-facing events from the controller (already engine-agnostic). */
     interface Callback {
@@ -187,6 +94,13 @@ class PlayerController(
          * when the UI launched controlled main-process recovery.
          */
         fun onLocalProcessRecoveryRequired(): Boolean = false
+        /**
+         * The decode ladder ran dry only because software HD was withheld on
+         * this constrained device (SoftwareHdFallbackPolicy). Fired at most
+         * once per channel, before the ordinary reconnect/terminal failure, so
+         * the UI can tell the user the stream is too heavy for the box.
+         */
+        fun onStreamTooHeavyForDevice(width: Int, height: Int, codec: String?) {}
         /** Emitted only after all retries + fallback are exhausted. */
         fun onFatalError()
         fun onRetrying(attempt: Int)
@@ -197,26 +111,11 @@ class PlayerController(
     /**
      * The supplied Xiaomi/Amlogic logs prove that libVLC's direct-rendering
      * MediaCodec surface is corrupt on this decoder family while Media3's
-     * hardware SurfaceView path is healthy. Probe decoder names once per
-     * controller and treat only VLC hardware as unavailable on those devices.
+     * hardware SurfaceView path is healthy. The decoder-name probe is memoized
+     * process-wide (see [DeviceVideoDecoders]): controllers are built on the
+     * main thread and MediaCodecList enumeration is slow on vendor builds.
      */
-    private val bypassVlcHardware: Boolean = runCatching {
-        val videoDecoderNames = MediaCodecList(MediaCodecList.ALL_CODECS)
-            .codecInfos
-            .asSequence()
-            .filterNot { it.isEncoder }
-            .mapNotNull { codec ->
-                runCatching {
-                    codec.name.takeIf {
-                        codec.supportedTypes.any { type ->
-                            type.startsWith("video/", ignoreCase = true)
-                        }
-                    }
-                }.getOrNull()
-            }
-            .toList()
-        VlcHardwareDevicePolicy.shouldBypassVlcHardware(videoDecoderNames)
-    }.getOrDefault(false)
+    private val bypassVlcHardware: Boolean = DeviceVideoDecoders.bypassVlcHardware
 
     private var engine: PlayerEngine? = null
     private var currentUrl: String? = null
@@ -295,8 +194,22 @@ class PlayerController(
     private var unconfirmedStartFailures = 0
     private var adaptiveRebuffers = 0
     private var adaptiveBufferingActive = false
+    // Video tunneling is a remote per-device opt-in (never on Amlogic). A
+    // tunneled decoder that reaches READY without a frame gets one untunneled
+    // replay of the same stage before the ordinary ladder runs.
+    private var tunnelingActive = false
+    private var tunnelingRetryUsed = false
+    // The "too heavy for this device" UI notice fires at most once per channel.
+    private var streamTooHeavyReported = false
     private val devicePlaybackProfile
         get() = PlaybackQoeRuntime.devicePlaybackProfile()
+    private val remoteOverrides: PlaybackRemotePolicy.DeviceOverrides
+        get() = PlaybackRemotePolicy.deviceOverrides()
+    // A remote per-device buffer mode replaces only the user's ADAPTIVE choice.
+    private val effectiveBufferMode: BufferMode
+        get() = AdaptiveBufferPolicy.configuredWithOverride(bufferMode, remoteOverrides.bufferMode)
+    private val constrainedDevice: Boolean
+        get() = lowRamDevice || devicePlaybackProfile.compatibilityMode
     private val lowRamDevice: Boolean = runCatching {
         val manager = context.applicationContext
             .getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
@@ -309,6 +222,9 @@ class PlayerController(
         stablePlaybackMs = STABLE_PLAYBACK_MS,
         stallTimeoutMs = STALL_TIMEOUT_MS,
     )
+    // Earlier stall signal: BUFFERING with a buffer that is not being fed at all
+    // for EMPTY_BUFFER_STALL_MS. Armed/retired together with progressPolicy.
+    private val starvationPolicy = LiveBufferStarvationPolicy()
     private var playbackBuffering = true
 
     private var audioDelayMs = 0L
@@ -487,6 +403,7 @@ class PlayerController(
         // New channel: drop stability evidence and the quick-decode-failure
         // count from the previous stream so they can't bleed into this one.
         progressPolicy.reset()
+        starvationPolicy.reset()
         playbackBuffering = true
         quickDecodeFailures = 0
         softwareSlowHardwareRetryUsed = false
@@ -494,6 +411,8 @@ class PlayerController(
         unconfirmedStartFailures = 0
         adaptiveRebuffers = 0
         adaptiveBufferingActive = false
+        tunnelingRetryUsed = false
+        streamTooHeavyReported = false
         // Tear down the previous channel's stall/startup watchdog; the (re)start
         // path below re-arms it for this channel.
         cancelWatchdog()
@@ -518,10 +437,29 @@ class PlayerController(
         videoOutputConfirmed = false
         memoryIgnoredThisPlay = false
         routeLearningAllowed = true
+        // Per-channel learning: a channel that rebuffered in its recent sessions
+        // starts on the larger adaptive reserve immediately instead of earning
+        // it again through the same stalls. The record is then decayed so the
+        // seed fades within a few clean visits.
+        val channelRecord = PlaybackRouteMemory.record(currentRouteKey)
+        adaptiveRebuffers = PlaybackRouteMemory.seedRebuffers(channelRecord)
+        PlaybackRouteMemory.beginSession(currentRouteKey)
+        if (adaptiveRebuffers > 0) {
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "channel record rebuffers=${channelRecord?.rebufferCount} " +
+                    "breaches=${channelRecord?.droppedFrameBreaches} -> seed adaptive $adaptiveRebuffers",
+            )
+        }
         // Tier 2 self-healing: prefer the stage this channel last proved STABLE on
         // (route memory) over the cold base ladder, so a channel that always needs,
         // say, software decode starts there instead of greening on hardware first.
-        val preferredBase = PlaybackRoutingPolicy.initialStage(mode, decoderMode)
+        val preferredBase = PlaybackRoutingPolicy.initialStage(
+            mode,
+            decoderMode,
+            startEngineOverride = remoteOverrides.startEngine,
+        )
         val base = baseInitialStage()
         if (base != preferredBase) {
             PlaybackLog.log(
@@ -601,7 +539,13 @@ class PlayerController(
      */
     private fun baseInitialStage(): Stage =
         VlcHardwareDevicePolicy.compatibleInitialStage(
-            preferred = PlaybackRoutingPolicy.initialStage(mode, decoderMode),
+            // A remote per-device start engine applies only while the user's
+            // engine is AUTO; the Amlogic VLC_HW -> EXO substitution still wins.
+            preferred = PlaybackRoutingPolicy.initialStage(
+                mode,
+                decoderMode,
+                startEngineOverride = remoteOverrides.startEngine,
+            ),
             bypassVlcHardware = bypassVlcHardware,
         )
 
@@ -640,6 +584,7 @@ class PlayerController(
         playbackConfirmed = false
         videoOutputConfirmed = false
         progressPolicy.reset()
+        starvationPolicy.reset()
         playbackBuffering = true
         val useVlc = target != Stage.EXO
         val forceSoftware = target == Stage.VLC_SW
@@ -656,7 +601,6 @@ class PlayerController(
         // during the swap gap (that path does NOT clear the handler), so a token
         // check stops a second, overlapping engine from being created.
         val generation = ++startGeneration
-        releaseEngine()
 
         var providerDrainAttempted = false
         lateinit var create: Runnable
@@ -718,13 +662,19 @@ class PlayerController(
             }
             var candidate: PlayerEngine? = null
             try {
+                // Remote per-device overrides resolved once per engine build.
+                val overrides = remoteOverrides
+                val configuredBuffer =
+                    AdaptiveBufferPolicy.configuredWithOverride(bufferMode, overrides.bufferMode)
+                val constrained = constrainedDevice
+                val effectiveBuffer = AdaptiveBufferPolicy.resolve(
+                    configured = configuredBuffer,
+                    lowRamDevice = constrained,
+                    recentRebuffers = adaptiveRebuffers,
+                )
                 val newEngine: PlayerEngine =
                     if (useVlc) {
-                        val effectiveBuffer = AdaptiveBufferPolicy.resolve(
-                            configured = bufferMode,
-                            lowRamDevice = lowRamDevice || devicePlaybackProfile.compatibilityMode,
-                            recentRebuffers = adaptiveRebuffers,
-                        )
+                        tunnelingActive = false
                         VlcPlayerEngine(
                             context,
                             forceSoftware,
@@ -732,24 +682,24 @@ class PlayerController(
                             effectiveBuffer.networkCachingMs,
                         )
                     } else {
-                        val effectiveBuffer = AdaptiveBufferPolicy.resolve(
-                            configured = bufferMode,
-                            lowRamDevice = lowRamDevice || devicePlaybackProfile.compatibilityMode,
-                            recentRebuffers = adaptiveRebuffers,
+                        tunnelingActive = ExoTunnelingPolicy.shouldEnable(
+                            remoteOptIn = overrides.tunneling,
+                            videoDecoderNames = DeviceVideoDecoders.names,
+                            retryWithoutTunnelingUsed = tunnelingRetryUsed,
                         )
                         ExoPlayerEngine(
                             context = context,
                             allowPassthrough = allowPassthrough,
-                            bufferMode = if (bufferMode == BufferMode.ADAPTIVE) {
-                                bufferMode
+                            bufferMode = if (configuredBuffer == BufferMode.ADAPTIVE) {
+                                configuredBuffer
                             } else {
                                 effectiveBuffer
                             },
                             initialRebuffers = adaptiveRebuffers,
-                            constrainedDevice = lowRamDevice || devicePlaybackProfile.compatibilityMode,
-                            preferSoftwareAudio = lowRamDevice ||
-                                devicePlaybackProfile.compatibilityMode || bypassVlcHardware,
+                            constrainedDevice = constrained,
+                            preferSoftwareAudio = constrained || bypassVlcHardware,
                             expectsVideo = expectsVideo,
+                            tunnelingEnabled = tunnelingActive,
                         )
                     }
                 candidate = newEngine
@@ -800,16 +750,33 @@ class PlayerController(
             // compositor teardown and produce a green first frame on Amlogic.
             // Deferring the new engine gives that teardown a bounded gap.
             //
-            // Trampoline through the shared VLC ops thread: the old engine's
-            // blocking stop/release now runs there asynchronously (ANR fix), so
-            // FIFO ordering guarantees the old libVLC instance has fully released
-            // its network connection (single-connection contract) before the next
-            // engine is created — without ever blocking the main thread. With an
-            // idle queue (e.g. old engine was ExoPlayer) the hop is immediate.
-            mainHandler.postDelayed({
-                VlcOps.awaitProviderDrain { mainHandler.post(create) }
-            }, ENGINE_SWAP_DELAY_MS)
+            // Single-connection contract: the retired engine reports when its
+            // provider socket has really closed (Media3 only cancels the Loader;
+            // a fixed 250 ms gap used to let the next engine open a second
+            // connection while the old read was still blocked). Then trampoline
+            // through the shared VLC ops thread: the old libVLC stop/release runs
+            // there asynchronously (ANR fix), so FIFO ordering guarantees it has
+            // released its network connection before the next engine is created
+            // — without ever blocking the main thread. With an idle queue (e.g.
+            // old engine was ExoPlayer) the hop is immediate.
+            val retireStartedMs = SystemClock.elapsedRealtime()
+            releaseEngine { released ->
+                if (generation != startGeneration) return@releaseEngine
+                if (!released) {
+                    PlaybackLog.log(
+                        context,
+                        "Controller",
+                        "retired engine socket close unproven -> continue swap",
+                    )
+                }
+                val elapsed = SystemClock.elapsedRealtime() - retireStartedMs
+                val gap = (ENGINE_SWAP_DELAY_MS - elapsed).coerceIn(0L, ENGINE_SWAP_DELAY_MS)
+                mainHandler.postDelayed({
+                    VlcOps.awaitProviderDrain { mainHandler.post(create) }
+                }, gap)
+            }
         } else {
+            releaseEngine()
             create.run()
         }
     }
@@ -837,15 +804,38 @@ class PlayerController(
             if (source !== engine || suspended) return@dispatch
             playbackBuffering = true
             progressPolicy.onBuffering()
-            if (
-                bufferMode == BufferMode.ADAPTIVE &&
-                playbackConfirmed &&
-                !adaptiveBufferingActive
-            ) {
-                adaptiveRebuffers = (adaptiveRebuffers + 1).coerceAtMost(6)
+            if (playbackConfirmed && !adaptiveBufferingActive) {
                 adaptiveBufferingActive = true
+                // Every mid-stream rebuffer feeds the channel record (any buffer
+                // mode); only ADAPTIVE also grows this session's reserve.
+                PlaybackRouteMemory.recordRebuffer(currentRouteKey)
+                if (effectiveBufferMode == BufferMode.ADAPTIVE) {
+                    adaptiveRebuffers = (adaptiveRebuffers + 1).coerceAtMost(6)
+                }
             }
             callback.onBuffering()
+        }
+
+        override fun onDroppedFrameBreach() = dispatch {
+            if (source !== engine || suspended) return@dispatch
+            PlaybackRouteMemory.recordDroppedFrameBreach(currentRouteKey)
+        }
+
+        override fun onTunnelingNoFrame() = dispatch {
+            if (source !== engine) return@dispatch
+            if (suspended) {
+                recoveryNeededOnResume = true
+                return@dispatch
+            }
+            if (ExoTunnelingPolicy.shouldRetryWithoutTunneling(tunnelingActive, tunnelingRetryUsed)) {
+                tunnelingRetryUsed = true
+                PlaybackLog.log(context, "Controller", "tunneled decoder rendered no frame -> retry $stage untunneled")
+                recordStability("tunneling_retry", "warn", "stage=$stage")
+                // Same stage, fresh engine: startEngine now resolves tunneling off.
+                startStage(stage)
+                return@dispatch
+            }
+            handleEngineFailure(Reason.VIDEO)
         }
 
         override fun onPlaying() = dispatch {
@@ -1143,6 +1133,7 @@ class PlayerController(
             nowMs = SystemClock.elapsedRealtime(),
             positionMs = engine?.playbackPositionMs() ?: -1L,
         )
+        starvationPolicy.start()
         scheduleStallPoll(watchdogGen)
     }
 
@@ -1179,6 +1170,30 @@ class PlayerController(
                 engageReconnect()
                 return@postDelayed
             }
+            // Earlier signal: BUFFERING with a buffer nobody is feeding. Cannot
+            // fire during a healthy top-up (the fill marker keeps growing).
+            val starved = starvationPolicy.sample(
+                nowMs = now,
+                buffering = playbackBuffering,
+                bufferMarker = engine?.bufferFillMarker() ?: -1L,
+            )
+            if (starved) {
+                PlaybackLog.log(
+                    context,
+                    "Controller",
+                    "buffer starvation (buffering, no data ${LiveBufferStarvationPolicy.EMPTY_BUFFER_STALL_MS}ms) -> reconnect",
+                )
+                recordStability("stall", "warn", "buffer starvation")
+                notifyPlaybackFailure(
+                    PlaybackFailureClassifier.classify(
+                        FailureSignal.Timeout(FailureSignal.TimeoutKind.STALL),
+                        PlaybackFailure.Phase.PLAYBACK,
+                    ),
+                )
+                cancelWatchdog()
+                engageReconnect()
+                return@postDelayed
+            }
             scheduleStallPoll(gen)
         }, WATCHDOG_POLL_MS)
     }
@@ -1186,6 +1201,7 @@ class PlayerController(
     private fun handleFailure(reason: Reason) {
         // Never carry readiness/progress evidence into a pending recovery.
         progressPolicy.reset()
+        starvationPolicy.reset()
 
         val effectiveReason =
             if (reason == Reason.ERROR && !playbackConfirmed) {
@@ -1420,6 +1436,7 @@ class PlayerController(
         // evidence before scheduling a replacement so no success callback can
         // erase the pending retry near the stability deadline.
         progressPolicy.reset()
+        starvationPolicy.reset()
         // Retire the old output poll. The separate episode deadline continues
         // through retry backoff, cleanup and replacement engine submission.
         cancelWatchdog()
@@ -1496,16 +1513,29 @@ class PlayerController(
     /** The stage to advance to, or null when no more paths are available. */
     private fun nextStage(current: Stage, reason: Reason): Stage? {
         val streamInfo = engine?.getStreamInfo()
+        val width = streamInfo?.width ?: 0
+        val height = streamInfo?.height ?: 0
+        val codec = streamInfo?.codec
         val softwareCodecUnavailable =
             !devicePlaybackProfile.allowSoftwareHevcRescue &&
-                isHevcCodec(streamInfo?.codec)
+                isHevcCodec(codec)
+        // Weak sticks must not be pushed onto software HD/HEVC: it trades a
+        // green picture for a CPU-bound slideshow. Remote override re-enables it.
+        val softwareHdExcluded = SoftwareHdFallbackPolicy.excludedStages(
+            constrainedDevice = constrainedDevice,
+            width = width,
+            height = height,
+            codec = codec,
+            allowSoftwareHdFallback = remoteOverrides.allowSoftwareHdFallback == true,
+        )
         val unavailableAwareTriedStages =
             triedStages + VlcHardwareDevicePolicy.unavailableStages(
                 bypassVlcHardware = bypassVlcHardware,
-                width = streamInfo?.width ?: 0,
-                height = streamInfo?.height ?: 0,
-            ) + if (softwareCodecUnavailable) setOf(Stage.VLC_SW) else emptySet()
-        return PlaybackRoutingPolicy.nextStage(
+                width = width,
+                height = height,
+            ) + (if (softwareCodecUnavailable) setOf(Stage.VLC_SW) else emptySet()) +
+                softwareHdExcluded
+        val next = PlaybackRoutingPolicy.nextStage(
             mode = mode,
             decoderMode = decoderMode,
             current = current,
@@ -1518,6 +1548,20 @@ class PlayerController(
             triedStages = unavailableAwareTriedStages,
             bypassVlcHardware = bypassVlcHardware,
         )
+        if (
+            !streamTooHeavyReported &&
+            SoftwareHdFallbackPolicy.shouldReportTooHeavy(next, softwareHdExcluded, reason)
+        ) {
+            streamTooHeavyReported = true
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "ladder exhausted with software HD withheld (${width}x$height $codec) -> too heavy for device",
+            )
+            recordStability("stream_too_heavy", "warn", "${width}x$height $codec stage=$current")
+            callback.onStreamTooHeavyForDevice(width, height, codec)
+        }
+        return next
     }
 
     /** Current video stream info for the diagnostics overlay, or null. */
@@ -1549,6 +1593,7 @@ class PlayerController(
         ++startGeneration
         mainHandler.removeCallbacksAndMessages(null)
         progressPolicy.reset()
+        starvationPolicy.reset()
         resetReconnect()
         cancelWatchdog()
         val target = engine
@@ -1577,19 +1622,6 @@ class PlayerController(
         if (playbackConfirmed) armStallWatchdog()
     }
 
-    fun stop() {
-        suspended = true
-        ++attemptEpoch
-        resetDeadline()
-        recoveryNeededOnResume = false
-        ++startGeneration
-        mainHandler.removeCallbacksAndMessages(null)
-        progressPolicy.reset()
-        resetReconnect()
-        cancelWatchdog()
-        engine?.stop()
-    }
-
     fun release() {
         // Invalidate any pending engine-create. The swap path trampolines the
         // create through the VLC ops thread, where it can sit for seconds behind
@@ -1603,17 +1635,27 @@ class PlayerController(
         ++startGeneration
         mainHandler.removeCallbacksAndMessages(null)
         progressPolicy.reset()
+        starvationPolicy.reset()
         cancelWatchdog()
         resetReconnect()
         releaseEngine()
     }
 
-    private fun releaseEngine() {
+    /**
+     * Retire the active engine. With [onReleased] the caller is told (on main)
+     * when the engine's provider socket has actually closed, so a replacement
+     * engine never opens a second connection; false means the bound elapsed.
+     */
+    private fun releaseEngine(onReleased: ((Boolean) -> Unit)? = null) {
         videoRebindPending = false
         val retiring = engine
         engine = null
         retiring?.setListener(null)
-        retiring?.release()
+        when {
+            retiring == null -> onReleased?.invoke(true)
+            onReleased == null -> retiring.release()
+            else -> retiring.releaseAndThen { released -> post { onReleased(released) } }
+        }
     }
 
     private fun post(action: () -> Unit) {
@@ -1626,7 +1668,9 @@ class PlayerController(
          * Gap between asking an engine to retire and creating the next one. Each
          * backend removes its SurfaceView only after native decoder shutdown;
          * this extra compositor gap prevents the freshly-added surface from
-         * inheriting a green frame on Amlogic. Short enough to stay snappy.
+         * inheriting a green frame on Amlogic. Short enough to stay snappy. The
+         * retired engine's socket-close boundary is awaited first; this gap is
+         * the minimum that still elapses after retirement was requested.
          */
         private const val ENGINE_SWAP_DELAY_MS = 250L
 

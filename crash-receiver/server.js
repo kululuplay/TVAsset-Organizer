@@ -10,7 +10,8 @@
  *      per device.
  *   3. Remote announcements — operator messages set in the panel are returned in
  *      heartbeat responses; the app shows each once. Messages can be global, or
- *      targeted to one account (username) or one device.
+ *      targeted to one account (the opaque account id the app reports as
+ *      "username") or one device.
  *   4. Requests & complaints — the app's Home "İstek & Şikayet" dialog POSTs a
  *      typed request (live channel / movie / series / complaint). Stored and
  *      shown in the panel, where the operator can mark it handled or delete it.
@@ -22,10 +23,13 @@
  *   POST /api/request             user request/complaint (app -> server), X-Kululu-Key
  *   GET  /                        HTML panel (HTTP Basic auth)
  *   GET  /device/:id              per-device detail: watch / nettest / crash history (auth)
+ *   GET  /crash/:id               full crash log (the panel inlines a 2 KB preview) (auth)
  *   GET  /api/crashes             JSON crash list (auth)
  *   GET  /api/devices             JSON device list (auth)
  *   POST /api/announcement        publish an announcement, optionally targeted (auth)
  *   POST /api/announcement/clear  retire one announcement by id, or all (auth)
+ *   POST /api/playback-policy     save the playbackPolicy JSON served to devices (auth)
+ *   POST /api/playback-policy/clear  drop the stored policy (env fallback) (auth)
  *   POST /api/crashes/:id/delete  delete one crash (auth)
  *   POST /api/crashes/clear       delete all crashes (auth)
  *   POST /api/devices/clear       delete all devices (auth)
@@ -37,13 +41,28 @@
 const express = require("express");
 const { Pool } = require("pg");
 const crypto = require("crypto");
+const fs = require("fs");
 const {
   parsePlaybackPolicy,
-  parseUpdateRolloutPolicy,
-  decideUpdateRollout,
+  validatePlaybackPolicyText,
+  deviceMatchesRule,
   sanitizeSupportChecks,
   persistTelemetryEvents,
 } = require("./telemetry-store");
+const {
+  BoundedMap,
+  createRateLimiter,
+  createCsrf,
+  sameOrigin,
+  normalizeIp,
+  maskAccount,
+  parseTrustProxyHops,
+  timingSafeEqualStr,
+} = require("./guard");
+
+// Express's default error handler echoes stack traces unless the env is
+// "production". Default to production so an unset NODE_ENV never leaks them.
+if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -57,7 +76,10 @@ const ONLINE_WINDOW_SEC = Math.round(ONLINE_WINDOW_MS / 1000);
 // IP -> city/country cache so we don't hit the geolocation API on every beat.
 const GEO_TTL_MS = 24 * 3600 * 1000;
 const GEO_FAIL_RETRY_MS = 5 * 60 * 1000;
-const geoCache = new Map(); // ip -> { city, country, at }
+// Bounded: req.ip is attacker-influenced (X-Forwarded-For through the trusted
+// hop), so every IP-keyed map has a hard cap and is swept on a timer.
+const MAP_MAX_ENTRIES = 5000;
+const geoCache = new BoundedMap(MAP_MAX_ENTRIES); // ip -> { city, country, at }
 const geoInFlight = new Set();
 
 // Active operator announcements, cached in memory (refreshed on every CRUD +
@@ -86,6 +108,14 @@ const ADMIN_PASSWORD = requiredSecret("ADMIN_PASSWORD");
 // is constant-time (timingSafeEqual needs equal-length buffers).
 const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest();
 const ADMIN_CRED_HASH = sha256(`${ADMIN_USER}:${ADMIN_PASSWORD}`);
+// CSRF token for every state-changing panel form: bound to the admin credential
+// and a per-process nonce (see guard.js). Rendered as a hidden input.
+const CSRF = createCsrf(ADMIN_CRED_HASH);
+
+// Number of reverse-proxy hops in front of us (Replit = 1). Only the last hop's
+// X-Forwarded-For entry is trusted, so a client can't spoof req.ip by sending
+// its own X-Forwarded-For header.
+const TRUST_PROXY_HOPS = parseTrustProxyHops(process.env.TRUST_PROXY_HOPS, 1);
 
 // Optional: forward each crash to a Telegram chat if these are configured.
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
@@ -105,91 +135,39 @@ const RETENTION_LOG_DAYS = intEnv("RETENTION_LOG_DAYS", 30);
 // Optional server-side kill switches/timeouts. The parser is deliberately a
 // closed schema: malformed JSON, unknown keys and out-of-range values can never
 // reach a device. Restart the service after changing the environment value.
+// The env value is only the FALLBACK: a policy saved from the panel (settings
+// table, key playback_policy) takes precedence and needs no restart. See
+// docs/playback-policy.md for the schema incl. per-device-class overrides.
 const PLAYBACK_POLICY = parsePlaybackPolicy(process.env.PLAYBACK_POLICY_JSON);
-const UPDATE_ROLLOUT_POLICY = parseUpdateRolloutPolicy(
-  process.env.UPDATE_ROLLOUT_JSON,
-);
-const updateRolloutRuntime = {
-  autoPaused: false,
-  reason: null,
-  lastEvaluatedAt: 0,
-  devices: 0,
-  failedDevices: 0,
-  failurePercent: 0,
-};
+const SETTING_PLAYBACK_POLICY = "playback_policy";
+// In-memory mirror of the stored policy so heartbeats never read the DB for it.
+let storedPlaybackPolicy = null; // parsed + frozen, or null
+let storedPlaybackPolicyText = null; // exact text the operator saved, or null
+let storedPlaybackPolicyAt = null;
+const effectivePlaybackPolicy = () => storedPlaybackPolicy || PLAYBACK_POLICY;
+
+// Postgres TLS: verify the server certificate by default. PGSSL_CA=<path> pins
+// a custom CA bundle; PGSSL_INSECURE=1 disables verification (logged loudly).
+// Local URLs skip TLS entirely.
+function pgSslConfig() {
+  const url = process.env.DATABASE_URL || "";
+  if (!url || url.includes("localhost") || url.includes("127.0.0.1")) return false;
+  if (process.env.PGSSL_INSECURE === "1") {
+    console.warn(
+      "[crash-receiver] WARNING: PGSSL_INSECURE=1 — Postgres TLS certificate " +
+        "verification is DISABLED. Unset it once the database CA is trusted.",
+    );
+    return { rejectUnauthorized: false };
+  }
+  const caPath = String(process.env.PGSSL_CA || "").trim();
+  if (caPath) return { rejectUnauthorized: true, ca: fs.readFileSync(caPath, "utf8") };
+  return { rejectUnauthorized: true };
+}
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl:
-    process.env.DATABASE_URL &&
-    !process.env.DATABASE_URL.includes("localhost") &&
-    !process.env.DATABASE_URL.includes("127.0.0.1")
-      ? { rejectUnauthorized: false }
-      : false,
+  ssl: pgSslConfig(),
 });
-
-const ROLLOUT_EVALUATION_INTERVAL_MS = 5 * 60 * 1000;
-async function evaluateUpdateRolloutHealth(force = false) {
-  const policy = UPDATE_ROLLOUT_POLICY;
-  if (!policy || !policy.autoPauseEnabled || updateRolloutRuntime.autoPaused) {
-    return updateRolloutRuntime;
-  }
-  const now = Date.now();
-  if (
-    !force &&
-    now - updateRolloutRuntime.lastEvaluatedAt < ROLLOUT_EVALUATION_INTERVAL_MS
-  ) {
-    return updateRolloutRuntime;
-  }
-  updateRolloutRuntime.lastEvaluatedAt = now;
-  try {
-    const [devicesResult, failuresResult] = await Promise.all([
-      pool.query(
-        `SELECT count(*)::int AS n
-           FROM devices
-          WHERE app_version = $1
-            AND last_seen > now() - ($2::int * interval '1 minute')`,
-        [policy.targetVersion, policy.autoPauseWindowMinutes],
-      ),
-      pool.query(
-        `SELECT count(DISTINCT device_id)::int AS n
-           FROM telemetry_events
-          WHERE app_version = $1
-            AND received_at > now() - ($2::int * interval '1 minute')
-            AND (
-              severity = 'fatal' OR
-              type IN ('fatal','native_crash','signaled_exit','os_anr',
-                       'suspected_abnormal_exit','process_recovery')
-            )`,
-        [policy.targetVersion, policy.autoPauseWindowMinutes],
-      ),
-    ]);
-    const devices = toInt(devicesResult.rows[0]?.n) || 0;
-    const failedDevices = toInt(failuresResult.rows[0]?.n) || 0;
-    const failurePercent = devices > 0 ? Math.round((failedDevices * 100) / devices) : 0;
-    Object.assign(updateRolloutRuntime, { devices, failedDevices, failurePercent });
-    if (
-      devices >= policy.autoPauseMinDevices &&
-      failurePercent >= policy.autoPauseFailurePercent
-    ) {
-      updateRolloutRuntime.autoPaused = true;
-      updateRolloutRuntime.reason =
-        `health ${failedDevices}/${devices} devices (${failurePercent}%)`;
-      console.error(
-        `[update-rollout] AUTO-PAUSED ${policy.targetVersion}: ` +
-          updateRolloutRuntime.reason,
-      );
-    }
-  } catch (e) {
-    console.error("update rollout health evaluation failed", e);
-    // Health is part of the release safety contract. If it cannot be measured,
-    // fail closed for the managed target until the service is restarted after
-    // the database/telemetry fault is resolved.
-    updateRolloutRuntime.autoPaused = true;
-    updateRolloutRuntime.reason = "health evaluation unavailable";
-  }
-  return updateRolloutRuntime;
-}
 
 async function initDb() {
   await pool.query(`
@@ -274,6 +252,24 @@ async function initDb() {
   await pool.query(
     `ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_nettest_at TIMESTAMPTZ;`,
   );
+  // Device-class facts (heartbeat) that playbackPolicy.deviceOverrides rules
+  // match against, so an operator can write a rule from what the panel shows.
+  await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS hardware TEXT;`);
+  await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS board TEXT;`);
+  await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS soc_model TEXT;`);
+  await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS low_ram BOOLEAN;`);
+  await pool.query(
+    `ALTER TABLE devices ADD COLUMN IF NOT EXISTS total_ram_mb INTEGER;`,
+  );
+  // Small key/value store for operator settings edited in the panel (currently
+  // only the playback policy JSON). Brand new table, no ALTER backfill needed.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
   // Operator announcement pushed to every device via the heartbeat response.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS announcements (
@@ -421,6 +417,28 @@ async function initDb() {
     `CREATE INDEX IF NOT EXISTS idx_requests_device ON requests(device_id, created_at DESC);`,
   );
   await refreshAnnouncementCache();
+  await refreshPlaybackPolicyCache();
+}
+
+// Load the operator-saved playback policy (if any) into memory. A stored text
+// that no longer parses (schema tightened after it was saved) is ignored with a
+// log line rather than served, so devices fall back to the env policy.
+async function refreshPlaybackPolicyCache() {
+  try {
+    const { rows } = await pool.query(
+      `SELECT value, updated_at FROM settings WHERE key = $1`,
+      [SETTING_PLAYBACK_POLICY],
+    );
+    const text = rows[0]?.value || null;
+    storedPlaybackPolicyText = text;
+    storedPlaybackPolicyAt = rows[0]?.updated_at || null;
+    storedPlaybackPolicy = text ? parsePlaybackPolicy(text) : null;
+    if (text && !storedPlaybackPolicy) {
+      console.error("[crash-receiver] stored playback policy is invalid; using env fallback");
+    }
+  } catch (e) {
+    console.error("playback policy cache refresh failed", e);
+  }
 }
 
 async function refreshAnnouncementCache() {
@@ -450,14 +468,71 @@ function pickAnnouncement(deviceId, username) {
   return best ? { id: best.id, message: best.message } : null;
 }
 
+app.set("trust proxy", TRUST_PROXY_HOPS);
+
+// ---- Ingest key (app -> server endpoints) ----
+// Constant-time compare (both sides hashed to a fixed length). Checked in a
+// middleware mounted BEFORE the JSON parser so an unauthenticated request never
+// gets its body parsed.
+function checkIngestKey(req) {
+  const presented = req.get("X-Kululu-Key") || "";
+  return presented.length > 0 && timingSafeEqualStr(presented, INGEST_KEY);
+}
+const INGEST_PATHS = new Set([
+  "/api/crash",
+  "/api/heartbeat",
+  "/api/nettest",
+  "/api/support-report",
+  "/api/request",
+  "/api/requests/mine",
+  "/api/requests/ack",
+]);
+app.use((req, res, next) => {
+  if (INGEST_PATHS.has(req.path) && !checkIngestKey(req)) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  next();
+});
+
 app.use(express.json({ limit: "512kb" }));
 app.use(express.urlencoded({ extended: false }));
-app.set("trust proxy", true);
 
 function clip(v, max = 500) {
   if (v == null) return null;
   const s = String(v);
   return s.length > max ? s.slice(0, max) : s;
+}
+
+// The panel inlines at most this much of each crash log (300 rows x 200 KB
+// would otherwise be a 60 MB page); /crash/:id shows the full log.
+const CRASH_LOG_PREVIEW_CHARS = 2048;
+
+// ---- Public ingest rate limits ----
+// Token bucket per device id (fallback: client IP) with per-endpoint hourly
+// budgets. In-memory and bounded; a restart resets it, which is fine for an
+// abuse control. 429 + Retry-After so a well-behaved client backs off.
+const HOUR_MS = 3600 * 1000;
+const INGEST_LIMITS = {
+  crash: createRateLimiter({ max: 10, windowMs: HOUR_MS, maxKeys: MAP_MAX_ENTRIES }),
+  heartbeat: createRateLimiter({ max: 120, windowMs: HOUR_MS, maxKeys: MAP_MAX_ENTRIES }),
+  nettest: createRateLimiter({ max: 20, windowMs: HOUR_MS, maxKeys: MAP_MAX_ENTRIES }),
+  supportReport: createRateLimiter({ max: 10, windowMs: HOUR_MS, maxKeys: MAP_MAX_ENTRIES }),
+  request: createRateLimiter({ max: 5, windowMs: HOUR_MS, maxKeys: MAP_MAX_ENTRIES }),
+  requestsRead: createRateLimiter({ max: 120, windowMs: HOUR_MS, maxKeys: MAP_MAX_ENTRIES }),
+};
+function rateLimited(name) {
+  const limiter = INGEST_LIMITS[name];
+  return (req, res, next) => {
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const deviceId = clip(body.deviceId ?? req.query.deviceId, 128);
+    const key = `${name}:${deviceId || "ip:" + (clientIp(req) || "?")}`;
+    const r = limiter.check(key);
+    if (!r.ok) {
+      res.set("Retry-After", String(r.retryAfterSec));
+      return res.status(429).json({ error: "rate_limited", retryAfterSec: r.retryAfterSec });
+    }
+    next();
+  };
 }
 
 // Defense in depth: older clients and hand-crafted requests may not apply the
@@ -489,12 +564,12 @@ function toInt(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-// Real client IP. 'trust proxy' is on, so req.ip resolves through Replit's proxy
-// to the device's public address. Strip the IPv4-mapped-IPv6 prefix for clarity.
+// Real client IP. 'trust proxy' = TRUST_PROXY_HOPS, so req.ip resolves through
+// the proxy to the device's public address. Must be a syntactically valid
+// IPv4/IPv6 (X-Forwarded-For is client-influenced text); otherwise fall back to
+// the socket address, and to null if even that is unusable.
 function clientIp(req) {
-  let ip = req.ip || req.socket?.remoteAddress || "";
-  if (ip.startsWith("::ffff:")) ip = ip.slice(7);
-  return clip(ip, 64);
+  return normalizeIp(req.ip) || normalizeIp(req.socket?.remoteAddress) || null;
 }
 
 // Private / loopback / link-local addresses have no public geolocation.
@@ -565,10 +640,15 @@ async function applyGeo(ip) {
 }
 
 // ---- Crash ingest (app -> server) ----
-app.post("/api/crash", async (req, res) => {
-  if ((req.get("X-Kululu-Key") || "") !== INGEST_KEY) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
+// Malformed client timestamps become null instead of throwing (pg rejects an
+// Invalid Date), mirroring telemetry-store's occurredAt().
+function safeDate(v) {
+  if (v == null || v === "") return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+app.post("/api/crash", rateLimited("crash"), async (req, res) => {
   const b = req.body || {};
   const safeMessage = clip(redactSensitive(b.message), 2000);
   const safeLog = clip(redactSensitive(b.log), 200000);
@@ -579,7 +659,7 @@ app.post("/api/crash", async (req, res) => {
          android_version, api_level, message, log, ip, device_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
       [
-        b.occurredAt ? new Date(b.occurredAt) : null,
+        safeDate(b.occurredAt),
         clip(b.appVersion),
         toInt(b.versionCode),
         clip(b.manufacturer),
@@ -604,10 +684,7 @@ app.post("/api/crash", async (req, res) => {
 // ---- Heartbeat ingest (app -> server) ----
 // Sent every ~60s while the app is foregrounded. Upserts one row per device and
 // returns the active announcement (if any) for the app to surface.
-app.post("/api/heartbeat", async (req, res) => {
-  if ((req.get("X-Kululu-Key") || "") !== INGEST_KEY) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
+app.post("/api/heartbeat", rateLimited("heartbeat"), async (req, res) => {
   const b = req.body || {};
   const deviceId = clip(b.deviceId, 128);
   if (!deviceId) return res.status(400).json({ error: "missing_device_id" });
@@ -636,12 +713,14 @@ app.post("/api/heartbeat", async (req, res) => {
         )
         .catch((e) => console.error("watch_log insert failed", e));
     }
-    await pool.query(
+    const upsert = await pool.query(
       `INSERT INTO devices
         (device_id, last_seen, ip, manufacturer, model, device,
          android_version, api_level, app_version, version_code,
-         now_playing, now_playing_kind, username, audio_passthrough, player_settings)
-       VALUES ($1, now(), $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         now_playing, now_playing_kind, username, audio_passthrough, player_settings,
+         hardware, board, soc_model, low_ram, total_ram_mb)
+       VALUES ($1, now(), $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
+               $15,$16,$17,$18,$19)
        ON CONFLICT (device_id) DO UPDATE SET
          last_seen = now(),
          ip = EXCLUDED.ip,
@@ -660,7 +739,14 @@ app.post("/api/heartbeat", async (req, res) => {
          -- Older app versions don't send the settings snapshot; keep the last
          -- known values instead of wiping them on every beat.
          audio_passthrough = COALESCE(EXCLUDED.audio_passthrough, devices.audio_passthrough),
-         player_settings = COALESCE(EXCLUDED.player_settings, devices.player_settings)`,
+         player_settings = COALESCE(EXCLUDED.player_settings, devices.player_settings),
+         -- Device-class facts: static per box, older apps omit them.
+         hardware = COALESCE(EXCLUDED.hardware, devices.hardware),
+         board = COALESCE(EXCLUDED.board, devices.board),
+         soc_model = COALESCE(EXCLUDED.soc_model, devices.soc_model),
+         low_ram = COALESCE(EXCLUDED.low_ram, devices.low_ram),
+         total_ram_mb = COALESCE(EXCLUDED.total_ram_mb, devices.total_ram_mb)
+       RETURNING username`,
       [
         deviceId,
         ip,
@@ -678,8 +764,16 @@ app.post("/api/heartbeat", async (req, res) => {
         uname,
         typeof b.audioPassthrough === "boolean" ? b.audioPassthrough : null,
         clip(b.playerSettings, 200),
+        clip(b.hardware, 64),
+        clip(b.board, 64),
+        clip(b.socModel, 64),
+        typeof b.lowRam === "boolean" ? b.lowRam : null,
+        toInt(b.totalRamMb),
       ],
     );
+    // Account-targeted announcements must reach a device whose beat omits the
+    // username (M3U session / logged out): use the COALESCE'd stored value.
+    const accountId = upsert.rows[0]?.username ?? uname;
     // ---- Stability telemetry events piggybacked on this beat ----
     // The app spools discrete field failures (player stall/reconnect/fallback/
     // start-fail/fatal, an ANR freeze, a suspected abnormal exit) to disk and
@@ -755,14 +849,15 @@ app.post("/api/heartbeat", async (req, res) => {
       console.error("resolved-requests lookup failed", e);
     }
     const payload = {
-      announcement: pickAnnouncement(deviceId, uname),
+      announcement: pickAnnouncement(deviceId, accountId),
       // ACK only IDs confirmed present after the insert. An empty list is
       // intentional on DB failure, so new clients retain and retry their spool.
       ackedEventIds,
       eventsDroppedAccepted,
     };
-    if (PLAYBACK_POLICY) {
-      const { ttlSeconds, ...values } = PLAYBACK_POLICY;
+    const playbackPolicy = effectivePlaybackPolicy();
+    if (playbackPolicy) {
+      const { ttlSeconds, ...values } = playbackPolicy;
       payload.playbackPolicy = {
         ...values,
         expiresAtEpochMs: Date.now() + ttlSeconds * 1000,
@@ -770,8 +865,6 @@ app.post("/api/heartbeat", async (req, res) => {
     }
     if (resolvedRequests.length) payload.resolvedRequests = resolvedRequests;
     res.status(200).json(payload);
-    // Evaluate at most once per five minutes and never delay the heartbeat.
-    evaluateUpdateRolloutHealth().catch(() => {});
     // Resolve location after responding so the heartbeat stays fast.
     applyGeo(ip).catch(() => {});
   } catch (e) {
@@ -780,39 +873,11 @@ app.post("/api/heartbeat", async (req, res) => {
   }
 });
 
-// ---- Deterministic staged app update gate (app -> server) ----
-// The APK still comes from immutable GitHub Releases. This endpoint only decides
-// whether a concrete target version is visible to this stable device cohort.
-app.post("/api/update-policy", async (req, res) => {
-  if ((req.get("X-Kululu-Key") || "") !== INGEST_KEY) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
-  const b = req.body || {};
-  const deviceId = clip(b.deviceId, 128);
-  const candidateVersion = clip(b.candidateVersion, 32);
-  if (!deviceId || !candidateVersion) {
-    return res.status(400).json({ error: "missing_update_identity" });
-  }
-  await evaluateUpdateRolloutHealth();
-  const decision = decideUpdateRollout(
-    UPDATE_ROLLOUT_POLICY,
-    { deviceId, candidateVersion },
-    updateRolloutRuntime,
-  );
-  return res.status(200).json({
-    ...decision,
-    evaluatedAtEpochMs: Date.now(),
-  });
-});
-
 // ---- Peering / network-quality test result (app -> server) ----
 // One human-readable line per device summarising its last in-app peering test
 // (run from Settings -> Diagnostics). Upserted so it survives even if the device
 // row predates the column, and never accumulates.
-app.post("/api/nettest", async (req, res) => {
-  if ((req.get("X-Kululu-Key") || "") !== INGEST_KEY) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
+app.post("/api/nettest", rateLimited("nettest"), async (req, res) => {
   const b = req.body || {};
   const deviceId = clip(b.deviceId, 128);
   if (!deviceId) return res.status(400).json({ error: "missing_device_id" });
@@ -849,10 +914,7 @@ function newSupportCode() {
 
 // One-button customer diagnostics. Returns a short code the customer can read
 // over the phone; the report contains only closed-schema checks and redacted text.
-app.post("/api/support-report", async (req, res) => {
-  if ((req.get("X-Kululu-Key") || "") !== INGEST_KEY) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
+app.post("/api/support-report", rateLimited("supportReport"), async (req, res) => {
   const b = req.body || {};
   const deviceId = clip(b.deviceId, 128);
   if (!deviceId) return res.status(400).json({ error: "missing_device_id" });
@@ -908,10 +970,7 @@ const TELEMETRY_LABELS = {
   process_recovery: "Otomatik oynatıcı süreç yenileme",
 };
 const telemetryLabel = (t) => TELEMETRY_LABELS[t] || t || "—";
-app.post("/api/request", async (req, res) => {
-  if ((req.get("X-Kululu-Key") || "") !== INGEST_KEY) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
+app.post("/api/request", rateLimited("request"), async (req, res) => {
   const b = req.body || {};
   const message = clip(b.message, 2000);
   if (!message || !message.trim()) {
@@ -951,10 +1010,7 @@ app.post("/api/request", async (req, res) => {
 // ---- App: the user's own request history (shown in the İstek & Şikayet dialog) ----
 // Device-scoped (no per-user auth): the unguessable device id + shared ingest key
 // match the trust model of /api/heartbeat and /api/request.
-app.get("/api/requests/mine", async (req, res) => {
-  if ((req.get("X-Kululu-Key") || "") !== INGEST_KEY) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
+app.get("/api/requests/mine", rateLimited("requestsRead"), async (req, res) => {
   const deviceId = clip(req.query.deviceId, 128);
   if (!deviceId) return res.status(400).json({ error: "missing_device_id" });
   try {
@@ -980,10 +1036,7 @@ app.get("/api/requests/mine", async (req, res) => {
 });
 
 // ---- App: acknowledge resolved-request popups so the server stops re-sending ----
-app.post("/api/requests/ack", async (req, res) => {
-  if ((req.get("X-Kululu-Key") || "") !== INGEST_KEY) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
+app.post("/api/requests/ack", rateLimited("requestsRead"), async (req, res) => {
   const b = req.body || {};
   const deviceId = clip(b.deviceId, 128);
   const ids = Array.isArray(b.ids)
@@ -1003,20 +1056,29 @@ app.post("/api/requests/ack", async (req, res) => {
   }
 });
 
+// Telegram hard limit is 4096 chars; keep a margin.
+const TELEGRAM_MAX_TEXT = 4000;
 async function sendTelegram(text) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
   await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text }),
+    body: JSON.stringify({
+      chat_id: TELEGRAM_CHAT_ID,
+      text: clip(String(text ?? ""), TELEGRAM_MAX_TEXT),
+    }),
   });
 }
+
+// Device fields are client-supplied free text: clip each before it reaches the
+// operator chat.
+const tgField = (v, def = "?") => clip(v, 64) || def;
 
 async function forwardTelegram(b) {
   await sendTelegram(
     `🛑 Kululu çökme\n` +
-      `${b.manufacturer || "?"} ${b.model || ""} · Android ${b.androidVersion || "?"} · v${b.appVersion || "?"}\n` +
-      `${String(b.message || "").slice(0, 500)}`,
+      `${tgField(b.manufacturer)} ${tgField(b.model, "")} · Android ${tgField(b.androidVersion)} · v${tgField(b.appVersion)}\n` +
+      `${clip(redactSensitive(b.message), 500) || ""}`,
   );
 }
 
@@ -1030,20 +1092,25 @@ const REQUEST_TYPE_LABEL = {
 };
 
 async function forwardRequestTelegram(r) {
-  const who = [r.username, `${r.manufacturer || ""} ${r.model || ""}`.trim()]
+  // Account id goes out masked (first 2 chars + ***); the full value stays in
+  // the panel. Free text is redacted + truncated like crash text.
+  const who = [
+    r.username ? maskAccount(r.username) : null,
+    `${tgField(r.manufacturer, "")} ${tgField(r.model, "")}`.trim(),
+  ]
     .filter(Boolean)
     .join(" · ");
   await sendTelegram(
     `${REQUEST_TYPE_LABEL[r.type] || REQUEST_TYPE_LABEL.other} — Kululu isteği\n` +
       `${who ? who + "\n" : ""}` +
-      `${String(r.message || "").slice(0, 800)}`,
+      `${clip(redactSensitive(r.message), 800) || ""}`,
   );
 }
 
 // Debounced account-sharing alert: warns (once per window per account) when one
 // username is active from multiple cities. No-ops unless Telegram is configured.
 const SHARING_ALERT_DEBOUNCE_MS = 12 * 3600 * 1000;
-const sharingAlertedAt = new Map(); // username -> last alert ts
+const sharingAlertedAt = new BoundedMap(MAP_MAX_ENTRIES); // account -> last alert ts
 async function checkSharingAlerts() {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
   try {
@@ -1065,8 +1132,8 @@ async function checkSharingAlerts() {
       sharingAlertedAt.set(r.username, now);
       await sendTelegram(
         `⚠ Kululu hesap paylaşımı şüphesi\n` +
-          `Hesap: ${r.username}\n` +
-          `${r.city_count} şehir: ${r.cities}\n` +
+          `Hesap: ${maskAccount(r.username)}\n` +
+          `${r.city_count} şehir: ${clip(r.cities, 200)}\n` +
           `${r.device_count} cihaz`,
       ).catch(() => {});
     }
@@ -1076,12 +1143,14 @@ async function checkSharingAlerts() {
 }
 
 // ---- Basic auth for the panel ----
-// Throttle FAILED auth per IP only (with time decay). A correct password always
-// works and clears the counter, so the operator can never lock themselves out;
-// this just slows brute-force guessing.
+// Throttle per IP after AUTH_FAIL_LIMIT wrong guesses in a window: a throttled
+// IP gets 429 WITHOUT the credential being evaluated (otherwise the throttle is
+// a no-op against brute force). Only failures count; a success clears the
+// counter. The operator's own IP can lock itself out for 15 min after 20 typos,
+// which is the intended trade-off.
 const AUTH_FAIL_LIMIT = 20;
 const AUTH_FAIL_WINDOW_MS = 15 * 60 * 1000;
-const authFails = new Map(); // ip -> { count, firstAt }
+const authFails = new BoundedMap(MAP_MAX_ENTRIES); // ip -> { count, firstAt }
 function authThrottled(ip) {
   const rec = authFails.get(ip);
   if (!rec) return false;
@@ -1110,10 +1179,11 @@ function sweepAuthFails() {
 }
 
 function auth(req, res, next) {
-  const ip = clientIp(req);
-  // Evaluate credentials FIRST so a correct password is never blocked, even from
-  // a throttled IP — the operator can always get in. Throttling applies only to
-  // wrong guesses.
+  const ip = clientIp(req) || "unknown";
+  if (authThrottled(ip)) {
+    res.set("Retry-After", "900");
+    return res.status(429).send("Too many failed attempts. Try again later.");
+  }
   const hdr = req.get("Authorization") || "";
   const [scheme, encoded] = hdr.split(" ");
   let ok = false;
@@ -1130,13 +1200,38 @@ function auth(req, res, next) {
     authFails.delete(ip); // success clears the counter
     return next();
   }
-  noteAuthFail(ip);
-  if (authThrottled(ip)) {
-    res.set("Retry-After", "900");
-    return res.status(429).send("Too many failed attempts. Try again later.");
-  }
+  // Only count real guesses. A bare request without an Authorization header
+  // is the browser's first probe before it shows the login prompt.
+  if (hdr) noteAuthFail(ip);
   res.set("WWW-Authenticate", 'Basic realm="Kululu Crash Panel"');
   return res.status(401).send("Authentication required");
+}
+
+// ---- CSRF guard for state-changing admin routes ----
+// Basic auth is sent automatically by the browser, so any site could POST to
+// the panel's delete/clear/announce routes. Require (a) same-origin per
+// Origin/Referer + Sec-Fetch-Site and (b) the per-process token rendered into
+// every panel form (constant-time compare). Mounted AFTER auth.
+function csrfGuard(req, res, next) {
+  const reason = sameOrigin({
+    header: (name) => req.get(name),
+    hostname: req.hostname,
+  });
+  if (reason) return res.status(403).send(`Forbidden (${reason})`);
+  const token = req.body && typeof req.body === "object" ? req.body._csrf : undefined;
+  if (!CSRF.verify(token)) return res.status(403).send("Forbidden (csrf_rejected)");
+  next();
+}
+const adminWrite = [auth, csrfGuard];
+
+// Bound every in-memory map on a timer (independent of the daily retention
+// tick) so spoofed/rotating keys can't hold memory for a day.
+function sweepMemoryMaps() {
+  const now = Date.now();
+  sweepAuthFails();
+  geoCache.sweep((e) => now - e.at >= GEO_TTL_MS);
+  sharingAlertedAt.sweep((at) => now - at >= SHARING_ALERT_DEBOUNCE_MS);
+  for (const limiter of Object.values(INGEST_LIMITS)) limiter.sweep();
 }
 
 // Delete rows older than the configured age, per table. 0 days disables a sweep.
@@ -1202,7 +1297,7 @@ app.get("/api/devices", auth, async (req, res) => {
 });
 
 // ---- Announcement management ----
-app.post("/api/announcement", auth, async (req, res) => {
+app.post("/api/announcement", adminWrite, async (req, res) => {
   const message = clip((req.body && req.body.message) || "", 500);
   if (!message || !message.trim()) return res.redirect("/");
   const targetDevice = clip((req.body.target_device_id || "").trim() || null, 128);
@@ -1229,7 +1324,7 @@ app.post("/api/announcement", auth, async (req, res) => {
   res.redirect("/");
 });
 
-app.post("/api/announcement/clear", auth, async (req, res) => {
+app.post("/api/announcement/clear", adminWrite, async (req, res) => {
   // Per-row clear (id from the panel) so retiring a targeted message leaves the
   // others active; no id falls back to clearing everything.
   const id = toInt(req.body && req.body.id);
@@ -1242,25 +1337,51 @@ app.post("/api/announcement/clear", auth, async (req, res) => {
   res.redirect("/");
 });
 
-app.post("/api/crashes/:id/delete", auth, async (req, res) => {
+// ---- Playback policy (panel-managed playbackPolicy JSON) ----
+// Validated with the same closed schema the heartbeat serves; a rejected body
+// never touches the DB. The env PLAYBACK_POLICY_JSON stays the fallback once
+// the stored policy is cleared.
+app.post("/api/playback-policy", adminWrite, async (req, res) => {
+  const text = String((req.body && req.body.policy) || "").trim();
+  const result = validatePlaybackPolicyText(text);
+  if (!result.ok) {
+    return res.redirect(`/?policy_error=${encodeURIComponent(result.error)}#playback-policy`);
+  }
+  await pool.query(
+    `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, now())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [SETTING_PLAYBACK_POLICY, text],
+  );
+  await refreshPlaybackPolicyCache();
+  const note = result.dropped > 0 ? `?policy_dropped=${result.dropped}` : "";
+  res.redirect(`/${note}#playback-policy`);
+});
+
+app.post("/api/playback-policy/clear", adminWrite, async (req, res) => {
+  await pool.query(`DELETE FROM settings WHERE key = $1`, [SETTING_PLAYBACK_POLICY]);
+  await refreshPlaybackPolicyCache();
+  res.redirect("/#playback-policy");
+});
+
+app.post("/api/crashes/:id/delete", adminWrite, async (req, res) => {
   await pool.query(`DELETE FROM crash_reports WHERE id = $1`, [
     toInt(req.params.id),
   ]);
   res.redirect("/");
 });
 
-app.post("/api/crashes/clear", auth, async (req, res) => {
+app.post("/api/crashes/clear", adminWrite, async (req, res) => {
   await pool.query(`DELETE FROM crash_reports`);
   res.redirect("/");
 });
 
-app.post("/api/devices/clear", auth, async (req, res) => {
+app.post("/api/devices/clear", adminWrite, async (req, res) => {
   await pool.query(`DELETE FROM devices`);
   res.redirect("/");
 });
 
 // ---- Request / complaint management ----
-app.post("/api/requests/:id/done", auth, async (req, res) => {
+app.post("/api/requests/:id/done", adminWrite, async (req, res) => {
   // Toggle handled <-> new so a mis-click is reversible. Reset notified on every
   // toggle: marking done re-arms the user's "resolved" popup; reverting clears
   // it (harmless while status='new', and lets a later re-resolve notify again).
@@ -1274,12 +1395,12 @@ app.post("/api/requests/:id/done", auth, async (req, res) => {
   res.redirect("/");
 });
 
-app.post("/api/requests/:id/delete", auth, async (req, res) => {
+app.post("/api/requests/:id/delete", adminWrite, async (req, res) => {
   await pool.query(`DELETE FROM requests WHERE id = $1`, [toInt(req.params.id)]);
   res.redirect("/");
 });
 
-app.post("/api/requests/clear-done", auth, async (req, res) => {
+app.post("/api/requests/clear-done", adminWrite, async (req, res) => {
   // Only handled rows; pending requests are never bulk-deleted by accident.
   await pool.query(`DELETE FROM requests WHERE status = 'done'`);
   res.redirect("/");
@@ -1515,6 +1636,47 @@ app.get("/", auth, async (req, res) => {
   const last24 = rows.filter((r) => new Date(r.received_at).getTime() > dayAgo).length;
   const onlineCount = devices.filter((d) => d.online).length;
 
+  // ---- Playback policy editor ----
+  // Text shown = what the operator saved, else the env fallback pretty-printed,
+  // else a commented starter. Rule preview counts run in memory over the device
+  // rows already fetched for this page (<= 500), so no extra query.
+  const envPolicyText = PLAYBACK_POLICY ? JSON.stringify(PLAYBACK_POLICY, null, 2) : "";
+  const policyText = storedPlaybackPolicyText || envPolicyText;
+  const policySource = storedPlaybackPolicyText
+    ? `Kaynak: <b>panel</b> (kaydedildi ${esc(ago(storedPlaybackPolicyAt))})`
+    : PLAYBACK_POLICY
+      ? "Kaynak: <b>PLAYBACK_POLICY_JSON</b> ortam değişkeni (henüz panelden kaydedilmedi)"
+      : "Şu an cihazlara politika gönderilmiyor.";
+  const activePolicy = effectivePlaybackPolicy();
+  const policyRules = (activePolicy && activePolicy.deviceOverrides) || [];
+  const policyRulePreview = policyRules.length
+    ? `<table class="policy-rules"><thead><tr><th>#</th><th>Eşleşme</th><th>Ayar</th><th>Eşleşen cihaz</th></tr></thead><tbody>${policyRules
+        .map((rule, i) => {
+          let n = 0;
+          for (const d of devices) {
+            try {
+              if (deviceMatchesRule(rule, d)) n++;
+            } catch (_) {
+              /* never let a preview break the panel */
+            }
+          }
+          return `<tr>
+        <td class="muted">${i + 1}</td>
+        <td class="mono">${esc(JSON.stringify(rule.match))}</td>
+        <td class="mono">${esc(JSON.stringify(rule.set))}</td>
+        <td><b>${n}</b> / ${devices.length}</td>
+      </tr>`;
+        })
+        .join("")}</tbody></table>`
+    : "";
+  const policyError = clip(req.query.policy_error, 300);
+  const policyDropped = toInt(req.query.policy_dropped);
+  const policyNotice = policyError
+    ? `<div class="policy-err">Kaydedilmedi: ${esc(policyError)}</div>`
+    : policyDropped
+      ? `<div class="policy-warn">Kaydedildi; ${policyDropped} geçersiz kural atlandı (regex/alan adlarını kontrol edin).</div>`
+      : "";
+
   // Same-IP grouping = likely same household/account (multi-TV). Not proof of
   // cross-home credential sharing, but a useful "this account is on N boxes" flag.
   const ipDeviceCount = new Map();
@@ -1582,7 +1744,7 @@ app.get("/", auth, async (req, res) => {
   const deviceSection = devices.length
     ? `<table class="devices">
         <thead><tr>
-          <th>Durum</th><th>Cihaz</th><th>Kullanıcı</th><th>IP / Konum</th><th>Şu an izliyor</th>
+          <th>Durum</th><th>Cihaz</th><th>Hesap</th><th>IP / Konum</th><th>Şu an izliyor</th>
           <th>Sürüm</th><th>Android</th><th>Çökme</th><th>Ağ testi</th><th>Son görülme</th><th>İlk görülme</th>
         </tr></thead>
         <tbody>${deviceRows}</tbody>
@@ -1602,6 +1764,7 @@ app.get("/", auth, async (req, res) => {
          <span class="ann-label">${scopeLabel(a)}</span>
          <span class="ann-msg">${esc(a.message)}</span>
          <form method="post" action="/api/announcement/clear" style="margin:0">
+           ${CSRF.field}
            <input type="hidden" name="id" value="${a.id}">
            <button class="clearbtn" type="submit">Kaldır</button>
          </form>
@@ -1622,13 +1785,15 @@ app.get("/", auth, async (req, res) => {
           ${r.ip ? `<span class="pill ip">${esc(r.ip)}</span>` : ""}
           <span class="time">${esc(fmt(r.received_at))}</span>
           <form method="post" action="/api/crashes/${r.id}/delete" class="del">
+            ${CSRF.field}
             <button title="Sil">✕</button>
           </form>
         </div>
         <div class="msg">${esc(firstLine)}</div>
         <details>
-          <summary>Tam kaydı göster</summary>
-          <pre>${esc(r.log || "(kayıt yok)")}</pre>
+          <summary>Kaydın başını göster</summary>
+          <pre>${esc(clip(r.log, CRASH_LOG_PREVIEW_CHARS) || "(kayıt yok)")}</pre>
+          ${(r.log || "").length > CRASH_LOG_PREVIEW_CHARS ? `<a class="devlink" href="/crash/${r.id}">Tam kaydı aç (${Math.round(r.log.length / 1024)} KB)</a>` : ""}
         </details>
       </div>`;
     })
@@ -1677,11 +1842,11 @@ app.get("/", auth, async (req, res) => {
     .join("");
   const accountsSection = accounts.length
     ? `<table class="agg">
-         <thead><tr><th>Hesap (kullanıcı adı)</th><th>Çevrimiçi/Cihaz</th><th>IP</th><th>Şehir</th></tr></thead>
+         <thead><tr><th>Hesap</th><th>Çevrimiçi/Cihaz</th><th>IP</th><th>Şehir</th></tr></thead>
          <tbody>${accountRows}</tbody>
        </table>
        <div class="muted" style="margin-top:8px">⚠ paylaşım? = aynı hesap birden çok şehirden aktif (olası hesap paylaşımı).</div>`
-    : '<div class="empty">Henüz kullanıcı adı bildiren cihaz yok.</div>';
+    : '<div class="empty">Henüz hesap bildiren cihaz yok.</div>';
 
   // ---- Crash summary: per-version rate + grouped signatures ----
   const crashSigs = crashSigRes.rows;
@@ -1764,9 +1929,11 @@ app.get("/", auth, async (req, res) => {
         <div class="req-msg">${esc(r.message)}</div>
         <div class="req-actions">
           <form method="post" action="/api/requests/${r.id}/done" style="margin:0">
+            ${CSRF.field}
             <button class="${done ? "undonebtn" : "donebtn"}" type="submit">${done ? "↩ Geri al" : "✓ Çözüldü"}</button>
           </form>
           <form method="post" action="/api/requests/${r.id}/delete" style="margin:0" onsubmit="return confirm('Bu istek silinsin mi?')">
+            ${CSRF.field}
             <button class="clearbtn" type="submit">Sil</button>
           </form>
         </div>
@@ -1952,6 +2119,11 @@ app.get("/", auth, async (req, res) => {
   .ann { background:#161B22; border:1px solid #1C232D; border-radius:12px; padding:14px 16px; }
   .ann textarea { width:100%; box-sizing:border-box; background:#0E1116; color:#F5F7FA; border:1px solid #2A3340; border-radius:8px; padding:10px; font:13px/1.4 system-ui, sans-serif; resize:vertical; min-height:54px; }
   .ann .sendbtn { margin-top:8px; background:#1f5a35; color:#D6FBE5; border:1px solid #2FBF71; padding:8px 16px; border-radius:8px; cursor:pointer; font-size:13px; }
+  .ann textarea.policy { font-family:monospace; min-height:180px; white-space:pre; }
+  .policy-err { background:#3a1714; color:#F2766A; border:1px solid #6a201a; border-radius:8px; padding:8px 12px; margin-bottom:10px; font-size:13px; }
+  .policy-warn { background:#3a2f10; color:#FFC93C; border:1px solid #6a5410; border-radius:8px; padding:8px 12px; margin-bottom:10px; font-size:13px; }
+  .policy-rules { margin-top:12px; }
+  .policy-rules td.mono { font-size:11px; word-break:break-all; }
   .ann-current { display:flex; align-items:center; gap:12px; background:#23301c; border:1px solid #3a5a2a; border-radius:10px; padding:10px 14px; margin-bottom:12px; }
   .ann-label { color:#9fe6b8; font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
   .ann-msg { flex:1; color:#EAF7EE; }
@@ -2037,12 +2209,15 @@ app.get("/", auth, async (req, res) => {
   <div class="actions">
     <a href="/">↻ Yenile</a>
     <form method="post" action="/api/devices/clear" style="display:inline" onsubmit="return confirm('Tüm cihaz kayıtları silinsin mi?')">
+      ${CSRF.field}
       <button class="clearbtn" type="submit">Cihazları temizle</button>
     </form>
     <form method="post" action="/api/crashes/clear" style="display:inline" onsubmit="return confirm('Tüm çökme raporları silinsin mi?')">
+      ${CSRF.field}
       <button class="clearbtn" type="submit">Çökmeleri temizle</button>
     </form>
     <form method="post" action="/api/requests/clear-done" style="display:inline" onsubmit="return confirm('Çözülmüş tüm istekler silinsin mi?')">
+      ${CSRF.field}
       <button class="clearbtn" type="submit">Çözülen istekleri temizle</button>
     </form>
   </div>
@@ -2052,24 +2227,31 @@ app.get("/", auth, async (req, res) => {
     <h2>Duyuru</h2>
     ${announcementBox}
     <form class="ann" method="post" action="/api/announcement">
+      ${CSRF.field}
       <textarea name="message" maxlength="500" placeholder="Mesaj (ör. 'Yarın 02:00-04:00 arası bakım yapılacaktır')"></textarea>
       <div class="ann-targets">
-        <input name="target_username" maxlength="120" placeholder="Hedef hesap (kullanıcı adı) — boş = herkese">
+        <input name="target_username" maxlength="120" placeholder="Hedef hesap kimliği (Hesaplar tablosundaki değer) — boş = herkese">
         <input name="target_device_id" maxlength="128" placeholder="Hedef cihaz ID — boş = herkese">
       </div>
       <button class="sendbtn" type="submit">Duyuruyu yayınla</button>
       <div class="muted" style="margin-top:6px">Uygulama her cihaza yalnızca <b>en son yayınlanan</b> ilgili mesajı gösterir. Bu yüzden hedefli duyuruyu, genel duyurudan <b>sonra</b> yayınlayın — aksi halde sonradan yayınlanan genel duyuru hedefli mesajı gölgeler.</div>
     </form>
   </section>
-  <section>
-    <h2>Kademeli Güncelleme</h2>
-    ${UPDATE_ROLLOUT_POLICY
-      ? `<div class="ann-item"><b>v${esc(UPDATE_ROLLOUT_POLICY.targetVersion)}</b> · ` +
-        `%${UPDATE_ROLLOUT_POLICY.rolloutPercent} · ` +
-        `${UPDATE_ROLLOUT_POLICY.paused || updateRolloutRuntime.autoPaused ? "DURAKLATILDI" : "aktif"}` +
-        `${updateRolloutRuntime.reason ? ` · ${esc(updateRolloutRuntime.reason)}` : ""}` +
-        `<div class="muted">Son pencere: ${updateRolloutRuntime.failedDevices}/${updateRolloutRuntime.devices} sorunlu cihaz (%${updateRolloutRuntime.failurePercent})</div></div>`
-      : '<div class="empty">UPDATE_ROLLOUT_JSON tanımlı değil; güncellemeler herkese açıktır.</div>'}
+  <section id="playback-policy">
+    <h2>Oynatma politikası <span class="muted">(playbackPolicy)</span></h2>
+    ${policyNotice}
+    <form class="ann" method="post" action="/api/playback-policy">
+      ${CSRF.field}
+      <div class="muted" style="margin-bottom:8px">${policySource}</div>
+      <textarea class="policy" name="policy" maxlength="32768" spellcheck="false" placeholder='{"ttlSeconds":7200,"deviceOverrides":[{"match":{"model":"AFTM|AFTT"},"set":{"bufferMode":"HIGH","startEngine":"EXOPLAYER"}}]}'>${esc(policyText)}</textarea>
+      <button class="sendbtn" type="submit">Politikayı kaydet</button>
+      <div class="muted" style="margin-top:6px">Her kalp atışında (dakikada bir) cihazlara gönderilir; <b>ttlSeconds</b> dolunca cihaz varsayılana döner. En fazla 32 KB, 32 kural, regex ≤ 128 karakter. Şema ve örnekler: <span class="mono">docs/playback-policy.md</span>. Kural alanları cihaz sayfasındaki <b>Donanım / Kart / SoC / RAM</b> değerleriyle eşleşir.</div>
+      ${policyRulePreview}
+    </form>
+    ${storedPlaybackPolicyText ? `<form method="post" action="/api/playback-policy/clear" style="margin-top:8px" onsubmit="return confirm('Panelde kayıtlı politika silinsin mi? (Ortam değişkeni varsa ona dönülür.)')">
+      ${CSRF.field}
+      <button class="clearbtn" type="submit">Kayıtlı politikayı sil</button>
+    </form>` : ""}
   </section>
   <section>
     <h2>Destek Kodu Ara</h2>
@@ -2228,6 +2410,38 @@ app.get("/api/telemetry/summary", auth, async (req, res) => {
   }
 });
 
+// ---- Per-crash page: the full log (the panel only inlines a short preview) ----
+app.get("/crash/:id", auth, async (req, res) => {
+  const id = toInt(req.params.id);
+  if (!id) return res.status(400).send("Geçersiz çökme id.");
+  const { rows } = await pool.query(`SELECT * FROM crash_reports WHERE id = $1`, [id]);
+  const r = rows[0];
+  if (!r) return res.status(404).send("Çökme raporu bulunamadı.");
+  const name = `${r.manufacturer || ""} ${r.model || ""}`.trim() || "Bilinmeyen cihaz";
+  res.send(`<!doctype html><html lang="tr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Çökme #${r.id} — ${esc(name)}</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#0E1116; color:#F5F7FA; font:14px/1.5 system-ui, sans-serif; }
+  header { padding:20px 24px; border-bottom:1px solid #1C232D; }
+  a { color:#3DA9FC; text-decoration:none; font-size:13px; }
+  h1 { margin:8px 0 4px; font-size:18px; }
+  .muted { color:#5B6877; font-size:12px; }
+  main { padding:16px 24px; }
+  pre { background:#161B22; border:1px solid #1C232D; border-radius:8px; padding:12px; overflow:auto; font-size:11px; color:#9AA7B4; white-space:pre-wrap; word-break:break-word; }
+</style></head><body>
+<header>
+  <a href="/">← Panele dön</a>${r.device_id ? ` · <a href="/device/${encodeURIComponent(r.device_id)}">Cihaz sayfası</a>` : ""}
+  <h1>${esc(name)} · Android ${esc(r.android_version || "?")} · ${versionLabel(r.app_version, r.version_code)}</h1>
+  <div class="muted">${esc(fmt(r.received_at))}${r.ip ? " · " + esc(r.ip) : ""}</div>
+</header>
+<main>
+  <pre>${esc(r.message || "(mesaj yok)")}</pre>
+  <pre>${esc(r.log || "(kayıt yok)")}</pre>
+</main></body></html>`);
+});
+
 // ---- Per-device detail page: crash / nettest / watch history ----
 app.get("/device/:id", auth, async (req, res) => {
   const deviceId = clip(req.params.id, 128);
@@ -2381,7 +2595,7 @@ app.get("/device/:id", auth, async (req, res) => {
   <section>
     <div class="info">
       <div><div class="k">Durum</div><div class="v">${d.online ? "Çevrimiçi" : "Çevrimdışı"}</div></div>
-      <div><div class="k">Kullanıcı</div><div class="v">${d.username ? esc(d.username) : "—"}</div></div>
+      <div><div class="k">Hesap</div><div class="v">${d.username ? esc(d.username) : "—"}</div></div>
       <div><div class="k">IP</div><div class="v mono">${esc(d.ip || "—")}</div></div>
       <div><div class="k">Konum</div><div class="v">${esc(geo)}</div></div>
       <div><div class="k">Sürüm</div><div class="v">${versionLabel(d.app_version, d.version_code)}</div></div>
@@ -2395,6 +2609,9 @@ app.get("/device/:id", auth, async (req, res) => {
             : "—"
       }</div></div>
       <div><div class="k">Oynatıcı ayarları</div><div class="v mono">${esc(d.player_settings || "—")}</div></div>
+      <div><div class="k">Donanım / Kart</div><div class="v mono" title="playbackPolicy.deviceOverrides: match.hardware / match.board">${esc(d.hardware || "—")} / ${esc(d.board || "—")}</div></div>
+      <div><div class="k">SoC</div><div class="v mono" title="match.socModel (Android 12+)">${esc(d.soc_model || "—")}</div></div>
+      <div><div class="k">RAM</div><div class="v" title="match.totalRamMaxMb / match.lowRam">${d.total_ram_mb ? esc(d.total_ram_mb) + " MB" : "—"}${d.low_ram === true ? ' <span class="badge warn">lowRam</span>' : ""}</div></div>
       <div><div class="k">İlk görülme</div><div class="v">${esc(fmt(d.first_seen))}</div></div>
       <div><div class="k">Son görülme</div><div class="v">${esc(ago(d.last_seen))}</div></div>
     </div>
@@ -2402,6 +2619,7 @@ app.get("/device/:id", auth, async (req, res) => {
   <section>
     <h2>Bu cihaza mesaj gönder</h2>
     <form method="post" action="/api/announcement" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start">
+      ${CSRF.field}
       <input type="hidden" name="target_device_id" value="${esc(d.device_id)}">
       <textarea name="message" maxlength="500" placeholder="Yalnızca bu cihaza gösterilecek mesaj" style="flex:1;min-width:280px;background:#0E1116;color:#F5F7FA;border:1px solid #2A3340;border-radius:8px;padding:10px;min-height:54px;resize:vertical;font:13px system-ui,sans-serif"></textarea>
       <button type="submit" style="background:#1f5a35;color:#D6FBE5;border:1px solid #2FBF71;padding:9px 18px;border-radius:8px;cursor:pointer">Gönder</button>
@@ -2416,11 +2634,25 @@ app.get("/device/:id", auth, async (req, res) => {
 </body></html>`);
 });
 
+// Final error handler: log server-side, answer with a generic body (never a
+// stack trace). Express 5 routes rejected promises here, so admin routes that
+// await pool.query without try/catch are covered too.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
+  if (status >= 500) console.error(`[crash-receiver] ${req.method} ${req.path} failed`, err);
+  const wantsJson = req.path.startsWith("/api/") || req.accepts(["html", "json"]) === "json";
+  if (wantsJson) return res.status(status).json({ error: status >= 500 ? "internal_error" : "bad_request" });
+  return res.status(status).type("text/plain").send(status >= 500 ? "Internal error" : "Bad request");
+});
+
 initDb()
   .then(() => {
     app.listen(PORT, "0.0.0.0", () =>
       console.log(`[crash-receiver] listening on :${PORT}`),
     );
+    setInterval(sweepMemoryMaps, 5 * 60 * 1000).unref();
     if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
       setTimeout(checkSharingAlerts, 30 * 1000);
       setInterval(checkSharingAlerts, 10 * 60 * 1000);

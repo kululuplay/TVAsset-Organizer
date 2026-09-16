@@ -130,7 +130,7 @@ class HomeViewModel(
                 return@launch
             }
             _loadState.value = CatalogLoadState(loading = true, total = 1)
-            when (val result = repo.refreshLive(config)) {
+            when (val result = repo.refreshLive(config, force = true)) {
                 is Outcome.Success -> _loadState.value = CatalogLoadState()
                 is Outcome.Failure -> {
                     _loadState.value = CatalogLoadState(errorRes = result.error.messageRes)

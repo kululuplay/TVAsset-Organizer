@@ -65,6 +65,7 @@ class SettingsStore(
         val BUFFER_MODE = stringPreferencesKey("buffer_mode")
         val AUDIO_PASSTHROUGH = booleanPreferencesKey("audio_passthrough")
         val DEBUG_OVERLAY = booleanPreferencesKey("debug_overlay")
+        val LIVE_PREVIEW = booleanPreferencesKey("live_preview")
         val LAST_CHANNEL = stringPreferencesKey("last_channel")
         val RESUME_ON_LAUNCH = booleanPreferencesKey("resume_on_launch")
         val LANGUAGE = stringPreferencesKey("language")
@@ -250,6 +251,18 @@ class SettingsStore(
     suspend fun setDebugOverlay(enabled: Boolean) =
         dataStore.edit { it[Keys.DEBUG_OVERLAY] = enabled }
 
+    /**
+     * Inline live preview on the Home screen. Null = never chosen: the UI then
+     * falls back to the device default (on, unless the compatibility profile or
+     * a remote override says otherwise). An explicit choice always wins.
+     */
+    val livePreviewChoice: Flow<Boolean?> = dataStore.data.map {
+        it[Keys.LIVE_PREVIEW]
+    }
+
+    suspend fun setLivePreview(enabled: Boolean) =
+        dataStore.edit { it[Keys.LIVE_PREVIEW] = enabled }
+
     val aspectRatio: Flow<AspectRatio> = dataStore.data.map { prefs ->
         runCatching { AspectRatio.valueOf(prefs[Keys.ASPECT] ?: "") }
             .getOrDefault(AspectRatio.ORIGINAL)
@@ -365,6 +378,26 @@ class SettingsStore(
     }
 
     suspend fun hasPin(): Boolean = !getPin().isNullOrEmpty()
+
+    // ---- PIN attempt throttling -----------------------------------------
+    // Wrong-attempt counter and lockout deadline (wall clock, ms). Kept in a tiny
+    // SharedPreferences file (same approach as the locale mirror) so the PIN
+    // dialog can read it synchronously on the main thread when it opens.
+
+    fun pinFailureCount(): Int = pinGuardPrefs.getInt(PIN_GUARD_FAILURES, 0)
+
+    fun pinLockedUntilMs(): Long = pinGuardPrefs.getLong(PIN_GUARD_LOCKED_UNTIL, 0L)
+
+    fun setPinAttemptState(failures: Int, lockedUntilMs: Long) {
+        pinGuardPrefs.edit()
+            .putInt(PIN_GUARD_FAILURES, failures)
+            .putLong(PIN_GUARD_LOCKED_UNTIL, lockedUntilMs)
+            .apply()
+    }
+
+    private val pinGuardPrefs by lazy {
+        context.getSharedPreferences("pin_guard", Context.MODE_PRIVATE)
+    }
 
     // ---- TMDB -----------------------------------------------------------
 
@@ -585,6 +618,9 @@ class SettingsStore(
     companion object {
         /** Default parental PIN used until the user sets their own. */
         const val DEFAULT_PIN = "0000"
+
+        private const val PIN_GUARD_FAILURES = "failures"
+        private const val PIN_GUARD_LOCKED_UNTIL = "locked_until"
 
         /** CI-injected TMDB key; older encrypted overrides remain compatible. */
         val DEFAULT_TMDB_KEY: String = BuildConfig.TMDB_API_KEY

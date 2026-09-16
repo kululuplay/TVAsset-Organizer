@@ -12,8 +12,10 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
 import androidx.core.view.ViewCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.R
 import com.iptv.player.data.model.ContentType
@@ -96,11 +98,13 @@ class CategoryManagerActivity : BaseActivity() {
         binding.cmReset.nextFocusRightId = binding.cmReset.id
 
         lifecycleScope.launch {
-            viewModel.categories.collectLatest { list ->
-                // Ignore flow updates while actively reordering a row.
-                if (movingId != null) return@collectLatest
-                items = list.toMutableList()
-                submit()
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.categories.collectLatest { list ->
+                    // Ignore flow updates while actively reordering a row.
+                    if (movingId != null) return@collectLatest
+                    items = list.toMutableList()
+                    submit()
+                }
             }
         }
     }
@@ -131,7 +135,16 @@ class CategoryManagerActivity : BaseActivity() {
     }
 
     private fun updateFocusGraph() {
-        val first = binding.categoryList.layoutManager?.findViewByPosition(0)
+        val list = binding.categoryList
+        // DiffUtil moves rows without rebinding them, so a row that used to be
+        // first keeps pointing Up at Reset. Re-stamp every attached row from its
+        // current adapter position instead of only the new first one.
+        for (i in 0 until list.childCount) {
+            val child = list.getChildAt(i)
+            val position = list.getChildAdapterPosition(child)
+            child.nextFocusUpId = if (position == 0) binding.cmReset.id else View.NO_ID
+        }
+        val first = list.layoutManager?.findViewByPosition(0)
         if (first == null) {
             binding.cmReset.nextFocusDownId = binding.cmReset.id
             return

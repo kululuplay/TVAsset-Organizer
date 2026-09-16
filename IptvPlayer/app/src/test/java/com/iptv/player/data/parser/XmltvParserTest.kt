@@ -45,6 +45,15 @@ class XmltvParserTest {
         } finally { TimeZone.setDefault(previous) }
     }
 
+    @Test fun `first title and description win in multi-language programmes`() {
+        val xml = """<tv><programme channel="epg.11" start="20260908150000 +0300" stop="20260908160000 +0300">""" +
+            """<title lang="tr">Haber</title><title lang="en">News</title>""" +
+            """<desc lang="tr">Açıklama</desc><desc lang="en">Description</desc></programme></tv>"""
+        val program = parse(xml.toByteArray()).single()
+        assertEquals("Haber", program.title)
+        assertEquals("Açıklama", program.description)
+    }
+
     @Test fun `large guide emits every programme through bounded callback parsing`() {
         var count = 0
         val xml = "<tv>" + programme.repeat(20_000) + "</tv>"

@@ -16,6 +16,20 @@
     <!-- In-app updates: download + install the latest APK from GitHub Releases. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Package visibility (API 30+): without these, queryIntentActivities() in
+         ApkInstaller sees no installer for a downloaded APK and cannot grant it
+         the content URI. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.INSTALL_PACKAGE" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+    </queries>
+
     <!-- TV apps must not require a touchscreen. -->
     <uses-feature
         android:name="android.hardware.touchscreen"
@@ -27,8 +41,9 @@
         android:required="false" />
 
     <!-- Arbitrary user-supplied IPTV portals, redirects, CDN hosts and IP
-         endpoints commonly support HTTP only. App-owned endpoints remain HTTPS
-         URLs; credentials at rest are encrypted and diagnostics redact URLs. -->
+         endpoints commonly support HTTP only. App-owned endpoints are pinned to
+         HTTPS in network_security_config.xml; credentials at rest are encrypted
+         and diagnostics redact URLs. -->
     <application
         android:name=".IptvApp"
         android:allowBackup="false"

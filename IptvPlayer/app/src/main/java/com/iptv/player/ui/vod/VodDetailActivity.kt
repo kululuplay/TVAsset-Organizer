@@ -21,6 +21,7 @@ import com.iptv.player.data.ServiceLocator
 import com.iptv.player.data.model.ResumeKind
 import com.iptv.player.data.model.VodItem
 import com.iptv.player.databinding.ActivityVodDetailBinding
+import com.iptv.player.ui.common.DurationFormat
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.CastAdapter
 import com.iptv.player.ui.common.LogoPlaceholder
@@ -361,7 +362,7 @@ class VodDetailActivity : BaseActivity() {
             year?.let { "${getString(R.string.detail_year)} $it" }
         binding.detailYear.visibility = if (year != null) View.VISIBLE else View.GONE
 
-        val duration = item.durationSecs?.takeIf { it > 0 }?.let { formatDuration(it) }
+        val duration = item.durationSecs?.takeIf { it > 0 }?.let { DurationFormat.seconds(it) }
         binding.detailDuration.text = duration ?: ""
         binding.detailDuration.visibility = if (duration != null) View.VISIBLE else View.GONE
 
@@ -432,18 +433,6 @@ class VodDetailActivity : BaseActivity() {
             val showCast = cast.isNotEmpty()
             binding.castLabel.visibility = if (showCast) View.VISIBLE else View.GONE
             binding.castList.visibility = if (showCast) View.VISIBLE else View.GONE
-        }
-    }
-
-    /** Seconds -> "H:MM:SS" (or "M:SS" when under an hour). */
-    private fun formatDuration(secs: Int): String {
-        val h = secs / 3600
-        val m = (secs % 3600) / 60
-        val s = secs % 60
-        return if (h > 0) {
-            String.format(Locale.getDefault(), "%d:%02d:%02d", h, m, s)
-        } else {
-            String.format(Locale.getDefault(), "%d:%02d", m, s)
         }
     }
 

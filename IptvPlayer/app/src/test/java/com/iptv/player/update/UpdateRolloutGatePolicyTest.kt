@@ -6,10 +6,53 @@ import org.junit.Test
 class UpdateRolloutGatePolicyTest {
 
     @Test
-    fun `future policy allows the currently published bootstrap release`() {
+    fun `future policy allows the last known-good release regardless of pause`() {
         assertEquals(
             UpdateRolloutGatePolicy.Outcome.Allow,
             decide(candidate = "1.5.83", target = "1.5.84", percent = 0, paused = true),
+        )
+        assertEquals(
+            UpdateRolloutGatePolicy.Outcome.Allow,
+            decide(candidate = "1.5.82", target = "1.5.84", percent = 0, paused = true),
+        )
+    }
+
+    @Test
+    fun `future policy holds a release between stable and target`() {
+        // 1.5.84 was published but the policy already targets 1.5.85 with a hold:
+        // the older-than-target build must not bypass paused/rolloutPercent.
+        assertEquals(
+            UpdateRolloutGatePolicy.Outcome.Hold("1.5.83"),
+            decide(candidate = "1.5.84", target = "1.5.85", percent = 0, paused = true),
+        )
+        assertEquals(
+            UpdateRolloutGatePolicy.Outcome.Hold("1.5.83"),
+            decide(candidate = "1.5.84", target = "1.5.85", percent = 100),
+        )
+    }
+
+    @Test
+    fun `future policy without a stable fallback holds every older release`() {
+        assertEquals(
+            UpdateRolloutGatePolicy.Outcome.Hold(null),
+            decide(candidate = "1.5.83", target = "1.5.84", percent = 100, stable = null),
+        )
+    }
+
+    @Test
+    fun `emergency admits only the exact target`() {
+        assertEquals(
+            UpdateRolloutGatePolicy.Outcome.Hold("1.5.83"),
+            decide(
+                candidate = "1.5.84",
+                target = "1.5.85",
+                percent = 100,
+                emergency = true,
+            ),
+        )
+        assertEquals(
+            UpdateRolloutGatePolicy.Outcome.Hold("1.5.83"),
+            decide(candidate = "1.5.86", target = "1.5.85", percent = 100, emergency = true),
         )
     }
 
@@ -65,12 +108,13 @@ class UpdateRolloutGatePolicyTest {
         percent: Int,
         paused: Boolean = false,
         emergency: Boolean = false,
+        stable: String? = "1.5.83",
     ): UpdateRolloutGatePolicy.Outcome = UpdateRolloutGatePolicy.decide(
         httpCode = 200,
         body = """{
             "schema":1,
             "targetVersion":"$target",
-            "stableVersion":"1.5.83",
+            "stableVersion":${stable?.let { "\"$it\"" }},
             "rolloutPercent":$percent,
             "paused":$paused,
             "emergency":$emergency,

@@ -85,4 +85,10 @@
     <string name="about_update_not_newer">Diese APK ist nicht neuer als die installierte Anwendung.</string>
     <string name="about_update_signature_mismatch">Die Update-Signatur stimmt nicht mit der installierten App überein. Android kann diese Installation nicht sicher aktualisieren, ohne sie vorher zu entfernen.</string>
 
+    <!-- Added by the 2026-09 translation audit -->
+    <string name="about_download_preparing">Wird vorbereitet…</string>
+    <string name="about_download_size">%1$s / %2$s</string>
+    <string name="about_download_meta">%1$s/s · noch %2$s</string>
+    <string name="about_download_complete">Download abgeschlossen. Installer wird geöffnet…</string>
+    <string name="about_download_cancel">Abbrechen</string>
 </resources>

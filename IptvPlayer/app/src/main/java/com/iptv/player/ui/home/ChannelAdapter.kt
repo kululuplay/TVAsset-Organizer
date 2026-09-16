@@ -34,6 +34,12 @@ class ChannelAdapter(
     var lockedProvider: (Channel) -> Boolean = { false }
 
     /**
+     * While a compatibility-profile device plays fullscreen, rows bind only the
+     * initial placeholder: no network/decode work competes with the video decoder.
+     */
+    var suppressLogos: Boolean = false
+
+    /**
      * Re-binds only attached rows after parental-lock state changes. This avoids
      * replacing the list (and disturbing TV focus) merely to update masking.
      */
@@ -122,7 +128,7 @@ class ChannelAdapter(
             logo.scaleType = ImageView.ScaleType.FIT_CENTER
 
             val placeholder = LogoPlaceholder.forName(itemView.context, channel.name)
-            if (channel.logoUrl.isNullOrBlank()) {
+            if (channel.logoUrl.isNullOrBlank() || suppressLogos) {
                 logo.load(placeholder) {
                     crossfade(false)
                 }

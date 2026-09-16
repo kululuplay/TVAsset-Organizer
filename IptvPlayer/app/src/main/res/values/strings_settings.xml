@@ -127,4 +127,7 @@
     <string name="speedtest_msg_normal">Sufficient for HD streams.</string>
     <string name="speedtest_msg_good">A good speed for smooth streaming.</string>
     <string name="speedtest_msg_excellent">Excellent for all content, including 4K.</string>
+    <!-- Parental PIN lockout + diagnostics (2026-09 audit) -->
+    <string name="pin_locked_retry">Too many wrong attempts. Try again in %1$d s.</string>
+    <string name="settings_pin_unchanged">The PIN has not been changed yet; the default code is still active. Set your own PIN to protect locked content.</string>
 </resources>

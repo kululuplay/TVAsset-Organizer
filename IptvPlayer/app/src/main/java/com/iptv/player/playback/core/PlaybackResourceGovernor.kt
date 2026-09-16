@@ -28,6 +28,7 @@ class PlaybackResourceGate {
     private val nextToken = AtomicLong(1L)
     private val owners = linkedMapOf<Long, String>()
     private val idleListeners = linkedMapOf<Long, () -> Unit>()
+    private val activityListeners = linkedMapOf<Long, (Boolean) -> Unit>()
     private val nextListener = AtomicLong(1L)
 
     private val _activeOwnerCount = MutableStateFlow(0)
@@ -43,24 +44,36 @@ class PlaybackResourceGate {
 
     fun begin(owner: String): PlaybackResourceToken {
         val label = owner.trim().take(MAX_OWNER_LABEL_LENGTH).ifEmpty { "player" }
+        val edgeListeners: List<(Boolean) -> Unit>
+        val token: Long
         synchronized(lock) {
             val wasIdle = owners.isEmpty()
-            val token = nextToken.getAndIncrement()
+            token = nextToken.getAndIncrement()
             owners[token] = label
             _activeOwnerCount.value = owners.size
             if (wasIdle) _playbackEpoch.value = _playbackEpoch.value + 1L
-            return PlaybackResourceToken(token)
+            edgeListeners = if (wasIdle) activityListeners.values.toList() else emptyList()
+            // Idle -> active edge for system resource holders (Wi-Fi lock). Delivered
+            // under the lock so a concurrent end() cannot publish its idle edge
+            // between this edge's decision and its delivery; listeners must be
+            // quick and must not call back into the gate.
+            edgeListeners.forEach { listener -> runCatching { listener(true) } }
         }
+        return PlaybackResourceToken(token)
     }
 
     /** Returns false for an unknown/already-ended token; the count never underflows. */
     fun end(token: PlaybackResourceToken?): Boolean {
         if (token == null) return false
         val listeners: List<() -> Unit>
+        val edgeListeners: List<(Boolean) -> Unit>
         synchronized(lock) {
             if (owners.remove(token.value) == null) return false
             _activeOwnerCount.value = owners.size
-            listeners = if (owners.isEmpty()) idleListeners.values.toList() else emptyList()
+            val idle = owners.isEmpty()
+            listeners = if (idle) idleListeners.values.toList() else emptyList()
+            edgeListeners = if (idle) activityListeners.values.toList() else emptyList()
+            edgeListeners.forEach { listener -> runCatching { listener(false) } }
         }
         // Call application/WorkManager code outside the lock.
         listeners.forEach { listener -> runCatching(listener) }
@@ -109,6 +122,21 @@ class PlaybackResourceGate {
         return AutoCloseable { synchronized(lock) { idleListeners.remove(id) } }
     }
 
+    /**
+     * Fires true on every idle -> active edge and false on every active -> idle
+     * edge (never per owner). A session already open at registration is reported
+     * immediately so a late installer cannot miss it.
+     */
+    fun addActivityListener(listener: (active: Boolean) -> Unit): AutoCloseable {
+        val id = nextListener.getAndIncrement()
+        val activeNow = synchronized(lock) {
+            activityListeners[id] = listener
+            owners.isNotEmpty()
+        }
+        if (activeNow) runCatching { listener(true) }
+        return AutoCloseable { synchronized(lock) { activityListeners.remove(id) } }
+    }
+
     private companion object {
         const val MAX_OWNER_LABEL_LENGTH = 48
     }
@@ -127,4 +155,6 @@ object PlaybackResourceGovernor {
     suspend fun <T> runWhileIdle(block: suspend () -> T): IdleWorkResult<T> =
         gate.runWhileIdle(block)
     fun addIdleListener(listener: () -> Unit): AutoCloseable = gate.addIdleListener(listener)
+    fun addActivityListener(listener: (active: Boolean) -> Unit): AutoCloseable =
+        gate.addActivityListener(listener)
 }

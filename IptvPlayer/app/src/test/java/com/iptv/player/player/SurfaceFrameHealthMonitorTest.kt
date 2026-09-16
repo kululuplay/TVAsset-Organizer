@@ -218,6 +218,37 @@ class SurfaceFrameHealthMonitorTest {
         }
     }
 
+    @Test fun hungPixelCopyReportsSamplingUnavailableInsteadOfWaitingForever() {
+        Fixture(uhd = true).use { f ->
+            f.start()
+            assertTrue(f.runNext()) // Request issued; the native callback never fires.
+            assertEquals(1, f.copies)
+            val requestedAt = f.now
+            assertTrue(f.runNext()) // Per-sample timeout.
+            assertEquals(4_000L, f.now - requestedAt)
+            assertEquals(1, f.unavailable)
+            assertTrue(f.monitor.isSamplingUnavailable())
+            assertEquals(0, f.healthy)
+            assertFalse(f.runNext())
+            // A late completion must not validate the retired sample.
+            f.complete()
+            assertEquals(0, f.healthy)
+            assertFalse(f.monitor.hasHealthyFrame())
+            assertEquals(f.copies, f.recycled)
+        }
+    }
+
+    @Test fun completedCopyCancelsItsTimeout() {
+        Fixture(uhd = true).use { f ->
+            f.start()
+            f.sample(copyDurationMs = 3_900)
+            f.sample()
+            assertEquals(1, f.healthy)
+            assertEquals(0, f.unavailable)
+            assertFalse(f.runNext())
+        }
+    }
+
     @Test fun constrainedDevicesRetainExistingStartupOnlyBehavior() {
         Fixture(constrained = true).use { f ->
             f.start()
@@ -295,6 +326,10 @@ class SurfaceFrameHealthMonitorTest {
                     true
                 }
                 "post" -> { tasks.add(Task(now, invocation.arguments[0] as Runnable)); true }
+                "removeCallbacks" -> {
+                    tasks.removeIf { it.runnable === invocation.arguments[0] }
+                    null
+                }
                 else -> Mockito.RETURNS_DEFAULTS.answer(invocation)
             }
         }

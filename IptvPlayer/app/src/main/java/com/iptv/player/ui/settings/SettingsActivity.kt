@@ -28,6 +28,7 @@ import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.iptv.player.BuildConfig
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
@@ -37,10 +38,15 @@ import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.data.prefs.SettingsStore
 import com.iptv.player.databinding.ActivitySettingsBinding
+import com.iptv.player.playback.android.PlaybackQoeRuntime
+import com.iptv.player.playback.core.CompatibilityReason
+import com.iptv.player.playback.core.DevicePlaybackProfile
 import com.iptv.player.ui.content.ContentManagerActivity
 import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.ui.common.PinAttemptGuard
 import com.iptv.player.ui.common.PinPromptDialog
 import com.iptv.player.ui.diagnostics.DiagnosticsActivity
+import com.iptv.player.ui.home.LivePreviewPolicy
 import com.iptv.player.ui.login.LoginActivity
 import com.iptv.player.ui.profiles.ProfilesActivity
 import com.iptv.player.ui.splash.SplashPrefetch
@@ -48,6 +54,7 @@ import com.iptv.player.update.UpdateChecker
 import com.iptv.player.update.UpdateResult
 import com.iptv.player.util.LocaleManager
 import com.iptv.player.util.Logger
+import com.iptv.player.util.PlaybackRemotePolicy
 import com.iptv.player.util.SupportDiagnosticDialog
 import com.iptv.player.util.PublicIpProvider
 import com.iptv.player.util.SpeedTester
@@ -55,6 +62,7 @@ import com.iptv.player.work.SyncScheduler
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -104,6 +112,7 @@ class SettingsActivity : BaseActivity() {
     private var bufferModeValue: TextView? = null
     private var passthroughSwitch: SwitchCompat? = null
     private var debugOverlaySwitch: SwitchCompat? = null
+    private var livePreviewSwitch: SwitchCompat? = null
     private var selectedPlayerMode = PlayerMode.AUTO
     private var selectedDecoderMode = DecoderMode.AUTO
     private var selectedBufferMode = BufferMode.NORMAL
@@ -586,6 +595,25 @@ class SettingsActivity : BaseActivity() {
         }
         c.addView(passthroughRow)
 
+        // Inline live preview on Home. The switch shows the EFFECTIVE value: an
+        // explicit choice, else the device default (off on weak sticks / remote
+        // override). Clicking always persists an explicit choice.
+        val previewRow = inflateMaster(c, getString(R.string.settings_live_preview))
+        livePreviewSwitch = previewRow.findViewById<SwitchCompat>(R.id.mSwitch)
+            .also { it.visibility = View.VISIBLE }
+        configureToggleRow(
+            previewRow,
+            getString(R.string.settings_live_preview),
+            livePreviewSwitch!!,
+        )
+        previewRow.setOnClickListener {
+            viewModel.setLivePreview(!livePreviewSwitch!!.isChecked)
+        }
+        c.addView(previewRow)
+
+        // Effective playback profile, so support can ask "what does it say?".
+        addInfoRow(c, getString(R.string.settings_playback_profile), playbackProfileLabel())
+
         // On-screen Debug overlay toggle (engine/stage/resolution + live log tail).
         val debugRow = inflateMaster(c, getString(R.string.settings_debug_overlay))
         debugOverlaySwitch = debugRow.findViewById<SwitchCompat>(R.id.mSwitch)
@@ -806,6 +834,10 @@ class SettingsActivity : BaseActivity() {
 
     private fun onPinDigit(d: String) {
         if (pinEntry.length >= 4) return
+        if (pinStage == PinStage.CURRENT && PinAttemptGuard.isLocked()) {
+            showPinLocked()
+            return
+        }
         if (pinErrorVisible) {
             pinErrorVisible = false
             renderPinHint()
@@ -831,8 +863,14 @@ class SettingsActivity : BaseActivity() {
         val entered = pinEntry.toString()
         when (pinStage) {
             PinStage.CURRENT -> lifecycleScope.launch {
+                if (PinAttemptGuard.isLocked()) {
+                    clearPinEntry()
+                    showPinLocked()
+                    return@launch
+                }
                 val stored = ServiceLocator.settings.getPin() ?: SettingsStore.DEFAULT_PIN
                 if (entered == stored) {
+                    PinAttemptGuard.reset()
                     pinStage = PinStage.NEW
                     pinEntry.setLength(0)
                     binding.pinPrompt.setText(R.string.settings_enter_new_pin)
@@ -841,12 +879,16 @@ class SettingsActivity : BaseActivity() {
                     updatePinBoxes()
                     binding.pinPrompt.announceForAccessibility(binding.pinPrompt.text)
                 } else {
+                    clearPinEntry()
+                    if (PinAttemptGuard.registerFailure()) {
+                        showPinLocked()
+                        return@launch
+                    }
                     Toast.makeText(
                         this@SettingsActivity,
                         R.string.pin_wrong,
                         Toast.LENGTH_SHORT,
                     ).show()
-                    clearPinEntry()
                     showPinError(R.string.pin_wrong)
                 }
             }
@@ -900,13 +942,22 @@ class SettingsActivity : BaseActivity() {
         binding.pinHint.setTextColor(
             ContextCompat.getColor(this, R.color.text_secondary),
         )
-        binding.pinHint.text = if (usesDefaultPin && pinStage == PinStage.CURRENT) {
+        // The panel is reachable without a PIN, so the digits are only revealed
+        // after the user has entered the current (default) PIN and is choosing a
+        // new one; before that the hint just says the PIN is still the default.
+        val hintRes = when {
+            !usesDefaultPin -> null
+            pinStage == PinStage.CURRENT -> R.string.settings_pin_unchanged
+            else -> R.string.settings_default_pin
+        }
+        binding.pinHint.text = if (hintRes != null) {
             buildString {
                 append(
-                    getString(
-                        R.string.settings_default_pin,
-                        SettingsStore.DEFAULT_PIN,
-                    ),
+                    if (hintRes == R.string.settings_default_pin) {
+                        getString(hintRes, SettingsStore.DEFAULT_PIN)
+                    } else {
+                        getString(hintRes)
+                    },
                 )
                 append('\n')
                 append(getString(R.string.settings_pin_remote_hint))
@@ -921,6 +972,21 @@ class SettingsActivity : BaseActivity() {
         binding.pinHint.setTextColor(ContextCompat.getColor(this, R.color.danger))
         binding.pinHint.setText(messageRes)
         binding.pinHint.announceForAccessibility(getString(messageRes))
+    }
+
+    /** Too many wrong PINs: show the remaining lockout as an inline error. */
+    private fun showPinLocked() {
+        val seconds = PinAttemptGuard.remainingLockSeconds()
+        if (seconds <= 0) {
+            if (pinErrorVisible) {
+                pinErrorVisible = false
+                renderPinHint()
+            }
+            return
+        }
+        pinErrorVisible = true
+        binding.pinHint.setTextColor(ContextCompat.getColor(this, R.color.danger))
+        binding.pinHint.text = getString(R.string.pin_locked_retry, seconds)
     }
 
     private fun buildUpdatesPanel() {
@@ -1322,6 +1388,28 @@ class SettingsActivity : BaseActivity() {
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
+    private fun devicePlaybackProfile(): DevicePlaybackProfile =
+        PlaybackQoeRuntime.devicePlaybackProfile()
+
+    /** "Standard" or "Compatibility (low RAM, ...)" from the resolved profile. */
+    private fun playbackProfileLabel(): String {
+        val profile = devicePlaybackProfile()
+        if (!profile.compatibilityMode) return getString(R.string.settings_playback_profile_standard)
+        val reasons = profile.reasons.joinToString(", ") { reason ->
+            getString(
+                when (reason) {
+                    CompatibilityReason.USER_SELECTED -> R.string.settings_profile_reason_user
+                    CompatibilityReason.ANDROID_LOW_RAM -> R.string.settings_profile_reason_low_ram
+                    CompatibilityReason.SMALL_APP_HEAP -> R.string.settings_profile_reason_small_heap
+                    CompatibilityReason.LIMITED_TOTAL_RAM -> R.string.settings_profile_reason_limited_ram
+                    CompatibilityReason.LEGACY_32_BIT_RUNTIME -> R.string.settings_profile_reason_legacy_32
+                    CompatibilityReason.NO_HARDWARE_AVC -> R.string.settings_profile_reason_no_hw_avc
+                },
+            )
+        }
+        return getString(R.string.settings_playback_profile_compat, reasons)
+    }
+
     private fun addChoiceGroup(
         container: LinearLayout, title: String, options: List<Pair<String, String>>,
         selected: () -> String, onSelect: (String) -> Unit,
@@ -1440,6 +1528,14 @@ class SettingsActivity : BaseActivity() {
 
     private fun observe() {
         lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { observeWhileStarted() }
+        }
+    }
+
+    // All of these are StateFlows of persisted preferences: re-collecting after
+    // a restart simply re-renders the current value, so nothing is double-fired.
+    private fun CoroutineScope.observeWhileStarted() {
+        launch {
             viewModel.lockAdult.collectLatest { enabled ->
                 lockAdultSwitch?.isChecked = enabled
                 lockAdultRow?.contentDescription = getString(
@@ -1449,10 +1545,10 @@ class SettingsActivity : BaseActivity() {
                 )
             }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.showClock.collectLatest { clockSwitch?.isChecked = it }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.screensaverMinutes.collectLatest {
                 selectedScreensaverMinutes = it
                 screensaverValue?.text = if (it <= 0) getString(R.string.settings_screensaver_off)
@@ -1460,20 +1556,20 @@ class SettingsActivity : BaseActivity() {
                 inlineSelections.forEach { it() }
             }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.autoSyncEnabled.collectLatest {
                 autoSyncEnabled = it
                 autoSyncSwitch?.isChecked = it
             }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.autoSyncHours.collectLatest {
                 autoSyncHours = it
                 autoSyncIntervalValue?.text = getString(R.string.settings_every_hours, it)
                 inlineSelections.forEach { it() }
             }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.languageTag.collectLatest { tag ->
                 languageRows.forEach { (t, row) ->
                     row.isSelected = t == tag
@@ -1488,7 +1584,7 @@ class SettingsActivity : BaseActivity() {
                 }
             }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.playbackSelection.collectLatest { selection ->
                 selectedPlayerMode = selection.player
                 selectedDecoderMode = selection.decoder
@@ -1504,23 +1600,35 @@ class SettingsActivity : BaseActivity() {
                 inlineSelections.forEach { it() }
             }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.streamFormat.collectLatest {
                 streamFormatValue?.text = streamFormatLabel(it)
             }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.bufferMode.collectLatest {
                 selectedBufferMode = it
                 bufferModeValue?.text = bufferModeLabel(it)
                 inlineSelections.forEach { it() }
             }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.audioPassthrough.collectLatest { passthroughSwitch?.isChecked = it }
         }
-        lifecycleScope.launch {
+        launch {
             viewModel.debugOverlay.collectLatest { debugOverlaySwitch?.isChecked = it }
+        }
+        launch {
+            viewModel.livePreviewChoice.collectLatest { choice ->
+                val remote = runCatching {
+                    PlaybackRemotePolicy.deviceOverrides().livePreviewEnabled
+                }.getOrNull()
+                livePreviewSwitch?.isChecked = LivePreviewPolicy.enabled(
+                    userChoice = choice,
+                    remote = remote,
+                    compat = devicePlaybackProfile().compatibilityMode,
+                )
+            }
         }
     }
 

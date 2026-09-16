@@ -186,6 +186,16 @@
     <string name="settings_audio_passthrough">Audio passthrough (for AV receivers)</string>
     <string name="settings_audio_passthrough_warning">Only enable this if an AV receiver or soundbar with Dolby/DTS decoding is connected. On TVs and projectors without a decoder, the picture will play but there will be NO sound. If sound is missing, turn this off.</string>
     <string name="settings_debug_overlay">Debug overlay (on player + preview)</string>
+    <string name="settings_live_preview">Live preview</string>
+    <string name="settings_playback_profile">Playback profile</string>
+    <string name="settings_playback_profile_standard">Standard</string>
+    <string name="settings_playback_profile_compat">Compatibility (%1$s)</string>
+    <string name="settings_profile_reason_user">chosen by you</string>
+    <string name="settings_profile_reason_low_ram">low RAM</string>
+    <string name="settings_profile_reason_small_heap">small app memory</string>
+    <string name="settings_profile_reason_limited_ram">limited total RAM</string>
+    <string name="settings_profile_reason_legacy_32">older 32-bit system</string>
+    <string name="settings_profile_reason_no_hw_avc">no hardware H.264 decoder</string>
     <string name="settings_share_playback_log">Send playback log</string>
     <string name="settings_playback_log_empty">No playback log yet</string>
     <string name="settings_language">Language</string>
@@ -312,4 +322,7 @@
     <string name="support_diagnostic_interrupted">Sending was interrupted. Retry to check delivery and receive your support number; duplicate reports are avoided.</string>
     <string name="support_diagnostic_incomplete">Some logs or settings were unavailable on this device. The available information was sent.</string>
     <string name="error_live_playback_failed">Playback could not continue. Please try again.</string>
+    <string name="playback_too_heavy_for_device">This channel is too heavy for this device. Choose the SD version if your provider offers one.</string>
+    <!-- Parental PIN lockout + diagnostics (2026-09 audit) -->
+    <string name="diag_loss_percent">%1$d%%</string>
 </resources>

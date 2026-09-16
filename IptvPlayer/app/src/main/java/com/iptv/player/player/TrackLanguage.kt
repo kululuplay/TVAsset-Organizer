@@ -16,6 +16,10 @@ object TrackLanguage {
         "rus" to "ru", "russian" to "ru", "русский" to "ru",
     )
 
+    // Locale.forLanguageTag() accepts ANY well-formed two-letter subtag, so a
+    // label token like "hd" or "ac" used to become a "language" preference.
+    private val isoLanguages: Set<String> = Locale.getISOLanguages().toHashSet()
+
     fun normalize(raw: String?): String? {
         val value = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val lower = value.lowercase(Locale.ROOT)
@@ -23,9 +27,7 @@ object TrackLanguage {
         val tokens = lower.split(Regex("[^\\p{L}]+"))
             .filter { it.isNotBlank() }
         tokens.forEach { token -> aliases[token]?.let { return it } }
-        tokens.firstOrNull { it.length == 2 && it.all(Char::isLetter) }?.let {
-            return Locale.forLanguageTag(it).language.takeIf { code -> code.length == 2 }
-        }
+        tokens.firstOrNull { it.length == 2 && it in isoLanguages }?.let { return it }
         tokens.firstOrNull { it.length == 3 && it.all(Char::isLetter) }?.let { iso3 ->
             Locale.getISOLanguages().firstOrNull { code ->
                 runCatching { Locale(code).getISO3Language().equals(iso3, ignoreCase = true) }

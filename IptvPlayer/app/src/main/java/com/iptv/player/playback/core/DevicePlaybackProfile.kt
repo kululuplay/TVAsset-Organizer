@@ -69,6 +69,20 @@ data class DevicePlaybackProfile(
 
 object DevicePlaybackProfileResolver {
 
+    /**
+     * A remote per-device verdict may decide AUTO for the box (true forces
+     * COMPATIBILITY, false forces STANDARD); an explicit user choice still wins.
+     */
+    fun preferenceWithOverride(
+        user: PlaybackProfilePreference,
+        remoteCompatibilityProfile: Boolean?,
+    ): PlaybackProfilePreference = when {
+        user != PlaybackProfilePreference.AUTO -> user
+        remoteCompatibilityProfile == true -> PlaybackProfilePreference.COMPATIBILITY
+        remoteCompatibilityProfile == false -> PlaybackProfilePreference.STANDARD
+        else -> PlaybackProfilePreference.AUTO
+    }
+
     fun resolve(
         signals: DevicePlaybackSignals,
         preference: PlaybackProfilePreference = PlaybackProfilePreference.AUTO,

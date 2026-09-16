@@ -156,7 +156,7 @@ class SearchActivity : BaseActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (normalizedQuery.isNotEmpty()) {
+                if (normalizedQuery.isNotEmpty() || !binding.searchInput.text.isNullOrEmpty()) {
                     clearSearch(focusInput = false)
                     binding.searchInput.hideSoftKeyboard()
                     selectedFilterView().requestFocus()
@@ -306,13 +306,17 @@ class SearchActivity : BaseActivity() {
                 before: Int,
                 count: Int,
             ) {
-                val next = value?.toString().orEmpty().trim()
+                val raw = value?.toString().orEmpty()
+                val next = raw.trim()
+                // Whitespace-only edits leave the normalized query untouched but
+                // the field is no longer empty: keep the clear button in sync so
+                // Back clears the field instead of finishing the screen.
+                binding.searchClearButton.visibility =
+                    if (raw.isEmpty()) View.INVISIBLE else View.VISIBLE
                 if (next == normalizedQuery) return
                 normalizedQuery = next
                 resetResultState(resetAnchors = true)
-                viewModel.setQuery(value?.toString().orEmpty())
-                binding.searchClearButton.visibility =
-                    if (next.isEmpty()) View.INVISIBLE else View.VISIBLE
+                viewModel.setQuery(raw)
                 renderSearchState()
             }
 

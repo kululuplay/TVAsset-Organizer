@@ -22,6 +22,7 @@ import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.LinearInterpolator
 import android.view.animation.OvershootInterpolator
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.databinding.ActivitySplashBinding
@@ -31,6 +32,7 @@ import com.iptv.player.ui.login.LoginActivity
 import com.iptv.player.ui.recovery.CrashRecoveryActivity
 import com.iptv.player.util.LaunchCrashGuard
 import com.iptv.player.util.Logger
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -42,6 +44,15 @@ class SplashActivity : BaseActivity() {
 
     /** Idle loops kept so they can be cancelled when we route onward. */
     private val animators = mutableListOf<ValueAnimator>()
+
+    /** Set once the guard is armed and cleared when a benign exit disarmed it. */
+    private var guardArmed = false
+
+    /** True after the hand-off to the Dashboard (the guarded step) has begun. */
+    private var routedToDashboard = false
+
+    /** In-flight disarm write; joined before a re-arm so the two cannot reorder. */
+    private var cleanExitJob: Job? = null
 
     /** Delayed kick-off for the idle loops; removed if we leave early. */
     private val idleLoopsRunnable = Runnable {
@@ -188,6 +199,25 @@ class SplashActivity : BaseActivity() {
             .start()
     }
 
+    override fun onStop() {
+        super.onStop()
+        // Leaving the splash without launching the Dashboard (Back, Home, a task
+        // switch, a config change) is not a crash. Disarm so the next launch does
+        // not count it toward the safe-mode streak; a later hand-off to the
+        // Dashboard re-arms right before the risky step.
+        if (guardArmed && !routedToDashboard) markCleanExit()
+    }
+
+    /**
+     * Runs on the app scope, not [lifecycleScope]: a Back press destroys this
+     * activity right after onStop and would cancel the write before it landed.
+     */
+    private fun markCleanExit() {
+        guardArmed = false
+        val app = applicationContext
+        cleanExitJob = ServiceLocator.appScope.launch { LaunchCrashGuard.markCleanExit(app) }
+    }
+
     override fun onDestroy() {
         binding.root.removeCallbacks(idleLoopsRunnable)
         listOf(
@@ -230,8 +260,12 @@ class SplashActivity : BaseActivity() {
             return
         }
         // Arm the guard before any risky startup work; cleared only once the
-        // Dashboard has drawn its first frame (DashboardActivity.onCreate).
+        // Dashboard has drawn its first frame (DashboardActivity.onCreate) or
+        // when this screen is left for a benign reason (onStop).
         LaunchCrashGuard.markLaunchStarted(this)
+        guardArmed = true
+        // The user may already have left while the arm was being committed.
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) markCleanExit()
         Logger.i("Splash", "Branded splash start")
 
         // Backfill a profile for accounts that connected before profiles existed.
@@ -240,7 +274,7 @@ class SplashActivity : BaseActivity() {
         val config = ServiceLocator.settings.getSourceConfig()
         if (config == null) {
             // Shouldn't happen (hasSource was true), but never hang: route on.
-            go(DashboardActivity::class.java)
+            goToDashboard()
             return
         }
 
@@ -265,6 +299,21 @@ class SplashActivity : BaseActivity() {
         }
 
         statusJob.cancel()
+        goToDashboard()
+    }
+
+    /**
+     * The guarded hand-off. If a Home/Back press disarmed the guard while the
+     * prefetch was still running, re-arm it here: the Dashboard launch is the
+     * risky step and its first frame is what proves the launch healthy.
+     */
+    private suspend fun goToDashboard() {
+        if (!guardArmed) {
+            cleanExitJob?.join()
+            LaunchCrashGuard.markLaunchStarted(this)
+            guardArmed = true
+        }
+        routedToDashboard = true
         go(DashboardActivity::class.java)
     }
 

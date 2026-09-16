@@ -50,4 +50,28 @@
     <string name="dash_offline_banner">Pas de connexion Internet — contenu enregistré affiché</string>
     <string name="dash_portal_unreachable">Serveur injoignable — nouvel essai automatique…</string>
     <string name="dash_reconnected_refreshing">Connexion rétablie — mise à jour du contenu…</string>
+    <!-- Added by the 2026-09 translation audit -->
+    <string name="dash_prompt_title">Que souhaitez-vous regarder ?</string>
+    <string name="dash_prompt_subtitle">Utilisez les flèches pour parcourir, appuyez sur OK pour ouvrir.</string>
+    <string name="dash_select_hint">Sélectionner · OK</string>
+    <string name="dash_sub_live">Chaînes &amp; sport</string>
+    <string name="dash_sub_movies">Films à la demande</string>
+    <string name="dash_sub_series">Séries &amp; épisodes</string>
+    <string name="dash_sub_settings">Préférences</string>
+    <string name="dash_sub_favorites">Vos sélections</string>
+    <string name="dash_sub_continue">Reprendre la lecture</string>
+    <string name="dash_sub_search">Tout trouver</string>
+    <string name="dash_sub_radio">Stations de radio</string>
+    <string name="weather_unavailable">Météo indisponible</string>
+    <string name="weather_temp_format">%1$d°</string>
+    <string name="weather_clear">Dégagé</string>
+    <string name="weather_partly">Partiellement nuageux</string>
+    <string name="weather_cloudy">Nuageux</string>
+    <string name="weather_fog">Brouillard</string>
+    <string name="weather_rain">Pluie</string>
+    <string name="weather_snow">Neige</string>
+    <string name="weather_storm">Orage</string>
+    <string name="signal_good">Bon</string>
+    <string name="signal_weak">Faible</string>
+    <string name="signal_offline">Hors ligne</string>
 </resources>

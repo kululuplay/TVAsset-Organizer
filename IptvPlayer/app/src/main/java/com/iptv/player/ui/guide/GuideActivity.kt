@@ -9,10 +9,14 @@ package com.iptv.player.ui.guide
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.widget.Toast
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.R
 import com.iptv.player.data.model.Channel
@@ -36,6 +40,17 @@ class GuideActivity : BaseActivity() {
 
     private var didInitialFocus = false
 
+    // Minute-aligned tick that keeps the "Now HH:mm" label and the live badge
+    // on the timeline cards current while the guide is on screen.
+    private val tickHandler = Handler(Looper.getMainLooper())
+    private val minuteTick = object : Runnable {
+        override fun run() {
+            updateNowIndicator()
+            programAdapter.refreshLiveState()
+            tickHandler.postDelayed(this, msUntilNextMinute())
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityGuideBinding.inflate(layoutInflater)
@@ -47,11 +62,27 @@ class GuideActivity : BaseActivity() {
         observe()
     }
 
+    override fun onStart() {
+        super.onStart()
+        tickHandler.removeCallbacks(minuteTick)
+        tickHandler.post(minuteTick)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        tickHandler.removeCallbacks(minuteTick)
+    }
+
     override fun onResume() {
         super.onResume()
         binding.dateText.text = DateFormat
             .getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
             .format(Date())
+    }
+
+    private fun msUntilNextMinute(): Long {
+        val now = System.currentTimeMillis()
+        return 60_000L - (now % 60_000L)
     }
 
     private fun setupLists() {
@@ -76,24 +107,30 @@ class GuideActivity : BaseActivity() {
 
     private fun observe() {
         lifecycleScope.launch {
-            viewModel.channels.collectLatest { channels ->
-                channelAdapter.submitList(channels)
-                if (!didInitialFocus && channels.isNotEmpty()) {
-                    didInitialFocus = true
-                    viewModel.selectChannel(channels.first())
-                    binding.channelList.post { binding.channelList.requestFocus() }
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    viewModel.channels.collectLatest { channels ->
+                        channelAdapter.submitList(channels)
+                        if (!didInitialFocus && channels.isNotEmpty()) {
+                            didInitialFocus = true
+                            viewModel.selectChannel(channels.first())
+                            binding.channelList.post { binding.channelList.requestFocus() }
+                        }
+                    }
+                }
+                launch {
+                    viewModel.programs.collectLatest { programs ->
+                        programAdapter.submitList(programs)
+                        binding.emptyGuide.visibility =
+                            if (programs.isEmpty()) View.VISIBLE else View.GONE
+                    }
+                }
+                launch {
+                    // Done/Failed are consumed back to Idle after the Toast, so
+                    // re-collecting after a restart cannot re-show a stale Toast.
+                    viewModel.refresh.collectLatest { state -> renderRefresh(state) }
                 }
             }
-        }
-        lifecycleScope.launch {
-            viewModel.programs.collectLatest { programs ->
-                programAdapter.submitList(programs)
-                binding.emptyGuide.visibility =
-                    if (programs.isEmpty()) View.VISIBLE else View.GONE
-            }
-        }
-        lifecycleScope.launch {
-            viewModel.refresh.collectLatest { state -> renderRefresh(state) }
         }
     }
 
@@ -130,7 +167,7 @@ class GuideActivity : BaseActivity() {
     private fun updateNowIndicator() {
         val now = System.currentTimeMillis()
         binding.nowIndicator.text =
-            getString(R.string.guide_now) + " " + EpgTimeFormatter.time(now)
+            getString(R.string.guide_now) + " " + EpgTimeFormatter.time(this, now)
     }
 
     private fun openMapping(channel: Channel) {

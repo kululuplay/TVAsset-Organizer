@@ -27,7 +27,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "node crash-receiver/server.js"
+args = "NODE_ENV=production node crash-receiver/server.js"
 waitForPort = 5000
 
 [workflows.workflow.metadata]
@@ -40,3 +40,6 @@ externalPort = 80
 [deployment]
 deploymentTarget = "autoscale"
 run = ["node", "crash-receiver/server.js"]
+
+[env]
+NODE_ENV = "production"

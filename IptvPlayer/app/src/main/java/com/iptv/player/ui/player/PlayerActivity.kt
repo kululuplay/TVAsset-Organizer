@@ -52,9 +52,11 @@ import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NowPlaying
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
+import com.iptv.player.ui.common.LowEndUiBudget
 import com.iptv.player.ui.common.PinLockHelper
 import com.iptv.player.ui.common.SleepTimer
 import com.iptv.player.ui.common.isAdult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -129,6 +131,12 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
 
     /** Diagnostics overlay state (toggled via the menu / INFO key). */
     private val statsHandler = Handler(Looper.getMainLooper())
+
+    /** Compatibility profile: overlays repaint half as often to spare the decoder. */
+    private val compatMode: Boolean by lazy {
+        runCatching { PlaybackQoeRuntime.devicePlaybackProfile().compatibilityMode }
+            .getOrDefault(false)
+    }
     private var statsVisible = false
 
     private val sleepTimer = SleepTimer { finish() }
@@ -234,8 +242,16 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         unlockedAdultCategoryId = intent.getStringExtra(EXTRA_AUTHORIZED_CATEGORY_ID)
 
         lifecycleScope.launch {
-            streamFormat = viewModel.streamFormat()
-            val channel = viewModel.resolveChannel(channelId)
+            // Playlist/settings resolution can fail (provider down, corrupt cache).
+            // Degrade to the generic error + finish instead of crashing the UI scope.
+            val channel = try {
+                streamFormat = viewModel.streamFormat()
+                viewModel.resolveChannel(channelId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                null
+            }
             // Playlist/settings resolution may finish after HOME was pressed. Do
             // not open a PIN dialog or construct a player behind another screen;
             // resume this one-time result only when this Activity is visible again.
@@ -735,7 +751,15 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         // Clear + hide immediately so a late callback can never flash stale text.
         clearEpg()
         epgJob = lifecycleScope.launch {
-            val nn = ServiceLocator.repository.getNowNext(channel)
+            val nn = try {
+                ServiceLocator.repository.getNowNext(channel)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                // Best-effort guide: never let an EPG fetch crash the UI coroutine.
+                // clearEpg() above already hid the overlay text.
+                return@launch
+            }
             // Ignore a result that arrived after the user already zapped away.
             if (currentChannel?.id != channel.id) return@launch
             bindEpg(nn)
@@ -885,6 +909,13 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         binding.playbackCover.visibility = View.VISIBLE
         binding.bufferingLabel.setText(R.string.error_stream_not_responding)
         binding.bufferingIndicator.visibility = View.VISIBLE
+    }
+
+    override fun onStreamTooHeavyForDevice(width: Int, height: Int, codec: String?) {
+        if (castOwnsPlayback || castLoadPending) return
+        // Advisory only. The controller keeps its own recovery budget; a toast
+        // never takes D-pad focus and vanishes on its own, unlike the retry card.
+        Toast.makeText(this, R.string.playback_too_heavy_for_device, Toast.LENGTH_LONG).show()
     }
 
     override fun onFatalError() {
@@ -1187,6 +1218,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         // Never carry a half-press across background/foreground. Some Bluetooth
         // remotes lose the UP event while an Activity is stopping.
         confirmPress.clear()
+        // The stats overlay must not keep polling the engine once off-screen;
+        // onStart re-arms it when the overlay is still enabled.
+        statsHandler.removeCallbacksAndMessages(null)
         super.onStop()
         // Drop any pending debounced zap so it can't start a stream after we've
         // backgrounded (it would re-open playback while not visible). Same for a
@@ -1226,6 +1260,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
             }
         }
         currentChannel?.let { NowPlaying.set(this, it.name, "Canlı") }
+        if (statsVisible) refreshStats()
     }
 
     override fun onDestroy() {
@@ -1267,7 +1302,10 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         if (!statsVisible || !::controller.isInitialized) return
         binding.statsOverlay.text = formatStats(controller.streamInfo())
         statsHandler.removeCallbacksAndMessages(null)
-        statsHandler.postDelayed({ refreshStats() }, STATS_REFRESH_MS)
+        statsHandler.postDelayed(
+            { refreshStats() },
+            LowEndUiBudget.refreshIntervalMs(STATS_REFRESH_MS, compatMode),
+        )
     }
 
     private fun formatStats(info: StreamInfo?): String {

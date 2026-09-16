@@ -4,6 +4,9 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
   parsePlaybackPolicy,
+  sanitizeDeviceOverrides,
+  validatePlaybackPolicyText,
+  deviceMatchesRule,
   parseUpdateRolloutPolicy,
   decideUpdateRollout,
   sanitizeSupportChecks,
@@ -52,6 +55,87 @@ test("playback policy exposes only typed in-range kill switches", () => {
     null,
   );
   assert.equal(parsePlaybackPolicy("not json"), null);
+});
+
+test("device override rules keep only closed-schema matches and sets", () => {
+  const rules = sanitizeDeviceOverrides([
+    {
+      match: { model: "AFTM|AFTT", sdkMax: 27, lowRam: true, totalRamMaxMb: 1536, junk: 1 },
+      set: { bufferMode: "high", startEngine: "ExoPlayer", tunneling: true, livePreview: false, evil: "x" },
+    },
+    { match: { model: "AFT(" }, set: { bufferMode: "HIGH" } }, // invalid regex
+    { match: { model: "a".repeat(129) }, set: { bufferMode: "HIGH" } }, // too long
+    { match: { model: 42 }, set: { bufferMode: "HIGH" } }, // not a string
+    { match: {}, set: { bufferMode: "ULTRA", tunneling: "yes" } }, // nothing valid to set
+    { set: { compatibilityProfile: true } }, // empty match = every device
+    "not an object",
+  ]);
+  assert.deepEqual(rules, [
+    {
+      match: { model: "AFTM|AFTT", sdkMax: 27, lowRam: true, totalRamMaxMb: 1536 },
+      set: { bufferMode: "HIGH", startEngine: "EXOPLAYER", tunneling: true, livePreview: false },
+    },
+    { match: {}, set: { compatibilityProfile: true } },
+  ]);
+  // Cap: 33 rules -> 32; a policy consisting only of rules is still a policy.
+  const many = Array.from({ length: 33 }, () => ({ set: { bufferMode: "LOW" } }));
+  assert.equal(sanitizeDeviceOverrides(many).length, 32);
+  assert.equal(
+    parsePlaybackPolicy(JSON.stringify({ deviceOverrides: many })).deviceOverrides.length,
+    32,
+  );
+  assert.equal(parsePlaybackPolicy('{"deviceOverrides":[{"set":{"x":1}}]}'), null);
+});
+
+test("panel policy text validation explains rejections and counts dropped rules", () => {
+  assert.equal(validatePlaybackPolicyText("").ok, false);
+  assert.match(validatePlaybackPolicyText("{oops").error, /invalid JSON/);
+  assert.match(validatePlaybackPolicyText("[1]").error, /object/);
+  assert.match(validatePlaybackPolicyText('{"deviceOverrides":{}}').error, /array/);
+  assert.match(validatePlaybackPolicyText('{"x":' + " ".repeat(33_000) + "1}").error, /too large/);
+  const tooMany = JSON.stringify({
+    deviceOverrides: Array.from({ length: 33 }, () => ({ set: { bufferMode: "LOW" } })),
+  });
+  assert.match(validatePlaybackPolicyText(tooMany).error, /too many/);
+  assert.match(validatePlaybackPolicyText('{"unknown":true}').error, /no valid policy/);
+  const ok = validatePlaybackPolicyText(
+    JSON.stringify({
+      ttlSeconds: 600,
+      deviceOverrides: [
+        { match: { lowRam: true }, set: { bufferMode: "LOW" } },
+        { match: { model: "(" }, set: { bufferMode: "LOW" } },
+      ],
+    }),
+  );
+  assert.equal(ok.ok, true);
+  assert.equal(ok.dropped, 1);
+  assert.equal(ok.policy.ttlSeconds, 600);
+  assert.deepEqual(ok.policy.deviceOverrides, [{ match: { lowRam: true }, set: { bufferMode: "LOW" } }]);
+});
+
+test("device row matching mirrors the app matcher (AND, case-insensitive find)", () => {
+  const stick = {
+    manufacturer: "Amazon",
+    model: "AFTT",
+    hardware: "mt8127",
+    board: "sloane",
+    soc_model: null,
+    api_level: 25,
+    low_ram: true,
+    total_ram_mb: 1000,
+  };
+  const rule = {
+    match: { manufacturer: "^amazon$", model: "aftm|aftt", sdkMin: 21, sdkMax: 27, lowRam: true, totalRamMaxMb: 1536 },
+    set: { bufferMode: "HIGH" },
+  };
+  assert.equal(deviceMatchesRule(rule, stick), true);
+  assert.equal(deviceMatchesRule(rule, { ...stick, api_level: 28 }), false);
+  assert.equal(deviceMatchesRule(rule, { ...stick, low_ram: null }), false);
+  assert.equal(deviceMatchesRule(rule, { ...stick, total_ram_mb: 2048 }), false);
+  assert.equal(deviceMatchesRule(rule, { ...stick, model: "SHIELD" }), false);
+  // socModel rule never matches a device that did not report one.
+  assert.equal(deviceMatchesRule({ match: { socModel: "tegra" }, set: {} }, stick), false);
+  assert.equal(deviceMatchesRule({ match: {}, set: {} }, stick), true);
 });
 
 test("update rollout policy accepts only a closed bounded schema", () => {

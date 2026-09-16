@@ -34,7 +34,12 @@ data class Channel(
     /** 0-based index of this channel's category in the source's category list. */
     val categoryPosition: Int = Int.MAX_VALUE,
     /** True for radio stations; kept off the Live TV page (own Radio folder). */
-    val isRadio: Boolean = false
+    val isRadio: Boolean = false,
+    /**
+     * Per-stream HTTP headers from the playlist (`|User-Agent=` URL suffix or
+     * `#EXTVLCOPT:http-user-agent`). Not persisted in Room yet; in-memory only.
+     */
+    val headers: Map<String, String> = emptyMap()
 )
 
 /** A channel paired with its manager state (hidden flag) for the channel editor. */

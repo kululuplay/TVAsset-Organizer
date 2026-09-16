@@ -22,8 +22,13 @@ jobs:
     permissions:
       contents: read
     env:
-      TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-      TELEMETRY_INGEST_KEY: ${{ secrets.TELEMETRY_INGEST_KEY }}
+      # Pull requests build without the production keys: a debug APK compiled
+      # from an untrusted branch must not carry them, and its artifact is not
+      # retained. Pushes to the default branch keep the full behaviour.
+      # (`cond && '' || secret` would always yield the secret: '' is falsy in
+      # the expression language, so the ternary must put the secret first.)
+      TMDB_API_KEY: ${{ github.event_name != 'pull_request' && secrets.TMDB_API_KEY || '' }}
+      TELEMETRY_INGEST_KEY: ${{ github.event_name != 'pull_request' && secrets.TELEMETRY_INGEST_KEY || '' }}
 
     steps:
       - name: Checkout
@@ -80,6 +85,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload debug APK
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: iptv-player-debug
@@ -282,8 +288,11 @@ jobs:
           fail_on_unmatched_files: true
 
       - name: Enable in-app rollout for the published release
-        # Only a new production publication enables distribution. Rebuilding an
-        # existing version must not undo a deliberate operational pause.
+        # Every verified production release is live for all users by default
+        # (rolloutPercent 100, see UPDATE_ROLLOUT.md). Only a new publication
+        # enables distribution: rebuilding an existing version skips this step,
+        # and the script itself refuses to overwrite an operator pause/emergency
+        # on the same version unless run by hand with --force.
         if: steps.existing.outputs.exists == 'false'
         working-directory: .
         env:

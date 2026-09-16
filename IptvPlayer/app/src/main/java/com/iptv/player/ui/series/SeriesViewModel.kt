@@ -344,7 +344,7 @@ class SeriesViewModel(
                     q.isNotEmpty() -> repo.pagingSeriesSearch(q, hiddenList, sort)
                     // Personal recommendations have their own ranking, independent of sort.
                     catId == CAT_POPULAR -> repo.pagingRecommendedSeries(hiddenList)
-                    catId == null || catId == CAT_ALL -> repo.pagingRecentSeries(hiddenList)
+                    catId == null || catId == CAT_ALL -> repo.pagingSeriesAll(sort, hiddenList)
                     // A selected category that becomes hidden (Content Manager) must
                     // not keep leaking its content through the unfiltered by-category
                     // path; fall back to the filtered "all" grid until reselected.

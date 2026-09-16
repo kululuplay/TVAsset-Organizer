@@ -80,7 +80,10 @@ internal class LiveLoadControl(
         private const val MIB = 1_048_576
 
         // This bounds encoded samples only; decoder/surface memory is separate.
-        private fun targetBytes(constrained: Boolean) = (if (constrained) 24 else 48) * MIB
+        // 32 MiB lets a constrained device actually reach the HIGH reserve that
+        // AdaptiveBufferPolicy now grants after repeated rebuffers (~20 s of a
+        // 10 Mbit/s stream); 24 MiB capped it below NORMAL on HD channels.
+        private fun targetBytes(constrained: Boolean) = (if (constrained) 32 else 48) * MIB
 
         // Fill a useful reserve after the first frame. ADAPTIVE used to retain
         // LOW's 4s maximum for an entire engine lifetime, even after many stalls.

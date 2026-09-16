@@ -15,15 +15,11 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.iptv.player.R
 import com.iptv.player.data.model.Program
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.iptv.player.ui.common.TimeFormat
 
 class CatchupProgramAdapter(
     private val onClicked: (Program) -> Unit
 ) : ListAdapter<Program, CatchupProgramAdapter.VH>(DIFF) {
-
-    private val formatter = SimpleDateFormat("EEE dd MMM • HH:mm", Locale.getDefault())
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val view = LayoutInflater.from(parent.context)
@@ -39,9 +35,9 @@ class CatchupProgramAdapter(
 
         fun bind(program: Program) {
             title.text = program.title
-            time.text = "${formatter.format(Date(program.startMs))} – ${
-                SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(program.stopMs))
-            }"
+            val context = itemView.context
+            time.text = TimeFormat.dayDateTime(context, program.startMs) + " \u2013 " +
+                TimeFormat.clock(context, program.stopMs)
             itemView.setOnClickListener { onClicked(program) }
         }
     }

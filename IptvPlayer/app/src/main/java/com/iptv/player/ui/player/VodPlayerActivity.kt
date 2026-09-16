@@ -201,6 +201,8 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         private const val NATIVE_OPERATION_TIMEOUT_MS = 8_000L
         private const val NATIVE_RELEASE_TIMEOUT_MS = 12_000L
         private const val NATIVE_EVENT_RETRY_MS = 16L
+        /** VLC seek re-posts while the owner queue is busy before the seek is dropped. */
+        private const val SEEK_DISPATCH_ATTEMPTS = 25
         private const val VLC_SNAPSHOT_INTERVAL_MS = 1_000L
         // After playback has started, a half-open HTTP connection can freeze
         // without EOF/error. Position must advance inside this window.
@@ -288,6 +290,9 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     private var playbackStarted = false
     private var playbackEnded = false
     private var completionHandled = false
+    // False until onCreate passed its early-finish guard, i.e. until the lazy
+    // castController/playbackSession are allowed to exist.
+    private var controlsInitialised = false
     private var completionGeneration = 0L
     private var pendingNextEpisode: Episode? = null
     private val nextEpisodeGate = VodNextEpisodeGate()
@@ -308,6 +313,9 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     }
     private var startupTimeoutOperation = 0L
     private var lastObservedPositionMs = -1L
+    // Last position the backend itself reported while no seek was pending. A
+    // dropped seek restores the deferred-position sources from this value.
+    private var lastPlayerPositionMs = -1L
     private var lastPositionAdvanceAtMs = 0L
     private var bufferingSinceMs = 0L
     private var decodedVideoSeen = false
@@ -421,14 +429,56 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
             context = this,
             tag = "TVAsset-VOD",
             controls = TvPlaybackSession.Controls(
-                onPlay = { if (foreground && !activeIsPlaying()) togglePlayPause() },
-                onPause = { if (foreground && activeIsPlaying()) togglePlayPause() },
-                onToggle = { if (foreground) togglePlayPause() },
+                onPlay = { onSessionTransport(VodModalTransportPolicy.Transport.PLAY) },
+                onPause = { onSessionTransport(VodModalTransportPolicy.Transport.PAUSE) },
+                onToggle = { onSessionTransport(VodModalTransportPolicy.Transport.TOGGLE) },
                 onStop = { if (foreground) pauseForExternalPlayback() },
-                onSeekBy = { deltaMs -> if (foreground) seekBy(deltaMs) },
+                onSeekBy = { deltaMs -> onSessionSeekBy(deltaMs) },
             ),
         )
     }
+
+    /**
+     * MediaSession transport goes through the same modal guards as the hardware
+     * media keys in dispatchKeyEvent: while the next-episode prompt is showing,
+     * play means "play the next episode now" and pause is ignored; while the
+     * terminal error card is showing, play means Retry.
+     */
+    private fun onSessionTransport(transport: VodModalTransportPolicy.Transport) {
+        if (!foreground) return
+        when (resolveModalTransport(transport)) {
+            VodModalTransportPolicy.Action.PLAY_NEXT_EPISODE -> playPendingNextEpisode()
+            VodModalTransportPolicy.Action.RETRY -> retryFromConfiguredDecoder()
+            VodModalTransportPolicy.Action.IGNORE -> Unit
+            VodModalTransportPolicy.Action.PASS_THROUGH -> when (transport) {
+                VodModalTransportPolicy.Transport.PLAY -> if (!activeIsPlaying()) togglePlayPause()
+                VodModalTransportPolicy.Transport.PAUSE -> if (activeIsPlaying()) togglePlayPause()
+                VodModalTransportPolicy.Transport.TOGGLE -> togglePlayPause()
+                VodModalTransportPolicy.Transport.SEEK -> Unit
+            }
+        }
+    }
+
+    private fun onSessionSeekBy(deltaMs: Long) {
+        if (!foreground) return
+        // Hardware FF/REW are swallowed behind both modal cards; a session seek
+        // must not bump completionGeneration underneath the countdown either.
+        if (
+            resolveModalTransport(VodModalTransportPolicy.Transport.SEEK) !=
+            VodModalTransportPolicy.Action.PASS_THROUGH
+        ) {
+            return
+        }
+        seekBy(deltaMs)
+    }
+
+    private fun resolveModalTransport(
+        transport: VodModalTransportPolicy.Transport,
+    ): VodModalTransportPolicy.Action = VodModalTransportPolicy.resolve(
+        transport = transport,
+        nextEpisodePromptShowing = binding.nextEpisodeOverlay.visibility == View.VISIBLE,
+        errorCardShowing = binding.errorOverlay.visibility == View.VISIBLE,
+    )
 
     private val handler = Handler(Looper.getMainLooper())
     private var surfaceValidationStarted = false
@@ -1211,6 +1261,9 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
             finish()
             return
         }
+        // Past this point setupControls()/initPlayer() build the Cast controller
+        // and the MediaSession; onDestroy only detaches what was created.
+        controlsInitialised = true
 
         // Report to the live-device ops panel what's playing (cleared in onStop).
         nowKind = when (ResumeKind.fromRaw(intent.getStringExtra(EXTRA_RESUME_TYPE))) {
@@ -3427,17 +3480,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                 // return ownership to this Activity.
                 Unit
             }
-            playbackEnded -> {
-                playbackEnded = false
-                completionHandled = false
-                completionGeneration++
-                playbackErrorAttempts = 0
-                softwareFallbackAttempted = false
-                crossDecoderRescueAttempted = false
-                recoveryInProgress = false
-                resetRoutingForCurrentItem()
-                rebuildRoute(resumeAt = 0L, targetRoute = activeVodRoute)
-            }
+            playbackCompleted() -> restartAfterCompletion(resumeAt = 0L)
             activeIsPlaying() -> {
                 if (isMedia3Route()) {
                     media3VodEngine?.pause()
@@ -3483,9 +3526,17 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         val duration = maxOf(activeDurationMs(), lastKnownDurationMs)
         if (duration <= 0L) return
         val target = seekTimeline.request(targetMs, duration, SystemClock.uptimeMillis())
-        playbackEnded = false
-        completionHandled = false
-        completionGeneration++
+        if (playbackCompleted()) {
+            // The coordinator stays in COMPLETED until the item is replaced, so a
+            // plain seek + play would never report the second end of file. Re-enter
+            // playback through the route-reset path with the seek target as the
+            // start position instead of resuming the finished backend in place.
+            seekTimeline.clear()
+            binding.seekBar.progress = target.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            binding.currentTime.text = formatTime(target)
+            restartAfterCompletion(resumeAt = target)
+            return
+        }
         seekGeneration++
         pendingSeekMs = target
         backgroundResumePosition = target
@@ -3496,6 +3547,29 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         // Held D-pad input selects one final position instead of flooding the decoder.
         handler.removeCallbacks(applySeekRunnable)
         handler.postDelayed(applySeekRunnable, 180L)
+    }
+
+    /** True once the current item reached its end and no restart has begun yet. */
+    private fun playbackCompleted(): Boolean =
+        playbackEnded || vodCoordinator.state.phase == VodPlaybackCoordinator.Phase.COMPLETED
+
+    /**
+     * Leave the completed state by replacing the item in the coordinator and
+     * rebuilding the active route from [resumeAt]. Playing/onFirstFrame of the
+     * rebuilt backend re-post the progress and save runnables via startTimers().
+     */
+    private fun restartAfterCompletion(resumeAt: Long) {
+        playbackEnded = false
+        completionHandled = false
+        completionGeneration++
+        playbackErrorAttempts = 0
+        softwareFallbackAttempted = false
+        crossDecoderRescueAttempted = false
+        recoveryInProgress = false
+        handler.removeCallbacks(applySeekRunnable)
+        seekGeneration++
+        resetRoutingForCurrentItem()
+        rebuildRoute(resumeAt = resumeAt.coerceAtLeast(0L), targetRoute = activeVodRoute)
     }
 
     private fun dispatchSeekCommand(target: Long, generation: Long, attempt: Int = 0) {
@@ -3515,12 +3589,32 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                 }
             },
         ) { player -> player.setTime(target) }
-        if (!posted && playbackStarted && generation == seekGeneration && attempt < 25) {
+        if (posted || !playbackStarted || generation != seekGeneration) return
+        if (attempt < SEEK_DISPATCH_ATTEMPTS) {
             handler.postDelayed(
                 { dispatchSeekCommand(target, generation, attempt + 1) },
                 NATIVE_EVENT_RETRY_MS,
             )
+            return
         }
+        abandonSeek(target)
+    }
+
+    /**
+     * The owner queue never accepted the seek. Drop every deferred-position
+     * source that [requestSeek] primed, otherwise the next VLC Playing (or a
+     * background resume) would still jump to a position the viewer never reached.
+     */
+    private fun abandonSeek(target: Long) {
+        PlaybackLog.log(this, "VOD", "seek to ${target}ms dropped: owner busy")
+        if (pendingSeekMs == target) pendingSeekMs = 0L
+        seekTimeline.clear()
+        val restore = (
+            if (lastPlayerPositionMs >= 0L) lastPlayerPositionMs else activePositionMs()
+            ).coerceAtLeast(0L)
+        backgroundResumePosition = restore
+        resetStallWatch(restore)
+        updateProgress()
     }
 
     private fun cycleAspect() {
@@ -3876,7 +3970,10 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         val displayed = seekTimeline.display(position, SystemClock.uptimeMillis())
         binding.seekBar.progress = displayed.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         binding.currentTime.text = formatTime(displayed)
-        if (seekTimeline.targetMs == null) detectPlaybackStall(position)
+        if (seekTimeline.targetMs == null) {
+            lastPlayerPositionMs = position
+            detectPlaybackStall(position)
+        }
     }
 
     private fun persistResume(durable: Boolean = false) {
@@ -4165,9 +4262,11 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         activeDialog = null
         debugBinder?.release()
         sleepTimer.release()
-        castController.detach()
+        // An early finish() in onCreate never built these lazies; touching them
+        // here would construct a Cast controller/MediaSession just to tear it down.
+        if (controlsInitialised) castController.detach()
         finishQoe(PlaybackEndReason.USER_STOP)
-        playbackSession.release()
+        if (controlsInitialised) playbackSession.release()
         media3VodEngine?.setListener(null)
         media3VodEngine?.release()
         media3VodEngine = null

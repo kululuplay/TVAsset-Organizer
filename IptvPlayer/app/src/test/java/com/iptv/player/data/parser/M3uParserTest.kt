@@ -155,6 +155,110 @@ class M3uParserTest {
     }
 
     @Test
+    fun idsSurviveInsertingALineAbove() {
+        val before = parse(
+            """
+            #EXTM3U
+            #EXTINF:-1 tvg-id="bbc.uk",BBC One
+            http://stream/bbc
+            #EXTINF:-1,No Tvg
+            http://stream/notvg
+            """.trimIndent()
+        )
+        val after = parse(
+            """
+            #EXTM3U
+            #EXTINF:-1,Inserted
+            http://stream/inserted
+            #EXTINF:-1 tvg-id="bbc.uk",BBC One
+            http://stream/bbc
+            #EXTINF:-1,No Tvg
+            http://stream/notvg
+            """.trimIndent()
+        )
+
+        assertEquals(before.map { it.id }, after.drop(1).map { it.id })
+        assertTrue(after[0].id !in before.map { it.id })
+    }
+
+    @Test
+    fun duplicateTvgIdsGetDistinctDeterministicIds() {
+        val text = """
+            #EXTM3U
+            #EXTINF:-1 tvg-id="bbc.uk",BBC One HD
+            http://stream/bbc-hd
+            #EXTINF:-1 tvg-id="bbc.uk",BBC One SD
+            http://stream/bbc-sd
+            #EXTINF:-1 tvg-id="bbc.uk",BBC One SD
+            http://stream/bbc-sd
+            """.trimIndent()
+        val first = parse(text)
+        val second = parse(text)
+
+        assertEquals(3, first.map { it.id }.toSet().size)
+        assertEquals(first.map { it.id }, second.map { it.id })
+        assertEquals("m3u_bbc.uk", first[0].id)
+    }
+
+    @Test
+    fun commaInsideNameAndQuotedAttributeIsKept() {
+        val channels = parse(
+            """
+            #EXTM3U
+            #EXTINF:-1 tvg-name="A, B" group-title="News, Sport",News, Weather & Sport
+            http://stream/news
+            """.trimIndent()
+        )
+
+        assertEquals("News, Weather & Sport", channels[0].name)
+        assertEquals("News, Sport", channels[0].categoryName)
+    }
+
+    @Test
+    fun kodiUserAgentSuffixIsParsedIntoHeaders() {
+        val channels = parse(
+            """
+            #EXTM3U
+            #EXTINF:-1,Kodi
+            http://stream/kodi.m3u8|User-Agent=Mozilla%2F5.0&Referer=http://ref/
+            """.trimIndent()
+        )
+
+        assertEquals(1, channels.size)
+        assertEquals("http://stream/kodi.m3u8", channels[0].streamUrl)
+        assertEquals("Mozilla/5.0", channels[0].headers["User-Agent"])
+        assertEquals("http://ref/", channels[0].headers["Referer"])
+        assertTrue(M3uParser.hasPlaylistSignature("http://stream/kodi.m3u8|User-Agent=x"))
+    }
+
+    @Test
+    fun extVlcOptLinesBecomeHeaders() {
+        val channels = parse(
+            """
+            #EXTM3U
+            #EXTINF:-1,VLC
+            #EXTVLCOPT:http-user-agent=CustomUA/1.0
+            #EXTVLCOPT:http-referrer=http://ref/
+            #EXTVLCOPT:network-caching=1000
+            http://stream/vlc
+            """.trimIndent()
+        )
+
+        assertEquals(1, channels.size)
+        assertEquals("VLC", channels[0].name)
+        assertEquals(mapOf("User-Agent" to "CustomUA/1.0", "Referer" to "http://ref/"), channels[0].headers)
+    }
+
+    @Test
+    fun crlfAndBomAreTolerated() {
+        val channels = parse("\uFEFF#EXTM3U\r\n#EXTINF:-1 tvg-id=\"a\",A\r\nhttp://stream/a\r\n#EXTINF:-1,B\r\nhttp://stream/b\r\n")
+
+        assertEquals(listOf("A", "B"), channels.map { it.name })
+        assertEquals("http://stream/a", channels[0].streamUrl)
+        assertEquals("a", channels[0].epgChannelId)
+    }
+
+    @Test
     fun garbledExtinfDoesNotAbortRemainingEntries() {
         // A junk line that isn't a comment or recognisable #EXTINF should be
         // tolerated; the well-formed entry after it must still parse.

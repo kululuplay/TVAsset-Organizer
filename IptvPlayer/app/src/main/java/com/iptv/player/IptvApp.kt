@@ -7,21 +7,30 @@
 package com.iptv.player
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.Application
+import android.content.Context
 import android.os.Bundle
 import android.os.StrictMode
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.disk.DiskCache
+import coil.imageLoader
+import coil.memory.MemoryCache
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.playback.android.PlaybackQoeRuntime
 import com.iptv.player.playback.android.PlaybackProcessRecovery
+import com.iptv.player.playback.android.PlaybackWifiLock
 import com.iptv.player.playback.android.PlaybackProcessRecoveryTargetProvider
 import com.iptv.player.ui.player.PlayerActivity
 import com.iptv.player.ui.player.VodPlayerActivity
 import com.iptv.player.ui.screensaver.ScreensaverActivity
 import com.iptv.player.ui.trailer.TrailerActivity
+import com.iptv.player.ui.common.LowEndUiBudget
 import com.iptv.player.util.AbnormalExitDetector
 import com.iptv.player.util.AnnouncementCenter
 import com.iptv.player.util.AnrWatchdog
@@ -40,7 +49,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
 
-class IptvApp : Application() {
+class IptvApp : Application(), ImageLoaderFactory {
 
     private var anrWatchdog: AnrWatchdog? = null
 
@@ -70,6 +79,11 @@ class IptvApp : Application() {
         if (BuildConfig.DEBUG) enableStrictMode()
 
         ServiceLocator.init(this)
+
+        // Hold a Wi-Fi performance lock while a stream plays so cheap sticks do
+        // not drop into Wi-Fi power-save mid-channel. Best effort only.
+        runCatching { PlaybackWifiLock.install(this) }
+            .onFailure { Logger.w("IptvApp", "wifi lock install failed: ${it.message}") }
 
         // Load any stability events spooled by a previous run so they ship on the
         // next beat (set up before we record the abnormal-exit check below).
@@ -176,6 +190,65 @@ class IptvApp : Application() {
             }
         }
     }
+
+    // ---- Image memory budget --------------------------------------------
+
+    /**
+     * The one Coil loader for the whole app (every `ImageView.load {}` goes
+     * through it). Weak sticks get a small bitmap cache and no crossfade so
+     * poster/logo rails cannot crowd the decoder out of the app heap.
+     */
+    override fun newImageLoader(): ImageLoader {
+        val policy = LowEndUiBudget.imageCache(
+            compat = isCompatibilityProfile(),
+            lowRamDevice = isLowRamDevice(),
+        )
+        return ImageLoader.Builder(this)
+            .respectCacheHeaders(false)
+            .crossfade(policy.crossfade)
+            .memoryCache {
+                MemoryCache.Builder(this)
+                    .apply { policy.memoryCachePercent?.let { maxSizePercent(it) } }
+                    .build()
+            }
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(cacheDir.resolve("image_cache"))
+                    .maxSizeBytes(policy.diskCacheBytes)
+                    .build()
+            }
+            .build()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        val constrained = isCompatibilityProfile() || isLowRamDevice()
+        when (LowEndUiBudget.trimAction(level, constrained)) {
+            LowEndUiBudget.TrimAction.CLEAR -> clearImageMemoryCache()
+            LowEndUiBudget.TrimAction.TRIM ->
+                runCatching { imageLoader.memoryCache?.trimMemory(level) }
+            LowEndUiBudget.TrimAction.NONE -> Unit
+        }
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        clearImageMemoryCache()
+    }
+
+    private fun clearImageMemoryCache() {
+        // Touching the loader lazily creates it; that is fine (and cheap) here.
+        runCatching { imageLoader.memoryCache?.clear() }
+    }
+
+    private fun isCompatibilityProfile(): Boolean =
+        runCatching { PlaybackQoeRuntime.devicePlaybackProfile().compatibilityMode }
+            .getOrDefault(false)
+
+    private fun isLowRamDevice(): Boolean =
+        runCatching {
+            (getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)?.isLowRamDevice == true
+        }.getOrDefault(false)
 
     /**
      * Show the pending remote announcement once, on a safe (non-player) screen.
