@@ -20,6 +20,13 @@ internal data class DatasetSnapshot(
     val existingCount: Int,
     val receivedCount: Int,
     val acceptedCount: Int,
+    /**
+     * How many accepted ids already exist in the cache; null when the caller
+     * did not compare ids. Zero overlap with a non-empty response means the
+     * server now serves a different catalog (panel migration, re-imported
+     * ids), which the shrink guard must not mistake for a truncated reply.
+     */
+    val overlapCount: Int? = null,
 )
 
 internal data class StagedDataset<T>(
@@ -92,6 +99,10 @@ internal object DatasetRefreshPolicy {
             // A manual refresh is the user saying "trust the server"; a repeated
             // or day-old rejection means the shrink is the new truth.
             if (force) return DatasetRefreshDecision.Apply
+            // Field case: devices migrated from another panel kept 150 old
+            // category ids and rejected the new 28-category list forever, so
+            // every per-category fetch asked the new panel for ids it never had.
+            if (snapshot.overlapCount == 0 && accepted > 0) return DatasetRefreshDecision.Apply
             if (priorRejections != null && (
                     priorRejections.count >= SHRINK_OVERRIDE_AFTER_REJECTIONS ||
                         nowMs - priorRejections.firstRejectedAt >= SHRINK_OVERRIDE_AFTER_MS

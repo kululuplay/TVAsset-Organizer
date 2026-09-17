@@ -28,6 +28,22 @@ class DatasetRefreshPolicyTest {
     }
 
     @Test
+    fun `a catalog sharing no ids with the cache replaces it despite the shrink`() {
+        // Panel migration: 150 old category ids cached, 28 new ones served.
+        val migrated = DatasetSnapshot(existingCount = 150, receivedCount = 28, acceptedCount = 28, overlapCount = 0)
+        assertTrue(DatasetRefreshPolicy.evaluate(CatalogDataset.VOD_CATEGORIES, migrated) is DatasetRefreshDecision.Apply)
+        assertTrue(DatasetRefreshPolicy.evaluate(CatalogDataset.LIVE, migrated) is DatasetRefreshDecision.Apply)
+        // A truncated reply of the SAME catalog still preserves the cache.
+        val truncated = DatasetSnapshot(existingCount = 150, receivedCount = 28, acceptedCount = 28, overlapCount = 28)
+        assertTrue(DatasetRefreshPolicy.evaluate(CatalogDataset.VOD_CATEGORIES, truncated) is DatasetRefreshDecision.PreserveCache)
+        // Unknown overlap keeps the old behaviour; an empty reply is never a new catalog.
+        val unknown = DatasetSnapshot(existingCount = 150, receivedCount = 28, acceptedCount = 28)
+        assertTrue(DatasetRefreshPolicy.evaluate(CatalogDataset.VOD_CATEGORIES, unknown) is DatasetRefreshDecision.PreserveCache)
+        val empty = DatasetSnapshot(existingCount = 150, receivedCount = 0, acceptedCount = 0, overlapCount = 0)
+        assertTrue(DatasetRefreshPolicy.evaluate(CatalogDataset.VOD_CATEGORIES, empty) is DatasetRefreshDecision.PreserveCache)
+    }
+
+    @Test
     fun `forced refresh bypasses only the shrink guard`() {
         val shrink = DatasetSnapshot(existingCount = 100, receivedCount = 10, acceptedCount = 10)
         assertTrue(DatasetRefreshPolicy.evaluate(CatalogDataset.LIVE, shrink, force = true) is DatasetRefreshDecision.Apply)
