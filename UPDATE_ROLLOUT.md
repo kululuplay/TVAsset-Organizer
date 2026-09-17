@@ -98,7 +98,37 @@ already-installed higher version.
 v1.5.83 was the one-time bootstrap release that installed this client-side
 gate; v1.5.82 and older builds cannot enforce this GitHub policy.
 
-Without a central health/telemetry service there is no truthful way to aggregate
-fleet crash rates and automatically edit this GitHub policy. The app's local
-playback recovery remains automatic; a fleet rollout pause is an explicit GitHub
-policy change.
+## Automatic emergency brake (release health gate)
+
+The crash receiver aggregates per-session playback QoE (`docs/qoe-dashboard.md`)
+and exposes `GET /api/release-health` (`docs/release-health.md`). The workflow
+`.github/workflows/release-health.yml` runs `scripts/release_health_gate.py`
+every 30 minutes:
+
+- it looks at the current `targetVersion` only while its release is younger
+  than 72 h and the policy is not already `paused`;
+- verdict `degraded` (crash-free sessions below 97 %, or clearly worse than the
+  previous version on crash-free rate, stall rate or start-up time, with at
+  least 200 sessions) → it sets **only** `paused: true` on `main` (commit
+  "Auto-pause rollout vX: …", compare-and-swap on the file SHA) and opens or
+  updates the issue "Rollout auto-paused: vX" with the metrics;
+- `healthy` / `insufficient` → nothing happens.
+
+It is a brake, not an accelerator: it never raises `rolloutPercent`, never
+clears a pause and never touches `emergency`. Lifting an auto-pause is the
+same manual step as lifting an operator pause:
+
+```sh
+GH_TOKEN=... python3 scripts/activate_release_rollout.py \
+  --repo kululuplay/TVAsset-Organizer --version 1.5.90 \
+  --verified-apk KululuIPTV-v1.5.90.apk --force
+```
+
+If the version is still degraded and still younger than 72 h, the next gate run
+pauses it again — publish a fix instead of forcing repeatedly. The gate needs
+the repository secrets `RELEASE_HEALTH_URL` and `RELEASE_HEALTH_KEY` (the
+latter also set on the crash receiver); without them the workflow fails
+visibly and the rollout is unaffected.
+
+The app's local playback recovery remains automatic; every other fleet rollout
+change is still an explicit GitHub policy edit.

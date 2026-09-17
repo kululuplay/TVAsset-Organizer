@@ -39,6 +39,7 @@ import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.data.prefs.SettingsStore
 import com.iptv.player.databinding.ActivitySettingsBinding
 import com.iptv.player.playback.android.PlaybackQoeRuntime
+import com.iptv.player.player.AfrMode
 import com.iptv.player.playback.core.CompatibilityReason
 import com.iptv.player.playback.core.DevicePlaybackProfile
 import com.iptv.player.ui.content.ContentManagerActivity
@@ -116,6 +117,7 @@ class SettingsActivity : BaseActivity() {
     private var selectedPlayerMode = PlayerMode.AUTO
     private var selectedDecoderMode = DecoderMode.AUTO
     private var selectedBufferMode = BufferMode.NORMAL
+    private var selectedAfrMode = AfrMode.OFF
     private var selectedScreensaverMinutes = 10
 
     private var autoSyncEnabled = false
@@ -565,6 +567,13 @@ class SettingsActivity : BaseActivity() {
         addChoiceGroup(c, getString(R.string.settings_buffer),
             BufferMode.entries.map { it.name to bufferModeLabel(it) },
             { selectedBufferMode.name }) { viewModel.setBufferMode(BufferMode.valueOf(it)) }
+
+        // Automatic frame-rate matching (default OFF: a wrong display-mode
+        // switch blanks the picture on some TVs, so the user opts in).
+        addChoiceGroup(c, getString(R.string.settings_afr),
+            AfrMode.entries.map { it.name to afrModeLabel(it) },
+            { selectedAfrMode.name }) { viewModel.setAfrMode(AfrMode.valueOf(it)) }
+        addPanelDescription(c, getString(R.string.settings_afr_desc))
 
         // Audio passthrough toggle (default OFF = decode to PCM for sound).
         val passthroughRow = inflateMaster(c, getString(R.string.settings_audio_passthrough))
@@ -1613,6 +1622,12 @@ class SettingsActivity : BaseActivity() {
             }
         }
         launch {
+            viewModel.afrMode.collectLatest {
+                selectedAfrMode = it
+                inlineSelections.forEach { it() }
+            }
+        }
+        launch {
             viewModel.audioPassthrough.collectLatest { passthroughSwitch?.isChecked = it }
         }
         launch {
@@ -1783,6 +1798,14 @@ class SettingsActivity : BaseActivity() {
             BufferMode.LOW -> R.string.settings_buffer_low
             BufferMode.NORMAL -> R.string.settings_buffer_normal
             BufferMode.HIGH -> R.string.settings_buffer_high
+        }
+    )
+
+    private fun afrModeLabel(mode: AfrMode): String = getString(
+        when (mode) {
+            AfrMode.OFF -> R.string.settings_afr_off
+            AfrMode.REFRESH_ONLY -> R.string.settings_afr_refresh
+            AfrMode.REFRESH_AND_RESOLUTION -> R.string.settings_afr_refresh_resolution
         }
     )
 

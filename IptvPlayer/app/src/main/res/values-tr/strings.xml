@@ -156,6 +156,11 @@
     <string name="settings_buffer_low">Düşük (hızlı geçiş)</string>
     <string name="settings_buffer_normal">Normal (dengeli)</string>
     <string name="settings_buffer_high">Yüksek (daha az donma)</string>
+    <string name="settings_afr">Otomatik kare hızı</string>
+    <string name="settings_afr_off">Kapalı</string>
+    <string name="settings_afr_refresh">Yalnızca yenileme hızı</string>
+    <string name="settings_afr_refresh_resolution">Yenileme hızı + çözünürlük</string>
+    <string name="settings_afr_desc">Akıcı oynatım için televizyonu videonun kare hızına (24/25/30/50/60 Hz) geçirir. Her geçişte ekran kısa süre kararır; görüntü siyah kalırsa kapatın.</string>
     <string name="stream_info">Yayın bilgisi</string>
     <string name="stream_info_unavailable">Yayın bilgisi henüz yok</string>
     <string name="stream_info_engine">Motor: %1$s</string>

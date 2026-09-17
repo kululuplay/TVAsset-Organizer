@@ -4,220 +4,54 @@
  * favorites, recents, profiles and resume positions. Fetches from Xtream or
  * M3U (+ optional TMDB enrichment), caches into Room, and exposes reactive
  * Flows. Network/parse work runs on Dispatchers.IO; errors map to AppError.
+ *
+ * This class is the facade every caller uses. The work is split into
+ * per-domain repositories (live, VOD, series, EPG, library, profiles, search,
+ * source) that share one [CatalogSyncSupport] instance so the commit mutex,
+ * generation gate and shrink ledger stay process-global.
  */
 package com.iptv.player.data.repository
 
-import com.iptv.player.data.local.dao.WatchSignalEntity
-import com.iptv.player.data.recommendation.RecommendationRanker
-import com.iptv.player.data.recommendation.RecommendationCandidate
-import com.iptv.player.data.recommendation.WatchPreference
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.mapLatest
-import kotlinx.coroutines.flow.flowOn
-import android.util.Base64
-import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
-import androidx.paging.map
-import androidx.room.withTransaction
-import androidx.sqlite.db.SupportSQLiteDatabase
 import com.iptv.player.data.local.AppDatabase
-import com.iptv.player.data.local.LikeEscape
-import com.iptv.player.data.local.entity.ChannelEntity
-import com.iptv.player.data.local.entity.ChannelFtsEntity
-import com.iptv.player.data.local.entity.ChannelOverrideEntity
-import com.iptv.player.data.local.entity.EpgMappingEntity
-import com.iptv.player.data.local.entity.EpisodeEntity
-import com.iptv.player.data.local.entity.FavoriteEntity
-import com.iptv.player.data.local.entity.ProfileEntity
-import com.iptv.player.data.local.entity.ProgramEntity
-import com.iptv.player.data.local.entity.RecentEntity
-import com.iptv.player.data.local.entity.ResumeEntity
-import com.iptv.player.data.local.entity.SeriesCategoryEntity
-import com.iptv.player.data.local.entity.SeriesEntity
-import com.iptv.player.data.local.entity.SeriesFtsEntity
-import com.iptv.player.data.local.entity.VodCategoryEntity
-import com.iptv.player.data.local.entity.VodEntity
-import com.iptv.player.data.local.entity.VodFtsEntity
 import com.iptv.player.data.model.AccountInfo
+import com.iptv.player.data.model.CastMember
 import com.iptv.player.data.model.Category
 import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.ContentSort
 import com.iptv.player.data.model.ContentType
-import com.iptv.player.util.NewContentNotifier
 import com.iptv.player.data.model.ContinueItem
-import com.iptv.player.data.model.CastMember
 import com.iptv.player.data.model.DiagnosticResult
 import com.iptv.player.data.model.FavoriteItem
-import com.iptv.player.data.model.FavoriteKind
-import com.iptv.player.data.model.Episode
-import com.iptv.player.data.model.ResumeKind
-import com.iptv.player.data.model.ResumeMeta
 import com.iptv.player.data.model.ManagedCategory
 import com.iptv.player.data.model.ManagedChannel
 import com.iptv.player.data.model.NowNext
 import com.iptv.player.data.model.Profile
 import com.iptv.player.data.model.Program
+import com.iptv.player.data.model.ResumeMeta
 import com.iptv.player.data.model.Season
 import com.iptv.player.data.model.Series
 import com.iptv.player.data.model.SourceConfig
 import com.iptv.player.data.model.SourceType
 import com.iptv.player.data.model.VodItem
-import com.iptv.player.data.parser.M3uParser
-import com.iptv.player.data.parser.XmltvParser
 import com.iptv.player.data.prefs.SettingsStore
-import com.iptv.player.data.remote.MetadataPolicy
-import com.iptv.player.data.remote.TmdbApi
-import com.iptv.player.data.remote.XtreamApi
-import com.iptv.player.data.remote.XtreamUrlBuilder
 import com.iptv.player.security.SecureValueCodec
-import com.iptv.player.util.AppError
-import com.iptv.player.util.HttpAppErrorPolicy
-import com.iptv.player.util.Logger
-import com.iptv.player.util.KululuEndpoint
 import com.iptv.player.util.Outcome
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.emitAll
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import retrofit2.HttpException
 import retrofit2.Retrofit
-import java.io.IOException
-import java.net.SocketTimeoutException
-import javax.net.ssl.SSLException
-import java.net.InetAddress
-import java.util.Locale
 
 class IptvRepository(
     private val db: AppDatabase,
-    private val httpClient: OkHttpClient,
-    private val retrofitBuilder: Retrofit.Builder,
+    httpClient: OkHttpClient,
+    retrofitBuilder: Retrofit.Builder,
     private val settings: SettingsStore,
-    private val secureValues: SecureValueCodec,
-    private val shrinkLedger: ShrinkGuardLedger = ShrinkGuardLedger(),
+    secureValues: SecureValueCodec,
+    shrinkLedger: ShrinkGuardLedger = ShrinkGuardLedger(),
 ) {
-
-    private val channelDao = db.channelDao()
-    private val channelOverrideDao = db.channelOverrideDao()
-    private val favoriteDao = db.favoriteDao()
-    private val recentDao = db.recentDao()
-    private val epgDao = db.epgDao()
-    private val vodDao = db.vodDao()
-    private val vodCategoryDao = db.vodCategoryDao()
-    private val seriesDao = db.seriesDao()
-    private val seriesCategoryDao = db.seriesCategoryDao()
-    private val profileDao = db.profileDao()
-    private val resumeDao = db.resumeDao()
-    private val watchedDao = db.watchedDao()
-    private val recommendationDao = db.recommendationDao()
-    private val epgMappingDao = db.epgMappingDao()
-    private val playbackStateMigrationMutex = Mutex()
-    private val catalogCommitMutex = Mutex()
-    private val refreshGenerations = DatasetGenerationGate()
-    private val epgSyncMutex = Mutex()
-    private val panelTimezones = java.util.concurrent.ConcurrentHashMap<String, String>()
-    /** Episode-date sweeps pause until this instant after a 429/5xx from the panel. */
-    @Volatile
-    private var seriesDatesBackoffUntil = 0L
-    /** Process-local fast path; guarded exclusively by [playbackStateMigrationMutex]. */
-    private val claimedLegacyPlaybackProfiles = mutableSetOf<Long>()
-
-    /**
-     * Encrypt sensitive values written by versions before secure field storage.
-     * The Room schema is unchanged; only column payloads gain a versioned AES-GCM
-     * envelope. The transaction makes an interrupted migration retryable.
-     */
-    suspend fun migrateSensitiveStorage() = withContext(Dispatchers.IO) {
-        if (settings.isSecureStorageMigrated()) return@withContext
-        settings.migrateSensitiveValues()
-        var migrated = 0
-        db.withTransaction {
-            val sql = db.openHelper.writableDatabase
-            migrated += migrateEncryptedColumn(sql, "channels", "id", "streamUrl")
-            migrated += migrateEncryptedColumn(sql, "vod", "id", "streamUrl")
-            migrated += migrateEncryptedColumn(sql, "episodes", "id", "streamUrl")
-            migrated += migrateEncryptedResumeUrls(sql)
-            migrated += migrateEncryptedColumn(sql, "profiles", "id", "serverUrl")
-            migrated += migrateEncryptedColumn(sql, "profiles", "id", "username")
-            migrated += migrateEncryptedColumn(sql, "profiles", "id", "password")
-            migrated += migrateEncryptedColumn(sql, "profiles", "id", "m3uUrl")
-        }
-        settings.markSecureStorageMigrated()
-        Logger.i("SecureStorage", "encrypted $migrated legacy database values")
-    }
-
-    private fun migrateEncryptedColumn(
-        db: SupportSQLiteDatabase,
-        table: String,
-        idColumn: String,
-        valueColumn: String,
-    ): Int {
-        val pending = mutableListOf<Pair<String, String>>()
-        db.query(
-            "SELECT `$idColumn`, `$valueColumn` FROM `$table` " +
-                "WHERE `$valueColumn` IS NOT NULL AND `$valueColumn` != ''",
-        ).use { cursor ->
-            while (cursor.moveToNext()) {
-                val id = cursor.getString(0)
-                val value = cursor.getString(1)
-                if (!secureValues.isEncrypted(value)) pending += id to value
-            }
-        }
-        pending.forEach { (id, value) ->
-            db.execSQL(
-                "UPDATE `$table` SET `$valueColumn` = ? WHERE `$idColumn` = ?",
-                arrayOf(secureValues.encrypt(value), id),
-            )
-        }
-        return pending.size
-    }
-
-    /** Resume is keyed by (profileId, contentId) as of schema v13. */
-    private fun migrateEncryptedResumeUrls(db: SupportSQLiteDatabase): Int {
-        val pending = mutableListOf<Triple<Long, String, String>>()
-        db.query(
-            "SELECT `profileId`, `contentId`, `streamUrl` FROM `resume` " +
-                "WHERE `streamUrl` IS NOT NULL AND `streamUrl` != ''",
-        ).use { cursor ->
-            while (cursor.moveToNext()) {
-                val profileId = cursor.getLong(0)
-                val contentId = cursor.getString(1)
-                val value = cursor.getString(2)
-                if (!secureValues.isEncrypted(value)) {
-                    pending += Triple(profileId, contentId, value)
-                }
-            }
-        }
-        pending.forEach { (profileId, contentId, value) ->
-            db.execSQL(
-                "UPDATE `resume` SET `streamUrl` = ? " +
-                    "WHERE `profileId` = ? AND `contentId` = ?",
-                arrayOf(secureValues.encrypt(value), profileId, contentId),
-            )
-        }
-        return pending.size
-    }
-    private val vodFtsDao = db.vodFtsDao()
-    private val seriesFtsDao = db.seriesFtsDao()
-    private val channelFtsDao = db.channelFtsDao()
 
     /**
      * Shared Paging config. enablePlaceholders=false keeps memory bounded to the
@@ -226,1480 +60,295 @@ class IptvRepository(
      */
     private val pagingConfig = PagingConfig(pageSize = 60, enablePlaceholders = false)
 
-    /**
-     * Turns raw user input into a safe FTS4 MATCH expression: splits on
-     * non-alphanumerics and appends a prefix wildcard to each token, AND-ed
-     * together (e.g. "harry pot" -> "name:harry* name:pot*"). The column filter
-     * keeps id fragments ("xt_live_12") from matching. Returns "" when there's
-     * nothing to match so callers can short-circuit to an empty result instead
-     * of issuing an invalid empty MATCH (which SQLite rejects).
-     */
-    private fun toFtsQuery(raw: String): String =
-        raw.trim().lowercase()
-            .split(Regex("[^\\p{L}\\p{N}]+"))
-            .filter { it.isNotBlank() }
-            .joinToString(" ") { "name:$it*" }
+    private val support = CatalogSyncSupport(db, retrofitBuilder, settings, shrinkLedger)
+    private val tmdb = TmdbMetadataRepository(retrofitBuilder, settings)
+    private val source = SourceRepository(db, httpClient, settings, secureValues, support)
+    private val live = LiveCatalogRepository(db, httpClient, settings, secureValues, support)
+    private val profiles = ProfileRepository(db, settings, secureValues)
+    private val vod = VodCatalogRepository(db, settings, secureValues, support, tmdb, profiles, pagingConfig)
+    private val series = SeriesCatalogRepository(db, settings, secureValues, support, tmdb, profiles, pagingConfig)
+    private val epg = EpgRepository(db, httpClient, settings, secureValues, support)
+    private val library = LibraryRepository(db, settings, secureValues, support, live, vod, series, epg)
+    private val searchIndex = SearchRepository(db, secureValues, pagingConfig)
+
+    // Only read by [syncAllReport] to size the "cached before" counts.
+    private val channelDao = db.channelDao()
+    private val epgDao = db.epgDao()
+    private val vodCategoryDao = db.vodCategoryDao()
+    private val seriesCategoryDao = db.seriesCategoryDao()
+
+    // ---- Secure storage migration ---------------------------------------
+
+    suspend fun migrateSensitiveStorage() = source.migrateSensitiveStorage()
 
     // ---- Reactive reads (UI layer) --------------------------------------
 
     fun observeCategories(type: ContentType, radio: Int = -1): Flow<List<Category>> =
-        channelDao.observeCategories(type.name, radio).map { rows ->
-            rows.map { Category(it.categoryId, it.categoryName ?: "Uncategorized", type) }
-        }
+        live.observeCategories(type, radio)
 
     fun observeChannels(type: ContentType, radio: Boolean = false): Flow<List<Channel>> =
-        channelDao.observeByType(type.name, if (radio) 1 else 0).map { list -> list.map { it.toModel() } }
+        live.observeChannels(type, radio)
 
     fun observeChannelsByCategory(type: ContentType, categoryId: String, radio: Boolean = false): Flow<List<Channel>> =
-        channelDao.observeByCategory(type.name, categoryId, if (radio) 1 else 0).map { list -> list.map { it.toModel() } }
+        live.observeChannelsByCategory(type, categoryId, radio)
 
     /** Channel counts per category id, used for the category row badges. */
     fun observeCategoryCounts(type: ContentType, radio: Int = -1): Flow<Map<String, Int>> =
-        channelDao.observeCategoryCounts(type.name, radio).map { rows ->
-            rows.associate { it.categoryId to it.count }
-        }
+        live.observeCategoryCounts(type, radio)
 
     /** Favorite live channels, minus those in categories hidden by Content Manager. */
-    fun observeFavorites(): Flow<List<Channel>> =
-        combine(
-            favoriteDao.observeFavoriteChannels(),
-            settings.hiddenCategories(ContentType.LIVE),
-        ) { list, hidden ->
-            list.filter { it.categoryId == null || it.categoryId !in hidden }
-                .map { it.toModel(isFav = true) }
-        }
+    fun observeFavorites(): Flow<List<Channel>> = library.observeFavorites()
 
-    /**
-     * All favorites across every content type (live channels, movies, series),
-     * normalized into a single list for the dedicated Favorites screen. Rows whose
-     * underlying content is no longer cached are skipped.
-     */
-    fun observeAllFavorites(): Flow<List<FavoriteItem>> =
-        favoriteDao.observeAll().map { rows -> rows.mapNotNull { resolveFavorite(it.channelId) } }
+    /** All favorites across every content type, for the dedicated Favorites screen. */
+    fun observeAllFavorites(): Flow<List<FavoriteItem>> = library.observeAllFavorites()
 
-    private suspend fun resolveFavorite(id: String): FavoriteItem? = when {
-        id.startsWith("vod_") -> vodDao.getById(id.removePrefix("vod_"))?.let {
-            FavoriteItem(id, FavoriteKind.MOVIE, it.name, it.posterUrl, it.id, it.categoryName)
-        }
-        id.startsWith("series_") -> seriesDao.getById(id.removePrefix("series_"))?.let {
-            FavoriteItem(id, FavoriteKind.SERIES, it.name, it.posterUrl, it.id, it.categoryName)
-        }
-        else -> channelDao.getById(id)?.toModel(isFav = true)?.let {
-            FavoriteItem(id, FavoriteKind.CHANNEL, it.name, it.logoUrl, it.id, it.categoryName, it.streamUrl)
-        }
-    }
-
-    fun observeRecent(limit: Int = 20): Flow<List<Channel>> =
-        recentDao.observeRecentChannels(limit).map { list -> list.map { it.toModel() } }
+    fun observeRecent(limit: Int = 20): Flow<List<Channel>> = library.observeRecent(limit)
 
     fun search(
         query: String,
         type: ContentType,
         hiddenCategories: List<String> = emptyList(),
         radio: Int = -1,
-    ): Flow<List<Channel>> {
-        val match = toFtsQuery(query)
-        if (match.isBlank()) return flowOf(emptyList())
-        return channelDao.searchFts(match, type.name, hiddenCategories, radio)
-            .map { list -> list.map { it.toModel() } }
-    }
+    ): Flow<List<Channel>> = searchIndex.search(query, type, hiddenCategories, radio)
 
-    suspend fun getChannel(id: String): Channel? = channelDao.getById(id)?.toModel()
+    suspend fun getChannel(id: String): Channel? = live.getChannel(id)
 
-    suspend fun liveChannelCount(): Int = withContext(Dispatchers.IO) {
-        channelDao.countByType(ContentType.LIVE.name)
-    }
+    suspend fun liveChannelCount(): Int = live.liveChannelCount()
 
-    /**
-     * Live channels that advertise a catch-up / timeshift archive. Hidden
-     * categories are excluded here so the catch-up screen matches Live TV.
-     */
-    fun observeCatchupChannels(): Flow<List<Channel>> =
-        combine(
-            channelDao.observeByType(ContentType.LIVE.name, 0),
-            settings.hiddenCategories(ContentType.LIVE),
-        ) { list, hidden ->
-            list.filter { it.catchupDays > 0 && (it.categoryId == null || it.categoryId !in hidden) }
-                .map { it.toModel() }
-        }
+    /** Live channels that advertise a catch-up / timeshift archive. */
+    fun observeCatchupChannels(): Flow<List<Channel>> = live.observeCatchupChannels()
 
-    /**
-     * Channels of a type (including hidden) plus their manager state, in the
-     * user's custom order. When [categoryId] is set, only that category's
-     * channels are returned (used by the per-category channel editor).
-     */
+    /** Channels of a type (including hidden) plus their manager state. */
     fun observeManagedChannels(
         type: ContentType,
         categoryId: String? = null
-    ): Flow<List<ManagedChannel>> =
-        combine(
-            channelDao.observeForManagement(type.name),
-            favoriteDao.observeFavoriteChannels()
-        ) { rows, favorites ->
-            val favoriteIds = favorites.map { it.id }.toHashSet()
-            rows.asSequence()
-                .filter { categoryId == null || it.channel.categoryId == categoryId }
-                .map {
-                    ManagedChannel(
-                        channel = it.channel.toModel(),
-                        hidden = it.hidden,
-                        isFavorite = it.channel.id in favoriteIds
-                    )
-                }
-                .toList()
-        }
+    ): Flow<List<ManagedChannel>> = library.observeManagedChannels(type, categoryId)
 
     // ---- Managed / visible categories (Content Manager) -----------------
 
-    /** Raw category list for [type] in source/default order (no user prefs). */
-    private fun rawCategories(type: ContentType, radio: Int = -1): Flow<List<Category>> = when (type) {
-        ContentType.LIVE -> observeCategories(ContentType.LIVE, radio)
-        ContentType.VOD -> observeVodCategories()
-        ContentType.SERIES -> observeSeriesCategories()
-    }
-
-    /** Per-category content counts for [type]. */
-    private fun categoryCounts(type: ContentType, radio: Int = -1): Flow<Map<String, Int>> = when (type) {
-        ContentType.LIVE -> observeCategoryCounts(ContentType.LIVE, radio)
-        ContentType.VOD -> observeVodCategoryCounts()
-        ContentType.SERIES -> observeSeriesCategoryCounts()
-    }
-
-    /**
-     * Reorders [cats] by the user's saved id [order]: ids present in the saved
-     * order come first (in that order); any category not yet in the saved order
-     * (e.g. newly added by the provider) keeps its default position at the end.
-     */
-    private fun applyCategoryOrder(cats: List<Category>, order: List<String>): List<Category> {
-        if (order.isEmpty()) return cats
-        val rank = order.withIndex().associate { (i, id) -> id to i }
-        val (known, unknown) = cats.partition { it.id in rank }
-        return known.sortedBy { rank[it.id]!! } + unknown
-    }
-
-    /**
-     * All categories for [type] (incl. hidden) with their hidden flag + count,
-     * in the user's custom order — drives the Content Manager editor.
-     */
+    /** All categories for [type] (incl. hidden) with their hidden flag + count. */
     fun observeManagedCategories(type: ContentType): Flow<List<ManagedCategory>> =
-        combine(
-            rawCategories(type),
-            categoryCounts(type),
-            settings.hiddenCategories(type),
-            settings.categoryOrder(type)
-        ) { cats, counts, hidden, order ->
-            val withCounts = cats.map { it.copy(count = counts[it.id]) }
-            applyCategoryOrder(withCounts, order).map { ManagedCategory(it, it.id in hidden) }
-        }
+        library.observeManagedCategories(type)
 
-    /**
-     * Visible categories for [type]: hidden categories removed and the user's
-     * custom order applied — used by the Live/Movies/Series browse rails.
-     */
-    fun observeVisibleCategories(type: ContentType, radio: Boolean = false): Flow<List<Category>> {
-        // Radio split only applies to LIVE; other types ignore it (-1 = all).
-        val radioFilter = if (type == ContentType.LIVE) (if (radio) 1 else 0) else -1
-        return combine(
-            rawCategories(type, radioFilter),
-            categoryCounts(type, radioFilter),
-            settings.hiddenCategories(type),
-            settings.categoryOrder(type)
-        ) { cats, counts, hidden, order ->
-            val visible = cats.filter { it.id !in hidden }.map { it.copy(count = counts[it.id]) }
-            applyCategoryOrder(visible, order)
-        }
-    }
+    /** Visible categories for [type] in the user's custom order. */
+    fun observeVisibleCategories(type: ContentType, radio: Boolean = false): Flow<List<Category>> =
+        library.observeVisibleCategories(type, radio)
 
     // ---- Channel overrides (hide / custom order) ------------------------
 
-    suspend fun setChannelHidden(channelId: String, hidden: Boolean) = withContext(Dispatchers.IO) {
-        val existing = channelOverrideDao.get(channelId)
-        channelOverrideDao.upsert(
-            ChannelOverrideEntity(channelId, hidden, existing?.sortOrder)
-        )
-    }
+    suspend fun setChannelHidden(channelId: String, hidden: Boolean) =
+        library.setChannelHidden(channelId, hidden)
 
     /** Persists a custom order; index in [orderedIds] becomes the sort key. */
-    suspend fun applyChannelOrder(orderedIds: List<String>) = withContext(Dispatchers.IO) {
-        val existing = channelOverrideDao.getAll().associateBy { it.channelId }
-        val updated = orderedIds.mapIndexed { index, id ->
-            ChannelOverrideEntity(id, existing[id]?.hidden ?: false, index)
-        }
-        channelOverrideDao.upsertAll(updated)
-    }
+    suspend fun applyChannelOrder(orderedIds: List<String>) = library.applyChannelOrder(orderedIds)
 
     // ---- Favorites / recents -------------------------------------------
 
-    suspend fun toggleFavorite(channelId: String): Boolean = withContext(Dispatchers.IO) {
-        val isFav = favoriteDao.isFavorite(channelId)
-        if (isFav) favoriteDao.remove(channelId)
-        else favoriteDao.add(FavoriteEntity(channelId, System.currentTimeMillis()))
-        !isFav
-    }
+    suspend fun toggleFavorite(channelId: String): Boolean = library.toggleFavorite(channelId)
 
     /** Whether a generic content id (e.g. "vod_42", "series_7") is favorited. */
-    suspend fun isContentFavorite(id: String): Boolean = withContext(Dispatchers.IO) {
-        favoriteDao.isFavorite(id)
-    }
+    suspend fun isContentFavorite(id: String): Boolean = library.isContentFavorite(id)
 
-    suspend fun markWatched(channelId: String) = withContext(Dispatchers.IO) {
-        recentDao.add(RecentEntity(channelId, System.currentTimeMillis()))
-        recentDao.trim(keep = 50)
-    }
+    suspend fun markWatched(channelId: String) = library.markWatched(channelId)
 
     // ---- Source validation / live ---------------------------------------
 
-    suspend fun testSource(config: SourceConfig): Outcome<Unit> = withContext(Dispatchers.IO) {
-        try {
-            when (config.type) {
-                SourceType.XTREAM -> {
-                    val api = buildXtreamApi(config.serverUrl)
-                    val auth = api.authenticate(config.username, config.password)
-                    auth.serverInfo?.timezone?.let { panelTimezones[config.serverUrl] = it }
-                    val info = auth.userInfo
-                        ?: return@withContext Outcome.Failure(AppError.CANNOT_CONNECT)
-                    when {
-                        info.auth == 0 -> Outcome.Failure(AppError.BAD_CREDENTIALS)
-                        info.auth != 1 -> Outcome.Failure(AppError.CANNOT_CONNECT)
-                        info.status.equals("Disabled", true) ||
-                            info.status.equals("Banned", true) ->
-                            Outcome.Failure(AppError.ACCOUNT_DISABLED)
-                        info.status.equals("Expired", true) ->
-                            Outcome.Failure(AppError.SUBSCRIPTION_EXPIRED)
-                        info.status.equals("Active", true) -> Outcome.Success(Unit)
-                        else -> Outcome.Failure(AppError.CANNOT_CONNECT)
-                    }
-                }
-                SourceType.M3U_URL -> {
-                    val request = Request.Builder()
-                        .url(config.m3uUrl)
-                        .header("Range", "bytes=0-1023")
-                        .build()
-                    httpClient.newCall(request).execute().use { resp ->
-                        if (resp.isSuccessful) {
-                            val prefix = resp.body?.charStream()?.let { reader ->
-                                val chars = CharArray(1024)
-                                val count = reader.read(chars)
-                                if (count > 0) String(chars, 0, count) else ""
-                            }.orEmpty()
-                            if (M3uParser.hasPlaylistSignature(prefix)) Outcome.Success(Unit)
-                            else Outcome.Failure(AppError.EMPTY_PLAYLIST)
-                        }
-                        else Outcome.Failure(
-                            HttpAppErrorPolicy.fromStatus(resp.code),
-                            httpStatus = resp.code.takeIf { it in 400..599 },
-                        )
-                    }
-                }
-            }
-        } catch (e: Throwable) {
-            if (e is CancellationException) throw e // never swallow coroutine cancellation
-            e.toOutcomeFailure()
-        }
-    }
+    suspend fun testSource(config: SourceConfig): Outcome<Unit> = source.testSource(config)
 
     /**
      * Replaces the live channel snapshot. [force] (a manual user refresh) trusts
      * a much smaller server list that the shrink guard would otherwise reject.
      */
-    suspend fun refreshLive(config: SourceConfig, force: Boolean = false): Outcome<Int> = withContext(Dispatchers.IO) {
-        val generation = refreshGenerations.begin("live", config)
-        try {
-            val staged = when (config.type) {
-                SourceType.XTREAM -> loadXtreamLive(config)
-                SourceType.M3U_URL -> loadM3u(config)
-            }
-            val channels = staged.items
-            if (channels.isEmpty()) return@withContext Outcome.Failure(AppError.EMPTY_PLAYLIST)
-            // Stamp each channel with its index in the source list so the visible
-            // order matches what the server delivered.
-            val ordered = channels.mapIndexed { index, ch -> ch.copy(position = index) }
-            // Count genuinely-new live channels (Xtream ids and M3U tvg-id/URL-hash
-            // ids are refresh-stable) so the Live screen can flash a "N new
-            // channels" notice. Captured before the wipe below; skipped on the very
-            // first load (no prior data) and when nothing overlaps at all (an id
-            // scheme or source change, not new content) to avoid a false popup.
-            val existing = channelDao.idsForType(ContentType.LIVE.name).toSet()
-            val newLiveCount = if (existing.isEmpty()) 0 else {
-                ordered.count { it.id !in existing }.let { if (it == ordered.size) 0 else it }
-            }
-            when (
-                val decision = evaluateRefresh(
-                    CatalogDataset.LIVE,
-                    generation,
-                    DatasetSnapshot(
-                        generation.policyExistingCount(existing.size),
-                        staged.receivedCount,
-                        ordered.size,
-                    ),
-                    force = force,
-                )
-            ) {
-                DatasetRefreshDecision.Apply -> Unit
-                is DatasetRefreshDecision.PreserveCache ->
-                    return@withContext preservedDataset(CatalogDataset.LIVE, decision.reason)
-            }
-            // Replace channels + their search index atomically so live search never
-            // sees a half-built index (or an empty one) if this is interrupted.
-            // Insert in chunks: large Xtream accounts / M3U lists can hold tens of
-            // thousands of channels. Mapping + inserting all at once spikes memory and
-            // can OOM on low-RAM TV boxes, so bound the peak by batching.
-            val committed = commitSnapshot(config, generation) {
-                channelDao.clearType(ContentType.LIVE.name)
-                ordered.chunked(1000).forEach { batch ->
-                    channelDao.upsertAll(batch.map { it.toEntity() })
-                }
-                channelFtsDao.clearAll()
-                ordered.chunked(1000).forEach { batch ->
-                    channelFtsDao.insertAll(batch.map { ChannelFtsEntity(it.id, it.name) })
-                }
-            }
-            if (!committed) return@withContext staleDataset(CatalogDataset.LIVE)
-            if (newLiveCount > 0) NewContentNotifier.addLive(newLiveCount)
-            Outcome.Success(ordered.size)
-        } catch (e: Throwable) {
-            if (e is CancellationException) throw e // never swallow coroutine cancellation
-            e.toOutcomeFailure()
-        }
-    }
-
-    private suspend fun loadXtreamLive(config: SourceConfig): StagedDataset<Channel> {
-        val api = buildXtreamApi(config.serverUrl)
-        val categoryList = api.getLiveCategories(config.username, config.password)
-        val categories = categoryList
-            .associate { (it.categoryId ?: "") to (it.categoryName ?: "Uncategorized") }
-        // Index each category by its position in the server's category list so the
-        // UI can present categories in the same order the provider returned them.
-        val categoryOrder = categoryList
-            .mapIndexedNotNull { index, c -> c.categoryId?.let { it to index } }
-            .toMap()
-        val streams = api.getLiveStreams(config.username, config.password)
-        val channels = streams.mapNotNull { s ->
-            val id = s.streamId ?: return@mapNotNull null
-            Channel(
-                id = "xt_live_$id",
-                name = s.name ?: "Unknown",
-                streamUrl = XtreamUrlBuilder.liveUrl(
-                    config.serverUrl,
-                    config.username,
-                    config.password,
-                    id,
-                    directSource = s.directSource,
-                ),
-                logoUrl = s.streamIcon?.takeIf { it.isNotBlank() },
-                categoryId = s.categoryId,
-                categoryName = categories[s.categoryId] ?: "Uncategorized",
-                epgChannelId = s.epgChannelId?.takeIf { it.isNotBlank() },
-                number = s.num,
-                type = ContentType.LIVE,
-                catchupDays = if (s.tvArchive == 1) (s.tvArchiveDuration ?: 7).coerceAtLeast(1) else 0,
-                categoryPosition = categoryOrder[s.categoryId] ?: Int.MAX_VALUE
-            )
-        }
-        return StagedDataset(streams.size, channels)
-    }
-
-    private fun loadM3u(config: SourceConfig): StagedDataset<Channel> {
-        val request = Request.Builder().url(config.m3uUrl).build()
-        httpClient.newCall(request).execute().use { resp ->
-            if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}")
-            val body = resp.body ?: throw IOException("Empty body")
-            val parsed = body.charStream().buffered().use { M3uParser.parse(it) }
-            // M3U has no separate category list, so category order is the order in
-            // which each group first appears in the playlist.
-            val categoryOrder = LinkedHashMap<String?, Int>()
-            parsed.forEach { c -> categoryOrder.getOrPut(c.categoryId) { categoryOrder.size } }
-            return StagedDataset(parsed.size, parsed.map { c ->
-                c.copy(categoryPosition = categoryOrder[c.categoryId] ?: Int.MAX_VALUE)
-            })
-        }
-    }
+    suspend fun refreshLive(config: SourceConfig, force: Boolean = false): Outcome<Int> =
+        live.refreshLive(config, force)
 
     // ---- VOD ------------------------------------------------------------
 
-    fun observeVod(): Flow<List<VodItem>> = vodDao.observeAll().map { it.map { e -> e.toModel() } }
+    fun observeVod(): Flow<List<VodItem>> = vod.observeVod()
 
     /** Latest [limit] movies by added date, for the "Recently added" rail. */
-    fun observeRecentVod(limit: Int): Flow<List<VodItem>> =
-        vodDao.observeRecent(limit).map { it.map { e -> e.toModel() } }
+    fun observeRecentVod(limit: Int): Flow<List<VodItem>> = vod.observeRecentVod(limit)
 
-    fun observeVodByCategory(categoryId: String): Flow<List<VodItem>> =
-        vodDao.observeByCategory(categoryId).map { it.map { e -> e.toModel() } }
+    fun observeVodByCategory(categoryId: String): Flow<List<VodItem>> = vod.observeVodByCategory(categoryId)
 
-    /**
-     * Movie categories, read from the dedicated [vod_categories] table so the rail
-     * is available immediately after login — before any category's movies have
-     * been lazily downloaded.
-     */
-    fun observeVodCategories(): Flow<List<Category>> =
-        vodCategoryDao.observeAll().map { rows ->
-            rows.map { Category(it.id, it.name, ContentType.VOD) }
-        }
+    /** Movie categories from the dedicated [vod_categories] table. */
+    fun observeVodCategories(): Flow<List<Category>> = vod.observeVodCategories()
 
     /** Movie count per category id, used for the category row badges. */
-    fun observeVodCategoryCounts(): Flow<Map<String, Int>> =
-        vodDao.observeCategoryCounts().map { rows -> rows.associate { it.categoryId to it.count } }
+    fun observeVodCategoryCounts(): Flow<Map<String, Int>> = vod.observeVodCategoryCounts()
 
-    fun searchVod(query: String): Flow<List<VodItem>> =
-        vodDao.search(LikeEscape.escape(query)).map { it.map { e -> e.toModel() } }
+    fun searchVod(query: String): Flow<List<VodItem>> = vod.searchVod(query)
 
     // ---- Paging 3 (bounded movie lists) ---------------------------------
 
     /** Whole movie cache, newest first — the "Recently added" default view. */
     fun pagingRecentVod(hidden: List<String> = emptyList()): Flow<PagingData<VodItem>> =
-        Pager(pagingConfig) { vodDao.pagingRecent(hidden) }
-            .flow.map { data -> data.map { it.toModel() } }
+        vod.pagingRecentVod(hidden)
 
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
     fun pagingRecommendedVod(hidden: List<String>): Flow<PagingData<VodItem>> =
-        settings.activeProfileId.distinctUntilChanged().flatMapLatest { profileId ->
-            combine(recommendationDao.observePreferences(profileId), vodDao.observeRecommendationCatalog()) { history, _ -> history }
-                .debounce(600).mapLatest { history ->
-                    val ids = recommendationIds(profileId, "movie", history, hidden)
-                    val items = vodDao.recommendedItems(ids, hidden).associateBy { it.id }
-                    PagingData.from(ids.mapNotNull { items[it]?.toModel() }, sourceLoadStates = androidx.paging.LoadStates(androidx.paging.LoadState.NotLoading(false), androidx.paging.LoadState.NotLoading(true), androidx.paging.LoadState.NotLoading(true)))
-                }.flowOn(Dispatchers.IO)
-        }
+        vod.pagingRecommendedVod(hidden)
 
     fun pagingVodByCategory(categoryId: String): Flow<PagingData<VodItem>> =
-        Pager(pagingConfig) { vodDao.pagingByCategory(categoryId) }
-            .flow.map { data -> data.map { it.toModel() } }
+        vod.pagingVodByCategory(categoryId)
 
-    /**
-     * Whole movie cache in the requested [sort] order, with [hidden] categories
-     * (from Content Manager) excluded so they never leak into the "all" view.
-     */
+    /** Whole movie cache in the requested [sort] order, [hidden] categories excluded. */
     fun pagingVodAll(sort: ContentSort, hidden: List<String> = emptyList()): Flow<PagingData<VodItem>> =
-        Pager(pagingConfig) {
-            when (sort) {
-                ContentSort.RECENT -> vodDao.pagingRecent(hidden)
-                ContentSort.NAME -> vodDao.pagingAllByName(hidden)
-                ContentSort.RATING -> vodDao.pagingAllByRating(hidden)
-                ContentSort.YEAR -> vodDao.pagingAllByYear(hidden)
-            }
-        }.flow.map { data -> data.map { it.toModel() } }
+        vod.pagingVodAll(sort, hidden)
 
     /** One category's movies in the requested [sort] order. */
     fun pagingVodByCategory(categoryId: String, sort: ContentSort): Flow<PagingData<VodItem>> =
-        Pager(pagingConfig) {
-            when (sort) {
-                ContentSort.RECENT -> vodDao.pagingByCategory(categoryId)
-                ContentSort.NAME -> vodDao.pagingCategoryByName(categoryId)
-                ContentSort.RATING -> vodDao.pagingCategoryByRating(categoryId)
-                ContentSort.YEAR -> vodDao.pagingCategoryByYear(categoryId)
-            }
-        }.flow.map { data -> data.map { it.toModel() } }
+        vod.pagingVodByCategory(categoryId, sort)
 
     /** Instant FTS search, paged. Empty input yields an empty page (no MATCH). */
     fun pagingVodSearch(
         query: String,
         hidden: List<String> = emptyList(),
         sort: ContentSort = ContentSort.RECENT,
-    ): Flow<PagingData<VodItem>> {
-        val match = toFtsQuery(query)
-        if (match.isBlank()) return flowOf(PagingData.empty())
-        return Pager(pagingConfig) {
-            when (sort) {
-                ContentSort.RECENT -> vodDao.pagingSearchRecent(match, hidden)
-                ContentSort.NAME -> vodDao.pagingSearchByName(match, hidden)
-                ContentSort.RATING -> vodDao.pagingSearchByRating(match, hidden)
-                ContentSort.YEAR -> vodDao.pagingSearchByYear(match, hidden)
-            }
-        }
-            .flow.map { data -> data.map { it.toModel() } }
-    }
-    /**
-     * Fetches and caches only the movie *categories* (not the movies themselves).
-     * This is cheap and lets the Movies rail render immediately. The per-category
-     * [loaded] flag is preserved across refreshes so re-syncing the category list
-     * never forces a re-download of categories whose movies are already cached.
-     */
-    suspend fun refreshVodCategories(config: SourceConfig): Outcome<Int> = withContext(Dispatchers.IO) {
-        if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
-        val generation = refreshGenerations.begin("vod_categories", config)
-        try {
-            val api = buildXtreamApi(config.serverUrl)
-            val catList = api.getVodCategories(config.username, config.password)
-            val cachedCategories = vodCategoryDao.getAll()
-            val alreadyLoaded = cachedCategories.filter { it.loaded }.mapTo(mutableSetOf()) { it.id }
-            val categories = catList.mapIndexedNotNull { index, c ->
-                val id = c.categoryId?.trim()?.takeIf { it.isNotEmpty() }
-                    ?: return@mapIndexedNotNull null
-                VodCategoryEntity(
-                    id = id,
-                    name = c.categoryName ?: "Uncategorized",
-                    position = index,
-                    loaded = id in alreadyLoaded
-                )
-            }.distinctBy { it.id }
-            when (
-                val decision = evaluateRefresh(
-                    CatalogDataset.VOD_CATEGORIES,
-                    generation,
-                    DatasetSnapshot(
-                        generation.policyExistingCount(cachedCategories.size),
-                        catList.size,
-                        categories.size,
-                    ),
-                )
-            ) {
-                DatasetRefreshDecision.Apply -> Unit
-                is DatasetRefreshDecision.PreserveCache ->
-                    return@withContext preservedDataset(CatalogDataset.VOD_CATEGORIES, decision.reason)
-            }
-            val incomingIds = categories.mapTo(mutableSetOf()) { it.id }
-            val staleCategoryIds = cachedCategories.map { it.id }
-                .filterNot { it in incomingIds }
-            val committed = commitSnapshot(config, generation) {
-                if (staleCategoryIds.isNotEmpty()) {
-                    val staleMovieIds = mutableListOf<String>()
-                    for (id in staleCategoryIds) {
-                        staleMovieIds += vodDao.itemsForCategory(id).map { it.id }
-                    }
-                    if (staleMovieIds.isNotEmpty()) {
-                        vodDao.deleteByIds(staleMovieIds)
-                        vodFtsDao.deleteByIds(staleMovieIds)
-                    }
-                    vodCategoryDao.deleteByIds(staleCategoryIds)
-                }
-                if (categories.isNotEmpty()) vodCategoryDao.upsertAll(categories)
-            }
-            if (!committed) return@withContext staleDataset(CatalogDataset.VOD_CATEGORIES)
-            Outcome.Success(categories.size)
-        } catch (e: Throwable) {
-            if (e is CancellationException) throw e // never swallow coroutine cancellation
-            e.toOutcomeFailure()
-        }
-    }
+    ): Flow<PagingData<VodItem>> = searchIndex.pagingVodSearch(query, hidden, sort)
+
+    /** Fetches and caches only the movie *categories* (not the movies themselves). */
+    suspend fun refreshVodCategories(config: SourceConfig): Outcome<Int> = vod.refreshVodCategories(config)
 
     /** True if this category's movies have already been downloaded into the cache. */
-    suspend fun isVodCategoryLoaded(categoryId: String): Boolean = withContext(Dispatchers.IO) {
-        vodCategoryDao.getById(categoryId)?.loaded == true
-    }
+    suspend fun isVodCategoryLoaded(categoryId: String): Boolean = vod.isVodCategoryLoaded(categoryId)
 
     /** Visible movie categories that still need a first catalog download. */
-    suspend fun unloadedVodCategoryIds(hidden: Set<String>): List<String> =
-        withContext(Dispatchers.IO) {
-            vodCategoryDao.getAll()
-                .filter { !it.loaded && it.id !in hidden }
-                .map { it.id }
-        }
+    suspend fun unloadedVodCategoryIds(hidden: Set<String>): List<String> = vod.unloadedVodCategoryIds(hidden)
 
     /** Every visible movie category, used by an explicit user refresh. */
-    suspend fun vodCategoryIds(hidden: Set<String>): List<String> =
-        withContext(Dispatchers.IO) {
-            vodCategoryDao.getAll().filter { it.id !in hidden }.map { it.id }
-        }
+    suspend fun vodCategoryIds(hidden: Set<String>): List<String> = vod.vodCategoryIds(hidden)
 
-    /**
-     * Lazily downloads a single movie category's movies and *merges* them into the
-     * cache (no full-table wipe), so other already-downloaded categories stay
-     * intact. Skips the network entirely when the category is already loaded
-     * unless [force] is set. Marks the category loaded on success.
-     */
+    /** Lazily downloads a single movie category's movies and merges them into the cache. */
     suspend fun refreshVodCategory(
         config: SourceConfig,
         categoryId: String,
         force: Boolean = false
-    ): Outcome<Int> = withContext(Dispatchers.IO) {
-        if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
-        val generation = refreshGenerations.begin("vod_category:$categoryId", config)
-        val category = vodCategoryDao.getById(categoryId)
-        if (!force && category?.loaded == true) return@withContext Outcome.Success(0)
-        try {
-            val api = buildXtreamApi(config.serverUrl)
-            val catName = category?.name ?: "Uncategorized"
-            val catPosition = category?.position ?: Int.MAX_VALUE
-            val existing = vodDao.itemsForCategory(categoryId).associateBy { it.id }
-            val received = api.getVodStreams(config.username, config.password, categoryId)
-            val scoped = received.filter { it.categoryId == null || it.categoryId == categoryId }
-            val items = scoped
-                .mapIndexedNotNull { position, s ->
-                    val id = s.streamId ?: return@mapIndexedNotNull null
-                    val previous = existing[id]
-                    VodEntity(
-                        id = id,
-                        name = s.name ?: "Unknown",
-                        streamUrl = secureValues.encrypt(
-                            XtreamUrlBuilder.movieUrl(
-                                config.serverUrl, config.username, config.password, id,
-                                s.containerExtension ?: "mp4",
-                                directSource = s.directSource,
-                            ),
-                        ),
-                        posterUrl = s.streamIcon?.takeIf { it.isNotBlank() }
-                            ?: previous?.posterUrl,
-                        backdropUrl = previous?.backdropUrl,
-                        categoryId = categoryId,
-                        categoryName = catName,
-                        rating = s.rating?.toDoubleOrNull() ?: previous?.rating,
-                        plot = previous?.plot,
-                        cast = previous?.cast,
-                        director = previous?.director,
-                        genre = previous?.genre,
-                        releaseDate = s.releaseDate?.takeIf { it.isNotBlank() }
-                            ?: s.year?.takeIf { it.isNotBlank() }
-                            ?: previous?.releaseDate,
-                        durationSecs = previous?.durationSecs,
-                        trailerUrl = previous?.trailerUrl,
-                        tmdbId = previous?.tmdbId,
-                        addedAt = MetadataPolicy.newest(previous?.addedAt ?: 0L, s.added),
-                        position = position,
-                        categoryPosition = catPosition
-                    )
-                }
-            when (
-                val decision = evaluateRefresh(
-                    CatalogDataset.VOD_CATEGORY,
-                    generation,
-                    DatasetSnapshot(
-                        generation.policyExistingCount(existing.size),
-                        scoped.size,
-                        items.size,
-                    ),
-                )
-            ) {
-                DatasetRefreshDecision.Apply -> Unit
-                is DatasetRefreshDecision.PreserveCache ->
-                    return@withContext preservedDataset(CatalogDataset.VOD_CATEGORY, decision.reason)
-            }
-            // How many of these are genuinely new to the cache. Only meaningful on a
-            // forced re-check of an already-loaded category (the launch sweep): a first
-            // load has no prior rows, so everything would look "new". Guard on
-            // categoryId so a backend that ignores category filtering and returns the
-            // whole catalog can't inflate this category's count.
-            val existingIds = existing.keys
-            val incomingIds = items.mapTo(mutableSetOf()) { it.id }
-            val staleIds = existingIds.filterNot { it in incomingIds }
-            val newCount = items.count { it.id !in existingIds }
-            // Merge (REPLACE on id) — never clear, so other categories remain
-            // cached. Keep the FTS index in lockstep (drop this batch's old rows
-            // then re-insert), all atomically so search never sees a half index.
-            val committed = commitSnapshot(config, generation) {
-                if (staleIds.isNotEmpty()) {
-                    vodDao.deleteByIds(staleIds)
-                    vodFtsDao.deleteByIds(staleIds)
-                }
-                if (items.isNotEmpty()) {
-                    vodDao.upsertAll(items)
-                    vodFtsDao.deleteByIds(items.map { it.id })
-                    vodFtsDao.insertAll(items.map { VodFtsEntity(it.id, it.name) })
-                }
-                vodCategoryDao.markLoaded(categoryId)
-            }
-            if (!committed) return@withContext staleDataset(CatalogDataset.VOD_CATEGORY)
-            // On a forced launch sweep, return the genuine new-count so the caller can
-            // aggregate across categories and notify once; non-forced loads keep the
-            // legacy item-count contract.
-            Outcome.Success(if (force) newCount else items.size)
-        } catch (e: Throwable) {
-            if (e is CancellationException) throw e // never swallow coroutine cancellation
-            e.toOutcomeFailure()
-        }
-    }
+    ): Outcome<Int> = vod.refreshVodCategory(config, categoryId, force)
 
-    /**
-     * Best-effort prefetch of the first movie category so the "Recently added"
-     * view has content right after the splash, without pulling the whole catalog.
-     */
+    /** Best-effort prefetch of the first movie category. */
     suspend fun prefetchFirstVodCategory(config: SourceConfig): Outcome<Int> =
-        withContext(Dispatchers.IO) {
-            val first = vodCategoryDao.getAll().firstOrNull()
-                ?: return@withContext Outcome.Success(0)
-            refreshVodCategory(config, first.id)
-        }
+        vod.prefetchFirstVodCategory(config)
 
-    /**
-     * Re-syncs every movie category the user has already opened (loaded == true)
-     * so newly added movies surface on each app launch. Force-refreshes via upsert
-     * (REPLACE on id) — existing items stay put (no flicker), only new ones appear.
-     * Best-effort: a single category's failure never aborts the rest. Xtream only.
-     */
+    /** Re-syncs every movie category the user has already opened. Xtream only. */
     suspend fun refreshLoadedVodCategories(config: SourceConfig): Outcome<Int> =
-        withContext(Dispatchers.IO) {
-            if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
-            var added = 0
-            for (id in vodCategoryDao.loadedIds()) {
-                when (val r = refreshVodCategory(config, id, force = true)) {
-                    is Outcome.Success -> added += r.data
-                    is Outcome.Failure -> Unit // keep going; best-effort per category
-                }
-            }
-            // Notify the Movies screen once with the launch's total new count, so it
-            // shows a single "N new movies" popup instead of one per category.
-            if (added > 0) NewContentNotifier.addMovies(added)
-            Outcome.Success(added)
-        }
+        vod.refreshLoadedVodCategories(config)
 
     /** Loads full VOD detail on demand, enriching with TMDB when a key is set. */
-    suspend fun getVodDetail(config: SourceConfig, id: String): VodItem? = withContext(Dispatchers.IO) {
-        val cachedEntity = vodDao.getById(id) ?: return@withContext null
-        val cached = cachedEntity.toModel()
-        val merged = try {
-            if (config.type == SourceType.XTREAM) {
-                val api = buildXtreamApi(config.serverUrl)
-                val response = api.getVodInfo(config.username, config.password, id)
-                check(response.movieData?.streamId == id) { "Mismatched VOD detail identifier" }
-                val info = response.info
-                val directStreamUrl = XtreamUrlBuilder.resolveDirectSource(
-                    config.serverUrl,
-                    response.movieData?.directSource,
-                )
-                cached.copy(
-                    streamUrl = directStreamUrl ?: cached.streamUrl,
-                    plot = info?.plot ?: cached.plot,
-                    cast = info?.cast ?: cached.cast,
-                    director = info?.director ?: cached.director,
-                    genre = info?.genre ?: cached.genre,
-                    releaseDate = info?.releaseDate ?: cached.releaseDate,
-                    durationSecs = info?.durationSecs ?: cached.durationSecs,
-                    rating = info?.rating?.toDoubleOrNull() ?: cached.rating,
-                    trailerUrl = youtube(info?.youtubeTrailer) ?: cached.trailerUrl,
-                    posterUrl = info?.movieImage?.takeIf { it.isNotBlank() } ?: cached.posterUrl,
-                    tmdbId = info?.tmdbId ?: cached.tmdbId
-                )
-            } else {
-                cached
-            }
-        } catch (ce: CancellationException) {
-            throw ce
-        } catch (t: Throwable) {
-            Logger.w("Xtream", "VOD detail unavailable; retaining cached metadata", t)
-            cached
-        }
-        val enriched = enrichWithTmdb(merged, isMovie = true)
-        // Detail metadata must survive leaving this screen. Keeping it in Room
-        // also makes year/rating sorts improve as titles are enriched.
-        vodDao.upsertAll(
-            listOf(
-                cachedEntity.copy(
-                    name = enriched.name,
-                    streamUrl = secureValues.encrypt(enriched.streamUrl),
-                    posterUrl = enriched.posterUrl,
-                    backdropUrl = enriched.backdropUrl,
-                    rating = enriched.rating,
-                    plot = enriched.plot,
-                    cast = enriched.cast,
-                    director = enriched.director,
-                    genre = enriched.genre,
-                    releaseDate = enriched.releaseDate,
-                    durationSecs = enriched.durationSecs,
-                    trailerUrl = enriched.trailerUrl,
-                    tmdbId = enriched.tmdbId,
-                ),
-            ),
-        )
-        enriched
-    }
+    suspend fun getVodDetail(config: SourceConfig, id: String): VodItem? = vod.getVodDetail(config, id)
 
-    /**
-     * Instant, network-free VOD record straight from the local cache (populated
-     * by [refreshVodCategory]). Lets the detail screen render the poster, title and a
-     * working Play button immediately while [getVodDetail] enriches in the bg.
-     */
-    suspend fun getVodCached(id: String): VodItem? = withContext(Dispatchers.IO) {
-        vodDao.getById(id)?.toModel()
-    }
+    /** Instant, network-free VOD record straight from the local cache. */
+    suspend fun getVodCached(id: String): VodItem? = vod.getVodCached(id)
 
     // ---- Series ---------------------------------------------------------
 
-    fun observeSeries(): Flow<List<Series>> = seriesDao.observeAll().map { it.map { e -> e.toModel() } }
+    fun observeSeries(): Flow<List<Series>> = series.observeSeries()
 
-    /**
-     * Instant, network-free series record straight from the local cache (populated
-     * by [refreshSeriesCategory]). Lets the detail header render immediately instead
-     * of scanning the entire series list in memory.
-     */
-    suspend fun getSeriesCached(id: String): Series? = withContext(Dispatchers.IO) {
-        seriesDao.getById(id)?.toModel()
-    }
+    /** Instant, network-free series record straight from the local cache. */
+    suspend fun getSeriesCached(id: String): Series? = series.getSeriesCached(id)
 
     /** Latest [limit] series by added date, for the "Recently added" rail. */
-    fun observeRecentSeries(limit: Int): Flow<List<Series>> =
-        seriesDao.observeRecent(limit).map { it.map { e -> e.toModel() } }
+    fun observeRecentSeries(limit: Int): Flow<List<Series>> = series.observeRecentSeries(limit)
 
     fun observeSeriesByCategory(categoryId: String): Flow<List<Series>> =
-        seriesDao.observeByCategory(categoryId).map { it.map { e -> e.toModel() } }
+        series.observeSeriesByCategory(categoryId)
 
-    /**
-     * Series categories, read from the dedicated [series_categories] table so the
-     * rail is available immediately after login — before any category's series
-     * have been lazily downloaded. Mirrors [observeVodCategories].
-     */
-    fun observeSeriesCategories(): Flow<List<Category>> =
-        seriesCategoryDao.observeAll().map { rows ->
-            rows.map { Category(it.id, it.name, ContentType.SERIES) }
-        }
+    /** Series categories from the dedicated [series_categories] table. */
+    fun observeSeriesCategories(): Flow<List<Category>> = series.observeSeriesCategories()
 
     /** Series count per category id, used for the category row badges. */
-    fun observeSeriesCategoryCounts(): Flow<Map<String, Int>> =
-        seriesDao.observeCategoryCounts().map { rows -> rows.associate { it.categoryId to it.count } }
+    fun observeSeriesCategoryCounts(): Flow<Map<String, Int>> = series.observeSeriesCategoryCounts()
 
-    fun searchSeries(query: String): Flow<List<Series>> =
-        seriesDao.search(LikeEscape.escape(query)).map { it.map { e -> e.toModel() } }
+    fun searchSeries(query: String): Flow<List<Series>> = series.searchSeries(query)
 
     // ---- Paging 3 (bounded series lists) --------------------------------
 
     /** Whole series cache, newest first — the "Recently added" default view. */
     fun pagingRecentSeries(hidden: List<String> = emptyList()): Flow<PagingData<Series>> =
-        Pager(pagingConfig) { seriesDao.pagingRecent(hidden) }
-            .flow.map { data -> data.map { it.toModel() } }
+        series.pagingRecentSeries(hidden)
 
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
     fun pagingRecommendedSeries(hidden: List<String>): Flow<PagingData<Series>> =
-        settings.activeProfileId.distinctUntilChanged().flatMapLatest { profileId ->
-            combine(recommendationDao.observePreferences(profileId), seriesDao.observeRecommendationCatalog()) { history, _ -> history }
-                .debounce(600).mapLatest { history ->
-                    val ids = recommendationIds(profileId, "series", history, hidden)
-                    val items = seriesDao.recommendedItems(ids, hidden).associateBy { it.id }
-                    PagingData.from(ids.mapNotNull { items[it]?.toModel() }, sourceLoadStates = androidx.paging.LoadStates(androidx.paging.LoadState.NotLoading(false), androidx.paging.LoadState.NotLoading(true), androidx.paging.LoadState.NotLoading(true)))
-                }.flowOn(Dispatchers.IO)
-        }
+        series.pagingRecommendedSeries(hidden)
 
     fun pagingSeriesByCategory(categoryId: String): Flow<PagingData<Series>> =
-        Pager(pagingConfig) { seriesDao.pagingByCategory(categoryId) }
-            .flow.map { data -> data.map { it.toModel() } }
+        series.pagingSeriesByCategory(categoryId)
 
-    /**
-     * Whole series cache in the requested [sort] order, with [hidden] categories
-     * (from Content Manager) excluded so they never leak into the "all" view.
-     */
+    /** Whole series cache in the requested [sort] order, [hidden] categories excluded. */
     fun pagingSeriesAll(sort: ContentSort, hidden: List<String> = emptyList()): Flow<PagingData<Series>> =
-        Pager(pagingConfig) {
-            when (sort) {
-                ContentSort.RECENT -> seriesDao.pagingRecent(hidden)
-                ContentSort.NAME -> seriesDao.pagingAllByName(hidden)
-                ContentSort.RATING -> seriesDao.pagingAllByRating(hidden)
-                ContentSort.YEAR -> seriesDao.pagingAllByYear(hidden)
-            }
-        }.flow.map { data -> data.map { it.toModel() } }
+        series.pagingSeriesAll(sort, hidden)
 
     /** One category's series in the requested [sort] order. */
     fun pagingSeriesByCategory(categoryId: String, sort: ContentSort): Flow<PagingData<Series>> =
-        Pager(pagingConfig) {
-            when (sort) {
-                ContentSort.RECENT -> seriesDao.pagingByCategory(categoryId)
-                ContentSort.NAME -> seriesDao.pagingCategoryByName(categoryId)
-                ContentSort.RATING -> seriesDao.pagingCategoryByRating(categoryId)
-                ContentSort.YEAR -> seriesDao.pagingCategoryByYear(categoryId)
-            }
-        }.flow.map { data -> data.map { it.toModel() } }
+        series.pagingSeriesByCategory(categoryId, sort)
 
     /** Instant FTS search, paged. Empty input yields an empty page (no MATCH). */
     fun pagingSeriesSearch(
         query: String,
         hidden: List<String> = emptyList(),
         sort: ContentSort = ContentSort.RECENT,
-    ): Flow<PagingData<Series>> {
-        val match = toFtsQuery(query)
-        if (match.isBlank()) return flowOf(PagingData.empty())
-        return Pager(pagingConfig) {
-            when (sort) {
-                ContentSort.RECENT -> seriesDao.pagingSearchRecent(match, hidden)
-                ContentSort.NAME -> seriesDao.pagingSearchByName(match, hidden)
-                ContentSort.RATING -> seriesDao.pagingSearchByRating(match, hidden)
-                ContentSort.YEAR -> seriesDao.pagingSearchByYear(match, hidden)
-            }
-        }
-            .flow.map { data -> data.map { it.toModel() } }
-    }
+    ): Flow<PagingData<Series>> = searchIndex.pagingSeriesSearch(query, hidden, sort)
 
-    /**
-     * Fetches and caches only the series *categories* (not the series themselves),
-     * mirroring [refreshVodCategories]. Cheap, so the Series rail renders right
-     * away; the per-category [loaded] flag is preserved across refreshes so a
-     * re-sync never forces a re-download of an already-cached category.
-     */
-    suspend fun refreshSeriesCategories(config: SourceConfig): Outcome<Int> = withContext(Dispatchers.IO) {
-        if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
-        val generation = refreshGenerations.begin("series_categories", config)
-        try {
-            val api = buildXtreamApi(config.serverUrl)
-            val catList = api.getSeriesCategories(config.username, config.password)
-            val cachedCategories = seriesCategoryDao.getAll()
-            val alreadyLoaded = cachedCategories.filter { it.loaded }.mapTo(mutableSetOf()) { it.id }
-            val categories = catList.mapIndexedNotNull { index, c ->
-                val id = c.categoryId?.trim()?.takeIf { it.isNotEmpty() }
-                    ?: return@mapIndexedNotNull null
-                SeriesCategoryEntity(
-                    id = id,
-                    name = c.categoryName ?: "Uncategorized",
-                    position = index,
-                    loaded = id in alreadyLoaded
-                )
-            }.distinctBy { it.id }
-            when (
-                val decision = evaluateRefresh(
-                    CatalogDataset.SERIES_CATEGORIES,
-                    generation,
-                    DatasetSnapshot(
-                        generation.policyExistingCount(cachedCategories.size),
-                        catList.size,
-                        categories.size,
-                    ),
-                )
-            ) {
-                DatasetRefreshDecision.Apply -> Unit
-                is DatasetRefreshDecision.PreserveCache ->
-                    return@withContext preservedDataset(CatalogDataset.SERIES_CATEGORIES, decision.reason)
-            }
-            val incomingIds = categories.mapTo(mutableSetOf()) { it.id }
-            val staleCategoryIds = cachedCategories.map { it.id }
-                .filterNot { it in incomingIds }
-            val committed = commitSnapshot(config, generation) {
-                if (staleCategoryIds.isNotEmpty()) {
-                    val staleSeriesIds = mutableListOf<String>()
-                    for (id in staleCategoryIds) {
-                        staleSeriesIds += seriesDao.itemsForCategory(id).map { it.id }
-                    }
-                    if (staleSeriesIds.isNotEmpty()) {
-                        seriesDao.deleteEpisodesForSeriesIds(staleSeriesIds)
-                        seriesDao.deleteSeriesByIds(staleSeriesIds)
-                        seriesFtsDao.deleteByIds(staleSeriesIds)
-                    }
-                    seriesCategoryDao.deleteByIds(staleCategoryIds)
-                }
-                if (categories.isNotEmpty()) seriesCategoryDao.upsertAll(categories)
-            }
-            if (!committed) return@withContext staleDataset(CatalogDataset.SERIES_CATEGORIES)
-            Outcome.Success(categories.size)
-        } catch (e: Throwable) {
-            if (e is CancellationException) throw e // never swallow coroutine cancellation
-            e.toOutcomeFailure()
-        }
-    }
+    /** Fetches and caches only the series *categories* (not the series themselves). */
+    suspend fun refreshSeriesCategories(config: SourceConfig): Outcome<Int> =
+        series.refreshSeriesCategories(config)
 
     /** True if this category's series have already been downloaded into the cache. */
-    suspend fun isSeriesCategoryLoaded(categoryId: String): Boolean = withContext(Dispatchers.IO) {
-        seriesCategoryDao.getById(categoryId)?.loaded == true
-    }
+    suspend fun isSeriesCategoryLoaded(categoryId: String): Boolean = series.isSeriesCategoryLoaded(categoryId)
 
     /** Visible series categories that still need a first catalog download. */
     suspend fun unloadedSeriesCategoryIds(hidden: Set<String>): List<String> =
-        withContext(Dispatchers.IO) {
-            seriesCategoryDao.getAll()
-                .filter { !it.loaded && it.id !in hidden }
-                .map { it.id }
-        }
+        series.unloadedSeriesCategoryIds(hidden)
 
     /** Every visible series category, used by an explicit user refresh. */
-    suspend fun seriesCategoryIds(hidden: Set<String>): List<String> =
-        withContext(Dispatchers.IO) {
-            seriesCategoryDao.getAll().filter { it.id !in hidden }.map { it.id }
-        }
+    suspend fun seriesCategoryIds(hidden: Set<String>): List<String> = series.seriesCategoryIds(hidden)
 
-    /**
-     * Lazily downloads a single series category's series and *merges* them into
-     * the cache (no full-table wipe), so other already-downloaded categories stay
-     * intact. Skips the network when the category is already loaded unless [force]
-     * is set. Keeps the FTS index in lockstep and marks the category loaded.
-     */
-    /** Some panels never update get_series.last_modified when adding episodes.
-     * Check the visible category every 15 minutes, or the whole visible catalog
-     * every 6 hours per series, at most [SERIES_DATES_PER_CALL] series per call
-     * with two requests in flight, so a 5,000-title catalog never turns into a
-     * request storm. A 429/5xx aborts the sweep and backs off. No TMDB, posters,
-     * playback or episode writes. One batch commit keeps Paging focus stable.
-     */
+    /** Throttled episode-date sweep for panels that never bump last_modified. */
     suspend fun refreshSeriesEpisodeDates(
         config: SourceConfig, categoryId: String?, hidden: List<String>, force: Boolean = false,
-    ): Outcome<Int> = withContext(Dispatchers.IO) {
-        if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
-        val now = System.currentTimeMillis()
-        if (now < seriesDatesBackoffUntil) return@withContext Outcome.Success(0)
-        val minInterval = if (categoryId == null) SERIES_DATES_CATALOG_INTERVAL_MS else SERIES_DATES_CATEGORY_INTERVAL_MS
-        val ids = seriesDao.episodeDatesDue(
-            categoryId, hidden, if (force) now + 1 else now - minInterval, SERIES_DATES_PER_CALL,
-        )
-        if (ids.isEmpty()) return@withContext Outcome.Success(0)
-        val generation = refreshGenerations.begin("series_dates:${categoryId ?: "all"}", config)
-        val api = buildXtreamApi(config.serverUrl)
-        var applied = 0
-        // First 429/5xx status seen; the panel is asking us to stop, not retry.
-        val throttledStatus = java.util.concurrent.atomic.AtomicInteger(0)
-        try {
-            // Small categories commit together so posters do not jump every time
-            // one response arrives. Large categories publish bounded batches.
-            ids.chunked(20).forEach { batch ->
-                val updates = mutableListOf<Pair<String, Long>>()
-                coroutineScope {
-                    batch.chunked(2).forEach { pair ->
-                        if (throttledStatus.get() != 0) return@forEach
-                        pair.map { id -> async {
-                            try {
-                                val info = api.getSeriesInfo(config.username, config.password, id)
-                                val episodes = info.episodes ?: return@async null
-                                id to MetadataPolicy.episodeTimestamp(
-                                    episodes.values.flatten().map { it.added } + info.info?.lastEpisodeAdded, now,
-                                )
-                            } catch (e: CancellationException) { throw e }
-                            catch (e: HttpException) {
-                                if (e.code() == 429 || e.code() in 500..599) throttledStatus.compareAndSet(0, e.code())
-                                null
-                            }
-                            catch (_: Exception) { null }
-                        } }.awaitAll().filterNotNull().let(updates::addAll)
-                    }
-                }
-                val committed = commitSnapshot(config, generation) {
-                    updates.forEach { (id, date) -> seriesDao.updateEpisodeDate(id, date, now) }
-                }
-                if (!committed) return@withContext staleDataset(CatalogDataset.SERIES_CATEGORY)
-                applied += updates.size
-                val status = throttledStatus.get()
-                if (status != 0) {
-                    val backoff = if (status == 429) SERIES_DATES_BACKOFF_429_MS else SERIES_DATES_BACKOFF_5XX_MS
-                    seriesDatesBackoffUntil = System.currentTimeMillis() + backoff
-                    Logger.w("CatalogSync", "episode date sweep paused ${backoff / 60_000} min after HTTP $status")
-                    return@withContext Outcome.Success(applied)
-                }
-            }
-            Outcome.Success(applied)
-        } catch (e: CancellationException) { throw e }
-        catch (e: Exception) { e.toOutcomeFailure() }
-    }
+    ): Outcome<Int> = series.refreshSeriesEpisodeDates(config, categoryId, hidden, force)
 
+    /** Lazily downloads a single series category's series and merges them into the cache. */
     suspend fun refreshSeriesCategory(
         config: SourceConfig,
         categoryId: String,
         force: Boolean = false
-    ): Outcome<Int> = withContext(Dispatchers.IO) {
-        if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
-        val generation = refreshGenerations.begin("series_category:$categoryId", config)
-        val category = seriesCategoryDao.getById(categoryId)
-        if (!force && category?.loaded == true) return@withContext Outcome.Success(0)
-        try {
-            val api = buildXtreamApi(config.serverUrl)
-            val catName = category?.name ?: "Uncategorized"
-            val catPosition = category?.position ?: Int.MAX_VALUE
-            val existing = seriesDao.itemsForCategory(categoryId).associateBy { it.id }
-            val received = api.getSeries(config.username, config.password, categoryId)
-            val scoped = received.filter { it.categoryId == null || it.categoryId == categoryId }
-            val items = scoped
-                .mapIndexedNotNull { position, s ->
-                    val id = s.seriesId ?: return@mapIndexedNotNull null
-                    val previous = existing[id]
-                    SeriesEntity(
-                        id = id,
-                        name = s.name ?: "Unknown",
-                        posterUrl = s.cover?.takeIf { it.isNotBlank() }
-                            ?: previous?.posterUrl,
-                        backdropUrl = previous?.backdropUrl,
-                        categoryId = categoryId,
-                        categoryName = catName,
-                        rating = s.rating?.toDoubleOrNull() ?: previous?.rating,
-                        plot = s.plot ?: previous?.plot,
-                        cast = s.cast ?: previous?.cast,
-                        director = s.director ?: previous?.director,
-                        genre = s.genre ?: previous?.genre,
-                        releaseDate = s.releaseDate ?: previous?.releaseDate,
-                        trailerUrl = youtube(s.youtubeTrailer) ?: previous?.trailerUrl,
-                        tmdbId = MetadataPolicy.tmdbId(s.tmdbId) ?: previous?.tmdbId,
-                        addedAt = MetadataPolicy.newest(
-                            previous?.addedAt ?: 0L, s.lastModified, s.added,
-                        ),
-                        latestEpisodeAt = MetadataPolicy.newest(previous?.latestEpisodeAt ?: 0L, s.lastEpisodeAdded),
-                        episodeCheckedAt = previous?.episodeCheckedAt ?: 0L,
-                        position = position,
-                        categoryPosition = catPosition
-                    )
-                }
-            when (
-                val decision = evaluateRefresh(
-                    CatalogDataset.SERIES_CATEGORY,
-                    generation,
-                    DatasetSnapshot(
-                        generation.policyExistingCount(existing.size),
-                        scoped.size,
-                        items.size,
-                    ),
-                )
-            ) {
-                DatasetRefreshDecision.Apply -> Unit
-                is DatasetRefreshDecision.PreserveCache ->
-                    return@withContext preservedDataset(CatalogDataset.SERIES_CATEGORY, decision.reason)
-            }
-            // How many of these are genuinely new to the cache. Only meaningful on a
-            // forced re-check of an already-loaded category (the launch sweep). Guard on
-            // categoryId so a backend that ignores category filtering can't inflate it.
-            val existingIds = existing.keys
-            val incomingIds = items.mapTo(mutableSetOf()) { it.id }
-            val staleIds = existingIds.filterNot { it in incomingIds }
-            val newCount = items.count { it.id !in existingIds }
-            // Merge (REPLACE on id), keeping the FTS index in lockstep, atomically.
-            val committed = commitSnapshot(config, generation) {
-                if (staleIds.isNotEmpty()) {
-                    seriesDao.deleteEpisodesForSeriesIds(staleIds)
-                    seriesDao.deleteSeriesByIds(staleIds)
-                    seriesFtsDao.deleteByIds(staleIds)
-                }
-                if (items.isNotEmpty()) {
-                    seriesDao.upsertSeries(items)
-                    seriesFtsDao.deleteByIds(items.map { it.id })
-                    seriesFtsDao.insertAll(items.map { SeriesFtsEntity(it.id, it.name) })
-                }
-                seriesCategoryDao.markLoaded(categoryId)
-            }
-            if (!committed) return@withContext staleDataset(CatalogDataset.SERIES_CATEGORY)
-            Outcome.Success(if (force) newCount else items.size)
-        } catch (e: Throwable) {
-            if (e is CancellationException) throw e // never swallow coroutine cancellation
-            e.toOutcomeFailure()
-        }
-    }
+    ): Outcome<Int> = series.refreshSeriesCategory(config, categoryId, force)
 
-    /**
-     * Best-effort prefetch of the first series category so the "Recently added"
-     * view has content right after the splash, without pulling the whole catalog.
-     */
+    /** Best-effort prefetch of the first series category. */
     suspend fun prefetchFirstSeriesCategory(config: SourceConfig): Outcome<Int> =
-        withContext(Dispatchers.IO) {
-            val first = seriesCategoryDao.getAll().firstOrNull()
-                ?: return@withContext Outcome.Success(0)
-            refreshSeriesCategory(config, first.id)
-        }
+        series.prefetchFirstSeriesCategory(config)
 
-    /**
-     * Re-syncs every series category the user has already opened (loaded == true)
-     * so newly added series surface on each app launch. Force-refreshes via upsert,
-     * so existing items stay put (no flicker) and only new ones appear. Best-effort:
-     * a single category's failure never aborts the rest. Xtream only.
-     */
+    /** Re-syncs every series category the user has already opened. Xtream only. */
     suspend fun refreshLoadedSeriesCategories(config: SourceConfig): Outcome<Int> =
-        withContext(Dispatchers.IO) {
-            if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
-            var added = 0
-            for (id in seriesCategoryDao.loadedIds()) {
-                when (val r = refreshSeriesCategory(config, id, force = true)) {
-                    is Outcome.Success -> added += r.data
-                    is Outcome.Failure -> Unit // keep going; best-effort per category
-                }
-            }
-            // Notify the Series screen once with the launch's total new count.
-            if (added > 0) NewContentNotifier.addSeries(added)
-            Outcome.Success(added)
-        }
+        series.refreshLoadedSeriesCategories(config)
 
     /** Loads seasons + episodes for a series and caches the episodes. */
-    suspend fun getSeasons(config: SourceConfig, seriesId: String): List<Season> = withContext(Dispatchers.IO) {
-        if (config.type != SourceType.XTREAM) return@withContext emptyList()
-        val generation = refreshGenerations.begin("series_episodes:$seriesId", config)
-        try {
-            val api = buildXtreamApi(config.serverUrl)
-            val info = api.getSeriesInfo(config.username, config.password, seriesId)
-            val cachedEntity = seriesDao.getById(seriesId)
-            val cachedEpisodeEntities = seriesDao.episodesFor(seriesId)
-            val detail = info.info
-            val enrichedSeries = cachedEntity?.toModel()?.let { cached ->
-                enrichWithTmdb(
-                    cached.copy(
-                        plot = detail?.plot ?: cached.plot,
-                        cast = detail?.cast ?: cached.cast,
-                        director = detail?.director ?: cached.director,
-                        genre = detail?.genre ?: cached.genre,
-                        releaseDate = detail?.releaseDate ?: cached.releaseDate,
-                        rating = detail?.rating?.toDoubleOrNull() ?: cached.rating,
-                        posterUrl = detail?.cover?.takeIf { it.isNotBlank() }
-                            ?: cached.posterUrl,
-                        trailerUrl = youtube(detail?.youtubeTrailer) ?: cached.trailerUrl,
-                        tmdbId = detail?.tmdbId ?: cached.tmdbId,
-                    ),
-                )
-            }
-            val episodeEntities = mutableListOf<EpisodeEntity>()
-            val seasons = (info.episodes ?: emptyMap()).map { (seasonKey, eps) ->
-                val seasonNum = seasonKey.toIntOrNull() ?: 0
-                val episodes = eps.mapNotNull { e ->
-                    val eid = e.id ?: return@mapNotNull null
-                    val entity = EpisodeEntity(
-                        id = eid,
-                        seriesId = seriesId,
-                        seasonNumber = e.season ?: seasonNum,
-                        episodeNumber = e.episodeNum ?: 0,
-                        title = e.title ?: "Episode ${e.episodeNum ?: 0}",
-                        streamUrl = secureValues.encrypt(
-                            XtreamUrlBuilder.seriesEpisodeUrl(
-                                config.serverUrl, config.username, config.password, eid,
-                                e.containerExtension ?: "mp4",
-                                directSource = e.directSource ?: e.info?.directSource,
-                            ),
-                        ),
-                        plot = e.info?.plot,
-                        durationSecs = e.info?.durationSecs,
-                        posterUrl = e.info?.movieImage?.takeIf { it.isNotBlank() }
-                    )
-                    episodeEntities += entity
-                    entity.toModel()
-                }.sortedBy { it.episodeNumber }
-                Season(seriesId, seasonNum, episodes)
-            }.sortedBy { it.seasonNumber }
-            val receivedEpisodeCount = info.episodes?.values?.sumOf { it.size } ?: 0
-            when (
-                val decision = evaluateRefresh(
-                    CatalogDataset.SERIES_EPISODES,
-                    generation,
-                    DatasetSnapshot(
-                        generation.policyExistingCount(cachedEpisodeEntities.size),
-                        receivedEpisodeCount,
-                        episodeEntities.size,
-                    ),
-                )
-            ) {
-                DatasetRefreshDecision.Apply -> Unit
-                is DatasetRefreshDecision.PreserveCache -> {
-                    Logger.w(
-                        "CatalogSync",
-                        "preserved SERIES_EPISODES cache: ${decision.reason}",
-                    )
-                    return@withContext cachedSeasons(seriesId)
-                }
-            }
-            val committed = commitSnapshot(config, generation) {
-                if (cachedEntity != null && enrichedSeries != null) {
-                    seriesDao.upsertSeries(
-                        listOf(
-                            cachedEntity.copy(
-                                name = enrichedSeries.name,
-                                posterUrl = enrichedSeries.posterUrl,
-                                backdropUrl = enrichedSeries.backdropUrl,
-                                rating = enrichedSeries.rating,
-                                plot = enrichedSeries.plot,
-                                cast = enrichedSeries.cast,
-                                director = enrichedSeries.director,
-                                genre = enrichedSeries.genre,
-                                releaseDate = enrichedSeries.releaseDate,
-                                trailerUrl = enrichedSeries.trailerUrl,
-                                tmdbId = enrichedSeries.tmdbId,
-                                addedAt = MetadataPolicy.newest(cachedEntity.addedAt, detail?.lastModified),
-                                latestEpisodeAt = MetadataPolicy.episodeTimestamp(
-                                    info.episodes.orEmpty().values.flatten().map { it.added } + detail?.lastEpisodeAdded,
-                                    System.currentTimeMillis(),
-                                ),
-                                episodeCheckedAt = System.currentTimeMillis(),
-                            ),
-                        ),
-                    )
-                }
-                // A successful response is authoritative: remove episodes deleted
-                // by the provider instead of leaving stale playable rows behind.
-                seriesDao.deleteEpisodesForSeries(seriesId)
-                if (episodeEntities.isNotEmpty()) seriesDao.upsertEpisodes(episodeEntities)
-            }
-            if (!committed) return@withContext cachedSeasons(seriesId)
-            seasons
-        } catch (ce: CancellationException) {
-            throw ce
-        } catch (t: Throwable) {
-            // Fall back to cached episodes if the network call fails.
-            cachedSeasons(seriesId)
-        }
-    }
+    suspend fun getSeasons(config: SourceConfig, seriesId: String): List<Season> =
+        series.getSeasons(config, seriesId)
 
-    /**
-     * Instant, network-free seasons/episodes from the local cache (populated by a
-     * previous [getSeasons] call). Lets the series screen show episodes right away
-     * on a repeat visit while [getSeasons] refreshes the cache in the background.
-     */
-    suspend fun getCachedSeasons(seriesId: String): List<Season> = withContext(Dispatchers.IO) {
-        cachedSeasons(seriesId)
-    }
-
-    private suspend fun cachedSeasons(seriesId: String): List<Season> =
-        seriesDao.episodesFor(seriesId)
-            .groupBy { it.seasonNumber }
-            .map { (num, eps) ->
-                Season(seriesId, num, eps.map { e -> e.toModel() }.sortedBy { it.episodeNumber })
-            }
-            .sortedBy { it.seasonNumber }
+    /** Instant, network-free seasons/episodes from the local cache. */
+    suspend fun getCachedSeasons(seriesId: String): List<Season> = series.getCachedSeasons(seriesId)
 
     // ---- EPG ------------------------------------------------------------
 
-    /**
-     * Display-name → normalized epg id map, built from the XMLTV <channel>
-     * entries on each [refreshEpg]. Used as a fallback when a channel's tvg-id
-     * is missing or doesn't match any program id. In-memory only (rebuilt on
-     * every guide refresh) to avoid a destructive Room schema migration.
-     */
-    @Volatile
-    private var epgNameIndex: Map<String, String> = emptyMap()
-
-    /** Lower-cased, trimmed epg id for case/space-insensitive matching. */
-    private fun normalizeEpgId(raw: String?): String? =
-        raw?.trim()?.lowercase(Locale.US)?.takeIf { it.isNotEmpty() }
-
-    /** Normalized channel display name (trim + lowercase + collapse whitespace). */
-    private fun normalizeName(raw: String?): String =
-        raw?.trim()?.lowercase(Locale.US)?.replace(Regex("\\s+"), " ").orEmpty()
-
     /** Downloads and caches the full XMLTV guide (Xtream xmltv.php). */
-    suspend fun refreshEpg(config: SourceConfig): Outcome<Int> = withContext(Dispatchers.IO) {
-        if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
-        epgSyncMutex.withLock {
-            val generation = refreshGenerations.begin("epg", config)
-            try {
-                val url = XtreamUrlBuilder.xmltvUrl(config.serverUrl, config.username, config.password)
-                val request = Request.Builder().url(url).build()
-                httpClient.newCall(request).execute().use { resp ->
-                    if (!resp.isSuccessful) {
-                        return@withLock Outcome.Failure(
-                            HttpAppErrorPolicy.fromStatus(resp.code),
-                            httpStatus = resp.code.takeIf { it in 400..599 },
-                        )
-                    }
-                    val body = resp.body ?: return@withLock Outcome.Failure(AppError.CANNOT_CONNECT)
-                    prepareEpgStaging()
-                    val batch = ArrayList<ProgramEntity>(500)
-                    var total = 0
-                    val nameIndex = HashMap<String, String>()
-                    // The parser callback is synchronous; keep a handle on the job
-                    // so a cancelled sync stops between batches instead of
-                    // grinding through the whole guide.
-                    val job = currentCoroutineContext()[Job]
-                    body.byteStream().use { stream ->
-                        XmltvParser.parse(
-                            stream,
-                            onChannel = { id, displayName ->
-                                val nId = normalizeEpgId(id)
-                                val nName = normalizeName(displayName)
-                                // First display-name wins; don't let aliases overwrite it.
-                                if (nId != null && nName.isNotEmpty() && !nameIndex.containsKey(nName)) {
-                                    nameIndex[nName] = nId
-                                }
-                            },
-                        ) { p ->
-                            batch += ProgramEntity(
-                                epgChannelId = normalizeEpgId(p.epgChannelId)
-                                    ?: p.epgChannelId.trim(),
-                                title = p.title,
-                                description = p.description,
-                                startMs = p.startMs,
-                                stopMs = p.stopMs,
-                            )
-                            if (batch.size >= 500) {
-                                // Stage each bounded batch on this IO thread with a plain
-                                // SQLite transaction (no runBlocking) without touching live EPG.
-                                job?.ensureActive()
-                                insertEpgStaging(batch)
-                                total += batch.size
-                                batch.clear()
-                            }
-                        }
-                    }
-                    if (batch.isNotEmpty()) {
-                        insertEpgStaging(batch)
-                        total += batch.size
-                    }
+    suspend fun refreshEpg(config: SourceConfig): Outcome<Int> = epg.refreshEpg(config)
 
-                    val existingCount = epgDao.count()
-                    when (
-                        val decision = evaluateRefresh(
-                            CatalogDataset.EPG,
-                            generation,
-                            DatasetSnapshot(
-                                generation.policyExistingCount(existingCount),
-                                total,
-                                total,
-                            ),
-                        )
-                    ) {
-                        DatasetRefreshDecision.Apply -> Unit
-                        is DatasetRefreshDecision.PreserveCache ->
-                            return@withLock preservedDataset(CatalogDataset.EPG, decision.reason)
-                    }
-                    // The only destructive step is this short atomic swap. A malformed,
-                    // interrupted or suspicious download leaves the previous guide intact.
-                    val committed = commitSnapshot(config, generation) {
-                        val sql = db.openHelper.writableDatabase
-                        sql.execSQL("DELETE FROM programs")
-                        sql.execSQL(
-                            "INSERT INTO programs " +
-                                "(epgChannelId, title, description, startMs, stopMs) " +
-                                "SELECT epgChannelId, title, description, startMs, stopMs " +
-                                "FROM $EPG_STAGING_TABLE",
-                        )
-                        sql.execSQL("DROP TABLE IF EXISTS $EPG_STAGING_TABLE")
-                    }
-                    if (!committed) return@withLock staleDataset(CatalogDataset.EPG)
-                    epgNameIndex = nameIndex
-                    settings.setEpgUpdatedAt(System.currentTimeMillis())
-                    Outcome.Success(total)
-                }
-            } catch (e: Throwable) {
-                if (e is CancellationException) throw e
-                e.toOutcomeFailure()
-            } finally {
-                dropEpgStaging()
-            }
-        }
-    }
-
-    suspend fun getNowNext(channel: Channel): NowNext = withContext(Dispatchers.IO) {
-        val epgId = resolveEpgId(channel) ?: return@withContext NowNext(null, null)
-        val now = System.currentTimeMillis()
-        val upcoming = epgDao.upcoming(epgId, now, limit = 2).map { it.toModel() }
-        val current = upcoming.firstOrNull { it.isLiveAt(now) }
-        val next = upcoming.firstOrNull { it.startMs > now }
-        NowNext(current, next)
-    }
+    suspend fun getNowNext(channel: Channel): NowNext = epg.getNowNext(channel)
 
     suspend fun getProgramsWindow(channel: Channel, fromMs: Long, toMs: Long): List<Program> =
-        withContext(Dispatchers.IO) {
-            val epgId = resolveEpgId(channel) ?: return@withContext emptyList()
-            epgDao.inWindow(epgId, fromMs, toMs).map { it.toModel() }
-        }
+        epg.getProgramsWindow(channel, fromMs, toMs)
 
     suspend fun setEpgMapping(channelId: String, epgChannelId: String) =
-        withContext(Dispatchers.IO) {
-            epgMappingDao.set(EpgMappingEntity(channelId, epgChannelId))
-        }
+        epg.setEpgMapping(channelId, epgChannelId)
 
     // ---- Catch-up / timeshift -------------------------------------------
 
-    /**
-     * Past programs available in a channel's archive, newest first. Bounded by
-     * the channel's advertised archive window and only programs that have already
-     * started are returned.
-     */
-    suspend fun getCatchupPrograms(channel: Channel): List<Program> =
-        withContext(Dispatchers.IO) {
-            if (channel.catchupDays <= 0) return@withContext emptyList()
-            val now = System.currentTimeMillis()
-            val from = now - channel.catchupDays.toLong() * 86_400_000L
-            getProgramsWindow(channel, from, now)
-                .filter { it.startMs < now }
-                .sortedByDescending { it.startMs }
-        }
+    /** Past programs available in a channel's archive, newest first. */
+    suspend fun getCatchupPrograms(channel: Channel): List<Program> = library.getCatchupPrograms(channel)
 
-    /**
-     * Builds a timeshift URL for a past [program] on [channel]. Only Xtream live
-     * channels support catch-up; returns null otherwise.
-     */
+    /** Builds a timeshift URL for a past [program] on [channel]; Xtream live only. */
     suspend fun buildCatchupUrl(channel: Channel, program: Program): String? =
-        withContext(Dispatchers.IO) {
-            val config = settings.getSourceConfig() ?: return@withContext null
-            if (config.type != SourceType.XTREAM) return@withContext null
-            val streamId = channel.id.removePrefix("xt_live_").toLongOrNull()
-                ?: return@withContext null
-            val durationMin = ((program.stopMs - program.startMs + 59_999L) / 60_000L)
-                .toInt().coerceAtLeast(1)
-            val timezone = panelTimezones[config.serverUrl] ?: run {
-                try {
-                    val auth = buildXtreamApi(config.serverUrl).authenticate(config.username, config.password)
-                    auth.serverInfo?.timezone?.also { panelTimezones[config.serverUrl] = it }
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (failure: Exception) {
-                    Logger.w("Xtream", "Catch-up unavailable: panel timezone could not be verified", failure)
-                    null
-                }
-            }
-            val start = com.iptv.player.data.remote.XtreamTime.formatCatchup(program.startMs, timezone)
-                ?: return@withContext null
-            XtreamUrlBuilder.catchupUrl(
-                config.serverUrl, config.username, config.password,
-                streamId, start, durationMin
-            )
-        }
+        library.buildCatchupUrl(channel, program)
 
     // ---- Background sync ------------------------------------------------
 
@@ -1743,877 +392,129 @@ class IptvRepository(
         SyncReport(results)
     }
 
-    private fun datasetSyncResult(
-        name: String,
-        cachedBefore: Int,
-        outcome: Outcome<Int>,
-    ): DatasetSyncResult = when (outcome) {
-        is Outcome.Success -> DatasetSyncResult(
-            dataset = name,
-            status = if (outcome.data == 0 && cachedBefore == 0) {
-                DatasetSyncStatus.EMPTY
-            } else {
-                DatasetSyncStatus.UPDATED
-            },
-            itemCount = outcome.data,
-        )
-        is Outcome.Failure -> DatasetSyncResult(
-            dataset = name,
-            status = if (cachedBefore > 0) {
-                DatasetSyncStatus.PRESERVED_CACHE
-            } else {
-                DatasetSyncStatus.FAILED
-            },
-            itemCount = cachedBefore,
-            errorCode = outcome.httpStatus?.let { "HTTP_$it" } ?: outcome.error.name,
-        )
-    }
-
-    private suspend fun resolveEpgId(channel: Channel): String? {
-        // 1) Manual user override (EPG correction screen) always wins.
-        val override = normalizeEpgId(epgMappingDao.get(channel.id))
-        if (override != null) return override
-        // 2) The channel's own tvg-id / epg_channel_id, matched case/space-insensitively.
-        val direct = normalizeEpgId(channel.epgChannelId)
-        if (direct != null && epgDao.countFor(direct) > 0) return direct
-        // 3) Fallback: match the channel's display name against the XMLTV <channel>
-        //    display-names — covers a missing or mismatched tvg-id.
-        val byName = epgNameIndex[normalizeName(channel.name)]
-        if (byName != null && epgDao.countFor(byName) > 0) return byName
-        // 4) Last resort: the normalized direct id even if no programs are present
-        //    yet (guide may still be downloading); null when nothing to match on.
-        return direct
-    }
-
     // ---- Account info ---------------------------------------------------
 
-    suspend fun getAccountInfo(config: SourceConfig): AccountInfo? = withContext(Dispatchers.IO) {
-        if (config.type != SourceType.XTREAM) return@withContext null
-        runCatching {
-            val info = buildXtreamApi(config.serverUrl)
-                .authenticate(config.username, config.password).userInfo ?: return@runCatching null
-            val expMs = info.expDate?.toLongOrNull()?.times(1000)
-            val daysLeft = expMs?.let { (it - System.currentTimeMillis()) / 86_400_000L }
-            AccountInfo(
-                status = info.status,
-                isActive = info.auth == 1 && !info.status.equals("Expired", true),
-                expiryDateMs = expMs,
-                daysRemaining = daysLeft,
-                activeConnections = info.activeConnections?.toIntOrNull(),
-                maxConnections = info.maxConnections?.toIntOrNull()
-            )
-        }.getOrNull()
-    }
+    suspend fun getAccountInfo(config: SourceConfig): AccountInfo? = source.getAccountInfo(config)
 
     // ---- Diagnostics ----------------------------------------------------
 
-    suspend fun pingServer(config: SourceConfig): DiagnosticResult = withContext(Dispatchers.IO) {
-        val target = config.serverUrl.ifBlank { config.m3uUrl }
-        runCatching {
-            val start = System.currentTimeMillis()
-            val request = Request.Builder().url(target).header("Range", "bytes=0-0").build()
-            httpClient.newCall(request).execute().use { resp ->
-                val ms = System.currentTimeMillis() - start
-                DiagnosticResult("ping", resp.isSuccessful || resp.code in 200..416, "${ms}ms")
-            }
-        }.getOrElse { DiagnosticResult("ping", false, it.message ?: "error") }
-    }
+    suspend fun pingServer(config: SourceConfig): DiagnosticResult = source.pingServer(config)
 
     /** The panel root and M3U are not throughput endpoints; do not download them. */
-    @Suppress("UNUSED_PARAMETER")
-    suspend fun speedTestMbps(config: SourceConfig): DiagnosticResult = withContext(Dispatchers.IO) {
-        DiagnosticResult("speed", false, "Not measured: no verified server speed-test endpoint")
-    }
+    suspend fun speedTestMbps(config: SourceConfig): DiagnosticResult = source.speedTestMbps(config)
 
-    suspend fun checkDns(config: SourceConfig): DiagnosticResult = withContext(Dispatchers.IO) {
-        val host = runCatching {
-            java.net.URI(config.serverUrl.ifBlank { config.m3uUrl }).host
-        }.getOrNull() ?: return@withContext DiagnosticResult("dns", false, "no host")
-        runCatching {
-            val addr = InetAddress.getByName(host)
-            DiagnosticResult("dns", true, addr.hostAddress ?: host)
-        }.getOrElse { DiagnosticResult("dns", false, "cannot resolve") }
-    }
+    suspend fun checkDns(config: SourceConfig): DiagnosticResult = source.checkDns(config)
 
     // ---- Profiles -------------------------------------------------------
 
-    fun observeProfiles(): Flow<List<Profile>> =
-        profileDao.observeAll().map { list -> list.map { it.toModel() } }
+    fun observeProfiles(): Flow<List<Profile>> = profiles.observeProfiles()
 
     suspend fun addProfile(name: String, config: SourceConfig, lockAdult: Boolean): Long =
-        withContext(Dispatchers.IO) {
-            profileDao.add(
-                ProfileEntity(
-                    name = name,
-                    sourceType = config.type.name,
-                    serverUrl = secureValues.encrypt(
-                        KululuEndpoint.migrateLegacyServerUrl(config.serverUrl),
-                    ),
-                    username = secureValues.encrypt(config.username),
-                    password = secureValues.encrypt(config.password),
-                    m3uUrl = secureValues.encrypt(config.m3uUrl),
-                    lockAdult = lockAdult,
-                    createdAt = System.currentTimeMillis()
-                )
-            )
-        }
+        profiles.addProfile(name, config, lockAdult)
 
-    /**
-     * Ensures the given source is also saved as a switchable profile and returns
-     * its id. Reuses an existing profile that points at the same source so that
-     * repeated logins don't create duplicates; otherwise inserts a new one. This
-     * is what makes a freshly logged-in account show up on the Profiles screen.
-     */
+    /** Ensures the given source is also saved as a switchable profile and returns its id. */
     suspend fun ensureProfile(config: SourceConfig, lockAdult: Boolean = false): Long =
-        withContext(Dispatchers.IO) {
-            profileDao.getAll().firstOrNull { it.matches(config) }?.id
-                ?: addProfile(defaultProfileName(config), config, lockAdult)
-        }
+        profiles.ensureProfile(config, lockAdult)
 
-    /**
-     * One-time backfill for accounts that connected before profiles were created
-     * automatically: if a source is saved but no profile exists yet, mirror it
-     * into a profile and make it active so the Profiles screen isn't empty.
-     */
-    suspend fun backfillProfileFromSource() = withContext(Dispatchers.IO) {
-        if (profileDao.getAll().isNotEmpty()) return@withContext
-        val config = settings.getSourceConfig() ?: return@withContext
-        settings.setActiveProfileId(ensureProfile(config))
-    }
+    /** One-time backfill for accounts that connected before profiles were automatic. */
+    suspend fun backfillProfileFromSource() = profiles.backfillProfileFromSource()
 
-    private fun ProfileEntity.matches(config: SourceConfig): Boolean =
-        sourceType == config.type.name &&
-            KululuEndpoint.migrateLegacyServerUrl(secureValues.decrypt(serverUrl)) ==
-                KululuEndpoint.migrateLegacyServerUrl(config.serverUrl) &&
-            secureValues.decrypt(username) == config.username &&
-            secureValues.decrypt(password) == config.password &&
-            secureValues.decrypt(m3uUrl) == config.m3uUrl
+    suspend fun removeProfile(id: Long) = profiles.removeProfile(id)
 
-    /** A friendly default profile name: the Xtream username, else the source host. */
-    private fun defaultProfileName(config: SourceConfig): String = when (config.type) {
-        SourceType.XTREAM -> config.username.ifBlank { hostOf(config.serverUrl) }
-        SourceType.M3U_URL -> hostOf(config.m3uUrl)
-    }
-
-    private fun hostOf(url: String): String =
-        runCatching { java.net.URI(url).host }.getOrNull()
-            ?.takeIf { it.isNotBlank() } ?: "Playlist"
-
-    suspend fun removeProfile(id: Long) = withContext(Dispatchers.IO) {
-        db.withTransaction {
-            resumeDao.clearProfile(id)
-            watchedDao.clearProfile(id)
-            recommendationDao.clearProfile(id)
-            profileDao.remove(id)
-            // Favorites, recents, overrides and EPG mappings carry no profile
-            // column and their ids collide across providers, so they can only
-            // be attributed (and dropped) once no profile remains at all.
-            if (profileDao.getAll().isEmpty()) {
-                favoriteDao.clearAll()
-                recentDao.clearAll()
-                channelOverrideDao.clearAll()
-                epgMappingDao.clearAll()
-            }
-        }
-    }
-
-    suspend fun getProfile(id: Long): Profile? = withContext(Dispatchers.IO) {
-        profileDao.getById(id)?.toModel()
-    }
+    suspend fun getProfile(id: Long): Profile? = profiles.getProfile(id)
 
     // ---- Resume positions ----------------------------------------------
 
-    /**
-     * v12 could not associate its global playback rows with a DataStore profile
-     * during Room migration. Claim that one-time legacy scope for the currently
-     * active profile before the first state access, without exposing it to a later
-     * profile switch. Existing data is copied before deletion in one transaction.
-     */
-    private suspend fun claimLegacyPlaybackState(profileId: Long) {
-        if (profileId < 0L) return
-        playbackStateMigrationMutex.withLock {
-            if (profileId in claimedLegacyPlaybackProfiles) return@withLock
-            if (settings.getActiveProfileId() != profileId) return@withLock
-            db.withTransaction {
-                val sql = db.openHelper.writableDatabase
-                sql.execSQL(
-                    "INSERT OR REPLACE INTO resume " +
-                        "(profileId, contentId, positionMs, durationMs, updatedAt, type, title, " +
-                        "posterUrl, streamUrl, vodId, seriesId, seasonNumber, episodeNumber) " +
-                        "SELECT ?, contentId, positionMs, durationMs, updatedAt, type, title, " +
-                        "posterUrl, streamUrl, vodId, seriesId, seasonNumber, episodeNumber " +
-                        "FROM resume WHERE profileId = -1",
-                    arrayOf(profileId),
-                )
-                sql.execSQL(
-                    "INSERT OR REPLACE INTO watched " +
-                        "(profileId, contentId, type, seriesId, watchedAt) " +
-                        "SELECT ?, contentId, type, seriesId, watchedAt " +
-                        "FROM watched WHERE profileId = -1",
-                    arrayOf(profileId),
-                )
-                sql.execSQL("DELETE FROM resume WHERE profileId = -1")
-                sql.execSQL("DELETE FROM watched WHERE profileId = -1")
-            }
-            claimedLegacyPlaybackProfiles += profileId
-        }
-    }
-
-    private suspend fun activePlaybackProfileId(): Long {
-        val profileId = settings.getActiveProfileId()
-        claimLegacyPlaybackState(profileId)
-        return profileId
-    }
-
     suspend fun saveResume(meta: ResumeMeta, positionMs: Long, durationMs: Long) =
-        withContext(Dispatchers.IO) {
-            val profileId = activePlaybackProfileId()
-            saveResumeRow(profileId, meta, positionMs, durationMs)
-        }
+        profiles.saveResume(meta, positionMs, durationMs)
 
-    /**
-     * Persist against the profile that opened the player. Lifecycle-final writes
-     * may outlive the Activity and race a profile switch, so resolving DataStore
-     * again inside that coroutine would leak the old title into the new profile.
-     */
+    /** Persist against the profile that opened the player. */
     suspend fun saveResumeForProfile(
         profileId: Long,
         meta: ResumeMeta,
         positionMs: Long,
         durationMs: Long,
-    ) = withContext(Dispatchers.IO) {
-        claimLegacyPlaybackState(profileId)
-        saveResumeRow(profileId, meta, positionMs, durationMs)
-    }
+    ) = profiles.saveResumeForProfile(profileId, meta, positionMs, durationMs)
 
-    private suspend fun saveResumeRow(
-        profileId: Long,
-        meta: ResumeMeta,
-        positionMs: Long,
-        durationMs: Long,
-    ) {
-        // Don't persist trivial or near-complete positions: clearing them keeps
-        // the Continue Watching rail to genuinely in-progress content.
-        if (positionMs < 10_000 || (durationMs > 0 && positionMs > durationMs - 30_000)) {
-            resumeDao.clear(profileId, meta.contentId)
-            // A near-complete position means the title was finished: record it
-            // as watched so the tick survives the resume row being cleared.
-            if (durationMs > 0 && positionMs > durationMs - 30_000) {
-                markWatchedRow(profileId, meta.contentId, meta.kind.raw, meta.seriesId)
-            }
-        } else {
-            resumeDao.save(
-                ResumeEntity(
-                    profileId = profileId,
-                    contentId = meta.contentId,
-                    positionMs = positionMs,
-                    durationMs = durationMs,
-                    updatedAt = System.currentTimeMillis(),
-                    type = meta.kind.raw,
-                    title = meta.title,
-                    posterUrl = meta.posterUrl,
-                    streamUrl = secureValues.encrypt(meta.streamUrl),
-                    vodId = meta.vodId,
-                    seriesId = meta.seriesId,
-                    seasonNumber = meta.seasonNumber,
-                    episodeNumber = meta.episodeNumber,
-                )
-            )
-        }
-    }
-
-    suspend fun getResume(contentId: String): Long = withContext(Dispatchers.IO) {
-        val profileId = activePlaybackProfileId()
-        resumeDao.get(profileId, contentId)?.positionMs ?: 0L
-    }
+    suspend fun getResume(contentId: String): Long = profiles.getResume(contentId)
 
     suspend fun getResumeForProfile(profileId: Long, contentId: String): Long =
-        withContext(Dispatchers.IO) {
-            claimLegacyPlaybackState(profileId)
-            resumeDao.get(profileId, contentId)?.positionMs ?: 0L
-        }
+        profiles.getResumeForProfile(profileId, contentId)
 
-    suspend fun clearResume(contentId: String) = withContext(Dispatchers.IO) {
-        val profileId = activePlaybackProfileId()
-        resumeDao.clear(profileId, contentId)
-    }
+    suspend fun clearResume(contentId: String) = profiles.clearResume(contentId)
 
     suspend fun clearResumeForProfile(profileId: Long, contentId: String) =
-        withContext(Dispatchers.IO) {
-            claimLegacyPlaybackState(profileId)
-            resumeDao.clear(profileId, contentId)
-        }
+        profiles.clearResumeForProfile(profileId, contentId)
 
-    /**
-     * Commit EndReached state for the profile that opened the player. Resume
-     * removal and the watched badge are one Room transaction, so process death or
-     * a concurrent observer can never expose a half-completed title.
-     */
+    /** Commit EndReached state for the profile that opened the player, atomically. */
     suspend fun completePlaybackForProfile(
         profileId: Long,
         contentId: String,
         type: String,
         seriesId: String? = null,
-    ) = withContext(Dispatchers.IO) {
-        claimLegacyPlaybackState(profileId)
-        db.withTransaction {
-            resumeDao.clear(profileId, contentId)
-            markWatchedRow(profileId, contentId, type, seriesId)
-        }
-    }
+    ) = profiles.completePlaybackForProfile(profileId, contentId, type, seriesId)
 
     /** Reactive Continue Watching rail: most recent in-progress items first. */
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     fun observeContinueWatching(limit: Int = 20): Flow<List<ContinueItem>> =
-        settings.activeProfileId
-            .distinctUntilChanged()
-            .flatMapLatest { profileId ->
-                flow {
-                    claimLegacyPlaybackState(profileId)
-                    emitAll(resumeDao.observeRecent(profileId, limit))
-                }
-            }
-            .map { rows -> rows.map { it.toContinueItem() } }
+        profiles.observeContinueWatching(limit)
 
     /** Saved positions (ms) keyed by raw episode id for one series. */
-    suspend fun episodeProgress(seriesId: String): Map<String, Long> =
-        withContext(Dispatchers.IO) {
-            val profileId = activePlaybackProfileId()
-            resumeDao.forSeries(profileId, seriesId)
-                .associate { it.contentId.removePrefix("ep_") to it.positionMs }
-        }
+    suspend fun episodeProgress(seriesId: String): Map<String, Long> = profiles.episodeProgress(seriesId)
 
     /** Last-watched episode of a series for a one-tap continue action. */
-    suspend fun latestSeriesResume(seriesId: String): ContinueItem? =
-        withContext(Dispatchers.IO) {
-            val profileId = activePlaybackProfileId()
-            resumeDao.latestForSeries(profileId, seriesId)?.toContinueItem()
-        }
-
-    private fun ResumeEntity.toContinueItem() = ContinueItem(
-        contentId = contentId,
-        kind = ResumeKind.fromRaw(type),
-        title = title,
-        posterUrl = KululuEndpoint.migrateLegacyAssetUrl(posterUrl),
-        streamUrl = KululuEndpoint.migrateLegacyAssetUrl(secureValues.decrypt(streamUrl)).orEmpty(),
-        positionMs = positionMs,
-        durationMs = durationMs,
-        vodId = vodId,
-        seriesId = seriesId,
-        seasonNumber = seasonNumber,
-        episodeNumber = episodeNumber
-    )
+    suspend fun latestSeriesResume(seriesId: String): ContinueItem? = profiles.latestSeriesResume(seriesId)
 
     /** Watch-progress percent (0..100) keyed by resume contentId, for grid bars. */
-    suspend fun allWatchProgress(): Map<String, Int> = withContext(Dispatchers.IO) {
-        val profileId = activePlaybackProfileId()
-        resumeDao.all(profileId).associate { row ->
-            val pct = if (row.durationMs > 0) {
-                ((row.positionMs * 100) / row.durationMs).toInt().coerceIn(0, 100)
-            } else 0
-            row.contentId to pct
-        }
-    }
+    suspend fun allWatchProgress(): Map<String, Int> = profiles.allWatchProgress()
 
-    /**
-     * In-progress percent (0..100) keyed by *series* id, for the series grid bars.
-     * A series has no resume row of its own — progress is tracked per episode — so
-     * we surface the most recently watched episode's progress as the series's
-     * "continue" hint. (There is no series-level *watched* tick: the grid can't
-     * cheaply know whether every episode is finished.)
-     */
-    suspend fun seriesWatchProgress(): Map<String, Int> = withContext(Dispatchers.IO) {
-        val profileId = activePlaybackProfileId()
-        resumeDao.all(profileId)
-            .filter { it.seriesId != null && it.durationMs > 0 }
-            .groupBy { it.seriesId!! }
-            .mapValues { (_, rows) ->
-                val latest = rows.maxByOrNull { it.updatedAt } ?: return@mapValues 0
-                ((latest.positionMs * 100) / latest.durationMs).toInt().coerceIn(0, 100)
-            }
-    }
+    /** In-progress percent (0..100) keyed by *series* id, for the series grid bars. */
+    suspend fun seriesWatchProgress(): Map<String, Int> = profiles.seriesWatchProgress()
 
     // ---- Watched (finished) state --------------------------------------
 
     suspend fun markWatched(contentId: String, type: String, seriesId: String? = null) =
-        withContext(Dispatchers.IO) {
-            val profileId = activePlaybackProfileId()
-            markWatchedRow(profileId, contentId, type, seriesId)
-        }
+        profiles.markWatched(contentId, type, seriesId)
 
     suspend fun markWatchedForProfile(
         profileId: Long,
         contentId: String,
         type: String,
         seriesId: String? = null,
-    ) = withContext(Dispatchers.IO) {
-        claimLegacyPlaybackState(profileId)
-        markWatchedRow(profileId, contentId, type, seriesId)
-    }
+    ) = profiles.markWatchedForProfile(profileId, contentId, type, seriesId)
 
-    private suspend fun markWatchedRow(
-        profileId: Long,
-        contentId: String,
-        type: String,
-        seriesId: String?,
-    ) {
-        watchedDao.mark(
-            com.iptv.player.data.local.entity.WatchedEntity(
-                profileId = profileId,
-                contentId = contentId,
-                type = type,
-                seriesId = seriesId,
-                watchedAt = System.currentTimeMillis(),
-            )
-        )
-    }
-
-    suspend fun isWatched(contentId: String): Boolean =
-        withContext(Dispatchers.IO) {
-            val profileId = activePlaybackProfileId()
-            watchedDao.isWatched(profileId, contentId)
-        }
+    suspend fun isWatched(contentId: String): Boolean = profiles.isWatched(contentId)
 
     /** All watched content ids, for badging the movie/series grids. */
-    suspend fun watchedIds(): Set<String> =
-        withContext(Dispatchers.IO) {
-            val profileId = activePlaybackProfileId()
-            watchedDao.allIds(profileId).toSet()
-        }
+    suspend fun watchedIds(): Set<String> = profiles.watchedIds()
 
     /** Watched episode ids for one series (raw episode ids, "ep_" stripped). */
-    suspend fun watchedEpisodeIds(seriesId: String): Set<String> =
-        withContext(Dispatchers.IO) {
-            val profileId = activePlaybackProfileId()
-            watchedDao.idsForSeries(profileId, seriesId)
-                .map { it.removePrefix("ep_") }
-                .toSet()
-        }
+    suspend fun watchedEpisodeIds(seriesId: String): Set<String> = profiles.watchedEpisodeIds(seriesId)
 
     /** Durable actual-playback deltas, isolated to the profile that opened the player. */
     suspend fun recordWatchTime(profileId: Long, meta: ResumeMeta, deltaMs: Long, nowMs: Long) =
-        withContext(Dispatchers.IO) {
-            if (profileId < 0 || deltaMs <= 0) return@withContext
-            val kind = when (meta.kind) {
-                ResumeKind.MOVIE -> "movie"
-                ResumeKind.EPISODE -> "series"
-                else -> return@withContext
-            }
-            val id = (if (kind == "movie") meta.vodId else meta.seriesId)
-                ?.takeIf { it.isNotBlank() } ?: return@withContext
-            val day = nowMs / RecommendationRanker.DAY_MS
-            db.withTransaction {
-                // A late lifecycle write must not recreate a deleted profile's history.
-                if (profileDao.getById(profileId) == null) return@withTransaction
-                recommendationDao.insert(WatchSignalEntity(profileId, kind, id, day, 0, nowMs))
-                recommendationDao.add(profileId, kind, id, day, deltaMs.coerceAtMost(60_000), nowMs)
-                recommendationDao.prune(profileId, nowMs - 90 * RecommendationRanker.DAY_MS)
-            }
-        }
-
-    private suspend fun recommendationIds(
-        profileId: Long, kind: String, history: List<WatchPreference>, hidden: List<String>,
-    ): List<String> {
-        val excluded = if (kind == "movie") watchedDao.allIds(profileId)
-            .filter { it.startsWith("vod_") }.map { it.removePrefix("vod_") }.toSet() else emptySet()
-        val ranker = RecommendationRanker(profileId, kind, history, System.currentTimeMillis(), excluded)
-        var afterId = ""
-        do {
-            val chunk: List<RecommendationCandidate> = if (kind == "movie")
-                vodDao.recommendationCandidates(afterId, hidden) else seriesDao.recommendationCandidates(afterId, hidden)
-            chunk.forEach(ranker::offer)
-            if (chunk.isEmpty()) break
-            afterId = chunk.last().id
-        } while (chunk.size == 256)
-        return ranker.results(50)
-    }
+        profiles.recordWatchTime(profileId, meta, deltaMs, nowMs)
 
     // ---- Similar / recommended -----------------------------------------
 
     /** Other movies in the same category as [item], for the detail "Similar" rail. */
-    suspend fun similarMovies(item: VodItem, limit: Int = 20): List<VodItem> =
-        withContext(Dispatchers.IO) {
-            val categoryId = item.categoryId ?: return@withContext emptyList()
-            vodDao.sampleByCategory(categoryId, item.id, limit).map { it.toModel() }
-        }
+    suspend fun similarMovies(item: VodItem, limit: Int = 20): List<VodItem> = vod.similarMovies(item, limit)
 
     /** Other series in the same category as [item], for the detail "Similar" rail. */
-    suspend fun similarSeries(item: Series, limit: Int = 20): List<Series> =
-        withContext(Dispatchers.IO) {
-            val categoryId = item.categoryId ?: return@withContext emptyList()
-            seriesDao.sampleByCategory(categoryId, item.id, limit).map { it.toModel() }
-        }
+    suspend fun similarSeries(item: Series, limit: Int = 20): List<Series> = series.similarSeries(item, limit)
 
     // ---- TMDB enrichment ------------------------------------------------
 
-    private suspend fun enrichWithTmdb(item: VodItem, isMovie: Boolean): VodItem {
-        val key = settings.getTmdbKey()
-        if (key.isBlank()) return item
-        return runCatching {
-            val api = retrofitBuilder.baseUrl(TmdbApi.BASE_URL).build().create(TmdbApi::class.java)
-            val result = MetadataPolicy.tmdbId(item.tmdbId)?.let { tmdbId ->
-                if (isMovie) api.movieDetail(tmdbId, key) else api.tvDetail(tmdbId, key)
-            } ?: (if (isMovie) api.searchMovie(key, MetadataPolicy.searchTitle(item.name))
-            else api.searchTv(key, MetadataPolicy.searchTitle(item.name))).results?.firstOrNull() ?: return item
-            item.copy(
-                posterUrl = TmdbApi.posterUrl(result.posterPath) ?: item.posterUrl,
-                backdropUrl = TmdbApi.backdropUrl(result.backdropPath) ?: item.backdropUrl,
-                plot = item.plot?.takeIf { it.isNotBlank() } ?: result.overview,
-                rating = item.rating ?: result.voteAverage,
-                releaseDate = item.releaseDate?.takeIf { it.isNotBlank() }
-                    ?: result.releaseDate
-                    ?: result.firstAirDate,
-                tmdbId = MetadataPolicy.tmdbId(item.tmdbId) ?: result.id?.toString(),
-            )
-        }.getOrDefault(item)
-    }
-
-    private suspend fun enrichWithTmdb(item: Series): Series {
-        val key = settings.getTmdbKey()
-        if (key.isBlank()) return item
-        return runCatching {
-            val api = retrofitBuilder.baseUrl(TmdbApi.BASE_URL).build().create(TmdbApi::class.java)
-            val result = MetadataPolicy.tmdbId(item.tmdbId)?.let { tmdbId ->
-                api.tvDetail(tmdbId, key)
-            } ?: api.searchTv(key, MetadataPolicy.searchTitle(item.name)).results?.firstOrNull() ?: return item
-            item.copy(
-                posterUrl = TmdbApi.posterUrl(result.posterPath) ?: item.posterUrl,
-                backdropUrl = TmdbApi.backdropUrl(result.backdropPath) ?: item.backdropUrl,
-                plot = item.plot?.takeIf { it.isNotBlank() } ?: result.overview,
-                rating = item.rating ?: result.voteAverage,
-                releaseDate = item.releaseDate?.takeIf { it.isNotBlank() }
-                    ?: result.firstAirDate
-                    ?: result.releaseDate,
-                tmdbId = MetadataPolicy.tmdbId(item.tmdbId) ?: result.id?.toString(),
-            )
-        }.getOrDefault(item)
-    }
-
-    /**
-     * Cast list for a detail screen. Falls back to the source's comma-separated
-     * names (no photos) and upgrades to TMDB head-shots when a key is available
-     * and the title can be resolved. Network failures degrade gracefully to the
-     * name-only list so the cast row always renders something.
-     */
+    /** Cast list for a detail screen; degrades to the source's name-only list. */
     suspend fun castFor(
         name: String,
         tmdbId: String?,
         rawCast: String?,
         isMovie: Boolean
-    ): List<CastMember> = withContext(Dispatchers.IO) {
-        val fallback = rawCast?.split(",")
-            ?.map { it.trim() }
-            ?.filter { it.isNotEmpty() }
-            ?.map { CastMember(it, null) }
-            ?: emptyList()
-
-        val key = settings.getTmdbKey()
-        if (key.isBlank()) return@withContext fallback
-
-        runCatching {
-            val api = retrofitBuilder.baseUrl(TmdbApi.BASE_URL).build().create(TmdbApi::class.java)
-            val id = MetadataPolicy.tmdbId(tmdbId) ?: run {
-                val results = if (isMovie) api.searchMovie(key, MetadataPolicy.searchTitle(name)).results
-                else api.searchTv(key, MetadataPolicy.searchTitle(name)).results
-                results?.firstOrNull()?.id?.toString()
-            } ?: return@runCatching fallback
-
-            val credits = if (isMovie) api.movieCredits(id, key) else api.tvCredits(id, key)
-            val people = credits.cast.orEmpty()
-                .sortedBy { it.order ?: Int.MAX_VALUE }
-                .mapNotNull { c ->
-                    val n = c.name?.trim().orEmpty()
-                    if (n.isEmpty()) null else CastMember(n, TmdbApi.profileUrl(c.profilePath))
-                }
-                .take(15)
-            if (people.isNotEmpty()) people else fallback
-        }.getOrDefault(fallback)
-    }
+    ): List<CastMember> = tmdb.castFor(name, tmdbId, rawCast, isMovie)
 
     /** Fetch the selected season only. Metadata never creates a playable provider episode. */
-    suspend fun enrichSeason(series: Series, season: Season): Season = withContext(Dispatchers.IO) {
-        val key = settings.getTmdbKey()
-        if (key.isBlank()) return@withContext season
-        try {
-            val api = retrofitBuilder.baseUrl(TmdbApi.BASE_URL).build().create(TmdbApi::class.java)
-            val id = MetadataPolicy.tmdbId(series.tmdbId) ?: api.searchTv(
-                key, MetadataPolicy.searchTitle(series.name), Locale.getDefault().toLanguageTag(),
-            ).results?.firstOrNull()?.id?.toString() ?: return@withContext season
-            val metadata = api.seasonDetail(id, season.seasonNumber, key, Locale.getDefault().toLanguageTag())
-                .episodes.orEmpty().associateBy { it.episodeNumber }
-            season.copy(episodes = season.episodes.map { episode ->
-                metadata[episode.episodeNumber]?.let { MetadataPolicy.enrichEpisode(episode, it) } ?: episode
-            })
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            season
-        }
-    }
-
-    // ---- Mapping helpers ------------------------------------------------
-
-    private fun ChannelEntity.toModel(isFav: Boolean = false) = Channel(
-        id = id,
-        name = name,
-        streamUrl = KululuEndpoint.migrateLegacyAssetUrl(secureValues.decrypt(streamUrl)).orEmpty(),
-        logoUrl = KululuEndpoint.migrateLegacyAssetUrl(logoUrl),
-        categoryId = categoryId, categoryName = categoryName,
-        epgChannelId = epgChannelId, number = number,
-        type = ContentType.valueOf(type), isFavorite = isFav, catchupDays = catchupDays,
-        position = position, categoryPosition = categoryPosition, isRadio = isRadio
-    )
-
-    private fun Channel.toEntity() = ChannelEntity(
-        id = id, name = name, streamUrl = secureValues.encrypt(streamUrl), logoUrl = logoUrl,
-        categoryId = categoryId, categoryName = categoryName,
-        epgChannelId = epgChannelId, number = number, type = type.name,
-        catchupDays = catchupDays, position = position, categoryPosition = categoryPosition,
-        isRadio = type == ContentType.LIVE && isRadioCategory(categoryName)
-    )
-
-    /**
-     * Heuristic radio classifier. Providers don't flag radio explicitly, so a
-     * channel is treated as radio when its category name reads like one
-     * (e.g. "Radio", "RADYO", "FM Radio"). Centralized so the Live TV page and
-     * the Radio section stay in lockstep with the DB back-fill migration.
-     */
-    private fun isRadioCategory(name: String?): Boolean {
-        val n = name?.lowercase() ?: return false
-        return n.contains("radio") || n.contains("radyo")
-    }
-
-    private fun VodEntity.toModel() = VodItem(
-        id = id,
-        name = name,
-        streamUrl = KululuEndpoint.migrateLegacyAssetUrl(secureValues.decrypt(streamUrl)).orEmpty(),
-        posterUrl = KululuEndpoint.migrateLegacyAssetUrl(posterUrl),
-        backdropUrl = KululuEndpoint.migrateLegacyAssetUrl(backdropUrl),
-        categoryId = categoryId, categoryName = categoryName, rating = rating,
-        plot = plot, cast = cast, director = director, genre = genre,
-        releaseDate = releaseDate, durationSecs = durationSecs,
-        trailerUrl = KululuEndpoint.migrateLegacyAssetUrl(trailerUrl), tmdbId = tmdbId, addedAt = addedAt
-    )
-
-    private fun SeriesEntity.toModel() = Series(
-        id = id,
-        name = name,
-        posterUrl = KululuEndpoint.migrateLegacyAssetUrl(posterUrl),
-        backdropUrl = KululuEndpoint.migrateLegacyAssetUrl(backdropUrl),
-        categoryId = categoryId,
-        categoryName = categoryName, rating = rating, plot = plot, cast = cast,
-        director = director, genre = genre, releaseDate = releaseDate,
-        trailerUrl = KululuEndpoint.migrateLegacyAssetUrl(trailerUrl), tmdbId = tmdbId,
-        addedAt = MetadataPolicy.seriesFreshness(addedAt, latestEpisodeAt)
-    )
-
-    private fun EpisodeEntity.toModel() = Episode(
-        id = id, seriesId = seriesId, seasonNumber = seasonNumber,
-        episodeNumber = episodeNumber, title = title,
-        streamUrl = KululuEndpoint.migrateLegacyAssetUrl(secureValues.decrypt(streamUrl)).orEmpty(),
-        plot = plot,
-        durationSecs = durationSecs,
-        posterUrl = KululuEndpoint.migrateLegacyAssetUrl(posterUrl),
-    )
-
-    private fun ProgramEntity.toModel() = Program(
-        epgChannelId = epgChannelId, title = title, description = description,
-        startMs = startMs, stopMs = stopMs
-    )
-
-    private fun ProfileEntity.toModel() = Profile(
-        id = id,
-        name = name,
-        config = SourceConfig(
-            type = runCatching { SourceType.valueOf(sourceType) }.getOrDefault(SourceType.XTREAM),
-            serverUrl = KululuEndpoint.migrateLegacyServerUrl(
-                secureValues.decrypt(serverUrl),
-            ),
-            username = secureValues.decrypt(username),
-            password = secureValues.decrypt(password),
-            m3uUrl = secureValues.decrypt(m3uUrl),
-        ),
-        lockAdult = lockAdult
-    )
-
-    private fun youtube(idOrUrl: String?): String? {
-        val v = idOrUrl?.trim().orEmpty()
-        if (v.isBlank()) return null
-        return if (v.startsWith("http")) v else "https://www.youtube.com/watch?v=$v"
-    }
+    suspend fun enrichSeason(series: Series, season: Season): Season = tmdb.enrichSeason(series, season)
 
     /** Decodes Xtream's base64 EPG fields (used by short-EPG callers). */
-    fun decodeEpgText(b64: String?): String =
-        runCatching { String(Base64.decode(b64 ?: "", Base64.DEFAULT)) }.getOrDefault("")
-
-    private suspend fun mayCommit(
-        config: SourceConfig,
-        generation: DatasetGenerationGate.Token,
-    ): Boolean = refreshGenerations.isCurrent(generation) &&
-        SourceIdentity.matches(settings.getSourceConfig(), config)
-
-    /** Re-check generation/source while holding the same lock as the Room swap. */
-    private suspend fun commitSnapshot(
-        config: SourceConfig,
-        token: DatasetGenerationGate.Token,
-        block: suspend () -> Unit,
-    ): Boolean = catalogCommitMutex.withLock {
-        if (!mayCommit(config, token)) return@withLock false
-        db.withTransaction { block() }
-        true
-    }
-
-    private fun DatasetGenerationGate.Token.policyExistingCount(physicalCount: Int): Int =
-        if (sourceChanged) 0 else physicalCount
-
-    /**
-     * Runs the refresh gate and keeps the persisted shrink ledger in step: a
-     * shrink rejection is counted, any accepted snapshot resets the count, so a
-     * provider that really shrank stops being refused after a few syncs.
-     */
-    private fun evaluateRefresh(
-        dataset: CatalogDataset,
-        generation: DatasetGenerationGate.Token,
-        snapshot: DatasetSnapshot,
-        force: Boolean = false,
-    ): DatasetRefreshDecision {
-        val now = System.currentTimeMillis()
-        val decision = DatasetRefreshPolicy.evaluate(
-            dataset, snapshot, shrinkLedger.get(generation.key), now, force,
-        )
-        when {
-            decision is DatasetRefreshDecision.PreserveCache &&
-                decision.reason == DatasetRefreshPolicy.REASON_SHRINK -> {
-                val rejection = shrinkLedger.recordRejection(generation.key, now)
-                Logger.w("CatalogSync", "$dataset shrink rejected ${rejection.count}x since ${rejection.firstRejectedAt}")
-            }
-            decision is DatasetRefreshDecision.Apply -> shrinkLedger.clear(generation.key)
-        }
-        return decision
-    }
-
-    private fun preservedDataset(
-        dataset: CatalogDataset,
-        reason: String,
-    ): Outcome.Failure {
-        Logger.w("CatalogSync", "preserved $dataset cache: $reason")
-        return Outcome.Failure(AppError.EMPTY_PLAYLIST)
-    }
-
-    private fun staleDataset(dataset: CatalogDataset): Outcome.Failure {
-        Logger.w("CatalogSync", "ignored stale $dataset generation")
-        return Outcome.Failure(AppError.CANNOT_CONNECT)
-    }
-
-    private fun prepareEpgStaging() {
-        val sql = db.openHelper.writableDatabase
-        sql.execSQL("DROP TABLE IF EXISTS $EPG_STAGING_TABLE")
-        sql.execSQL(
-            "CREATE TABLE $EPG_STAGING_TABLE (" +
-                "epgChannelId TEXT NOT NULL, " +
-                "title TEXT NOT NULL, " +
-                "description TEXT, " +
-                "startMs INTEGER NOT NULL, " +
-                "stopMs INTEGER NOT NULL)",
-        )
-    }
-
-    /**
-     * Synchronous on purpose: it runs inside the XMLTV parser callback. The
-     * staging table is not a Room entity, so a raw SQLite transaction is enough
-     * and no invalidation tracking is needed.
-     */
-    private fun insertEpgStaging(batch: List<ProgramEntity>) {
-        if (batch.isEmpty()) return
-        val sql = db.openHelper.writableDatabase
-        sql.beginTransaction()
-        try {
-            val statement = sql.compileStatement(
-                "INSERT INTO $EPG_STAGING_TABLE " +
-                    "(epgChannelId, title, description, startMs, stopMs) VALUES (?, ?, ?, ?, ?)",
-            )
-            try {
-                batch.forEach { program ->
-                    statement.clearBindings()
-                    statement.bindString(1, program.epgChannelId)
-                    statement.bindString(2, program.title)
-                    program.description?.let { statement.bindString(3, it) }
-                        ?: statement.bindNull(3)
-                    statement.bindLong(4, program.startMs)
-                    statement.bindLong(5, program.stopMs)
-                    statement.executeInsert()
-                }
-            } finally {
-                statement.close()
-            }
-            sql.setTransactionSuccessful()
-        } finally {
-            sql.endTransaction()
-        }
-    }
-
-    private fun dropEpgStaging() {
-        runCatching {
-            db.openHelper.writableDatabase.execSQL("DROP TABLE IF EXISTS $EPG_STAGING_TABLE")
-        }
-    }
-
-    private fun buildXtreamApi(serverUrl: String): XtreamApi {
-        val base = XtreamUrlBuilder.apiBaseUrl(serverUrl)
-        return retrofitBuilder.baseUrl(base).build().create(XtreamApi::class.java)
-    }
-
-    private fun Throwable.toOutcomeFailure(): Outcome.Failure {
-        val httpStatus = causeChain()
-            .filterIsInstance<HttpException>()
-            .firstOrNull()
-            ?.code()
-            ?.takeIf { it in 400..599 }
-        return Outcome.Failure(
-            error = toAppError(),
-            httpStatus = httpStatus,
-        )
-    }
-
-    private fun Throwable.toAppError(): AppError {
-        val causes = causeChain().toList()
-        val mapped = when {
-            causes.any { it is HttpException } -> HttpAppErrorPolicy.fromStatus(
-                causes.filterIsInstance<HttpException>().first().code(),
-            )
-            causes.any { it is SocketTimeoutException } -> AppError.REQUEST_TIMEOUT
-            causes.any { it is SSLException } -> AppError.SECURE_CONNECTION_FAILED
-            causes.any { it is IOException } -> AppError.CANNOT_CONNECT
-            // OutOfMemoryError (huge playlists/accounts on low-RAM TV boxes) and other
-            // non-Exception Throwables must surface as a friendly error, not crash the app.
-            causes.any { it is OutOfMemoryError } -> AppError.EMPTY_PLAYLIST
-            else -> AppError.UNKNOWN
-        }
-        // Record the underlying cause so field logs explain provider failures that
-        // the user only sees as a friendly message.
-        Logger.w("IptvRepository", "Operation failed -> $mapped", this)
-        return mapped
-    }
-
-    /** Bounded cause traversal keeps wrapped Retrofit/OkHttp transport failures useful. */
-    private fun Throwable.causeChain(): Sequence<Throwable> = sequence {
-        var current: Throwable? = this@causeChain
-        repeat(MAX_CAUSE_DEPTH) {
-            val value = current ?: return@sequence
-            yield(value)
-            val next = value.cause
-            if (next === value) return@sequence
-            current = next
-        }
-    }
-
-    private companion object {
-        const val EPG_STAGING_TABLE = "epg_sync_staging"
-        const val MAX_CAUSE_DEPTH = 8
-        const val SERIES_DATES_PER_CALL = 40
-        const val SERIES_DATES_CATEGORY_INTERVAL_MS = 15L * 60_000L
-        const val SERIES_DATES_CATALOG_INTERVAL_MS = 6L * 60L * 60_000L
-        const val SERIES_DATES_BACKOFF_429_MS = 15L * 60_000L
-        const val SERIES_DATES_BACKOFF_5XX_MS = 5L * 60_000L
-    }
+    fun decodeEpgText(b64: String?): String = epg.decodeEpgText(b64)
 }

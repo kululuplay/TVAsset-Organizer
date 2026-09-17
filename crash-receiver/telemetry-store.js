@@ -582,6 +582,347 @@ async function persistTelemetryEvents(db, events, context) {
     .filter((id) => id && sent.has(id));
 }
 
+// ---- QoE session summaries (heartbeat "qoe": [...]) ----
+// One row per finished playback session, aggregated by the app. The schema is
+// closed and every value is typed + capped; a bad summary is dropped per item
+// and never fails the beat. Engine / transport / kind names are short tokens so
+// a new client engine name shows up in the dashboard without a server deploy.
+const QOE_MAX_PER_BEAT = 20;
+const QOE_MAX_SUMMARY_CHARS = 4096;
+const QOE_SESSION_ID_RE = /^[A-Za-z0-9_.:-]{1,64}$/;
+const QOE_TOKEN_RE = /^[A-Za-z0-9_-]{1,32}$/;
+const QOE_CODE_RE = /^[A-Za-z0-9_.-]{1,48}$/;
+const QOE_MAX_CODES = 16;
+const QOE_MAX_MS = 7 * 24 * 3600 * 1000; // a week; longer durations are garbage
+const QOE_MAX_COUNT = 1_000_000;
+const QOE_MAX_FRAMES = 10_000_000_000;
+
+function qoeToken(value) {
+  if (typeof value !== "string") return null;
+  const text = value.trim().toUpperCase();
+  return QOE_TOKEN_RE.test(text) ? text : null;
+}
+
+function qoeCodeList(value) {
+  if (value == null || value === "") return "";
+  if (typeof value !== "string") return null;
+  const parts = value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, QOE_MAX_CODES);
+  for (const part of parts) if (!QOE_CODE_RE.test(part)) return null;
+  return [...new Set(parts.map((part) => part.toUpperCase()))].join(",");
+}
+
+/**
+ * Closed-schema QoE summary -> DB row fields, or null when the item is garbage.
+ * Required: schema 1, session_id, session_duration_ms. Everything else is
+ * optional and dropped individually when out of range.
+ */
+function sanitizeQoeSession(source) {
+  if (!source || typeof source !== "object" || Array.isArray(source)) return null;
+  let size;
+  try {
+    size = JSON.stringify(source).length;
+  } catch (_) {
+    return null;
+  }
+  if (size > QOE_MAX_SUMMARY_CHARS) return null;
+  if (integer(source.schema, 1, 1) !== 1) return null;
+  const sessionId =
+    typeof source.session_id === "string" && QOE_SESSION_ID_RE.test(source.session_id.trim())
+      ? source.session_id.trim()
+      : null;
+  if (!sessionId) return null;
+  const duration = integer(source.session_duration_ms, 0, QOE_MAX_MS);
+  if (duration == null) return null;
+
+  let fingerprint = null;
+  if (typeof source.capability_fingerprint === "string") {
+    const hex = source.capability_fingerprint.trim().replace(/^cap-v1-/, "");
+    if (/^[0-9a-f]{1,64}$/i.test(hex)) fingerprint = hex.toLowerCase();
+  }
+  return {
+    sessionId,
+    contentKind: qoeToken(source.content_kind),
+    startedAt: occurredAt(source.started_at_epoch_ms),
+    endedAt: occurredAt(source.ended_at_epoch_ms),
+    initialEngine: qoeToken(source.initial_engine),
+    finalEngine: qoeToken(source.final_engine),
+    transport: qoeToken(source.transport),
+    capabilityFingerprint: fingerprint,
+    endReason: qoeToken(source.end_reason),
+    sessionDurationMs: duration,
+    timeToReadyMs: integer(source.time_to_ready_ms, 0, QOE_MAX_MS),
+    timeToFirstFrameMs: integer(source.time_to_first_frame_ms, 0, QOE_MAX_MS),
+    rebufferCount: integer(source.rebuffer_count, 0, QOE_MAX_COUNT) ?? 0,
+    rebufferDurationMs: integer(source.rebuffer_duration_ms, 0, QOE_MAX_MS) ?? 0,
+    engineSwitchCount: integer(source.engine_switch_count, 0, QOE_MAX_COUNT) ?? 0,
+    renderedFrames: integer(source.rendered_frames, 0, QOE_MAX_FRAMES) ?? 0,
+    droppedFrames: integer(source.dropped_frames, 0, QOE_MAX_FRAMES) ?? 0,
+    failureCodes: qoeCodeList(source.failure_codes) ?? "",
+    failureCategories: qoeCodeList(source.failure_categories) ?? "",
+  };
+}
+
+/** Sanitize a beat's `qoe` list: at most QOE_MAX_PER_BEAT valid rows. */
+function prepareQoeRows(list, context) {
+  const deviceId = clip(context && context.deviceId, 128);
+  if (!deviceId || !Array.isArray(list)) return [];
+  const rows = [];
+  const seen = new Set();
+  for (const source of list.slice(0, QOE_MAX_PER_BEAT)) {
+    const row = sanitizeQoeSession(source);
+    if (!row || seen.has(row.sessionId)) continue;
+    seen.add(row.sessionId);
+    rows.push({
+      deviceId,
+      appVersion: clip(context.appVersion, 64),
+      model: clip(context.model, 120),
+      manufacturer: clip(context.manufacturer, 80),
+      ...row,
+    });
+  }
+  return rows;
+}
+
+const QOE_COLUMNS = [
+  "device_id",
+  "session_id",
+  "app_version",
+  "model",
+  "manufacturer",
+  "content_kind",
+  "started_at",
+  "ended_at",
+  "initial_engine",
+  "final_engine",
+  "transport",
+  "capability_fingerprint",
+  "end_reason",
+  "session_duration_ms",
+  "time_to_ready_ms",
+  "time_to_first_frame_ms",
+  "rebuffer_count",
+  "rebuffer_duration_ms",
+  "engine_switch_count",
+  "rendered_frames",
+  "dropped_frames",
+  "failure_codes",
+  "failure_categories",
+];
+
+/** Insert QoE summaries; duplicates on (device_id, session_id) are ignored. */
+async function persistQoeSessions(db, list, context) {
+  const rows = prepareQoeRows(list, context);
+  if (!rows.length) return 0;
+  const values = [];
+  const tuples = [];
+  let parameter = 1;
+  for (const row of rows) {
+    tuples.push(
+      `(${Array.from({ length: QOE_COLUMNS.length }, () => `$${parameter++}`).join(",")})`,
+    );
+    values.push(
+      row.deviceId,
+      row.sessionId,
+      row.appVersion,
+      row.model,
+      row.manufacturer,
+      row.contentKind,
+      row.startedAt,
+      row.endedAt,
+      row.initialEngine,
+      row.finalEngine,
+      row.transport,
+      row.capabilityFingerprint,
+      row.endReason,
+      row.sessionDurationMs,
+      row.timeToReadyMs,
+      row.timeToFirstFrameMs,
+      row.rebufferCount,
+      row.rebufferDurationMs,
+      row.engineSwitchCount,
+      row.renderedFrames,
+      row.droppedFrames,
+      row.failureCodes,
+      row.failureCategories,
+    );
+  }
+  const result = await db.query(
+    `INSERT INTO qoe_sessions (${QOE_COLUMNS.join(", ")})
+     VALUES ${tuples.join(",")}
+     ON CONFLICT (device_id, session_id) DO NOTHING`,
+    values,
+  );
+  return result && Number.isFinite(result.rowCount) ? result.rowCount : rows.length;
+}
+
+// ---- QoE aggregates ----
+// Shared SELECT list for every QoE grouping (panel + /api/qoe/summary +
+// /api/release-health), so all three report the same definitions:
+//   clean_sessions  = sessions without any failure code (crash-free proxy)
+//   stall_sessions  = sessions with at least one rebuffer
+//   ttff_p50/p90    = percentile_cont over time_to_first_frame_ms (NULLs ignored)
+const QOE_AGGREGATE_COLUMNS = `
+  count(*)::int AS sessions,
+  count(*) FILTER (WHERE coalesce(failure_codes, '') = '')::int AS clean_sessions,
+  count(*) FILTER (WHERE rebuffer_count > 0)::int AS stall_sessions,
+  coalesce(sum(rebuffer_duration_ms), 0)::bigint AS rebuffer_ms,
+  coalesce(sum(session_duration_ms), 0)::bigint AS play_ms,
+  coalesce(sum(engine_switch_count), 0)::bigint AS engine_switches,
+  count(*) FILTER (WHERE engine_switch_count > 0)::int AS switch_sessions,
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY time_to_first_frame_ms) AS ttff_p50,
+  percentile_cont(0.9) WITHIN GROUP (ORDER BY time_to_first_frame_ms) AS ttff_p90`;
+
+const num = (value) => (value == null || value === "" ? null : Number(value));
+const ratio = (part, whole) => (whole > 0 ? +(part / whole).toFixed(4) : null);
+
+/** Turn one aggregate row into the metric shape every QoE consumer reports. */
+function qoeMetrics(row) {
+  const sessions = num(row && row.sessions) || 0;
+  const clean = num(row && row.clean_sessions) || 0;
+  const stalls = num(row && row.stall_sessions) || 0;
+  const rebufferMs = num(row && row.rebuffer_ms) || 0;
+  const playMs = num(row && row.play_ms) || 0;
+  const switches = num(row && row.engine_switches) || 0;
+  const switchSessions = num(row && row.switch_sessions) || 0;
+  const p50 = num(row && row.ttff_p50);
+  const p90 = num(row && row.ttff_p90);
+  const playHours = playMs / 3_600_000;
+  return {
+    sessions,
+    cleanSessions: clean,
+    crashFreeSessionRate: ratio(clean, sessions),
+    stallSessions: stalls,
+    stallSessionRate: ratio(stalls, sessions),
+    // Mean rebuffer seconds per hour of playback (0 when nothing played).
+    rebufferSecPerHour: playHours > 0 ? +(rebufferMs / 1000 / playHours).toFixed(2) : 0,
+    playbackHours: +playHours.toFixed(2),
+    engineSwitches: switches,
+    engineSwitchRate: ratio(switchSessions, sessions),
+    ttffP50Ms: p50 == null || Number.isNaN(p50) ? null : Math.round(p50),
+    ttffP90Ms: p90 == null || Number.isNaN(p90) ? null : Math.round(p90),
+  };
+}
+
+// ---- Release health gate ----
+// Verdict thresholds for GET /api/release-health (consumed by
+// scripts/release_health_gate.py, which pauses the rollout on "degraded").
+//   MIN_SESSIONS         below this the sample is too small: "insufficient".
+//   MIN_CRASH_FREE       absolute floor for the crash-free session rate.
+//   CRASH_FREE_DROP      degraded when worse than baseline by more than this.
+//   STALL_RATIO/MARGIN   degraded when stall rate > baseline*RATIO + MARGIN.
+//   TTFF_RATIO           degraded when TTFF p90 > baseline p90 * RATIO.
+//   MIN_BASELINE         a baseline with fewer sessions is ignored (too noisy).
+const RELEASE_HEALTH = Object.freeze({
+  MIN_SESSIONS: 200,
+  MIN_CRASH_FREE: 0.97,
+  CRASH_FREE_DROP: 0.02,
+  STALL_RATIO: 1.5,
+  STALL_MARGIN: 0.02,
+  TTFF_RATIO: 1.5,
+  MIN_BASELINE: 50,
+});
+
+const finite = (value) => typeof value === "number" && Number.isFinite(value);
+
+/**
+ * Pure verdict: "insufficient" | "healthy" | "degraded" plus human reasons.
+ * `current`/`baseline`: { sessions, crashFreeSessionRate, stallSessionRate,
+ * ttffP90Ms }; a null/small baseline disables the relative comparisons.
+ */
+function evaluateReleaseHealth(current, baseline) {
+  const c = current || {};
+  const sessions = finite(c.sessions) ? c.sessions : 0;
+  if (sessions < RELEASE_HEALTH.MIN_SESSIONS) {
+    return {
+      verdict: "insufficient",
+      reasons: [`only ${sessions} sessions (need ${RELEASE_HEALTH.MIN_SESSIONS})`],
+    };
+  }
+  const b =
+    baseline && finite(baseline.sessions) && baseline.sessions >= RELEASE_HEALTH.MIN_BASELINE
+      ? baseline
+      : null;
+  const reasons = [];
+  const pct = (value) => `${(value * 100).toFixed(1)}%`;
+  if (finite(c.crashFreeSessionRate)) {
+    if (c.crashFreeSessionRate < RELEASE_HEALTH.MIN_CRASH_FREE) {
+      reasons.push(
+        `crash-free sessions ${pct(c.crashFreeSessionRate)} < ${pct(RELEASE_HEALTH.MIN_CRASH_FREE)}`,
+      );
+    }
+    if (
+      b &&
+      finite(b.crashFreeSessionRate) &&
+      c.crashFreeSessionRate < b.crashFreeSessionRate - RELEASE_HEALTH.CRASH_FREE_DROP
+    ) {
+      reasons.push(
+        `crash-free sessions ${pct(c.crashFreeSessionRate)} vs baseline ${pct(b.crashFreeSessionRate)}`,
+      );
+    }
+  }
+  if (b && finite(c.stallSessionRate) && finite(b.stallSessionRate)) {
+    const limit = b.stallSessionRate * RELEASE_HEALTH.STALL_RATIO + RELEASE_HEALTH.STALL_MARGIN;
+    if (c.stallSessionRate > limit) {
+      reasons.push(
+        `stall sessions ${pct(c.stallSessionRate)} > ${pct(limit)} (baseline ${pct(b.stallSessionRate)})`,
+      );
+    }
+  }
+  if (b && finite(c.ttffP90Ms) && finite(b.ttffP90Ms) && b.ttffP90Ms > 0) {
+    if (c.ttffP90Ms > b.ttffP90Ms * RELEASE_HEALTH.TTFF_RATIO) {
+      reasons.push(
+        `TTFF p90 ${c.ttffP90Ms} ms > baseline ${b.ttffP90Ms} ms x ${RELEASE_HEALTH.TTFF_RATIO}`,
+      );
+    }
+  }
+  return { verdict: reasons.length ? "degraded" : "healthy", reasons };
+}
+
+/** Numeric x.y[.z[.w]] compare; null when either side is not a version. */
+function compareVersions(a, b) {
+  const re = /^\d+(?:\.\d+){1,3}$/;
+  if (typeof a !== "string" || typeof b !== "string" || !re.test(a) || !re.test(b)) return null;
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d < 0 ? -1 : 1;
+  }
+  return 0;
+}
+
+// ---- Playback policy signing ----
+// The app verifies `sig` with an embedded P-256 public key and only then trusts
+// `payload`; the unsigned `playbackPolicy` stays for older builds. `payload` is
+// the exact JSON text that was signed, so the client must verify the bytes it
+// received and parse that same string (never re-serialise).
+function loadPolicySigningKey(pem) {
+  if (typeof pem !== "string" || !pem.trim()) return null;
+  // Deployment envs often store the PEM with literal "\n" sequences.
+  const text = pem.includes("\\n") && !pem.includes("\n") ? pem.replace(/\\n/g, "\n") : pem;
+  const key = crypto.createPrivateKey({ key: text, format: "pem" });
+  const details = key.asymmetricKeyDetails || {};
+  if (key.asymmetricKeyType !== "ec" || details.namedCurve !== "prime256v1") {
+    throw new Error(
+      `policy signing key must be P-256 (prime256v1) EC, got ${key.asymmetricKeyType}/${details.namedCurve || "?"}`,
+    );
+  }
+  return key;
+}
+
+/** { payload, sig, kid }: ECDSA-SHA256 (DER, base64) over the UTF-8 payload. */
+function signPolicyPayload(policyObject, privateKey, kid) {
+  const payload = JSON.stringify(policyObject);
+  const sig = crypto
+    .sign("sha256", Buffer.from(payload, "utf8"), privateKey)
+    .toString("base64");
+  return { payload, sig, kid: String(kid || "1") };
+}
+
 module.exports = {
   eventId,
   parsePlaybackPolicy,
@@ -594,4 +935,15 @@ module.exports = {
   prepareRows,
   sanitizePlaybackQoe,
   persistTelemetryEvents,
+  QOE_MAX_PER_BEAT,
+  QOE_AGGREGATE_COLUMNS,
+  sanitizeQoeSession,
+  prepareQoeRows,
+  persistQoeSessions,
+  qoeMetrics,
+  RELEASE_HEALTH,
+  evaluateReleaseHealth,
+  compareVersions,
+  loadPolicySigningKey,
+  signPolicyPayload,
 };

@@ -1,0 +1,12 @@
+// Gradle init script applied to the androidx/media checkout so the native
+// build of lib-decoder-ffmpeg uses exactly the NDK that compiled FFmpeg.
+// AGP would otherwise pick (and try to download) its own default NDK.
+def pinnedNdk = System.getenv('NDK_VERSION')
+if (pinnedNdk == null || pinnedNdk.isEmpty()) {
+    throw new GradleException('NDK_VERSION environment variable is required')
+}
+allprojects { project ->
+    project.plugins.withId('com.android.library') {
+        project.extensions.getByName('android').ndkVersion = pinnedNdk
+    }
+}

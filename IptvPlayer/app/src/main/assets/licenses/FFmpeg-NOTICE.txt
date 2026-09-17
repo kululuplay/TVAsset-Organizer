@@ -1,0 +1,19 @@
+FFmpeg — the FFmpeg developers (2000–2023).
+Audio decoding library used through the AndroidX Media3 FFmpeg decoder
+extension, built from unmodified FFmpeg sources under LGPL 2.1 or later.
+No GPL or non-free components are enabled (--enable-gpl / --enable-nonfree
+are never passed; the build fails if either appears in the configuration).
+
+Enabled decoders: mp3, mp2, aac, ac3, eac3, dca, opus, vorbis, flac, alac,
+mlp, truehd (see scripts/ffmpeg/versions.env in the source repository).
+
+FFmpeg source tag: n6.0.1
+Corresponding source: https://git.ffmpeg.org/ffmpeg.git (tag n6.0.1)
+Media3 decoder extension: https://github.com/androidx/media (tag 1.8.1,
+libraries/decoder_ffmpeg), Apache License 2.0.
+License: LGPL-2.1.txt in this directory.
+
+The libraries are statically linked into libffmpegJNI.so. Under LGPL 2.1
+section 6 the application may be relinked against a modified FFmpeg; the
+build scripts under scripts/ffmpeg/ in the source repository reproduce the
+exact binaries shipped.

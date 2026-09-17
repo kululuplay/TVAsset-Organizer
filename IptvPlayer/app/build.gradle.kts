@@ -18,6 +18,32 @@ val livePlaybackDiagnostics = System.getenv("LIVE_PLAYBACK_DIAGNOSTICS") == "1"
 val tsOnlyTestBuild = providers.gradleProperty("tsOnlyTestBuild").orNull == "true"
 val compatibilityTestBuild = providers.gradleProperty("compatibilityTestBuild").orNull == "true"
 
+// Media3 FFmpeg audio decoder extension. Google does not publish it to Maven;
+// CI builds it from source (scripts/ffmpeg/build_media3_ffmpeg.sh) and drops
+// the AAR here before assembling. When the AAR is present the `ffmpeg` source
+// set wires FfmpegAudioRenderer in; otherwise the `noffmpeg` stub keeps every
+// existing libVLC fallback path unchanged. See docs/ffmpeg-audio.md.
+val ffmpegDecoderAar = file("libs/media3-decoder-ffmpeg-release.aar")
+val ffmpegAudio = ffmpegDecoderAar.isFile
+val ffmpegSourceSet = if (ffmpegAudio) "src/ffmpeg/java" else "src/noffmpeg/java"
+logger.lifecycle(
+    "FFmpeg audio extension: " +
+        if (ffmpegAudio) "present (${ffmpegDecoderAar.name})" else "absent, using $ffmpegSourceSet stub",
+)
+
+// Remote playback-policy signing key (PEM, public half only). Read at
+// configuration time so BuildConfig carries it; a missing file yields "" and
+// the verifier treats signed policy as unavailable. Line endings are
+// normalised so a CRLF checkout produces the same constant as CI.
+val policyPublicKeyPem: String =
+    file("policy_public_key.pem").takeIf { it.isFile }
+        ?.readText(Charsets.UTF_8)
+        ?.replace("\r\n", "\n")
+        ?.replace("\r", "\n")
+        ?.trim()
+        ?.let { it + "\n" }
+        .orEmpty()
+
 ksp {
     // Room schema history lives in git so migrations can be diffed and tested.
     arg("room.schemaLocation", "$projectDir/schemas")
@@ -40,6 +66,11 @@ android {
         buildConfigField("boolean", "TS_ONLY_TEST_BUILD", tsOnlyTestBuild.toString())
         if (livePlaybackDiagnostics) versionNameSuffix = "-diag1"
         buildConfigField("boolean", "LIVE_PLAYBACK_DIAGNOSTICS", livePlaybackDiagnostics.toString())
+        // True only when the locally built Media3 FFmpeg AAR was on disk at
+        // configuration time; production CI always ships it.
+        buildConfigField("boolean", "FFMPEG_AUDIO", ffmpegAudio.toString())
+        // Public key (PEM) that signs remote playback policy; "" when absent.
+        buildConfigField("String", "POLICY_PUBLIC_KEY_PEM", buildConfigString(policyPublicKeyPem))
 
         // Service credentials are injected by CI/local environment and never
         // committed. Blank values disable the optional integration gracefully.
@@ -126,6 +157,13 @@ android {
         }
     }
 
+    sourceSets {
+        // Exactly one of the two FfmpegAudio implementations is compiled in.
+        getByName("main") {
+            java.srcDir(ffmpegSourceSet)
+        }
+    }
+
     testOptions {
         unitTests {
             // Let unit tests hit android.jar stubs without "Method not mocked"
@@ -190,6 +228,12 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-dash:1.8.1")
     implementation("androidx.media3:media3-ui:1.8.1")
     implementation("androidx.media3:media3-common:1.8.1")
+    // FFmpeg software audio decoders (MP2/MP3/AAC/AC-3/E-AC-3/DTS/Opus/Vorbis/
+    // FLAC/ALAC/MLP/TrueHD) built from the same media3 tag by CI. Only bundled
+    // when the AAR exists; the build stays green without it (libVLC covers audio).
+    if (ffmpegAudio) {
+        implementation(files(ffmpegDecoderAar))
+    }
     // Audio-only MPEG Layer I/II/III fallback. No second player/network pull and
     // no native video decoder: Media3 retains the device's hardware video path.
     implementation("javazoom:jlayer:1.0.1")

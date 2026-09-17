@@ -143,6 +143,11 @@
     <string name="settings_buffer_low">منخفض (تبديل سريع)</string>
     <string name="settings_buffer_normal">عادي (متوازن)</string>
     <string name="settings_buffer_high">مرتفع (توقفات أقل)</string>
+    <string name="settings_afr">معدل الإطارات التلقائي</string>
+    <string name="settings_afr_off">إيقاف</string>
+    <string name="settings_afr_refresh">معدل التحديث فقط</string>
+    <string name="settings_afr_refresh_resolution">معدل التحديث + الدقة</string>
+    <string name="settings_afr_desc">يحوّل التلفاز إلى معدل إطارات الفيديو (24/25/30/50/60 هرتز) لتشغيل سلس بلا تقطّع. تظلم الشاشة لحظة عند كل تبديل؛ أوقفه إذا بقيت الصورة سوداء.</string>
     <string name="settings_debug_overlay">طبقة التصحيح (المشغّل والمعاينة)</string>
     <string name="settings_live_preview">المعاينة المباشرة</string>
     <string name="settings_playback_profile">ملف التشغيل</string>

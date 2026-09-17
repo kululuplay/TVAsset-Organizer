@@ -14,6 +14,7 @@ import com.iptv.player.data.model.PlaybackSelection
 import com.iptv.player.data.model.PlaybackSelectionPolicy
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.model.StreamFormat
+import com.iptv.player.player.AfrMode
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -30,6 +31,7 @@ class SettingsViewModel : ViewModel() {
     val streamFormat: Flow<StreamFormat> = settings.streamFormat
     val bufferMode: Flow<BufferMode> = settings.bufferMode
     val audioPassthrough: Flow<Boolean> = settings.audioPassthrough
+    val afrMode: Flow<AfrMode> = settings.afrMode
     val debugOverlay: Flow<Boolean> = settings.debugOverlay
     val livePreviewChoice: Flow<Boolean?> = settings.livePreviewChoice
     val showClock: Flow<Boolean> = settings.showClock
@@ -79,6 +81,8 @@ class SettingsViewModel : ViewModel() {
 
     fun setAudioPassthrough(enabled: Boolean) =
         viewModelScope.launch { settings.setAudioPassthrough(enabled) }
+
+    fun setAfrMode(mode: AfrMode) = viewModelScope.launch { settings.setAfrMode(mode) }
 
     fun setDebugOverlay(enabled: Boolean) =
         viewModelScope.launch { settings.setDebugOverlay(enabled) }

@@ -7,6 +7,11 @@
  * accumulate. The 200 response carries the active operator announcement (if any),
  * which we hand to AnnouncementCenter.
  *
+ * Also the upload path for finished playback QoE summaries ("qoe", <= 20 per
+ * beat, removed from the spool only after a 2xx) and the delivery path for the
+ * remote playback policy: when the build carries POLICY_PUBLIC_KEY_PEM only a
+ * correctly signed `playbackPolicySigned` is applied, never the legacy object.
+ *
  * Foreground-gated by IptvApp (started-activity count): Android TV keeps idle
  * processes alive for hours, so a bare process-alive loop would inflate the
  * "live" count with boxes nobody is using. Entirely best-effort — it never
@@ -19,6 +24,10 @@ import android.content.Context
 import android.os.Build
 import com.iptv.player.BuildConfig
 import com.iptv.player.data.ServiceLocator
+import com.iptv.player.playback.android.PlaybackQoeRuntime
+import com.iptv.player.security.PolicyPublicKey
+import com.iptv.player.security.PolicyRejectionGate
+import com.iptv.player.security.PolicySignature
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -40,7 +49,11 @@ object HeartbeatReporter {
     /** Max stability events drained per beat (server also caps; keeps the body small). */
     private const val MAX_EVENTS_PER_BEAT = 20
 
+    /** Max finished QoE session summaries drained per beat (server caps at 20). */
+    private const val MAX_QOE_PER_BEAT = 20
+
     @Volatile private var loopJob: Job? = null
+    private val policyRejections = PolicyRejectionGate()
 
     /** Begin (or keep) the heartbeat loop. Safe to call repeatedly. */
     fun start(context: Context) {
@@ -72,6 +85,9 @@ object HeartbeatReporter {
         // How many events the spool had to drop to overflow before this beat — the
         // server records one synthetic marker so a failure storm stays visible.
         val droppedBefore = StabilityTelemetry.snapshotDropped()
+        // Finished playback sessions; same keep-until-2xx rule, keyed by session id.
+        val pendingQoe = PlaybackQoeRuntime.pendingUploads(MAX_QOE_PER_BEAT)
+        val qoeDroppedBefore = PlaybackQoeRuntime.pendingDroppedCount()
         val json = JSONObject().apply {
             put("deviceId", DeviceId.get(context))
             put("appVersion", BuildConfig.VERSION_NAME)
@@ -121,6 +137,14 @@ object HeartbeatReporter {
                 put("events", JSONArray().apply { pendingEvents.forEach { put(it) } })
             }
             if (droppedBefore > 0) put("eventsDropped", droppedBefore)
+            if (pendingQoe.isNotEmpty()) {
+                val arr = JSONArray()
+                pendingQoe.forEach { entry ->
+                    runCatching { JSONObject(entry.json) }.getOrNull()?.let { arr.put(it) }
+                }
+                if (arr.length() > 0) put("qoe", arr)
+            }
+            if (qoeDroppedBefore > 0) put("qoeDropped", qoeDroppedBefore)
         }
         val body = json.toString()
             .toRequestBody("application/json; charset=utf-8".toMediaType())
@@ -131,6 +155,9 @@ object HeartbeatReporter {
             .build()
         ServiceLocator.httpClient.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) return
+            // QoE summaries have no per-row ack in the protocol: a 2xx for the
+            // beat that carried them is the server's acceptance.
+            if (pendingQoe.isNotEmpty()) PlaybackQoeRuntime.confirmUploaded(pendingQoe.map { it.id })
             // Newer servers return 200 with {announcement:{id,message}|null}; older
             // ones return 204 (no body). Parse defensively so neither breaks the loop.
             val text = runCatching { resp.body?.string() }.getOrNull()
@@ -154,11 +181,13 @@ object HeartbeatReporter {
             if (droppedBefore > 0 && root.optBoolean("eventsDroppedAccepted", false)) {
                 StabilityTelemetry.confirmDropped(droppedBefore)
             }
+            // The overflow counter is cleared only once the server recorded it.
+            if (qoeDroppedBefore > 0 && root.optBoolean("qoeDroppedAccepted", false)) {
+                PlaybackQoeRuntime.confirmDropped(qoeDroppedBefore)
+            }
 
+            runCatching { applyPlaybackPolicy(context, root) }
             runCatching {
-                root.optJSONObject("playbackPolicy")?.let { policy ->
-                    PlaybackRemotePolicy.apply(context, policy)
-                }
                 val obj = root.optJSONObject("announcement")
                 if (obj == null) {
                     AnnouncementCenter.clear()
@@ -192,5 +221,50 @@ object HeartbeatReporter {
             val retry = ResolvedRequestCenter.shownButPending()
             if (retry.isNotEmpty()) runCatching { RequestReporter.ack(context, retry) }
         }
+    }
+
+    /**
+     * With a public key in the build, only `playbackPolicySigned` whose `sig`
+     * verifies over the exact `payload` text is applied; a missing or bad
+     * signature applies nothing (never the unsigned `playbackPolicy`), logs once
+     * per process and spools one `policy_signature_rejected` event per hour.
+     * Without a key (dev/local builds) the legacy unsigned object is applied.
+     */
+    private fun applyPlaybackPolicy(context: Context, root: JSONObject) {
+        val legacy = root.optJSONObject("playbackPolicy")
+        val signed = root.optJSONObject("playbackPolicySigned")
+        val payload = signed?.optString("payload")?.takeIf { it.isNotEmpty() }
+        val sig = signed?.optString("sig")?.takeIf { it.isNotBlank() }
+        if (legacy == null && signed == null) return
+        val accepted = PolicySignature.acceptedPayload(
+            publicKeyPem = PolicyPublicKey.pem,
+            payload = payload,
+            sigBase64 = sig,
+            unsignedFallback = legacy?.toString(),
+        )
+        if (accepted == null) {
+            val why = when {
+                signed == null -> "unsigned"
+                payload == null || sig == null -> "incomplete"
+                else -> "bad_signature"
+            }
+            val kid = signed?.optString("kid").orEmpty().take(32)
+            if (policyRejections.shouldLog()) {
+                Logger.w(TAG, "playback policy rejected ($why, kid=$kid); key configured, not applied")
+                PlaybackLog.log(context, TAG, "remote policy rejected: $why")
+            }
+            if (policyRejections.shouldRecordEvent(System.currentTimeMillis())) {
+                StabilityTelemetry.record(
+                    type = PolicyRejectionGate.EVENT_TYPE,
+                    channel = null,
+                    kind = null,
+                    severity = "warn",
+                    detail = if (kid.isEmpty()) why else "$why kid=$kid",
+                )
+            }
+            return
+        }
+        val policy = runCatching { JSONObject(accepted) }.getOrNull() ?: return
+        PlaybackRemotePolicy.apply(context, policy)
     }
 }

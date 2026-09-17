@@ -146,6 +146,11 @@
     <string name="settings_buffer_low">Niedrig (schnelles Umschalten)</string>
     <string name="settings_buffer_normal">Normal (ausgewogen)</string>
     <string name="settings_buffer_high">Hoch (weniger Unterbrechungen)</string>
+    <string name="settings_afr">Automatische Bildrate</string>
+    <string name="settings_afr_off">Aus</string>
+    <string name="settings_afr_refresh">Nur Bildwiederholrate</string>
+    <string name="settings_afr_refresh_resolution">Bildwiederholrate + Auflösung</string>
+    <string name="settings_afr_desc">Schaltet den Fernseher auf die Bildrate des Videos (24/25/30/50/60 Hz) für ruckelfreie Wiedergabe. Bei jedem Wechsel wird das Bild kurz schwarz; bei dauerhaft schwarzem Bild ausschalten.</string>
     <string name="settings_language">Sprache</string>
     <string name="settings_general">Allgemein</string>
     <string name="settings_account">Konto</string>

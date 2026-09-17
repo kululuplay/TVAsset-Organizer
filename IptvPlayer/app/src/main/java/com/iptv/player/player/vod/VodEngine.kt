@@ -53,6 +53,14 @@ interface VodEngine {
     @MainThread
     fun streamInfo(): VodStreamInfo?
 
+    /**
+     * Frame rate of the playing video track for automatic frame-rate matching,
+     * or -1 when unknown. Backends that already expose it through
+     * [streamInfo] may keep this default; the coordinator falls back to that.
+     */
+    @MainThread
+    fun videoFrameRate(): Float = -1f
+
     @MainThread
     fun audioTracks(): List<VodTrack>
 

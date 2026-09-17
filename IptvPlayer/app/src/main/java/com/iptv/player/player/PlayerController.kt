@@ -27,6 +27,7 @@ import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.model.StreamFormat
+import com.iptv.player.playback.android.DisplayModeSwitcher
 import com.iptv.player.playback.android.PlaybackQoeRuntime
 import com.iptv.player.playback.core.AudioFailureEvidence
 import com.iptv.player.playback.core.FailureSignal
@@ -65,6 +66,29 @@ class PlayerController(
 
     /** Swap the UI callback (used when a preview controller is adopted by the player). */
     fun setCallback(cb: Callback) { callback = cb }
+
+    /**
+     * Automatic frame-rate matching is only sensible for fullscreen playback: a
+     * display-mode switch blanks the whole screen, which is unacceptable behind
+     * an inline preview thumbnail. Defaults to true; the Home preview owner must
+     * set it false (and back to true when the controller is adopted fullscreen).
+     * Turning it off undoes a switch already applied.
+     */
+    fun setDisplayModeSwitchingAllowed(allowed: Boolean) {
+        val wasAllowed = displayModeSwitchingAllowed
+        displayModeSwitchingAllowed = allowed
+        displayModeSwitcher?.allowed = allowed
+        // Home's inline preview becomes the fullscreen player without a new
+        // engine; the frame is already verified, so match now instead of waiting
+        // for the next channel.
+        if (allowed && !wasAllowed) matchDisplayMode(0)
+    }
+
+    /** Override the persisted AFR setting (tests / a live settings change). */
+    fun setFrameRateMatchMode(mode: AfrMode) {
+        frameRateMatchOverride = mode
+        displayModeSwitcher?.afrMode = mode
+    }
 
     /** UI-facing events from the controller (already engine-agnostic). */
     interface Callback {
@@ -123,6 +147,18 @@ class PlayerController(
     private var stage = Stage.EXO
     private val triedStages = mutableSetOf<Stage>()
     private var videoRebindPending = false
+
+    // ---- Automatic frame-rate matching ------------------------------------
+    // Built lazily from the container's Activity window on the first verified
+    // frame; null when the container is not hosted by an Activity. The switcher
+    // itself dedupes per content family and debounces, so calling it on every
+    // zap/re-check is safe: only a family change costs a (blanking) switch.
+    private var displayModeSwitcher: DisplayModeSwitcher? = null
+    private var displayModeSwitchingAllowed = true
+    private var frameRateMatchOverride: AfrMode? = null
+    // Guards the delayed fps re-polls (libVLC reports fps=0 on the first frame
+    // of a live TS and fills it in a moment later); bumped on play/quiesce/release.
+    private var frameRateMatchGen = 0
     // Bumped on every (re)start so a delayed engine creation that has been
     // superseded becomes a no-op. Guards the SurfaceView-swap handoff gap.
     private var startGeneration = 0
@@ -416,6 +452,10 @@ class PlayerController(
         // Tear down the previous channel's stall/startup watchdog; the (re)start
         // path below re-arms it for this channel.
         cancelWatchdog()
+        // Pending fps re-polls belong to the previous channel. The display mode
+        // itself is kept: the next channel's first frame re-evaluates it and
+        // only a changed frame-rate family costs another switch.
+        ++frameRateMatchGen
         currentOriginalUrl = url
         currentTransportKey = transportKey
         currentTransportFormat = if (isLive) StreamFormat.TS else null
@@ -855,6 +895,10 @@ class PlayerController(
             unconfirmedStartFailures = 0
             traceAttempt(PlaybackAttemptTrace.Phase.FRAME)
             callback.onVideoResumed()
+            // Match the TV refresh rate as early as the format is known: right
+            // after the first real frame (the no-first-frame watchdogs are already
+            // satisfied, so the brief HDMI re-sync blank cannot be misread).
+            if (firstVideoOutput) matchDisplayMode(recheckIndex = 0)
             if (firstVideoOutput && playbackConfirmed) {
                 // Playing may precede the first real picture by several seconds.
                 // Measure route stability from this verified frame, not from the
@@ -1095,7 +1139,41 @@ class PlayerController(
             LiveTransportMemory.markStable(currentTransportKey, currentTransportFormat)
         }
         usingRememberedRoute = false
+        // Long-tail fps population (libVLC live TS): one more look once stable.
+        matchDisplayMode(recheckIndex = null)
         callback.onStablePlayback()
+    }
+
+    /**
+     * Feed the engine's current video format to the display-mode switcher. With
+     * [recheckIndex] a bounded re-poll chain is scheduled while the engine still
+     * reports an unknown fps; null = single evaluation. Cheap when nothing
+     * changed: the switcher ignores a family it already handled.
+     */
+    private fun matchDisplayMode(recheckIndex: Int?) {
+        // Never before a verified frame: Exo knows the Format (and fps) at track
+        // selection, so an early fullscreen entry would otherwise switch modes
+        // inside the no-first-frame / pixel-validation windows.
+        if (!expectsVideo || !displayModeSwitchingAllowed || !videoOutputConfirmed) return
+        val switcher = displayModeSwitcher ?: DisplayModeSwitcher.from(container)?.also {
+            it.allowed = displayModeSwitchingAllowed
+            frameRateMatchOverride?.let { mode -> it.afrMode = mode }
+            displayModeSwitcher = it
+        } ?: return
+        if (switcher.afrMode == AfrMode.OFF) return
+        val info = engine?.getStreamInfo()
+        if (info != null && info.fps > 0f) {
+            switcher.apply(info.fps, info.width, info.height)
+            return
+        }
+        val next = recheckIndex ?: return
+        if (next >= FRAME_RATE_RECHECK_DELAYS_MS.size) return
+        val gen = frameRateMatchGen
+        mainHandler.postDelayed({
+            if (gen == frameRateMatchGen && engine != null && !suspended) {
+                matchDisplayMode(recheckIndex = next + 1)
+            }
+        }, FRAME_RATE_RECHECK_DELAYS_MS[next])
     }
 
     // ---- Watchdog ---------------------------------------------------------
@@ -1596,6 +1674,10 @@ class PlayerController(
         starvationPolicy.reset()
         resetReconnect()
         cancelWatchdog()
+        // Background/Cast quiesce: hand the TV back its own refresh rate. The
+        // resumed stream re-matches from its first verified frame.
+        ++frameRateMatchGen
+        displayModeSwitcher?.restore()
         val target = engine
         if (target == null) {
             onStopped(true)
@@ -1638,6 +1720,9 @@ class PlayerController(
         starvationPolicy.reset()
         cancelWatchdog()
         resetReconnect()
+        ++frameRateMatchGen
+        // Leaving playback: give the launcher/Home its original display mode back.
+        displayModeSwitcher?.release()
         releaseEngine()
     }
 
@@ -1719,5 +1804,12 @@ class PlayerController(
          * user isn't left staring at a frozen picture.
          */
         private const val STALL_TIMEOUT_MS = 15_000L
+
+        /**
+         * Re-poll schedule for the stream fps after the first frame. libVLC
+         * reports 0 on the first Vout of a live TS and fills it in shortly
+         * after; ExoPlayer knows it at the first frame, so the chain ends early.
+         */
+        private val FRAME_RATE_RECHECK_DELAYS_MS = longArrayOf(1_000L, 2_500L, 5_000L)
     }
 }

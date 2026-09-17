@@ -143,6 +143,11 @@
     <string name="settings_buffer_low">Faible (zapping rapide)</string>
     <string name="settings_buffer_normal">Normal (équilibré)</string>
     <string name="settings_buffer_high">Élevé (moins de coupures)</string>
+    <string name="settings_afr">Cadence d’images automatique</string>
+    <string name="settings_afr_off">Désactivé</string>
+    <string name="settings_afr_refresh">Taux de rafraîchissement seul</string>
+    <string name="settings_afr_refresh_resolution">Taux de rafraîchissement + résolution</string>
+    <string name="settings_afr_desc">Bascule le téléviseur sur la cadence de la vidéo (24/25/30/50/60 Hz) pour une lecture sans saccades. L’écran devient noir un instant à chaque changement ; désactivez si l’image reste noire.</string>
     <string name="settings_language">Langue</string>
     <string name="settings_general">Général</string>
     <string name="settings_account">Compte</string>

@@ -30,6 +30,8 @@
  *   POST /api/announcement/clear  retire one announcement by id, or all (auth)
  *   POST /api/playback-policy     save the playbackPolicy JSON served to devices (auth)
  *   POST /api/playback-policy/clear  drop the stored policy (env fallback) (auth)
+ *   GET  /api/qoe/summary         playback QoE aggregates (?hours=24) (auth)
+ *   GET  /api/release-health      release verdict for the rollout gate, X-Kululu-Ops-Key
  *   POST /api/crashes/:id/delete  delete one crash (auth)
  *   POST /api/crashes/clear       delete all crashes (auth)
  *   POST /api/devices/clear       delete all devices (auth)
@@ -48,6 +50,15 @@ const {
   deviceMatchesRule,
   sanitizeSupportChecks,
   persistTelemetryEvents,
+  QOE_MAX_PER_BEAT,
+  QOE_AGGREGATE_COLUMNS,
+  persistQoeSessions,
+  qoeMetrics,
+  RELEASE_HEALTH,
+  evaluateReleaseHealth,
+  compareVersions,
+  loadPolicySigningKey,
+  signPolicyPayload,
 } = require("./telemetry-store");
 const {
   BoundedMap,
@@ -131,6 +142,13 @@ const intEnv = (name, def) => {
 const RETENTION_DEVICE_DAYS = intEnv("RETENTION_DEVICE_DAYS", 90);
 const RETENTION_CRASH_DAYS = intEnv("RETENTION_CRASH_DAYS", 60);
 const RETENTION_LOG_DAYS = intEnv("RETENTION_LOG_DAYS", 30);
+// QoE session summaries feed the release-health baseline (prior 7 days) and the
+// panel's 7-day view; 60 days keeps two release cycles comparable.
+const RETENTION_QOE_DAYS = intEnv("RETENTION_QOE_DAYS", 60);
+
+// Release-health gate credential (scripts/release_health_gate.py). Unset =
+// the endpoint answers 503 so a forgotten secret fails visibly, never open.
+const RELEASE_HEALTH_KEY = String(process.env.RELEASE_HEALTH_KEY || "").trim();
 
 // Optional server-side kill switches/timeouts. The parser is deliberately a
 // closed schema: malformed JSON, unknown keys and out-of-range values can never
@@ -145,6 +163,59 @@ let storedPlaybackPolicy = null; // parsed + frozen, or null
 let storedPlaybackPolicyText = null; // exact text the operator saved, or null
 let storedPlaybackPolicyAt = null;
 const effectivePlaybackPolicy = () => storedPlaybackPolicy || PLAYBACK_POLICY;
+
+// ---- Playback policy signing (playbackPolicySigned) ----
+// POLICY_SIGNING_PRIVATE_KEY_PEM: PKCS#8 PEM, P-256. POLICY_SIGNING_KID names the
+// key so the app can pin several public keys during a rotation
+// (docs/policy-signing.md). No key = the unsigned playbackPolicy only, with a
+// one-time warning; a malformed key fails startup (misconfiguration, not an
+// outage condition to hide).
+const POLICY_SIGNING_KID = String(process.env.POLICY_SIGNING_KID || "1").trim().slice(0, 32);
+let policySigningKey = null;
+try {
+  policySigningKey = loadPolicySigningKey(process.env.POLICY_SIGNING_PRIVATE_KEY_PEM);
+} catch (e) {
+  throw new Error(`[crash-receiver] POLICY_SIGNING_PRIVATE_KEY_PEM is invalid: ${e.message}`);
+}
+if (!policySigningKey) {
+  console.warn(
+    "[crash-receiver] POLICY_SIGNING_PRIVATE_KEY_PEM not set: heartbeats carry only the " +
+      "unsigned playbackPolicy (playbackPolicySigned omitted; new apps fail closed).",
+  );
+}
+// The served policy carries expiresAtEpochMs, so the signed blob is rebuilt when
+// the policy changes (panel save/clear -> refreshPlaybackPolicyCache) or after
+// POLICY_SIGN_CACHE_MS, whichever first; both `playbackPolicy` and the signed
+// `payload` come from the same object so they can never disagree.
+const POLICY_SIGN_CACHE_MS = 30 * 1000;
+let policyEnvelope = null; // { policy, signed, builtAt, source }
+function invalidatePolicyEnvelope() {
+  policyEnvelope = null;
+}
+function currentPolicyEnvelope() {
+  const source = effectivePlaybackPolicy();
+  if (!source) return null;
+  const now = Date.now();
+  if (
+    policyEnvelope &&
+    policyEnvelope.source === source &&
+    now - policyEnvelope.builtAt < POLICY_SIGN_CACHE_MS
+  ) {
+    return policyEnvelope;
+  }
+  const { ttlSeconds, ...values } = source;
+  const policy = { ...values, expiresAtEpochMs: now + ttlSeconds * 1000 };
+  let signed = null;
+  if (policySigningKey) {
+    try {
+      signed = signPolicyPayload(policy, policySigningKey, POLICY_SIGNING_KID);
+    } catch (e) {
+      console.error("[crash-receiver] policy signing failed", e);
+    }
+  }
+  policyEnvelope = { policy, signed, builtAt: now, source };
+  return policyEnvelope;
+}
 
 // Postgres TLS: verify the server certificate by default. PGSSL_CA=<path> pins
 // a custom CA bundle; PGSSL_INSECURE=1 disables verification (logged loudly).
@@ -365,6 +436,49 @@ async function initDb() {
   await pool.query(
     `CREATE INDEX IF NOT EXISTS idx_nettest_log_device ON nettest_log(device_id, at DESC);`,
   );
+  // Playback QoE: one row per finished playback session, summarised on the app
+  // and piggybacked on the heartbeat ("qoe" list). Closed schema, see
+  // telemetry-store.js sanitizeQoeSession. Duplicate (device, session) rows are
+  // ignored at insert. Brand new table; pruned by RETENTION_QOE_DAYS.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS qoe_sessions (
+      id BIGSERIAL PRIMARY KEY,
+      received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      device_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      app_version TEXT,
+      model TEXT,
+      manufacturer TEXT,
+      content_kind TEXT,
+      started_at TIMESTAMPTZ,
+      ended_at TIMESTAMPTZ,
+      initial_engine TEXT,
+      final_engine TEXT,
+      transport TEXT,
+      capability_fingerprint TEXT,
+      end_reason TEXT,
+      session_duration_ms BIGINT NOT NULL DEFAULT 0,
+      time_to_ready_ms INTEGER,
+      time_to_first_frame_ms INTEGER,
+      rebuffer_count INTEGER NOT NULL DEFAULT 0,
+      rebuffer_duration_ms BIGINT NOT NULL DEFAULT 0,
+      engine_switch_count INTEGER NOT NULL DEFAULT 0,
+      rendered_frames BIGINT NOT NULL DEFAULT 0,
+      dropped_frames BIGINT NOT NULL DEFAULT 0,
+      failure_codes TEXT NOT NULL DEFAULT '',
+      failure_categories TEXT NOT NULL DEFAULT '',
+      UNIQUE (device_id, session_id)
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_qoe_received ON qoe_sessions(received_at DESC);`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_qoe_version ON qoe_sessions(app_version, received_at DESC);`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_qoe_model ON qoe_sessions(model, received_at DESC);`,
+  );
   await pool.query(`
     CREATE TABLE IF NOT EXISTS support_reports (
       code TEXT PRIMARY KEY,
@@ -433,6 +547,7 @@ async function refreshPlaybackPolicyCache() {
     storedPlaybackPolicyText = text;
     storedPlaybackPolicyAt = rows[0]?.updated_at || null;
     storedPlaybackPolicy = text ? parsePlaybackPolicy(text) : null;
+    invalidatePolicyEnvelope();
     if (text && !storedPlaybackPolicy) {
       console.error("[crash-receiver] stored playback policy is invalid; using env fallback");
     }
@@ -519,12 +634,17 @@ const INGEST_LIMITS = {
   supportReport: createRateLimiter({ max: 10, windowMs: HOUR_MS, maxKeys: MAP_MAX_ENTRIES }),
   request: createRateLimiter({ max: 5, windowMs: HOUR_MS, maxKeys: MAP_MAX_ENTRIES }),
   requestsRead: createRateLimiter({ max: 120, windowMs: HOUR_MS, maxKeys: MAP_MAX_ENTRIES }),
+  // Release-health polls come from CI every 30 min; per-IP so a leaked key
+  // cannot turn the aggregate queries into a load test.
+  releaseHealth: createRateLimiter({ max: 60, windowMs: HOUR_MS, maxKeys: MAP_MAX_ENTRIES }),
 };
-function rateLimited(name) {
+// perIp: ignore the client-supplied deviceId (a caller could rotate it to get
+// a fresh bucket per request) and key on the address only.
+function rateLimited(name, { perIp = false } = {}) {
   const limiter = INGEST_LIMITS[name];
   return (req, res, next) => {
     const body = req.body && typeof req.body === "object" ? req.body : {};
-    const deviceId = clip(body.deviceId ?? req.query.deviceId, 128);
+    const deviceId = perIp ? null : clip(body.deviceId ?? req.query.deviceId, 128);
     const key = `${name}:${deviceId || "ip:" + (clientIp(req) || "?")}`;
     const r = limiter.check(key);
     if (!r.ok) {
@@ -798,6 +918,23 @@ app.post("/api/heartbeat", rateLimited("heartbeat"), async (req, res) => {
         console.error("telemetry_events insert failed", e);
       }
     }
+    // ---- Playback QoE session summaries piggybacked on this beat ----
+    // Closed schema per item (garbage is dropped silently, never fails the
+    // beat); duplicates are ignored by the (device_id, session_id) unique key so
+    // a client may resend until it sees a 200.
+    const qoe = Array.isArray(b.qoe) ? b.qoe.slice(0, QOE_MAX_PER_BEAT) : [];
+    if (qoe.length) {
+      try {
+        await persistQoeSessions(pool, qoe, {
+          deviceId,
+          appVersion: b.appVersion,
+          model: b.model,
+          manufacturer: b.manufacturer,
+        });
+      } catch (e) {
+        console.error("qoe_sessions insert failed", e);
+      }
+    }
     // A non-zero dropped counter means this device's spool overflowed (a failure
     // storm) and lost events; record ONE synthetic marker so the burst is visible
     // even though the individual events are gone. Isolated + best-effort.
@@ -848,20 +985,49 @@ app.post("/api/heartbeat", rateLimited("heartbeat"), async (req, res) => {
     } catch (e) {
       console.error("resolved-requests lookup failed", e);
     }
+    // Same idea for QoE session summaries that overflowed the client spool.
+    const qoeDropped = toInt(b.qoeDropped);
+    let qoeDroppedAccepted = false;
+    if (qoeDropped > 0) {
+      try {
+        await pool.query(
+          `INSERT INTO telemetry_events
+            (device_id, app_version, version_code, manufacturer, model, device,
+             android_version, api_level, type, severity, details)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+          [
+            deviceId,
+            clip(b.appVersion),
+            toInt(b.versionCode),
+            clip(b.manufacturer),
+            clip(b.model),
+            clip(b.device),
+            clip(b.androidVersion),
+            toInt(b.apiLevel),
+            "qoe_dropped",
+            "warn",
+            `${qoeDropped} oynatma özeti taştı (QoE spool overflow)`,
+          ],
+        );
+        qoeDroppedAccepted = true;
+      } catch (e) {
+        console.error("qoe_dropped insert failed", e);
+      }
+    }
     const payload = {
       announcement: pickAnnouncement(deviceId, accountId),
+      qoeDroppedAccepted,
       // ACK only IDs confirmed present after the insert. An empty list is
       // intentional on DB failure, so new clients retain and retry their spool.
       ackedEventIds,
       eventsDroppedAccepted,
     };
-    const playbackPolicy = effectivePlaybackPolicy();
-    if (playbackPolicy) {
-      const { ttlSeconds, ...values } = playbackPolicy;
-      payload.playbackPolicy = {
-        ...values,
-        expiresAtEpochMs: Date.now() + ttlSeconds * 1000,
-      };
+    // Unsigned object for older apps + the signed envelope (same object, exact
+    // signed bytes in `payload`) for apps that verify with the embedded key.
+    const envelope = currentPolicyEnvelope();
+    if (envelope) {
+      payload.playbackPolicy = envelope.policy;
+      if (envelope.signed) payload.playbackPolicySigned = envelope.signed;
     }
     if (resolvedRequests.length) payload.resolvedRequests = resolvedRequests;
     res.status(200).json(payload);
@@ -966,6 +1132,7 @@ const TELEMETRY_LABELS = {
   anr: "Arayüz donması (ANR)",
   suspected_abnormal_exit: "Şüpheli ani kapanma",
   events_dropped: "Olay taşması (spool overflow)",
+  qoe_dropped: "Oynatma özeti taşması (QoE spool overflow)",
   safe_mode: "Güvenli mod (crash-loop koruması)",
   process_recovery: "Otomatik oynatıcı süreç yenileme",
 };
@@ -1244,6 +1411,7 @@ async function runRetention() {
     ["nettest_log", "at", RETENTION_LOG_DAYS],
     ["support_reports", "created_at", RETENTION_LOG_DAYS],
     ["telemetry_events", "received_at", RETENTION_LOG_DAYS],
+    ["qoe_sessions", "received_at", RETENTION_QOE_DAYS],
   ];
   for (const [table, col, days] of sweeps) {
     if (!days) continue; // 0 = disabled
@@ -1476,6 +1644,104 @@ function versionLabel(v, code) {
   return `v${esc(v || "?")}${code ? " (" + esc(code) + ")" : ""}`;
 }
 
+// ---- Playback QoE aggregates (panel + /api/qoe/summary) ----
+// Every grouping shares QOE_AGGREGATE_COLUMNS (telemetry-store.js) and is
+// bounded by the received_at index + a LIMIT; the model grouping uses the same
+// "manufacturer model" label as the stability tables so the two line up.
+const QOE_DIMENSIONS = {
+  version: "coalesce(NULLIF(app_version,''),'?')",
+  model: "NULLIF(trim(coalesce(manufacturer,'') || ' ' || coalesce(model,'')),'')",
+  engine: "coalesce(NULLIF(final_engine,''),'?')",
+};
+const QOE_WORST_MIN_SESSIONS = 20;
+const QOE_MAX_HOURS = 24 * 30;
+const qoeGroupSql = (expr, { having = "", order = "sessions DESC", limit = 15 } = {}) =>
+  `SELECT ${expr} AS k, ${QOE_AGGREGATE_COLUMNS}
+     FROM qoe_sessions
+    WHERE received_at > now() - make_interval(hours => $1)
+    GROUP BY 1 ${having}
+    ORDER BY ${order}
+    LIMIT ${limit}`;
+async function loadQoeDashboard(hours) {
+  const window = Math.min(Math.max(toInt(hours) || 24, 1), QOE_MAX_HOURS);
+  const [totals, byVersion, byModel, byEngine, worstModels] = await Promise.all([
+    pool.query(
+      `SELECT ${QOE_AGGREGATE_COLUMNS} FROM qoe_sessions
+        WHERE received_at > now() - make_interval(hours => $1)`,
+      [window],
+    ),
+    pool.query(qoeGroupSql(QOE_DIMENSIONS.version), [window]),
+    pool.query(qoeGroupSql(QOE_DIMENSIONS.model), [window]),
+    pool.query(qoeGroupSql(QOE_DIMENSIONS.engine), [window]),
+    pool.query(
+      qoeGroupSql(QOE_DIMENSIONS.model, {
+        having: `HAVING count(*) >= ${QOE_WORST_MIN_SESSIONS}`,
+        order: `(count(*) FILTER (WHERE rebuffer_count > 0))::float / count(*) DESC, sessions DESC`,
+        limit: 10,
+      }),
+      [window],
+    ),
+  ]);
+  const shape = (rows, dimension) =>
+    rows.filter((r) => r.k != null).map((r) => ({ [dimension]: r.k, ...qoeMetrics(r) }));
+  return {
+    windowHours: window,
+    totals: qoeMetrics(totals.rows[0]),
+    byVersion: shape(byVersion.rows, "version"),
+    byModel: shape(byModel.rows, "model"),
+    byEngine: shape(byEngine.rows, "engine"),
+    worstModels: shape(worstModels.rows, "model"),
+  };
+}
+
+// Panel table for one QoE grouping. Rates are pre-computed in qoeMetrics; here
+// they are only formatted (null -> "—") and escaped.
+function qoeTable(list, dimension, label) {
+  if (!list.length) return '<div class="empty">Veri yok.</div>';
+  const pct = (v) => (v == null ? '<span class="muted">—</span>' : `%${(v * 100).toFixed(1)}`);
+  const ms = (v) => (v == null ? "—" : `${v}`);
+  const stallClass = (v) => (v == null ? "" : v >= 0.3 ? "hi" : v >= 0.1 ? "mid" : "lo");
+  return `<table class="agg">
+    <thead><tr><th>${esc(label)}</th><th>Oturum</th><th>Hatasız</th><th>Takılma</th><th>Rebuf sn/sa</th><th>TTFF p50 / p90 ms</th><th>Motor değişimi</th></tr></thead>
+    <tbody>${list
+      .map(
+        (r) => `<tr>
+        <td class="strong">${esc(r[dimension])}</td>
+        <td>${r.sessions}</td>
+        <td>${pct(r.crashFreeSessionRate)}</td>
+        <td><span class="rate ${stallClass(r.stallSessionRate)}">${pct(r.stallSessionRate)}</span></td>
+        <td class="muted">${r.rebufferSecPerHour}</td>
+        <td class="muted">${ms(r.ttffP50Ms)} / ${ms(r.ttffP90Ms)}</td>
+        <td class="muted">${pct(r.engineSwitchRate)}</td>
+      </tr>`,
+      )
+      .join("")}</tbody>
+  </table>`;
+}
+
+function qoeWindowSection(q, title) {
+  if (!q) return `<div class="empty">${esc(title)}: QoE verisi okunamadı.</div>`;
+  const t = q.totals;
+  if (!t.sessions) return `<div class="empty">${esc(title)}: henüz QoE oturumu yok.</div>`;
+  const pct = (v) => (v == null ? "—" : `%${(v * 100).toFixed(1)}`);
+  const sub = (s) => `<h3 style="font-size:14px;margin:14px 0 8px;color:#9AA7B4">${s}</h3>`;
+  return `<div class="qoe-stats">
+      <span class="chip">${esc(title)}</span>
+      <span class="chip">Oturum <b>${t.sessions}</b></span>
+      <span class="chip">Hatasız <b>${pct(t.crashFreeSessionRate)}</b></span>
+      <span class="chip">Takılma <b>${pct(t.stallSessionRate)}</b></span>
+      <span class="chip">Rebuf <b>${t.rebufferSecPerHour}</b> sn/sa</span>
+      <span class="chip">TTFF p50 <b>${t.ttffP50Ms ?? "—"}</b> / p90 <b>${t.ttffP90Ms ?? "—"}</b> ms</span>
+      <span class="chip">Motor değişimi <b>${pct(t.engineSwitchRate)}</b></span>
+      <span class="chip">İzleme <b>${t.playbackHours}</b> sa</span>
+    </div>
+    <div class="grid2">
+      <div>${sub("Sürüme göre")}${qoeTable(q.byVersion, "version", "Sürüm")}</div>
+      <div>${sub("Son motora göre")}${qoeTable(q.byEngine, "engine", "Motor")}</div>
+    </div>
+    ${sub("Modele göre (en çok oturum, 15)")}${qoeTable(q.byModel, "model", "Model")}`;
+}
+
 app.get("/", auth, async (req, res) => {
   const [
     crashRes,
@@ -1631,6 +1897,20 @@ app.get("/", auth, async (req, res) => {
     ]);
   const rows = crashRes.rows;
   const devices = deviceRes.rows;
+  // Playback QoE (24 h + 7 d). Isolated: a QoE query failure must not take the
+  // rest of the panel down with it.
+  const [qoe24, qoe7d] = await Promise.all(
+    [24, 24 * 7].map((h) =>
+      loadQoeDashboard(h).catch((e) => {
+        console.error("qoe dashboard query failed", e);
+        return null;
+      }),
+    ),
+  );
+  const qoeWorstSection =
+    qoe7d && qoe7d.worstModels.length
+      ? `<h3 style="font-size:14px;margin:18px 0 8px;color:#9AA7B4">En çok takılan modeller <span class="muted">(son 7 gün, ≥ ${QOE_WORST_MIN_SESSIONS} oturum)</span></h3>${qoeTable(qoe7d.worstModels, "model", "Model")}`
+      : "";
 
   const dayAgo = Date.now() - 24 * 3600 * 1000;
   const last24 = rows.filter((r) => new Date(r.received_at).getTime() > dayAgo).length;
@@ -2199,6 +2479,7 @@ app.get("/", auth, async (req, res) => {
   .rtype-series { background:#10302e; color:#5BE0D0; border:1px solid #1d6359; }
   .rtype-complaint { background:#3a1714; color:#F2766A; border:1px solid #6a201a; }
   .rtype-other { background:#1C232D; color:#9AA7B4; border:1px solid #2A3340; }
+  .qoe-stats { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px; }
 </style></head>
 <body>
 <header>
@@ -2287,6 +2568,14 @@ app.get("/", auth, async (req, res) => {
     <h3 style="font-size:14px;margin:18px 0 8px;color:#9AA7B4">Sürüm bazında hata oranı</h3>${versionRateTable}
     <h3 style="font-size:14px;margin:18px 0 8px;color:#9AA7B4">Model bazında hata oranı</h3>${modelRateTable}
     ${stabilityChanTable ? `<h3 style="font-size:14px;margin:18px 0 8px;color:#9AA7B4">En çok sorun çıkaran içerikler</h3>${stabilityChanTable}` : ""}
+  </section>
+  <section id="qoe">
+    <h2>Oynatma kalitesi (QoE) <span class="muted">(oturum özetleri)</span></h2>
+    <div class="muted" style="margin-bottom:10px">Hatasız = hata kodu olmayan oturum oranı (çökmesiz oturum yaklaşımı). Takılma = en az bir rebuffer yaşayan oturum oranı; Rebuf sn/sa = izlenen saat başına ortalama rebuffer saniyesi. TTFF = ilk kareye kadar geçen süre. JSON: <span class="mono">/api/qoe/summary?hours=24</span></div>
+    ${qoeWindowSection(qoe24, "Son 24 saat")}
+    <div style="height:18px"></div>
+    ${qoeWindowSection(qoe7d, "Son 7 gün")}
+    ${qoeWorstSection}
   </section>
   <section>
     <h2>Çökme Özeti</h2>
@@ -2406,6 +2695,86 @@ app.get("/api/telemetry/summary", auth, async (req, res) => {
     });
   } catch (e) {
     console.error("telemetry summary failed", e);
+    res.status(500).json({ error: "query_failed" });
+  }
+});
+
+// ---- Playback QoE summary (auth, JSON) ----
+// Same aggregates as the panel section, for tooling (?hours=24, 1-720).
+app.get("/api/qoe/summary", auth, async (req, res) => {
+  try {
+    res.json(await loadQoeDashboard(req.query.hours));
+  } catch (e) {
+    console.error("qoe summary failed", e);
+    res.status(500).json({ error: "query_failed" });
+  }
+});
+
+// ---- Release health (ops key, JSON) ----
+// Verdict for one app version over the last ?hours (default 24, max 168) vs
+// the previous version with the most sessions in the prior 7 days. Consumed by
+// scripts/release_health_gate.py from GitHub Actions; see docs/release-health.md.
+// crashFreeSessionRate here = (sessions without failure codes - crash reports
+// for that version) / sessions: a crashed app never sends its session summary,
+// so crash_reports rows are subtracted from the clean count.
+const VERSION_RE = /^\d+(?:\.\d+){1,3}$/;
+const RELEASE_HEALTH_MAX_HOURS = 168;
+async function releaseMetrics(version, hours) {
+  const [agg, crashes] = await Promise.all([
+    pool.query(
+      `SELECT ${QOE_AGGREGATE_COLUMNS} FROM qoe_sessions
+        WHERE app_version = $1 AND received_at > now() - make_interval(hours => $2)`,
+      [version, hours],
+    ),
+    pool.query(
+      `SELECT count(*)::int AS n FROM crash_reports
+        WHERE app_version = $1 AND received_at > now() - make_interval(hours => $2)`,
+      [version, hours],
+    ),
+  ]);
+  const m = qoeMetrics(agg.rows[0]);
+  const crashReports = toInt(crashes.rows[0]?.n) || 0;
+  const clean = Math.max(0, m.cleanSessions - crashReports);
+  return {
+    version,
+    windowHours: hours,
+    sessions: m.sessions,
+    crashReports,
+    crashFreeSessionRate: m.sessions > 0 ? +(clean / m.sessions).toFixed(4) : null,
+    stallSessionRate: m.stallSessionRate,
+    rebufferSecPerHour: m.rebufferSecPerHour,
+    ttffP50Ms: m.ttffP50Ms,
+    ttffP90Ms: m.ttffP90Ms,
+    engineSwitchRate: m.engineSwitchRate,
+  };
+}
+app.get("/api/release-health", rateLimited("releaseHealth", { perIp: true }), async (req, res) => {
+  if (!RELEASE_HEALTH_KEY) return res.status(503).json({ error: "release_health_disabled" });
+  const presented = req.get("X-Kululu-Ops-Key") || "";
+  if (!presented || !timingSafeEqualStr(presented, RELEASE_HEALTH_KEY)) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  const version = clip(req.query.version, 32);
+  if (!version || !VERSION_RE.test(version)) return res.status(400).json({ error: "bad_version" });
+  const hours = Math.min(Math.max(toInt(req.query.hours) || 24, 1), RELEASE_HEALTH_MAX_HOURS);
+  try {
+    const current = await releaseMetrics(version, hours);
+    // Baseline: the most-used OLDER version in the prior 7 days (a newer
+    // version that is also in the field is not a baseline for this one).
+    const candidates = await pool.query(
+      `SELECT app_version AS k, count(*)::int AS sessions FROM qoe_sessions
+        WHERE received_at > now() - interval '7 days'
+          AND app_version IS NOT NULL AND app_version <> $1
+        GROUP BY 1 ORDER BY 2 DESC LIMIT 10`,
+      [version],
+    );
+    const baselineVersion =
+      candidates.rows.map((r) => r.k).find((k) => compareVersions(k, version) === -1) || null;
+    const baseline = baselineVersion ? await releaseMetrics(baselineVersion, RELEASE_HEALTH_MAX_HOURS) : null;
+    const { verdict, reasons } = evaluateReleaseHealth(current, baseline);
+    res.json({ ...current, baseline, verdict, reasons, thresholds: RELEASE_HEALTH });
+  } catch (e) {
+    console.error("release health failed", e);
     res.status(500).json({ error: "query_failed" });
   }
 });

@@ -12,17 +12,12 @@ package com.iptv.player.ui.home
 
 import android.content.Intent
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.KeyEvent
 import android.view.View
-import android.widget.FrameLayout
-import android.widget.LinearLayout
 import android.widget.Toast
 import android.view.inputmethod.EditorInfo
-import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -49,7 +44,6 @@ import com.iptv.player.playback.core.PlaybackResourceToken
 import com.iptv.player.playback.core.PlaybackSessionId
 import com.iptv.player.player.LiveLoadingOverlayPolicy
 import com.iptv.player.player.LivePlaybackQoePolicy
-import com.iptv.player.player.LiveSubtitlePreference
 import com.iptv.player.player.PlayerController
 import com.iptv.player.player.VlcOps
 import com.iptv.player.player.TvPlaybackSession
@@ -60,12 +54,10 @@ import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.LowEndUiBudget
 import com.iptv.player.ui.common.NewContentPopup
 import com.iptv.player.ui.common.NumberZapInputHelper
-import com.iptv.player.ui.common.PinLockHelper
 import com.iptv.player.ui.common.SleepTimer
 import com.iptv.player.ui.common.hideSoftKeyboard
 import com.iptv.player.ui.common.isAdult
 import com.iptv.player.player.LiveStreamUrl
-import com.iptv.player.ui.player.PlayerDialogs
 import com.iptv.player.ui.player.RemoteConfirmPress
 import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NewContentNotifier
@@ -78,8 +70,6 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.util.Date
-import java.util.Locale
 
 class HomeActivity : BaseActivity() {
 
@@ -203,65 +193,11 @@ class HomeActivity : BaseActivity() {
     private var previewChannelScope: List<Channel> = emptyList()
     private var previewChannelScopeLabel: String? = null
 
-    /** Collapses fast CH+/- taps before touching VLC/Exo on slower TV chipsets. */
-    private val fullscreenZapHandler = Handler(Looper.getMainLooper())
-    private var pendingFullscreenZapChannel: Channel? = null
-
-    /** One-second fullscreen EPG clock/progress updates + four-second auto-hide. */
-    private val fullscreenEpgHandler = Handler(Looper.getMainLooper())
-    private val hideFullscreenEpg = Runnable {
-        if (inlineFullscreen && !fullscreenGuideVisible) {
-            binding.fullscreenEpgOverlay.visibility = View.GONE
-        }
-    }
-    private val fullscreenEpgTick = object : Runnable {
-        override fun run() {
-            if (
-                !inlineFullscreen ||
-                isFinishing ||
-                isDestroyed ||
-                !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-            ) return
-            val now = System.currentTimeMillis()
-            if (binding.fullscreenEpgOverlay.visibility == View.VISIBLE) {
-                if (fullscreenGuideVisible && fullscreenGuideEpgLoaded) {
-                    bindFullscreenEpg(fullscreenGuidePrograms, now)
-                } else if (!fullscreenGuideVisible && captionEpgLoaded) {
-                    bindFullscreenEpg(captionPrograms, now)
-                }
-            }
-            if (captionEpgLoaded) {
-                maybeRefreshExpiredCaptionEpg(now)
-            }
-            fullscreenEpgHandler.postDelayed(
-                this,
-                LowEndUiBudget.refreshIntervalMs(FULLSCREEN_EPG_TICK_MS, compatMode),
-            )
-        }
-    }
-
-    private data class BrowseLayoutSnapshot(
-        val paddingLeft: Int,
-        val paddingTop: Int,
-        val paddingRight: Int,
-        val paddingBottom: Int,
-        val splitPercent: Float,
-        val previewTopMargin: Int,
-        val previewWeight: Float,
-        val previewClipToOutline: Boolean,
-        val previewFocusable: Boolean,
-        val previewClickable: Boolean,
-    )
-
-    private lateinit var browseLayoutSnapshot: BrowseLayoutSnapshot
-
     /** Prevents repeated OK events from stacking multiple parental dialogs/actions. */
-    private var pinPromptInFlight = false
-    private var pinRequestGeneration = 0
-    private var pinGuardRequest: PinLockHelper.Request? = null
+    private val pinGate = HomePinGate(this)
 
     /** Swallows repeats and matching UP after a pre-dispatch key action. */
-    private val consumedUntilUp = mutableSetOf<Int>()
+    private val consumedUntilUp = ConsumedUntilUpTracker()
 
     /** Matches fullscreen confirm DOWN/UP so long-OK favorite remains available. */
     private val fullscreenConfirmPress = RemoteConfirmPress()
@@ -292,8 +228,103 @@ class HomeActivity : BaseActivity() {
         )
     }
 
-    /** Invalidates delayed RecyclerView focus requests after a mode/layout change. */
-    private var focusRequestGeneration = 0
+    /** Fullscreen is a layout state, captured at inflate time (see HomeFullscreenLayout). */
+    private lateinit var fullscreenLayout: HomeFullscreenLayout
+
+    private val fullscreenEpgCard by lazy { FullscreenEpgCardBinder(this, binding, timeFmt) }
+
+    private val captionText by lazy {
+        HomeCaptionText(nextLabel = getString(R.string.next_label), timeFmt = timeFmt)
+    }
+
+    private val rowFocuser = HomeRowFocuser(
+        object : HomeRowFocuser.Host {
+            override fun stableIdFor(list: RecyclerView, pos: Int): String? = when (list) {
+                binding.channelList -> channelAdapter.currentList.getOrNull(pos)?.id
+                binding.categoryList -> categoryAdapter.currentList.getOrNull(pos)?.id
+                else -> null
+            }
+
+            override fun positionFor(list: RecyclerView, stableId: String?): Int? = when (list) {
+                binding.channelList ->
+                    channelAdapter.currentList.indexOfFirst { it.id == stableId }
+                binding.categoryList ->
+                    categoryAdapter.currentList.indexOfFirst { it.id == stableId }
+                else -> null
+            }
+
+            override fun listAllowed(list: RecyclerView): Boolean =
+                !(inlineFullscreen && list !== binding.fullscreenGuideList)
+        },
+    )
+
+    private val fullscreenZap by lazy {
+        FullscreenZapDebouncer(
+            overlay = binding.fullscreenZapOverlay,
+            debounceMs = FULLSCREEN_ZAP_DEBOUNCE_MS,
+            host = object : FullscreenZapDebouncer.Host {
+                override fun canCommit(): Boolean =
+                    inlineFullscreen &&
+                        !isFinishing &&
+                        !isDestroyed &&
+                        lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+
+                override fun commit(channel: Channel) {
+                    requestChannelPlayback(channel, enterFullscreenWhenReady = true)
+                }
+            },
+        )
+    }
+
+    private val fullscreenEpgTimer by lazy {
+        FullscreenEpgOverlayTimer(
+            overlay = binding.fullscreenEpgOverlay,
+            autoHideMs = FULLSCREEN_EPG_AUTO_HIDE_MS,
+            host = object : FullscreenEpgOverlayTimer.Host {
+                override fun canAutoHide(): Boolean = inlineFullscreen && !fullscreenGuideVisible
+
+                override fun shouldTick(): Boolean =
+                    inlineFullscreen &&
+                        !isFinishing &&
+                        !isDestroyed &&
+                        lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+
+                override fun onTick(now: Long) {
+                    if (binding.fullscreenEpgOverlay.visibility == View.VISIBLE) {
+                        if (fullscreenGuideVisible && fullscreenGuideEpgLoaded) {
+                            fullscreenEpgCard.bind(fullscreenGuidePrograms, now)
+                        } else if (!fullscreenGuideVisible && captionEpgLoaded) {
+                            fullscreenEpgCard.bind(captionPrograms, now)
+                        }
+                    }
+                    if (captionEpgLoaded) {
+                        maybeRefreshExpiredCaptionEpg(now)
+                    }
+                }
+
+                override val tickIntervalMs: Long
+                    get() = LowEndUiBudget.refreshIntervalMs(FULLSCREEN_EPG_TICK_MS, compatMode)
+            },
+        )
+    }
+
+    private val inlinePlayerMenu by lazy {
+        HomeInlinePlayerMenu(
+            activity = this,
+            scope = lifecycleScope,
+            sleepTimer = sleepTimer,
+            host = object : HomeInlinePlayerMenu.Host {
+                override val previewingChannel: Channel?
+                    get() = this@HomeActivity.previewingChannel
+                override val previewController: PlayerController?
+                    get() = this@HomeActivity.previewController
+                override val castController: CastController
+                    get() = this@HomeActivity.castController
+
+                override fun togglePreviewFavorite() = this@HomeActivity.togglePreviewFavorite()
+            },
+        )
+    }
 
     /** Retained through NumberZapInputHelper's clear callback for a useful miss message. */
     private var lastZapDigits = ""
@@ -320,14 +351,13 @@ class HomeActivity : BaseActivity() {
         private const val FULLSCREEN_EPG_TICK_MS = 1_000L
         private const val FULLSCREEN_EPG_AUTO_HIDE_MS = 4_000L
         private const val EPG_REFETCH_MIN_INTERVAL_MS = 60_000L
-        private const val STATS_DASH = "—"
     }
 
     private val zap by lazy {
         NumberZapInputHelper(
             lookup = { num -> numberZapChannels().firstOrNull { it.number == num } },
             onResolved = { channel ->
-                cancelFullscreenZap()
+                fullscreenZap.cancel()
                 if (channel == null) {
                     Toast.makeText(
                         this,
@@ -340,7 +370,7 @@ class HomeActivity : BaseActivity() {
                 lastZapDigits = ""
             },
             onInputChanged = { typed ->
-                if (typed.isNotEmpty()) cancelFullscreenZap(hideOverlay = false)
+                if (typed.isNotEmpty()) fullscreenZap.cancel(hideOverlay = false)
                 if (typed.isNotEmpty()) lastZapDigits = typed
                 binding.zapOverlay.text = typed
                 binding.zapOverlay.visibility = if (typed.isEmpty()) View.GONE else View.VISIBLE
@@ -358,7 +388,7 @@ class HomeActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityHomeBinding.inflate(layoutInflater)
-        browseLayoutSnapshot = captureBrowseLayout()
+        fullscreenLayout = HomeFullscreenLayout(binding)
         setContentView(binding.root)
         // Device default until the persisted choice arrives (collector below), so
         // a weak stick never runs an inline preview during the first OK press.
@@ -428,7 +458,7 @@ class HomeActivity : BaseActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (fullscreenGuideVisible && event.repeatCount == 0 && isNumberKey(keyCode)) {
+        if (fullscreenGuideVisible && event.repeatCount == 0 && HomeKeyCodes.isNumberKey(keyCode)) {
             closeFullscreenGuide(showPlayingEpg = false)
         }
         return zap.handleKeyDown(keyCode, event.repeatCount) || super.onKeyDown(keyCode, event)
@@ -444,16 +474,18 @@ class HomeActivity : BaseActivity() {
      * around inside the lists. Other keys fall through to normal handling.
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.keyCode in consumedUntilUp) {
-            // A fresh DOWN means the matching UP went to another window (a PIN
-            // dialog opened by the consumed press). Drop the stale entry and let
-            // this press through instead of swallowing it.
-            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                consumedUntilUp.remove(event.keyCode)
-            } else {
-                if (event.action == KeyEvent.ACTION_UP) consumedUntilUp.remove(event.keyCode)
-                return true
-            }
+        // A fresh DOWN means the matching UP went to another window (a PIN
+        // dialog opened by the consumed press). Drop the stale entry and let
+        // this press through instead of swallowing it.
+        if (
+            consumedUntilUp.swallow(
+                event.keyCode,
+                isDown = event.action == KeyEvent.ACTION_DOWN,
+                isUp = event.action == KeyEvent.ACTION_UP,
+                repeatCount = event.repeatCount,
+            )
+        ) {
+            return true
         }
 
         // RecyclerView rows normally consume OK before Activity.onKeyDown. Commit a
@@ -461,7 +493,7 @@ class HomeActivity : BaseActivity() {
         if (
             event.action == KeyEvent.ACTION_DOWN &&
             zap.hasPendingInput &&
-            isConfirmKey(event.keyCode)
+            HomeKeyCodes.isConfirmKey(event.keyCode)
         ) {
             if (event.repeatCount == 0) {
                 zap.commitIfPending()
@@ -481,7 +513,7 @@ class HomeActivity : BaseActivity() {
         if (
             event.action == KeyEvent.ACTION_DOWN &&
             zap.hasPendingInput &&
-            cancelsNumberZap(event.keyCode)
+            HomeKeyCodes.cancelsNumberZap(event.keyCode)
         ) {
             zap.cancel()
         }
@@ -559,11 +591,11 @@ class HomeActivity : BaseActivity() {
                         binding.searchInput.hideSoftKeyboard()
                         when {
                             inChannelView && currentChannels.isNotEmpty() ->
-                                focusRow(binding.channelList, 0)
+                                rowFocuser.focusRow(binding.channelList, 0)
                             categoryAdapter.itemCount > 0 -> {
                                 val id = lastSelectedCategoryId
                                 if (id != null) focusCategory(id)
-                                else focusRow(binding.categoryList, 0)
+                                else rowFocuser.focusRow(binding.categoryList, 0)
                             }
                         }
                         return true
@@ -594,14 +626,16 @@ class HomeActivity : BaseActivity() {
     /**
      * Fullscreen remains inside HomeActivity, so every handled remote event is
      * consumed before Android's focus search can escape into the hidden browser.
+     * Confirm keys are matched here (long-OK favourite); every other key goes
+     * through the pure decision table in [HomeFullscreenKeyPolicy].
      */
     private fun dispatchFullscreenKey(event: KeyEvent): Boolean {
-        if (fullscreenGuideVisible) return dispatchFullscreenGuideKey(event)
-
-        if (isConfirmKey(event.keyCode)) {
+        if (HomeKeyCodes.isConfirmKey(event.keyCode)) {
+            // While the guide is open, RecyclerView owns D-pad and confirm events.
+            if (fullscreenGuideVisible) return false
             when (event.action) {
                 KeyEvent.ACTION_DOWN -> {
-                    if (event.repeatCount == 0) cancelFullscreenZap()
+                    if (event.repeatCount == 0) fullscreenZap.cancel()
                     fullscreenConfirmPress.onDown(
                         event.keyCode,
                         event.eventTime,
@@ -637,143 +671,42 @@ class HomeActivity : BaseActivity() {
             return true
         }
 
-        val handledKey = when (event.keyCode) {
-            KeyEvent.KEYCODE_BACK,
-            KeyEvent.KEYCODE_DPAD_LEFT,
-            KeyEvent.KEYCODE_DPAD_RIGHT,
-            KeyEvent.KEYCODE_DPAD_UP,
-            KeyEvent.KEYCODE_DPAD_DOWN,
-            KeyEvent.KEYCODE_CHANNEL_UP,
-            KeyEvent.KEYCODE_CHANNEL_DOWN,
-            KeyEvent.KEYCODE_PAGE_UP,
-            KeyEvent.KEYCODE_PAGE_DOWN,
-            KeyEvent.KEYCODE_MENU,
-            KeyEvent.KEYCODE_INFO,
-            KeyEvent.KEYCODE_GUIDE,
-            KeyEvent.KEYCODE_PROG_RED -> true
-            else -> false
-        }
-        if (!handledKey) return false
-        if (event.action != KeyEvent.ACTION_DOWN || event.repeatCount > 0) return true
-        if (
-            event.keyCode != KeyEvent.KEYCODE_DPAD_UP &&
-            event.keyCode != KeyEvent.KEYCODE_DPAD_DOWN &&
-            event.keyCode != KeyEvent.KEYCODE_CHANNEL_UP &&
-            event.keyCode != KeyEvent.KEYCODE_CHANNEL_DOWN &&
-            event.keyCode != KeyEvent.KEYCODE_PAGE_UP &&
-            event.keyCode != KeyEvent.KEYCODE_PAGE_DOWN
-        ) {
-            cancelFullscreenZap()
-        }
-
-        when (event.keyCode) {
-            KeyEvent.KEYCODE_BACK -> {
-                exitPreviewFullscreen()
-                consumedUntilUp.add(event.keyCode)
-            }
-            KeyEvent.KEYCODE_DPAD_UP,
-            KeyEvent.KEYCODE_CHANNEL_UP,
-            KeyEvent.KEYCODE_PAGE_UP -> zapFullscreenChannel(+1)
-            KeyEvent.KEYCODE_DPAD_DOWN,
-            KeyEvent.KEYCODE_CHANNEL_DOWN,
-            KeyEvent.KEYCODE_PAGE_DOWN -> zapFullscreenChannel(-1)
-            KeyEvent.KEYCODE_MENU -> showInlinePlayerMenu()
-            // INFO follows normal TV behaviour and controls the programme card.
-            // Technical stream diagnostics remain available from MENU.
-            KeyEvent.KEYCODE_INFO -> toggleFullscreenCaption()
-            KeyEvent.KEYCODE_GUIDE,
-            KeyEvent.KEYCODE_PROG_RED -> openCatchup()
-            // LEFT/RIGHT are intentionally consumed: there is no hidden focus target.
-        }
-        return true
-    }
-
-    /**
-     * While the guide is open, RecyclerView owns D-pad and confirm events. Activity
-     * handles only global player commands so focus can never escape to hidden panes.
-     */
-    private fun dispatchFullscreenGuideKey(event: KeyEvent): Boolean {
-        if (isConfirmKey(event.keyCode)) return false
-
-        val handledKey = when (event.keyCode) {
-            KeyEvent.KEYCODE_BACK,
-            KeyEvent.KEYCODE_DPAD_LEFT,
-            KeyEvent.KEYCODE_DPAD_RIGHT,
-            KeyEvent.KEYCODE_CHANNEL_UP,
-            KeyEvent.KEYCODE_CHANNEL_DOWN,
-            KeyEvent.KEYCODE_PAGE_UP,
-            KeyEvent.KEYCODE_PAGE_DOWN,
-            KeyEvent.KEYCODE_MENU,
-            KeyEvent.KEYCODE_INFO,
-            KeyEvent.KEYCODE_GUIDE,
-            KeyEvent.KEYCODE_PROG_RED -> true
-            // Let the focused RecyclerView row handle ordinary vertical navigation.
-            KeyEvent.KEYCODE_DPAD_UP,
-            KeyEvent.KEYCODE_DPAD_DOWN -> false
-            else -> false
-        }
-        if (!handledKey) return false
-        if (event.action != KeyEvent.ACTION_DOWN || event.repeatCount > 0) return true
-
-        when (event.keyCode) {
-            KeyEvent.KEYCODE_BACK,
-            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                closeFullscreenGuide()
-                consumedUntilUp.add(event.keyCode)
-            }
-            KeyEvent.KEYCODE_CHANNEL_UP,
-            KeyEvent.KEYCODE_PAGE_UP -> {
+        val decision = HomeFullscreenKeyPolicy.decide(
+            keyCode = event.keyCode,
+            isDown = event.action == KeyEvent.ACTION_DOWN,
+            repeatCount = event.repeatCount,
+            guideVisible = fullscreenGuideVisible,
+        )
+        if (!decision.consume) return false
+        if (decision.cancelZap) fullscreenZap.cancel()
+        when (decision.command) {
+            HomeFullscreenKeyPolicy.Command.NONE -> Unit
+            HomeFullscreenKeyPolicy.Command.EXIT_FULLSCREEN -> exitPreviewFullscreen()
+            HomeFullscreenKeyPolicy.Command.ZAP_UP -> zapFullscreenChannel(+1)
+            HomeFullscreenKeyPolicy.Command.ZAP_DOWN -> zapFullscreenChannel(-1)
+            HomeFullscreenKeyPolicy.Command.MENU -> inlinePlayerMenu.show()
+            HomeFullscreenKeyPolicy.Command.TOGGLE_CAPTION -> toggleFullscreenCaption()
+            HomeFullscreenKeyPolicy.Command.CATCHUP -> openCatchup()
+            HomeFullscreenKeyPolicy.Command.CLOSE_GUIDE -> closeFullscreenGuide()
+            HomeFullscreenKeyPolicy.Command.GUIDE_ZAP_UP -> {
                 closeFullscreenGuide(showPlayingEpg = false)
                 zapFullscreenChannel(+1)
             }
-            KeyEvent.KEYCODE_CHANNEL_DOWN,
-            KeyEvent.KEYCODE_PAGE_DOWN -> {
+            HomeFullscreenKeyPolicy.Command.GUIDE_ZAP_DOWN -> {
                 closeFullscreenGuide(showPlayingEpg = false)
                 zapFullscreenChannel(-1)
             }
-            KeyEvent.KEYCODE_MENU -> {
+            HomeFullscreenKeyPolicy.Command.GUIDE_MENU -> {
                 closeFullscreenGuide(showPlayingEpg = false)
-                showInlinePlayerMenu()
+                inlinePlayerMenu.show()
             }
-            // The dedicated guide already keeps programme information visible.
-            KeyEvent.KEYCODE_INFO -> Unit
-            KeyEvent.KEYCODE_GUIDE,
-            KeyEvent.KEYCODE_PROG_RED -> {
+            HomeFullscreenKeyPolicy.Command.GUIDE_CATCHUP -> {
                 closeFullscreenGuide(showPlayingEpg = false)
                 openCatchup()
             }
-            // RIGHT is deliberately consumed so focus stays inside the guide.
         }
+        if (decision.markConsumedUntilUp) consumedUntilUp.add(event.keyCode)
         return true
-    }
-
-    private fun isConfirmKey(keyCode: Int): Boolean = when (keyCode) {
-        KeyEvent.KEYCODE_DPAD_CENTER,
-        KeyEvent.KEYCODE_ENTER,
-        KeyEvent.KEYCODE_SPACE,
-        KeyEvent.KEYCODE_NUMPAD_ENTER,
-        KeyEvent.KEYCODE_BUTTON_A -> true
-        else -> false
-    }
-
-    private fun isNumberKey(keyCode: Int): Boolean =
-        keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 ||
-            keyCode in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9
-
-    private fun cancelsNumberZap(keyCode: Int): Boolean = when (keyCode) {
-        KeyEvent.KEYCODE_DPAD_LEFT,
-        KeyEvent.KEYCODE_DPAD_RIGHT,
-        KeyEvent.KEYCODE_DPAD_UP,
-        KeyEvent.KEYCODE_DPAD_DOWN,
-        KeyEvent.KEYCODE_CHANNEL_UP,
-        KeyEvent.KEYCODE_CHANNEL_DOWN,
-        KeyEvent.KEYCODE_PAGE_UP,
-        KeyEvent.KEYCODE_PAGE_DOWN,
-        KeyEvent.KEYCODE_MENU,
-        KeyEvent.KEYCODE_INFO,
-        KeyEvent.KEYCODE_GUIDE,
-        KeyEvent.KEYCODE_PROG_RED -> true
-        else -> false
     }
 
     @Deprecated("Deprecated in Java")
@@ -953,11 +886,11 @@ class HomeActivity : BaseActivity() {
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                 binding.searchInput.hideSoftKeyboard()
                 if (viewModel.query.value.isNotBlank() && currentChannels.isNotEmpty()) {
-                    focusRow(binding.channelList, 0)
+                    rowFocuser.focusRow(binding.channelList, 0)
                 } else {
                     val id = lastSelectedCategoryId
                     if (id != null) focusCategory(id)
-                    else if (categoryAdapter.itemCount > 0) focusRow(binding.categoryList, 0)
+                    else if (categoryAdapter.itemCount > 0) rowFocuser.focusRow(binding.categoryList, 0)
                 }
                 true
             } else {
@@ -1001,13 +934,13 @@ class HomeActivity : BaseActivity() {
         val now = System.currentTimeMillis()
         val index = programs.indexOfFirst { it.isLiveAt(now) }.takeIf { it >= 0 }
             ?: programs.indexOfFirst { it.startMs >= now }.coerceAtLeast(0)
-        focusRow(binding.epgList, index)
+        rowFocuser.focusRow(binding.epgList, index)
     }
 
     private fun focusGuideChannelFavorite() {
         val index = currentChannels.indexOfFirst { it.id == currentInfoChannel?.id }
         if (index < 0) { binding.previewCard.requestFocus(); return }
-        focusRow(binding.channelList, index)
+        rowFocuser.focusRow(binding.channelList, index)
         binding.channelList.post {
             binding.channelList.findViewHolderForAdapterPosition(index)?.itemView
                 ?.findViewById<View>(R.id.favStar)?.takeIf { it.isShown }?.requestFocus()
@@ -1108,12 +1041,12 @@ class HomeActivity : BaseActivity() {
                                 val pos = channels.indexOfFirst { it.id == targetId }
                                 if (pos >= 0) {
                                     lastFocusedChannelId = targetId
-                                    focusRow(binding.channelList, pos, center = true)
+                                    rowFocuser.focusRow(binding.channelList, pos, center = true)
                                 } else if (channels.isNotEmpty()) {
                                     val playingPos = channels.indexOfFirst {
                                         it.id == previewingChannel?.id
                                     }
-                                    focusRow(
+                                    rowFocuser.focusRow(
                                         binding.channelList,
                                         playingPos.takeIf { it >= 0 } ?: 0,
                                         center = playingPos > 0,
@@ -1185,9 +1118,18 @@ class HomeActivity : BaseActivity() {
         val hasRealCategories = categoryAdapter.currentList.any {
             it.id != HomeViewModel.CAT_FAVORITES && it.id != HomeViewModel.CAT_RECENT
         }
-        val hasCachedBrowseData = hasRealCategories || currentChannels.isNotEmpty()
-        val blockingLoading = state.loading && !hasCachedBrowseData
-        val blockingFailure = failed && !hasCachedBrowseData
+        val showingChannels = inChannelView || viewModel.query.value.isNotBlank()
+        val visibleItemCount =
+            if (showingChannels) currentChannels.size else categoryAdapter.itemCount
+        val flags = HomeBrowseStatePolicy.resolve(
+            loading = state.loading,
+            failed = failed,
+            hasRealCategories = hasRealCategories,
+            hasChannels = currentChannels.isNotEmpty(),
+            visibleItemCount = visibleItemCount,
+        )
+        val blockingLoading = flags.blockingLoading
+        val blockingFailure = flags.blockingFailure
         binding.loadingIndicator.visibility =
             if (blockingLoading) View.VISIBLE else View.GONE
         binding.loadErrorContainer.visibility =
@@ -1202,12 +1144,7 @@ class HomeActivity : BaseActivity() {
             if (viewModel.query.value.isNotEmpty()) R.string.empty_search
             else R.string.empty_channels
         )
-        val showingChannels = inChannelView || viewModel.query.value.isNotBlank()
-        val visibleItemCount =
-            if (showingChannels) currentChannels.size else categoryAdapter.itemCount
-        val empty =
-            visibleItemCount == 0 && !state.loading && !blockingFailure
-        binding.emptyState.visibility = if (empty) View.VISIBLE else View.GONE
+        binding.emptyState.visibility = if (flags.empty) View.VISIBLE else View.GONE
         if (blockingFailure) {
             binding.retryButton.post { binding.retryButton.requestFocus() }
         } else if (restoreFocusAfterRetry && !state.loading) {
@@ -1217,7 +1154,7 @@ class HomeActivity : BaseActivity() {
                 categoryAdapter.itemCount > 0 -> {
                     val id = lastSelectedCategoryId
                     if (id != null) focusCategory(id)
-                    else focusRow(binding.categoryList, 0)
+                    else rowFocuser.focusRow(binding.categoryList, 0)
                 }
             }
         }
@@ -1297,7 +1234,11 @@ class HomeActivity : BaseActivity() {
                 val now = System.currentTimeMillis()
                 // Caption now-playing follows focus only when nothing is previewing.
                 if (previewingChannel == null) {
-                    binding.previewProgram.text = captionProgramLabel(programs, now)
+                    binding.previewProgram.text = captionText.captionProgramLabel(
+                        programs,
+                        now,
+                        includeNext = !livePreviewEnabled && previewingChannel == null,
+                    )
                 }
                 epgAdapter.submitList(programs) {
                     val idx = programs.indexOfFirst { it.isLiveAt(now) }
@@ -1341,7 +1282,7 @@ class HomeActivity : BaseActivity() {
                 placeholder(placeholder); error(placeholder)
             }
         }
-        bindFullscreenEpgMeta(channel)
+        fullscreenEpgCard.bindMeta(channel)
     }
 
     /**
@@ -1352,50 +1293,6 @@ class HomeActivity : BaseActivity() {
     private fun showPreviewIdentityPlaceholder(show: Boolean = true) {
         binding.infoLogo.visibility =
             if (show && !inlineFullscreen) View.VISIBLE else View.INVISIBLE
-    }
-
-    /** Binds only the fullscreen card so guide focus cannot corrupt preview metadata. */
-    private fun bindFullscreenEpgMeta(channel: Channel) {
-        val number = channel.number?.toString().orEmpty()
-        binding.fullscreenEpgNumber.text = number
-        binding.fullscreenEpgNumber.visibility =
-            if (number.isEmpty()) View.GONE else View.VISIBLE
-        binding.fullscreenEpgChannelName.text = ChannelText.clean(channel.name)
-        val category = channel.categoryName.orEmpty()
-        binding.fullscreenEpgCategory.text = category
-        binding.fullscreenEpgCategory.visibility =
-            if (category.isBlank()) View.GONE else View.VISIBLE
-        val placeholder = LogoPlaceholder.forName(this, channel.name)
-        if (channel.logoUrl.isNullOrBlank()) {
-            binding.fullscreenEpgLogo.load(placeholder) { crossfade(false) }
-        } else {
-            binding.fullscreenEpgLogo.load(channel.logoUrl) {
-                crossfade(false)
-                placeholder(placeholder)
-                error(placeholder)
-                size(160, 120)
-            }
-        }
-    }
-
-    /**
-     * Caption text under the card: the live program, plus the following one when
-     * no preview video will fill the card (preview disabled and nothing playing).
-     */
-    private fun captionProgramLabel(programs: List<Program>, now: Long): String {
-        val nowLine = nowPlayingLabel(programs, now)
-        if (livePreviewEnabled || previewingChannel != null) return nowLine
-        val next = programs.firstOrNull { it.startMs > now } ?: return nowLine
-        val nextLine = "${getString(R.string.next_label)}: " +
-            "${timeFmt.format(Date(next.startMs))}  ${next.title}"
-        return if (nowLine.isEmpty()) nextLine else "$nowLine\n$nextLine"
-    }
-
-    /** Formats the "now playing" caption line from [programs], or "" if none is live. */
-    private fun nowPlayingLabel(programs: List<Program>, now: Long): String {
-        val current = programs.firstOrNull { it.isLiveAt(now) } ?: return ""
-        return "${timeFmt.format(Date(current.startMs))} - " +
-            "${timeFmt.format(Date(current.stopMs))}  ${current.title}"
     }
 
     /**
@@ -1414,7 +1311,7 @@ class HomeActivity : BaseActivity() {
             // CH+/CH- could briefly pair the new channel name with the old channel's
             // programme while the fresh Room query was still running.
             binding.previewProgram.text = ""
-            renderFullscreenEpgLoading()
+            fullscreenEpgCard.renderLoading()
         }
         captionJob?.cancel()
         if (showLoading) {
@@ -1434,15 +1331,15 @@ class HomeActivity : BaseActivity() {
                 captionPrograms = programs
                 captionEpgLoaded = true
                 val now = System.currentTimeMillis()
-                binding.previewProgram.text = nowPlayingLabel(programs, now)
+                binding.previewProgram.text = captionText.nowPlayingLabel(programs, now)
                 if (!fullscreenGuideVisible) {
-                    bindFullscreenEpgMeta(channel)
-                    bindFullscreenEpg(programs, now)
+                    fullscreenEpgCard.bindMeta(channel)
+                    fullscreenEpgCard.bind(programs, now)
                     scheduleFullscreenEpgAutoHide()
                 } else if (fullscreenGuideFocusedChannel?.id == channel.id) {
                     fullscreenGuidePrograms = programs
                     fullscreenGuideEpgLoaded = true
-                    bindFullscreenEpg(programs, now)
+                    fullscreenEpgCard.bind(programs, now)
                 }
                 if (!inlineFullscreen && currentInfoChannel?.id == channel.id) {
                     restoreBrowseGuideFromPlayingCaption()
@@ -1459,76 +1356,18 @@ class HomeActivity : BaseActivity() {
                 captionEpgLoaded = true
                 binding.previewProgram.text = ""
                 if (!fullscreenGuideVisible) {
-                    bindFullscreenEpgMeta(channel)
-                    bindFullscreenEpg(emptyList(), System.currentTimeMillis())
+                    fullscreenEpgCard.bindMeta(channel)
+                    fullscreenEpgCard.bind(emptyList(), System.currentTimeMillis())
                     scheduleFullscreenEpgAutoHide()
                 } else if (fullscreenGuideFocusedChannel?.id == channel.id) {
                     fullscreenGuidePrograms = emptyList()
                     fullscreenGuideEpgLoaded = true
-                    bindFullscreenEpg(emptyList(), System.currentTimeMillis())
+                    fullscreenEpgCard.bind(emptyList(), System.currentTimeMillis())
                 }
                 if (!inlineFullscreen && currentInfoChannel?.id == channel.id) {
                     restoreBrowseGuideFromPlayingCaption()
                 }
             }
-        }
-    }
-
-    /** Loading placeholder shown atomically as soon as a new channel is committed. */
-    private fun renderFullscreenEpgLoading() {
-        binding.fullscreenEpgNowTitle.setText(R.string.loading)
-        binding.fullscreenEpgRemaining.visibility = View.GONE
-        binding.fullscreenEpgProgress.progress = 0
-        binding.fullscreenEpgProgress.visibility = View.GONE
-        binding.fullscreenEpgTimingRow.visibility = View.GONE
-        binding.fullscreenEpgStart.text = ""
-        binding.fullscreenEpgEnd.text = ""
-        binding.fullscreenEpgNextRow.visibility = View.GONE
-        binding.fullscreenEpgNextTitle.text = ""
-        binding.fullscreenEpgNextStart.text = ""
-    }
-
-    /** Binds current, progress, remaining time and next for the active EPG card. */
-    private fun bindFullscreenEpg(programs: List<Program>, now: Long) {
-        val state = LiveEpgOverlayPolicy.resolve(programs, now)
-        val current = state.current
-        if (current == null) {
-            binding.fullscreenEpgNowTitle.setText(R.string.no_guide)
-            binding.fullscreenEpgRemaining.visibility = View.GONE
-            binding.fullscreenEpgProgress.progress = 0
-            binding.fullscreenEpgProgress.visibility = View.GONE
-            binding.fullscreenEpgTimingRow.visibility = View.GONE
-            binding.fullscreenEpgStart.text = ""
-            binding.fullscreenEpgEnd.text = ""
-        } else {
-            binding.fullscreenEpgNowTitle.text = current.title
-            val remainingMs = (current.stopMs - now).coerceAtLeast(0L)
-            binding.fullscreenEpgRemaining.text =
-                if (remainingMs < 60_000L) {
-                    getString(R.string.epg_ending)
-                } else {
-                    getString(
-                        R.string.epg_min_left,
-                        state.remainingMinutes ?: 0,
-                    )
-                }
-            binding.fullscreenEpgRemaining.visibility = View.VISIBLE
-            binding.fullscreenEpgProgress.progress = state.progressPercent
-            binding.fullscreenEpgProgress.visibility = View.VISIBLE
-            binding.fullscreenEpgStart.text = timeFmt.format(Date(current.startMs))
-            binding.fullscreenEpgEnd.text = timeFmt.format(Date(current.stopMs))
-            binding.fullscreenEpgTimingRow.visibility = View.VISIBLE
-        }
-
-        val next = state.next
-        if (next == null) {
-            binding.fullscreenEpgNextRow.visibility = View.GONE
-            binding.fullscreenEpgNextTitle.text = ""
-            binding.fullscreenEpgNextStart.text = ""
-        } else {
-            binding.fullscreenEpgNextTitle.text = next.title
-            binding.fullscreenEpgNextStart.text = timeFmt.format(Date(next.startMs))
-            binding.fullscreenEpgNextRow.visibility = View.VISIBLE
         }
     }
 
@@ -1630,7 +1469,11 @@ class HomeActivity : BaseActivity() {
         val now = System.currentTimeMillis()
         val captionSource = if (previewingChannel != null) captionPrograms else currentPrograms
         if (captionSource.isNotEmpty()) {
-            binding.previewProgram.text = captionProgramLabel(captionSource, now)
+            binding.previewProgram.text = captionText.captionProgramLabel(
+                captionSource,
+                now,
+                includeNext = !livePreviewEnabled && previewingChannel == null,
+            )
         }
         if (currentPrograms.isNotEmpty()) epgAdapter.refreshLiveState()
     }
@@ -1670,30 +1513,11 @@ class HomeActivity : BaseActivity() {
             category.isAdult() &&
             category.id !in unlockedCategories
         ) {
-            if (pinPromptInFlight) return
-            pinPromptInFlight = true
-            val requestGeneration = ++pinRequestGeneration
-            pinGuardRequest = PinLockHelper.guard(
-                activity = this,
-                isAdult = true,
-                onDenied = {
-                    if (requestGeneration == pinRequestGeneration) {
-                        pinPromptInFlight = false
-                        pinGuardRequest = null
-                    }
-                },
-                onAllowed = allowed@{
-                    if (
-                        requestGeneration != pinRequestGeneration ||
-                        !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-                    ) return@allowed
-                    pinPromptInFlight = false
-                    pinGuardRequest = null
-                    unlockedCategories.add(category.id)
-                    channelAdapter.refreshVisible(binding.channelList)
-                    enterChannelView()
-                },
-            )
+            pinGate.guard {
+                unlockedCategories.add(category.id)
+                channelAdapter.refreshVisible(binding.channelList)
+                enterChannelView()
+            }
         } else {
             enterChannelView()
         }
@@ -1745,7 +1569,7 @@ class HomeActivity : BaseActivity() {
         updateBrowseHeader()
         val id = lastSelectedCategoryId
         if (id != null) focusCategory(id)
-        else if (categoryAdapter.itemCount > 0) focusRow(binding.categoryList, 0)
+        else if (categoryAdapter.itemCount > 0) rowFocuser.focusRow(binding.categoryList, 0)
     }
 
     /**
@@ -1760,76 +1584,14 @@ class HomeActivity : BaseActivity() {
             ?.let { id -> currentChannels.indexOfFirst { it.id == id } }
             ?.takeIf { it >= 0 }
             ?: 0
-        focusRow(binding.channelList, pos, center = pos > 0)
+        rowFocuser.focusRow(binding.channelList, pos, center = pos > 0)
     }
 
     /** Moves focus onto a given category row. */
     private fun focusCategory(id: String) {
         val pos = (0 until categoryAdapter.itemCount)
             .firstOrNull { categoryAdapter.currentList.getOrNull(it)?.id == id } ?: 0
-        focusRow(binding.categoryList, pos)
-    }
-
-    /**
-     * Focuses the row at [pos] in [list], retrying until it is laid out. When the
-     * left pane was just toggled from GONE to VISIBLE the relayout is still pending,
-     * so a single post() finds no view holder yet and the old code fell back to
-     * list.requestFocus() — which lands on the FIRST visible child, snapping focus
-     * back to the top category instead of the one we left from. Re-posting until the
-     * target holder exists (bounded) lands focus on the correct row.
-     */
-    private fun focusRow(list: RecyclerView, pos: Int, attempts: Int = 10, center: Boolean = false) {
-        val generation = ++focusRequestGeneration
-        val stableId = when (list) {
-            binding.channelList -> channelAdapter.currentList.getOrNull(pos)?.id
-            binding.categoryList -> categoryAdapter.currentList.getOrNull(pos)?.id
-            else -> null
-        }
-        list.scrollToPosition(pos)
-        list.post(object : Runnable {
-            private var remaining = attempts
-            override fun run() {
-                if (
-                    generation != focusRequestGeneration ||
-                    !list.isShown ||
-                    (inlineFullscreen && list !== binding.fullscreenGuideList)
-                ) return
-                val resolvedPosition = when (list) {
-                    binding.channelList ->
-                        channelAdapter.currentList.indexOfFirst { it.id == stableId }
-                    binding.categoryList ->
-                        categoryAdapter.currentList.indexOfFirst { it.id == stableId }
-                    else -> pos
-                }
-                if (resolvedPosition < 0) {
-                    if ((list.adapter?.itemCount ?: 0) > 0) focusRow(list, 0, center = false)
-                    return
-                }
-                val holder = list.findViewHolderForAdapterPosition(resolvedPosition)
-                when {
-                    holder != null -> {
-                        // Center the target row in the viewport when asked, so the
-                        // restored/playing channel sits mid-list with rows visible
-                        // above and below it (not pinned to the top edge).
-                        if (center) {
-                            (list.layoutManager as? LinearLayoutManager)?.let { lm ->
-                                val offset = (list.height - holder.itemView.height) / 2
-                                lm.scrollToPositionWithOffset(
-                                    resolvedPosition,
-                                    offset.coerceAtLeast(0),
-                                )
-                            }
-                        }
-                        holder.itemView.requestFocus()
-                    }
-                    remaining-- > 0 -> {
-                        list.scrollToPosition(resolvedPosition)
-                        list.post(this)
-                    }
-                    else -> list.requestFocus()
-                }
-            }
-        })
+        rowFocuser.focusRow(binding.categoryList, pos)
     }
 
     /** Opens the catch-up/archive browser, pre-focusing the previewed channel. */
@@ -1879,32 +1641,12 @@ class HomeActivity : BaseActivity() {
             startPreviewFor(channel, enterFullscreenWhenReady)
             return
         }
-        if (pinPromptInFlight) return
-
-        pinPromptInFlight = true
-        val requestGeneration = ++pinRequestGeneration
-        pinGuardRequest = PinLockHelper.guard(
-            activity = this,
-            isAdult = true,
-            onDenied = {
-                if (requestGeneration == pinRequestGeneration) {
-                    pinPromptInFlight = false
-                    pinGuardRequest = null
-                }
-            },
-            onAllowed = allowed@{
-                if (
-                    requestGeneration != pinRequestGeneration ||
-                    !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-                ) return@allowed
-                pinPromptInFlight = false
-                pinGuardRequest = null
-                unlockedChannels.add(channel.id)
-                channelAdapter.refreshVisible(binding.channelList)
-                showInfo(channel)
-                startPreviewFor(channel, enterFullscreenWhenReady)
-            },
-        )
+        pinGate.guard {
+            unlockedChannels.add(channel.id)
+            channelAdapter.refreshVisible(binding.channelList)
+            showInfo(channel)
+            startPreviewFor(channel, enterFullscreenWhenReady)
+        }
     }
 
     /** Starts the live preview for [channel] while retaining the same surface/controller. */
@@ -2050,6 +1792,9 @@ class HomeActivity : BaseActivity() {
                 preferredSubtitlePreference = preferredSubtitlePreference,
                 callback = buildPreviewCallback()
             )
+            // A display-mode switch blanks the TV briefly; only the fullscreen
+            // player may do that, never the inline preview card.
+            previewController?.setDisplayModeSwitchingAllowed(inlineFullscreen)
         }
         previewController?.play(
             LiveStreamUrl.applyFormat(channel.streamUrl, streamFormat),
@@ -2488,39 +2233,26 @@ class HomeActivity : BaseActivity() {
         ) return
 
         inlineFullscreen = true
+        previewController?.setDisplayModeSwitchingAllowed(true)
         fullscreenGuideVisible = false
         fullscreenConfirmPress.clear()
         // Compatibility devices: guide rows bind placeholders only while the
         // decoder owns the CPU (restored, and visible rows rebound, on exit).
         channelAdapter.suppressLogos = compatMode
         fullscreenGuideAdapter.suppressLogos = compatMode
-        focusRequestGeneration++
-        binding.previewCard.clearFocus()
-        binding.previewCard.isFocusable = false
-        binding.previewCard.isClickable = false
-        binding.previewCard.clipToOutline = false
-        binding.leftPane.visibility = View.GONE
-        binding.previewHeader.visibility = View.GONE
-        binding.guidePanel.visibility = View.GONE
-        binding.catchupHint.visibility = View.GONE
-        binding.previewCaption.visibility = View.GONE
+        rowFocuser.invalidate()
+        fullscreenLayout.enterPanes()
         showPreviewIdentityPlaceholder(show = false)
         binding.fullscreenGuideOverlay.visibility = View.GONE
-        updateFullscreenEpgGuideLayout(guideVisible = false)
-        previewingChannel?.let(::bindFullscreenEpgMeta)
+        fullscreenEpgCard.updateGuideLayout(guideVisible = false)
+        previewingChannel?.let(fullscreenEpgCard::bindMeta)
         if (captionEpgLoaded) {
-            bindFullscreenEpg(captionPrograms, System.currentTimeMillis())
+            fullscreenEpgCard.bind(captionPrograms, System.currentTimeMillis())
         } else {
-            renderFullscreenEpgLoading()
+            fullscreenEpgCard.renderLoading()
         }
         binding.fullscreenEpgOverlay.visibility = View.VISIBLE
-        binding.root.setPadding(0, 0, 0, 0)
-        updateSplitGuide(0f)
-        (binding.previewCard.layoutParams as? LinearLayout.LayoutParams)?.let { params ->
-            params.topMargin = 0
-            params.weight = 1f
-            binding.previewCard.layoutParams = params
-        }
+        fullscreenLayout.enterMetrics()
         startFullscreenEpgTicker()
         scheduleFullscreenEpgAutoHide()
     }
@@ -2531,6 +2263,7 @@ class HomeActivity : BaseActivity() {
 
         closeFullscreenGuide(showPlayingEpg = false)
         inlineFullscreen = false
+        previewController?.setDisplayModeSwitchingAllowed(false)
         pendingFullscreenChannelId = null
         fullscreenConfirmPress.clear()
         if (channelAdapter.suppressLogos) {
@@ -2538,35 +2271,17 @@ class HomeActivity : BaseActivity() {
             fullscreenGuideAdapter.suppressLogos = false
             channelAdapter.refreshVisible(binding.channelList)
         }
-        cancelFullscreenZap()
+        fullscreenZap.cancel()
         stopFullscreenEpgTicker()
-        focusRequestGeneration++
-        val snapshot = browseLayoutSnapshot
-        binding.root.setPadding(
-            snapshot.paddingLeft,
-            snapshot.paddingTop,
-            snapshot.paddingRight,
-            snapshot.paddingBottom,
-        )
-        updateSplitGuide(snapshot.splitPercent)
-        binding.leftPane.visibility = View.VISIBLE
-        binding.previewHeader.visibility = View.GONE
-        binding.guidePanel.visibility = View.VISIBLE
-        binding.previewCaption.visibility = View.VISIBLE
+        rowFocuser.invalidate()
+        fullscreenLayout.exitPanes()
         binding.fullscreenGuideOverlay.visibility = View.GONE
         binding.fullscreenEpgOverlay.visibility = View.GONE
-        updateFullscreenEpgGuideLayout(guideVisible = false)
+        fullscreenEpgCard.updateGuideLayout(guideVisible = false)
         binding.catchupHint.visibility =
             if ((currentInfoChannel?.catchupDays ?: 0) > 0) View.VISIBLE else View.GONE
         restoreBrowseGuideFromPlayingCaption()
-        (binding.previewCard.layoutParams as? LinearLayout.LayoutParams)?.let { params ->
-            params.topMargin = snapshot.previewTopMargin
-            params.weight = snapshot.previewWeight
-            binding.previewCard.layoutParams = params
-        }
-        binding.previewCard.clipToOutline = snapshot.previewClipToOutline
-        binding.previewCard.isClickable = snapshot.previewClickable
-        binding.previewCard.isFocusable = snapshot.previewFocusable
+        fullscreenLayout.exitCard()
 
         if (!restoreFocus) return
         val playing = previewingChannel
@@ -2575,13 +2290,13 @@ class HomeActivity : BaseActivity() {
         when {
             inChannelView && position >= 0 -> {
                 lastFocusedChannelId = playingId
-                focusRow(binding.channelList, position, center = true)
+                rowFocuser.focusRow(binding.channelList, position, center = true)
             }
             inChannelView && currentChannels.isNotEmpty() -> focusFirstChannel()
             categoryAdapter.itemCount > 0 -> {
                 val categoryId = lastSelectedCategoryId
                 if (categoryId != null) focusCategory(categoryId)
-                else focusRow(binding.categoryList, 0)
+                else rowFocuser.focusRow(binding.categoryList, 0)
             }
         }
         // No inline preview wanted: leaving fullscreen ends the stream (focus is
@@ -2609,32 +2324,9 @@ class HomeActivity : BaseActivity() {
         }
     }
 
-    private fun updateSplitGuide(percent: Float) {
-        val params = binding.splitGuide.layoutParams as ConstraintLayout.LayoutParams
-        params.guidePercent = percent
-        binding.splitGuide.layoutParams = params
-    }
-
-    private fun captureBrowseLayout(): BrowseLayoutSnapshot {
-        val guide = binding.splitGuide.layoutParams as ConstraintLayout.LayoutParams
-        val preview = binding.previewCard.layoutParams as LinearLayout.LayoutParams
-        return BrowseLayoutSnapshot(
-            paddingLeft = binding.root.paddingLeft,
-            paddingTop = binding.root.paddingTop,
-            paddingRight = binding.root.paddingRight,
-            paddingBottom = binding.root.paddingBottom,
-            splitPercent = guide.guidePercent,
-            previewTopMargin = preview.topMargin,
-            previewWeight = preview.weight,
-            previewClipToOutline = binding.previewCard.clipToOutline,
-            previewFocusable = binding.previewCard.isFocusable,
-            previewClickable = binding.previewCard.isClickable,
-        )
-    }
-
     /** INFO toggles the playing-channel card; every reveal starts a fresh four seconds. */
     private fun toggleFullscreenCaption() {
-        fullscreenEpgHandler.removeCallbacks(hideFullscreenEpg)
+        fullscreenEpgTimer.cancelAutoHide()
         if (binding.fullscreenEpgOverlay.visibility == View.VISIBLE) {
             binding.fullscreenEpgOverlay.visibility = View.GONE
         } else {
@@ -2644,23 +2336,22 @@ class HomeActivity : BaseActivity() {
 
     /** Keeps progress/remaining time exact while the fullscreen card is active. */
     private fun startFullscreenEpgTicker() {
-        fullscreenEpgHandler.removeCallbacks(fullscreenEpgTick)
-        fullscreenEpgHandler.post(fullscreenEpgTick)
+        fullscreenEpgTimer.startTicker()
     }
 
     private fun stopFullscreenEpgTicker() {
-        fullscreenEpgHandler.removeCallbacksAndMessages(null)
+        fullscreenEpgTimer.stopAll()
     }
 
     /** CH+/CH- always reveals the new channel's programme information for four seconds. */
     private fun revealFullscreenEpgForChannelChange() {
-        fullscreenEpgHandler.removeCallbacks(hideFullscreenEpg)
+        fullscreenEpgTimer.cancelAutoHide()
         if (fullscreenGuideVisible) closeFullscreenGuide(showPlayingEpg = false)
-        previewingChannel?.let(::bindFullscreenEpgMeta)
+        previewingChannel?.let(fullscreenEpgCard::bindMeta)
         if (captionEpgLoaded) {
-            bindFullscreenEpg(captionPrograms, System.currentTimeMillis())
+            fullscreenEpgCard.bind(captionPrograms, System.currentTimeMillis())
         } else {
-            renderFullscreenEpgLoading()
+            fullscreenEpgCard.renderLoading()
         }
         binding.fullscreenEpgOverlay.visibility = View.VISIBLE
         scheduleFullscreenEpgAutoHide()
@@ -2668,28 +2359,25 @@ class HomeActivity : BaseActivity() {
 
     /** Starts the timer only after usable EPG (including an empty result) is visible. */
     private fun scheduleFullscreenEpgAutoHide() {
-        fullscreenEpgHandler.removeCallbacks(hideFullscreenEpg)
+        fullscreenEpgTimer.cancelAutoHide()
         if (
             inlineFullscreen &&
             !fullscreenGuideVisible &&
             captionEpgLoaded &&
             binding.fullscreenEpgOverlay.visibility == View.VISIBLE
         ) {
-            fullscreenEpgHandler.postDelayed(
-                hideFullscreenEpg,
-                FULLSCREEN_EPG_AUTO_HIDE_MS,
-            )
+            fullscreenEpgTimer.postAutoHide()
         }
     }
 
     private fun showPlayingFullscreenEpg() {
         val channel = previewingChannel ?: return
-        fullscreenEpgHandler.removeCallbacks(hideFullscreenEpg)
-        bindFullscreenEpgMeta(channel)
+        fullscreenEpgTimer.cancelAutoHide()
+        fullscreenEpgCard.bindMeta(channel)
         if (captionEpgLoaded) {
-            bindFullscreenEpg(captionPrograms, System.currentTimeMillis())
+            fullscreenEpgCard.bind(captionPrograms, System.currentTimeMillis())
         } else {
-            renderFullscreenEpgLoading()
+            fullscreenEpgCard.renderLoading()
         }
         binding.fullscreenEpgOverlay.visibility = View.VISIBLE
         scheduleFullscreenEpgAutoHide()
@@ -2706,13 +2394,13 @@ class HomeActivity : BaseActivity() {
             .ifEmpty { currentChannels }
             .ifEmpty { listOfNotNull(playing) }
 
-        cancelFullscreenZap()
-        fullscreenEpgHandler.removeCallbacks(hideFullscreenEpg)
+        fullscreenZap.cancel()
+        fullscreenEpgTimer.cancelAutoHide()
         fullscreenGuideEpgJob?.cancel()
         fullscreenGuideEpgGeneration++
         fullscreenGuideVisible = true
         fullscreenConfirmPress.clear()
-        focusRequestGeneration++
+        rowFocuser.invalidate()
 
         binding.fullscreenGuideCategory.text =
             previewChannelScopeLabel?.takeIf { it.isNotBlank() }
@@ -2744,12 +2432,12 @@ class HomeActivity : BaseActivity() {
             .translationX(0f)
             .setDuration(190L)
             .start()
-        updateFullscreenEpgGuideLayout(guideVisible = true)
+        fullscreenEpgCard.updateGuideLayout(guideVisible = true)
 
         fullscreenGuideAdapter.submitList(channels) {
             if (!fullscreenGuideVisible || channels.isEmpty()) return@submitList
             val playingPosition = channels.indexOfFirst { it.id == playing?.id }
-            focusRow(
+            rowFocuser.focusRow(
                 binding.fullscreenGuideList,
                 playingPosition.takeIf { it >= 0 } ?: 0,
                 center = playingPosition > 0,
@@ -2773,18 +2461,18 @@ class HomeActivity : BaseActivity() {
         fullscreenGuideEpgJob?.cancel()
         fullscreenGuideEpgJob = null
         fullscreenGuideEpgGeneration++
-        focusRequestGeneration++
+        rowFocuser.invalidate()
         binding.fullscreenGuideOverlay.animate().cancel()
         binding.fullscreenGuidePanel.animate().cancel()
         binding.fullscreenGuideOverlay.alpha = 1f
         binding.fullscreenGuidePanel.translationX = 0f
         binding.fullscreenGuideList.clearFocus()
         binding.fullscreenGuideOverlay.visibility = View.GONE
-        updateFullscreenEpgGuideLayout(guideVisible = false)
+        fullscreenEpgCard.updateGuideLayout(guideVisible = false)
         if (showPlayingEpg && inlineFullscreen) {
             showPlayingFullscreenEpg()
         } else {
-            fullscreenEpgHandler.removeCallbacks(hideFullscreenEpg)
+            fullscreenEpgTimer.cancelAutoHide()
             binding.fullscreenEpgOverlay.visibility = View.GONE
         }
     }
@@ -2797,21 +2485,21 @@ class HomeActivity : BaseActivity() {
         fullscreenGuideEpgLoaded = false
         fullscreenGuideEpgJob?.cancel()
         val requestGeneration = ++fullscreenGuideEpgGeneration
-        fullscreenEpgHandler.removeCallbacks(hideFullscreenEpg)
+        fullscreenEpgTimer.cancelAutoHide()
         binding.fullscreenEpgOverlay.visibility = View.VISIBLE
 
         if (isChannelLocked(channel)) {
-            bindLockedFullscreenEpg()
+            fullscreenEpgCard.bindLocked()
             fullscreenGuideEpgLoaded = true
             return
         }
 
-        bindFullscreenEpgMeta(channel)
-        renderFullscreenEpgLoading()
+        fullscreenEpgCard.bindMeta(channel)
+        fullscreenEpgCard.renderLoading()
         if (channel.id == previewingChannel?.id && captionEpgLoaded) {
             fullscreenGuidePrograms = captionPrograms
             fullscreenGuideEpgLoaded = true
-            bindFullscreenEpg(captionPrograms, System.currentTimeMillis())
+            fullscreenEpgCard.bind(captionPrograms, System.currentTimeMillis())
             return
         }
 
@@ -2827,7 +2515,7 @@ class HomeActivity : BaseActivity() {
                 ) return@launch
                 fullscreenGuidePrograms = programs
                 fullscreenGuideEpgLoaded = true
-                bindFullscreenEpg(programs, System.currentTimeMillis())
+                fullscreenEpgCard.bind(programs, System.currentTimeMillis())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -2838,28 +2526,9 @@ class HomeActivity : BaseActivity() {
                 ) return@launch
                 fullscreenGuidePrograms = emptyList()
                 fullscreenGuideEpgLoaded = true
-                bindFullscreenEpg(emptyList(), System.currentTimeMillis())
+                fullscreenEpgCard.bind(emptyList(), System.currentTimeMillis())
             }
         }
-    }
-
-    private fun bindLockedFullscreenEpg() {
-        binding.fullscreenEpgNumber.text = ""
-        binding.fullscreenEpgNumber.visibility = View.GONE
-        binding.fullscreenEpgChannelName.setText(R.string.adult_locked_title)
-        binding.fullscreenEpgCategory.setText(R.string.pin_locked_content)
-        binding.fullscreenEpgCategory.visibility = View.VISIBLE
-        binding.fullscreenEpgLogo.load(R.drawable.ic_lock) { crossfade(false) }
-        binding.fullscreenEpgNowTitle.setText(R.string.pin_locked_content)
-        binding.fullscreenEpgRemaining.visibility = View.GONE
-        binding.fullscreenEpgProgress.progress = 0
-        binding.fullscreenEpgProgress.visibility = View.GONE
-        binding.fullscreenEpgTimingRow.visibility = View.GONE
-        binding.fullscreenEpgStart.text = ""
-        binding.fullscreenEpgEnd.text = ""
-        binding.fullscreenEpgNextRow.visibility = View.GONE
-        binding.fullscreenEpgNextTitle.text = ""
-        binding.fullscreenEpgNextStart.text = ""
     }
 
     private fun selectFullscreenGuideChannel(channel: Channel) {
@@ -2891,26 +2560,6 @@ class HomeActivity : BaseActivity() {
         ).show()
     }
 
-    /** Makes room for the rail while keeping the EPG card in the TV safe area. */
-    private fun updateFullscreenEpgGuideLayout(guideVisible: Boolean) {
-        val params = binding.fullscreenEpgOverlay.layoutParams as FrameLayout.LayoutParams
-        val safe = resources.getDimensionPixelSize(R.dimen.safe_area_h)
-        params.marginStart = if (guideVisible) {
-            safe +
-                resources.getDimensionPixelSize(R.dimen.fullscreen_guide_width) +
-                resources.getDimensionPixelSize(R.dimen.fullscreen_guide_epg_gap)
-        } else {
-            safe
-        }
-        params.marginEnd = safe
-        binding.fullscreenEpgOverlay.layoutParams = params
-        // The guide's full-screen scrim sits at 20dp while the EPG card starts at
-        // 18dp. Raise the card above that scrim only while both are visible.
-        binding.fullscreenEpgOverlay.translationZ =
-            if (guideVisible) resources.getDimension(R.dimen.space_xs) else 0f
-        if (guideVisible) binding.fullscreenEpgOverlay.bringToFront()
-    }
-
     private fun togglePreviewFavorite() {
         val channel = previewingChannel ?: return
         val favorite = !channel.isFavorite
@@ -2928,194 +2577,6 @@ class HomeActivity : BaseActivity() {
         ).show()
     }
 
-    /** Keeps the essential PlayerActivity controls available without changing player ownership. */
-    private fun showInlinePlayerMenu() {
-        val labels = mutableListOf<String>()
-        val actions = mutableListOf<() -> Unit>()
-
-        val channel = previewingChannel
-        if (channel != null) {
-            labels.add(
-                getString(
-                    if (channel.isFavorite) R.string.removed_from_favorites
-                    else R.string.added_to_favorites,
-                ),
-            )
-            actions.add(::togglePreviewFavorite)
-        }
-
-        labels.add(getString(R.string.sleep_timer))
-        actions.add(::showInlineSleepDialog)
-
-        val controller = previewController
-        if (controller?.supportsDelay == true) {
-            labels.add(getString(R.string.audio_delay))
-            actions.add { showInlineDelayDialog(audio = true) }
-            labels.add(getString(R.string.subtitle_delay))
-            actions.add { showInlineDelayDialog(audio = false) }
-        }
-
-        if (controller?.audioTracks()?.isNotEmpty() == true) {
-            labels.add(getString(R.string.audio_track))
-            actions.add { showInlineTrackDialog(audio = true) }
-        }
-
-        if (controller != null) {
-            labels.add(getString(R.string.subtitle_track))
-            actions.add { showInlineTrackDialog(audio = false) }
-        }
-
-        if (castController.isAvailable) {
-            labels.add(getString(R.string.cast))
-            actions.add { castController.onCastButtonClicked() }
-        }
-
-        labels.add(getString(R.string.stream_info))
-        actions.add(::showStreamInfo)
-
-        PlayerDialogs.showOptions(
-            this,
-            getString(R.string.player_menu),
-            labels.map { PlayerDialogs.Option(it) },
-        ) { index -> actions[index].invoke() }
-    }
-
-    private fun showInlineSleepDialog() {
-        val minutes = intArrayOf(0, 15, 30, 45, 60, 90)
-        val labels = minutes.map { value ->
-            if (value == 0) getString(R.string.sleep_timer_off)
-            else getString(R.string.sleep_timer_minutes, value)
-        }
-        PlayerDialogs.showOptions(
-            this,
-            getString(R.string.sleep_timer),
-            labels.mapIndexed { index, label ->
-                PlayerDialogs.Option(label, minutes[index] == sleepTimer.minutes)
-            },
-        ) { index ->
-            val value = minutes[index]
-            sleepTimer.set(value)
-            Toast.makeText(
-                this,
-                if (value == 0) getString(R.string.sleep_timer_off)
-                else getString(R.string.sleep_timer_set, value),
-                Toast.LENGTH_SHORT,
-            ).show()
-        }
-    }
-
-    private fun showInlineDelayDialog(audio: Boolean) {
-        val controller = previewController ?: return
-        val values = (-2000..2000 step 250).toList()
-        val current =
-            if (audio) controller.currentAudioDelayMs else controller.currentSubtitleDelayMs
-        val title = if (audio) R.string.audio_delay else R.string.subtitle_delay
-        PlayerDialogs.showOptions(
-            this,
-            getString(title),
-            values.map { value ->
-                PlayerDialogs.Option(
-                    getString(R.string.delay_ms, value),
-                    selected = value.toLong() == current,
-                )
-            },
-        ) { index ->
-            val value = values[index].toLong()
-            if (audio) controller.setAudioDelay(value) else controller.setSubtitleDelay(value)
-        }
-    }
-
-    /** D-pad friendly live track chooser shared by preview and inline fullscreen. */
-    private fun showInlineTrackDialog(audio: Boolean) {
-        val controller = previewController ?: return
-        val tracks = if (audio) controller.audioTracks() else controller.subtitleTracks()
-        if (audio && tracks.isEmpty()) return
-        val options = buildList {
-            if (!audio) {
-                add(
-                    PlayerDialogs.Option(
-                        getString(R.string.subtitles_auto),
-                        selected = controller.subtitlePreference is LiveSubtitlePreference.Auto,
-                    ),
-                )
-                add(
-                    PlayerDialogs.Option(
-                        getString(R.string.subtitles_off),
-                        selected = controller.subtitlePreference is LiveSubtitlePreference.Off,
-                    ),
-                )
-            }
-            tracks.forEach { add(PlayerDialogs.Option(it.label, it.selected)) }
-        }
-        PlayerDialogs.showOptions(
-            this,
-            getString(if (audio) R.string.audio_track else R.string.subtitle_track),
-            options,
-        ) { index ->
-            if (!audio && index == 0) {
-                if (controller.selectSubtitleAuto()) {
-                    lifecycleScope.launch {
-                        ServiceLocator.settings.setLiveSubtitlePreference(
-                            LiveSubtitlePreference.Auto,
-                        )
-                    }
-                }
-                return@showOptions
-            }
-            if (!audio && index == 1) {
-                if (controller.selectSubtitleTrack(null)) {
-                    lifecycleScope.launch {
-                        ServiceLocator.settings.setLiveSubtitlePreference(
-                            LiveSubtitlePreference.Off,
-                        )
-                    }
-                }
-                return@showOptions
-            }
-            val trackIndex = if (audio) index else index - 2
-            val track = tracks.getOrNull(trackIndex) ?: return@showOptions
-            val selected = if (audio) {
-                controller.selectAudioTrack(track.id)
-            } else {
-                controller.selectSubtitleTrack(track.id)
-            }
-            if (selected && track.language != null) {
-                lifecycleScope.launch {
-                    if (audio) {
-                        ServiceLocator.settings.setLiveAudioLanguage(track.language)
-                    } else {
-                        LiveSubtitlePreference.Language.from(track.language)?.let {
-                            ServiceLocator.settings.setLiveSubtitlePreference(it)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private fun showStreamInfo() {
-        val info = previewController?.streamInfo()
-        val message = if (info == null) {
-            getString(R.string.stream_info_unavailable)
-        } else {
-            val resolution =
-                if (info.width > 0 && info.height > 0) "${info.width}×${info.height}"
-                else STATS_DASH
-            val fps =
-                if (info.fps > 0f) String.format(Locale.US, "%.0f", info.fps)
-                else STATS_DASH
-            val bitrate = info.bitrateKbps?.let { "$it kbps" } ?: STATS_DASH
-            buildString {
-                append(getString(R.string.stream_info_engine, info.engine)).append('\n')
-                append(getString(R.string.stream_info_resolution, resolution)).append('\n')
-                append(getString(R.string.stream_info_fps, fps)).append('\n')
-                append(getString(R.string.stream_info_codec, info.codec ?: STATS_DASH)).append('\n')
-                append(getString(R.string.stream_info_bitrate, bitrate))
-            }
-        }
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-    }
-
     private fun numberZapChannels(): List<Channel> =
         if (inlineFullscreen) previewChannelScope.ifEmpty { currentChannels }
         else currentChannels
@@ -3123,48 +2584,15 @@ class HomeActivity : BaseActivity() {
     private fun zapFullscreenChannel(direction: Int) {
         val channels = previewChannelScope.ifEmpty { currentChannels }
         if (channels.isEmpty()) return
-        val currentId = pendingFullscreenZapChannel?.id ?: previewingChannel?.id
-        val currentIndex = channels.indexOfFirst { it.id == currentId }
-        val targetIndex = if (currentIndex >= 0) {
-            (currentIndex + direction + channels.size) % channels.size
-        } else {
-            0
-        }
-        val target = channels[targetIndex]
+        val currentId = fullscreenZap.pending?.id ?: previewingChannel?.id
+        val target = channels[HomeZapTarget.nextIndex(channels, currentId, direction)]
         lastFocusedChannelId = target.id
         if (isChannelLocked(target)) {
-            cancelFullscreenZap()
+            fullscreenZap.cancel()
             requestChannelPlayback(target, enterFullscreenWhenReady = true)
             return
         }
-
-        pendingFullscreenZapChannel = target
-        // CH+/CH- keeps a subtle name confirmation without flashing the channel
-        // number in the top-right corner.
-        binding.fullscreenZapOverlay.text = ChannelText.clean(target.name)
-        binding.fullscreenZapOverlay.visibility = View.VISIBLE
-        fullscreenZapHandler.removeCallbacksAndMessages(null)
-        fullscreenZapHandler.postDelayed({
-            if (
-                !inlineFullscreen ||
-                isFinishing ||
-                isDestroyed ||
-                !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-            ) {
-                cancelFullscreenZap()
-                return@postDelayed
-            }
-            val channel = pendingFullscreenZapChannel ?: return@postDelayed
-            pendingFullscreenZapChannel = null
-            binding.fullscreenZapOverlay.visibility = View.GONE
-            requestChannelPlayback(channel, enterFullscreenWhenReady = true)
-        }, FULLSCREEN_ZAP_DEBOUNCE_MS)
-    }
-
-    private fun cancelFullscreenZap(hideOverlay: Boolean = true) {
-        fullscreenZapHandler.removeCallbacksAndMessages(null)
-        pendingFullscreenZapChannel = null
-        if (hideOverlay) binding.fullscreenZapOverlay.visibility = View.GONE
+        fullscreenZap.arm(target)
     }
 
     override fun onDestroy() {
@@ -3175,7 +2603,7 @@ class HomeActivity : BaseActivity() {
         castController.detach()
         finishPreviewQoe(PlaybackEndReason.APP_SHUTDOWN)
         playbackSession.release()
-        fullscreenEpgHandler.removeCallbacksAndMessages(null)
+        fullscreenEpgTimer.stopAll()
         fullscreenGuideEpgJob?.cancel()
         debugBinder?.release()
     }
@@ -3232,14 +2660,14 @@ class HomeActivity : BaseActivity() {
         pendingFullscreenChannelId = null
         previewChannelScope = emptyList()
         previewChannelScopeLabel = null
-        cancelFullscreenZap()
+        fullscreenZap.cancel()
         captionPrograms = emptyList()
         fullscreenGuidePrograms = emptyList()
         fullscreenGuideEpgLoaded = false
         fullscreenGuideAdapter.setPlayingChannel(null)
         binding.fullscreenGuideOverlay.visibility = View.GONE
         binding.fullscreenEpgOverlay.visibility = View.GONE
-        renderFullscreenEpgLoading()
+        fullscreenEpgCard.renderLoading()
         binding.infoLogo.visibility = View.VISIBLE
         binding.previewLoading.visibility = View.GONE
         binding.previewStatus.visibility = View.GONE
@@ -3279,9 +2707,6 @@ class HomeActivity : BaseActivity() {
         zap.cancel()
         pendingEnterCategoryId = null
         consumedUntilUp.clear()
-        pinGuardRequest?.cancel()
-        pinGuardRequest = null
-        pinPromptInFlight = false
-        pinRequestGeneration++
+        pinGate.reset()
     }
 }

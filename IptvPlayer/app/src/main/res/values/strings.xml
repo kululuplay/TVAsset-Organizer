@@ -176,6 +176,11 @@
     <string name="settings_buffer_low">Low (fast zap)</string>
     <string name="settings_buffer_normal">Normal (balanced)</string>
     <string name="settings_buffer_high">High (fewer stalls)</string>
+    <string name="settings_afr">Auto frame rate</string>
+    <string name="settings_afr_off">Off</string>
+    <string name="settings_afr_refresh">Refresh rate only</string>
+    <string name="settings_afr_refresh_resolution">Refresh rate + resolution</string>
+    <string name="settings_afr_desc">Switches the TV to the frame rate of the video (24/25/30/50/60 Hz) for judder-free playback. The screen goes blank for a moment on each switch; turn it off if the picture stays black.</string>
     <string name="stream_info">Stream info</string>
     <string name="stream_info_unavailable">Stream info not available yet</string>
     <string name="stream_info_engine">Engine: %1$s</string>

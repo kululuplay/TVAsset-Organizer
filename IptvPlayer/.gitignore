@@ -15,3 +15,7 @@ app/build/
 *.keystore
 *.b64
 keystore.properties
+
+# Locally built Media3 FFmpeg extension (CI restores it from cache; never commit binaries).
+app/libs/media3-decoder-ffmpeg-release.aar
+app/libs/media3-decoder-ffmpeg-release.txt

@@ -2,6 +2,7 @@ package com.iptv.player.player.vod
 
 import com.iptv.player.data.model.DecoderMode
 import com.iptv.player.data.model.PlayerMode
+import com.iptv.player.playback.core.FrameRateMatcher
 import com.iptv.player.playback.core.PlaybackFailure
 import com.iptv.player.player.VodPlaybackRoutingPolicy
 import com.iptv.player.player.VodPlaybackRoutingPolicy.Route
@@ -62,6 +63,18 @@ internal class VodPlaybackCoordinator(
 
         /** Lifecycle/user stop. The generation makes late stop requests harmless. */
         data class Stop(val generation: Long) : Event
+
+        /**
+         * The engine reported its video format (first frame / Ready). Feeds the
+         * attached [FrameRateMatcher]; never changes the reducer state. [fps]
+         * may still be unknown (<= 0) and is then ignored by the matcher.
+         */
+        data class VideoFormat(
+            val generation: Long,
+            val fps: Float,
+            val width: Int,
+            val height: Int,
+        ) : Event
     }
 
     sealed interface Action {
@@ -122,9 +135,42 @@ internal class VodPlaybackCoordinator(
     var state: State = initialState
         private set
 
+    // Automatic frame-rate matching. The coordinator has no window of its own,
+    // so the Activity attaches a DisplayModeSwitcher (built from its video
+    // container) and dispatches Event.VideoFormat once the engine knows the
+    // format. Applied only for the CURRENT generation while playback is active;
+    // a user/lifecycle stop restores the original mode, a Replace (next
+    // episode) keeps it because the matcher dedupes on frame-rate family.
+    private var frameRateMatcher: FrameRateMatcher? = null
+
+    fun attachDisplayModeSwitcher(matcher: FrameRateMatcher?) {
+        if (frameRateMatcher !== matcher) frameRateMatcher?.restore()
+        frameRateMatcher = matcher
+    }
+
+    /** Undo any display-mode switch (call from the Activity's release path). */
+    fun releaseDisplayMode() {
+        frameRateMatcher?.restore()
+    }
+
     fun dispatch(event: Event): List<Action> {
         val transition = reduce(state, event)
         state = transition.state
+        when (event) {
+            is Event.VideoFormat -> if (
+                state.isCurrent(event.generation) &&
+                state.phase in ACTIVE_PHASES
+            ) {
+                frameRateMatcher?.onVideoFormat(event.fps, event.width, event.height)
+            }
+            is Event.Stop -> if (transition.actions.any {
+                    it is Action.Stop && it.reason == StopReason.USER_OR_LIFECYCLE
+                }
+            ) {
+                frameRateMatcher?.restore()
+            }
+            else -> Unit
+        }
         return transition.actions
     }
 
@@ -137,6 +183,8 @@ internal class VodPlaybackCoordinator(
             is Event.Completed -> completed(state, event.generation)
             is Event.Failed -> failed(state, event.generation, event.failure)
             is Event.Stop -> stop(state, event.generation)
+            // Side effect only (see dispatch); the reducer state is untouched.
+            is Event.VideoFormat -> unchanged(state)
         }
 
         private fun replace(state: State, selection: Selection): Transition {
