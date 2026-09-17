@@ -810,24 +810,31 @@ class SearchActivity : BaseActivity() {
 
         when {
             binding.searchInput.hasFocus() -> {
-                when (event.keyCode) {
-                    KeyEvent.KEYCODE_DPAD_DOWN -> {
+                val atEnd = binding.searchInput.selectionStart >=
+                    (binding.searchInput.text?.length ?: 0)
+                when (
+                    SearchInputKeyPolicy.decide(
+                        keyCode = event.keyCode,
+                        imeVisible = isImeVisible(),
+                        towardEnd = towardEnd,
+                        cursorAtEnd = atEnd,
+                        clearButtonVisible = binding.searchClearButton.visibility == View.VISIBLE,
+                    )
+                ) {
+                    // The on-screen keyboard owns the D-pad while it is showing;
+                    // otherwise the remote can never reach its letter rows.
+                    SearchInputKeyPolicy.Action.LET_IME_HANDLE -> return super.dispatchKeyEvent(event)
+                    SearchInputKeyPolicy.Action.FOCUS_FILTERS -> {
                         binding.searchInput.hideSoftKeyboard()
                         selectedFilterView().requestFocus()
                         return true
                     }
-                    towardEnd -> {
-                        val atEnd = binding.searchInput.selectionStart >=
-                            (binding.searchInput.text?.length ?: 0)
-                        if (
-                            atEnd &&
-                            binding.searchClearButton.visibility == View.VISIBLE
-                        ) {
-                            binding.searchInput.hideSoftKeyboard()
-                            binding.searchClearButton.requestFocus()
-                            return true
-                        }
+                    SearchInputKeyPolicy.Action.FOCUS_CLEAR_BUTTON -> {
+                        binding.searchInput.hideSoftKeyboard()
+                        binding.searchClearButton.requestFocus()
+                        return true
                     }
+                    SearchInputKeyPolicy.Action.PASS_THROUGH -> Unit
                 }
             }
             binding.searchClearButton.hasFocus() -> {
@@ -1182,8 +1189,17 @@ class SearchActivity : BaseActivity() {
         binding.searchInput.post {
             if (!binding.searchInput.hasFocus()) return@post
             val input = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-            input?.showSoftInput(binding.searchInput, InputMethodManager.SHOW_IMPLICIT)
+            // Fire OS / some TV launchers ignore an implicit request that follows
+            // a D-pad focus change; the user explicitly moved into the field.
+            @Suppress("DEPRECATION")
+            input?.showSoftInput(binding.searchInput, InputMethodManager.SHOW_FORCED)
         }
+    }
+
+    /** True while the on-screen keyboard is showing for this window. */
+    private fun isImeVisible(): Boolean {
+        val insets = ViewCompat.getRootWindowInsets(binding.root) ?: return false
+        return insets.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())
     }
 
     private fun clearSearch(focusInput: Boolean) {
