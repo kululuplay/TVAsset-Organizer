@@ -206,3 +206,18 @@ internal fun Throwable.causeChain(): Sequence<Throwable> = sequence {
         current = next
     }
 }
+
+/**
+ * SQLite binds every element of an `IN (:ids)` list as a separate variable and
+ * older Android builds (SQLite < 3.32, i.e. Android 10 and below) cap that at
+ * 999. Deleting a migrated catalog's stale rows passed thousands of ids in one
+ * statement, so the category refresh threw "too many SQL variables" on every
+ * launch and the stale category list survived forever. Chunk every id-list
+ * statement well under the limit.
+ */
+internal const val SQL_ID_CHUNK = 500
+
+internal suspend inline fun <T> List<T>.forEachSqlChunk(block: (List<T>) -> Unit) {
+    if (isEmpty()) return
+    chunked(SQL_ID_CHUNK).forEach { block(it) }
+}

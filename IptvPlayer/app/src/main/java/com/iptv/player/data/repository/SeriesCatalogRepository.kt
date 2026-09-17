@@ -223,12 +223,12 @@ internal class SeriesCatalogRepository(
                     for (id in staleCategoryIds) {
                         staleSeriesIds += seriesDao.itemsForCategory(id).map { it.id }
                     }
-                    if (staleSeriesIds.isNotEmpty()) {
-                        seriesDao.deleteEpisodesForSeriesIds(staleSeriesIds)
-                        seriesDao.deleteSeriesByIds(staleSeriesIds)
-                        seriesFtsDao.deleteByIds(staleSeriesIds)
+                    staleSeriesIds.forEachSqlChunk { chunk ->
+                        seriesDao.deleteEpisodesForSeriesIds(chunk)
+                        seriesDao.deleteSeriesByIds(chunk)
+                        seriesFtsDao.deleteByIds(chunk)
                     }
-                    seriesCategoryDao.deleteByIds(staleCategoryIds)
+                    staleCategoryIds.forEachSqlChunk { seriesCategoryDao.deleteByIds(it) }
                 }
                 if (categories.isNotEmpty()) seriesCategoryDao.upsertAll(categories)
             }
@@ -398,14 +398,14 @@ internal class SeriesCatalogRepository(
             val newCount = items.count { it.id !in existingIds }
             // Merge (REPLACE on id), keeping the FTS index in lockstep, atomically.
             val committed = support.commitSnapshot(config, generation) {
-                if (staleIds.isNotEmpty()) {
-                    seriesDao.deleteEpisodesForSeriesIds(staleIds)
-                    seriesDao.deleteSeriesByIds(staleIds)
-                    seriesFtsDao.deleteByIds(staleIds)
+                staleIds.forEachSqlChunk { chunk ->
+                    seriesDao.deleteEpisodesForSeriesIds(chunk)
+                    seriesDao.deleteSeriesByIds(chunk)
+                    seriesFtsDao.deleteByIds(chunk)
                 }
                 if (items.isNotEmpty()) {
                     seriesDao.upsertSeries(items)
-                    seriesFtsDao.deleteByIds(items.map { it.id })
+                    items.map { it.id }.forEachSqlChunk { seriesFtsDao.deleteByIds(it) }
                     seriesFtsDao.insertAll(items.map { SeriesFtsEntity(it.id, it.name) })
                 }
                 seriesCategoryDao.markLoaded(categoryId)

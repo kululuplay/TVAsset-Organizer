@@ -179,11 +179,11 @@ internal class VodCatalogRepository(
                     for (id in staleCategoryIds) {
                         staleMovieIds += vodDao.itemsForCategory(id).map { it.id }
                     }
-                    if (staleMovieIds.isNotEmpty()) {
-                        vodDao.deleteByIds(staleMovieIds)
-                        vodFtsDao.deleteByIds(staleMovieIds)
+                    staleMovieIds.forEachSqlChunk { chunk ->
+                        vodDao.deleteByIds(chunk)
+                        vodFtsDao.deleteByIds(chunk)
                     }
-                    vodCategoryDao.deleteByIds(staleCategoryIds)
+                    staleCategoryIds.forEachSqlChunk { vodCategoryDao.deleteByIds(it) }
                 }
                 if (categories.isNotEmpty()) vodCategoryDao.upsertAll(categories)
             }
@@ -299,13 +299,13 @@ internal class VodCatalogRepository(
             // cached. Keep the FTS index in lockstep (drop this batch's old rows
             // then re-insert), all atomically so search never sees a half index.
             val committed = support.commitSnapshot(config, generation) {
-                if (staleIds.isNotEmpty()) {
-                    vodDao.deleteByIds(staleIds)
-                    vodFtsDao.deleteByIds(staleIds)
+                staleIds.forEachSqlChunk { chunk ->
+                    vodDao.deleteByIds(chunk)
+                    vodFtsDao.deleteByIds(chunk)
                 }
                 if (items.isNotEmpty()) {
                     vodDao.upsertAll(items)
-                    vodFtsDao.deleteByIds(items.map { it.id })
+                    items.map { it.id }.forEachSqlChunk { vodFtsDao.deleteByIds(it) }
                     vodFtsDao.insertAll(items.map { VodFtsEntity(it.id, it.name) })
                 }
                 vodCategoryDao.markLoaded(categoryId)
