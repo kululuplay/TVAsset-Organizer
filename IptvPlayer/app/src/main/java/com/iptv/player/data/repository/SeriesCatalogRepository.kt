@@ -197,6 +197,7 @@ internal class SeriesCatalogRepository(
                     loaded = id in alreadyLoaded
                 )
             }.distinctBy { it.id }
+            val cachedIds = cachedCategories.mapTo(mutableSetOf()) { it.id }
             when (
                 val decision = support.evaluateRefresh(
                     CatalogDataset.SERIES_CATEGORIES,
@@ -205,6 +206,7 @@ internal class SeriesCatalogRepository(
                         generation.policyExistingCount(cachedCategories.size),
                         catList.size,
                         categories.size,
+                        overlapCount = categories.count { it.id in cachedIds },
                     ),
                 )
             ) {

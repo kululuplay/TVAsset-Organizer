@@ -113,6 +113,7 @@ internal class LiveCatalogRepository(
                         generation.policyExistingCount(existing.size),
                         staged.receivedCount,
                         ordered.size,
+                        overlapCount = ordered.count { it.id in existing },
                     ),
                     force = force,
                 )
