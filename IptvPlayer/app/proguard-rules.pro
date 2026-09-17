@@ -18,3 +18,10 @@
 -dontwarn okhttp3.**
 -dontwarn okio.**
 -dontwarn retrofit2.**
+
+# Media3 FFmpeg audio extension (CI-built AAR in app/libs; absent locally).
+# libffmpegJNI.so resolves Java methods by name; the AAR's consumer rules only
+# cover growOutputBuffer, so keep the whole package explicitly. Absent AAR ->
+# no such classes, and R8 must not warn about the missing package.
+-keep class androidx.media3.decoder.ffmpeg.** { *; }
+-dontwarn androidx.media3.decoder.ffmpeg.**

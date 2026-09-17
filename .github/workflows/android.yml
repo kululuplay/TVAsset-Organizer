@@ -16,8 +16,109 @@ defaults:
     working-directory: IptvPlayer
 
 jobs:
+  ffmpeg-extension:
+    # Media3's FFmpeg audio decoder extension is not on Maven: build it from
+    # source (scripts/ffmpeg/build_media3_ffmpeg.sh, pins in versions.env) and
+    # hand the AAR to the app jobs. The result is cached on every pinned input
+    # so a normal run restores in seconds; only a version/script/NDK bump
+    # rebuilds FFmpeg (~15-20 min). See docs/ffmpeg-audio.md.
+    name: Media3 FFmpeg audio extension
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      cache-key: ${{ steps.pins.outputs.cache-key }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Read pinned versions
+        id: pins
+        working-directory: .
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          source scripts/ffmpeg/versions.env
+          for name in MEDIA3_VERSION FFMPEG_TAG NDK_VERSION CMAKE_VERSION; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name missing from scripts/ffmpeg/versions.env"
+              exit 1
+            fi
+            echo "$name=${!name}" >> "$GITHUB_ENV"
+          done
+          app_media3=$(sed -n 's/.*"androidx\.media3:media3-exoplayer:\([^"]*\)".*/\1/p' IptvPlayer/app/build.gradle.kts | head -n 1)
+          if [ "$app_media3" != "$MEDIA3_VERSION" ]; then
+            echo "::error::app uses media3 $app_media3 but versions.env pins $MEDIA3_VERSION"
+            exit 1
+          fi
+          script_hash=$(sha256sum scripts/ffmpeg/build_media3_ffmpeg.sh scripts/ffmpeg/ndk-version.init.gradle scripts/ffmpeg/versions.env | sha256sum | cut -c1-16)
+          echo "cache-key=media3-ffmpeg-aar-v1-media3_${MEDIA3_VERSION}-ffmpeg_${FFMPEG_TAG}-script_${script_hash}-ndk_${NDK_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cached extension AAR
+        id: aar-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            IptvPlayer/app/libs/media3-decoder-ffmpeg-release.aar
+            IptvPlayer/app/libs/media3-decoder-ffmpeg-release.txt
+          key: ${{ steps.pins.outputs.cache-key }}
+
+      - name: Set up JDK 17
+        if: steps.aar-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK, NDK and CMake
+        if: steps.aar-cache.outputs.cache-hit != 'true'
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          packages: platform-tools platforms;android-35 build-tools;34.0.0 ndk;${{ env.NDK_VERSION }} cmake;${{ env.CMAKE_VERSION }}
+          log-accepted-android-sdk-licenses: false
+
+      - name: Build FFmpeg and the Media3 decoder AAR
+        if: steps.aar-cache.outputs.cache-hit != 'true'
+        working-directory: .
+        env:
+          FFMPEG_WORK_DIR: ${{ runner.temp }}/media3-ffmpeg-build
+        run: bash scripts/ffmpeg/build_media3_ffmpeg.sh
+
+      - name: Verify extension AAR
+        working-directory: .
+        run: |
+          set -euo pipefail
+          aar=IptvPlayer/app/libs/media3-decoder-ffmpeg-release.aar
+          if [ ! -s "$aar" ]; then
+            echo "::error::$aar is missing after build/restore"
+            exit 1
+          fi
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            if ! unzip -Z1 "$aar" | grep -qx "jni/$abi/libffmpegJNI.so"; then
+              echo "::error::$aar lacks jni/$abi/libffmpegJNI.so"
+              exit 1
+            fi
+          done
+          echo "cache-hit=${{ steps.aar-cache.outputs.cache-hit }}"
+          cat IptvPlayer/app/libs/media3-decoder-ffmpeg-release.txt || true
+          ls -l "$aar"
+
+      - name: Upload extension AAR
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: media3-decoder-ffmpeg
+          path: |
+            IptvPlayer/app/libs/media3-decoder-ffmpeg-release.aar
+            IptvPlayer/app/libs/media3-decoder-ffmpeg-release.txt
+          if-no-files-found: error
+          retention-days: 14
+
   verify:
     name: Test, lint and debug build
+    needs: ffmpeg-extension
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -58,6 +159,22 @@ jobs:
 
       - name: Verify Gradle wrapper
         uses: gradle/actions/wrapper-validation@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      # After the secret scan (binary AAR is not part of the tree scan) and
+      # before Gradle configures: app/build.gradle.kts detects the AAR on disk.
+      - name: Download Media3 FFmpeg extension AAR
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: media3-decoder-ffmpeg
+          path: IptvPlayer/app/libs
+
+      - name: Require the FFmpeg extension
+        working-directory: .
+        run: |
+          if [ ! -s IptvPlayer/app/libs/media3-decoder-ffmpeg-release.aar ]; then
+            echo "::error::media3-decoder-ffmpeg-release.aar missing; the build must ship FFmpeg audio"
+            exit 1
+          fi
 
       - name: Test telemetry receiver and release verifier
         working-directory: .
@@ -102,7 +219,7 @@ jobs:
 
   release:
     name: Signed release
-    needs: verify
+    needs: [verify, ffmpeg-extension]
     if: >-
       (github.event_name == 'workflow_dispatch' &&
        (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
@@ -147,6 +264,22 @@ jobs:
           packages: platform-tools platforms;android-35 build-tools;34.0.0
           log-accepted-android-sdk-licenses: false
 
+      # Production always ships FFmpeg audio: a missing AAR fails the release
+      # here (download-artifact errors) and again in the check below.
+      - name: Download Media3 FFmpeg extension AAR
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: media3-decoder-ffmpeg
+          path: IptvPlayer/app/libs
+
+      - name: Require the FFmpeg extension
+        working-directory: .
+        run: |
+          if [ ! -s IptvPlayer/app/libs/media3-decoder-ffmpeg-release.aar ]; then
+            echo "::error::media3-decoder-ffmpeg-release.aar missing; a release must ship FFmpeg audio"
+            exit 1
+          fi
+
       - name: Validate release secrets
         run: |
           for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
@@ -170,9 +303,10 @@ jobs:
           ./gradlew --no-daemon :app:assembleRelease --stacktrace
 
       - name: Verify MPEG decoder resource packaging
-        # R8 must preserve JLayer's synthesis resource as well as its license.
-        # Check the final minified artifact before it can become an update.
-        # Version metadata is read in the following step.
+        # R8 must preserve JLayer's synthesis resource as well as its license,
+        # and the FFmpeg extension's native library must be packaged for every
+        # shipped ABI. Check the final minified artifact before it can become
+        # an update. Version metadata is read in the following step.
         run: |
           python3 - <<'PY'
           from zipfile import ZipFile
@@ -180,12 +314,18 @@ jobs:
               "javazoom/jl/decoder/sfd.ser",
               "assets/licenses/LGPL-2.1.txt",
               "assets/licenses/JLayer-NOTICE.txt",
+              "assets/licenses/FFmpeg-NOTICE.txt",
           }
+          for abi in ("armeabi-v7a", "arm64-v8a", "x86", "x86_64"):
+              required.add(f"lib/{abi}/libffmpegJNI.so")
           with ZipFile("app/build/outputs/apk/release/app-release.apk") as apk:
-              missing = required - set(apk.namelist())
+              names = set(apk.namelist())
+              missing = required - names
               if missing:
-                  raise SystemExit("Missing MPEG decoder resources: " + ", ".join(sorted(missing)))
-          print("MPEG decoder resource and license packaging verified")
+                  raise SystemExit("Missing decoder resources: " + ", ".join(sorted(missing)))
+              if not any(n.startswith("assets/licenses/") for n in names):
+                  raise SystemExit("assets/licenses/ missing from APK")
+          print("MPEG decoder, FFmpeg extension and license packaging verified")
           PY
 
       - name: Read version

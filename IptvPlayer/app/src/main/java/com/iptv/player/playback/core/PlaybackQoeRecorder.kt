@@ -49,6 +49,8 @@ enum class PlaybackEndReason {
     BACKGROUND,
     FATAL_FAILURE,
     APP_SHUTDOWN,
+    /** Never closed by the UI: swept after [PlaybackQoeRecorder.ABANDON_AFTER_MS] or orphaned by a process death. */
+    ABANDONED,
 }
 
 data class PlaybackSession(
@@ -249,6 +251,30 @@ class PlaybackQoeRecorder(
         record
     }
 
+    /** IDs of open sessions, oldest first, optionally only those of [kind]. */
+    fun activeSessionIds(kind: PlaybackContentKind? = null): List<PlaybackSessionId> =
+        synchronized(lock) {
+            active.values.filter { kind == null || it.session.kind == kind }.map { it.session.id }
+        }
+
+    /**
+     * Close every session open longer than [maxAgeMs] (monotonic) as [reason].
+     * A missed teardown otherwise pins the session in memory forever and its
+     * summary never reaches the spool. Returns the records closed.
+     */
+    fun finishStale(
+        maxAgeMs: Long,
+        endedAtEpochMs: Long,
+        reason: PlaybackEndReason = PlaybackEndReason.ABANDONED,
+    ): List<PlaybackQoeRecord> {
+        require(maxAgeMs >= 0L) { "maxAgeMs must not be negative" }
+        val stale = synchronized(lock) {
+            val now = clock.nowMs()
+            active.values.filter { now - it.startedAtMs >= maxAgeMs }.map { it.session.id }
+        }
+        return stale.mapNotNull { finish(it, reason, endedAtEpochMs) }
+    }
+
     fun completedSnapshot(): List<PlaybackQoeRecord> = synchronized(lock) { completed.toList() }
 
     fun drainCompleted(max: Int): List<PlaybackQoeRecord> {
@@ -323,6 +349,35 @@ class PlaybackQoeRecorder(
         private const val DEFAULT_MAX_ACTIVE_SESSIONS = 16
         private const val DEFAULT_MAX_COMPLETED_SESSIONS = 50
         private const val DEFAULT_MAX_FAILURES_PER_SESSION = 8
+
+        /** Sessions still open after this long are closed as [PlaybackEndReason.ABANDONED]. */
+        const val ABANDON_AFTER_MS = 6L * 60L * 60L * 1000L
+
+        /**
+         * Summary for a session a previous process left open (no measurements
+         * survived the death): only the start facts are known, so the duration
+         * is reported as 0 rather than guessed from wall time.
+         */
+        fun abandoned(session: PlaybackSession, endedAtEpochMs: Long): PlaybackQoeRecord {
+            require(endedAtEpochMs >= 0L) { "endedAtEpochMs must not be negative" }
+            return PlaybackQoeRecord(
+                session = session,
+                finalEngine = session.initialEngine,
+                endedAtEpochMs = endedAtEpochMs,
+                endReason = PlaybackEndReason.ABANDONED,
+                sessionDurationMs = 0L,
+                timeToReadyMs = null,
+                timeToFirstFrameMs = null,
+                rebufferCount = 0,
+                rebufferDurationMs = 0L,
+                engineSwitchCount = 0,
+                renderedFrames = 0L,
+                droppedFrames = 0L,
+                failures = emptyList(),
+                discardedFailureCount = 0,
+                isFinal = true,
+            )
+        }
 
         private fun duration(startMs: Long, endMs: Long): Long = (endMs - startMs).coerceAtLeast(0L)
 

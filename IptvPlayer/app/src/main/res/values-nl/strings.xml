@@ -143,6 +143,11 @@
     <string name="settings_buffer_low">Laag (snel zappen)</string>
     <string name="settings_buffer_normal">Normaal (gebalanceerd)</string>
     <string name="settings_buffer_high">Hoog (minder onderbrekingen)</string>
+    <string name="settings_afr">Automatische beeldfrequentie</string>
+    <string name="settings_afr_off">Uit</string>
+    <string name="settings_afr_refresh">Alleen verversingsfrequentie</string>
+    <string name="settings_afr_refresh_resolution">Verversingsfrequentie + resolutie</string>
+    <string name="settings_afr_desc">Schakelt de tv naar de beeldfrequentie van de video (24/25/30/50/60 Hz) voor schokvrij afspelen. Bij elke omschakeling wordt het beeld even zwart; zet dit uit als het beeld zwart blijft.</string>
     <string name="settings_language">Taal</string>
     <string name="settings_general">Algemeen</string>
     <string name="settings_account">Account</string>

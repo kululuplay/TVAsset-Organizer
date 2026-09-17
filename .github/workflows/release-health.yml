@@ -1,0 +1,59 @@
+name: Release health gate
+
+# Emergency brake for the in-app rollout (docs/release-health.md): every 30
+# minutes ask the crash receiver for the current targetVersion's verdict and,
+# only when it is "degraded", set paused: true in update-rollout.json on main
+# and open/update a "Rollout auto-paused: vX" issue. Healthy / insufficient /
+# already paused / release older than 72 h: no-op. Re-activation is manual
+# (scripts/activate_release_rollout.py --force, see UPDATE_ROLLOUT.md).
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: release-health
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  gate:
+    name: Check release health
+    runs-on: ubuntu-latest
+    # Skip on forks: they have neither the secrets nor a fleet.
+    if: github.repository == 'kululuplay/TVAsset-Organizer'
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/release_health_gate.py
+          sparse-checkout-cone-mode: false
+
+      - name: Validate gate secrets
+        env:
+          RELEASE_HEALTH_URL: ${{ secrets.RELEASE_HEALTH_URL }}
+          RELEASE_HEALTH_KEY: ${{ secrets.RELEASE_HEALTH_KEY }}
+        run: |
+          for name in RELEASE_HEALTH_URL RELEASE_HEALTH_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name secret is required for the release health gate"
+              exit 1
+            fi
+          done
+
+      # ubuntu-latest ships python3 (no setup-python needed: the script only
+      # uses the standard library).
+      - name: Evaluate and pause on degraded
+        env:
+          RELEASE_HEALTH_URL: ${{ secrets.RELEASE_HEALTH_URL }}
+          RELEASE_HEALTH_KEY: ${{ secrets.RELEASE_HEALTH_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python3 scripts/release_health_gate.py

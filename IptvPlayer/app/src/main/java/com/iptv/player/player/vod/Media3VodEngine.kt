@@ -28,10 +28,16 @@ import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.audio.AudioCapabilities
+import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.iptv.player.player.CodecGatedAudioRenderer
+import com.iptv.player.player.FfmpegAudio
+import com.iptv.player.player.FfmpegAudioRendererOrder
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.video.VideoFrameMetadataListener
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -308,6 +314,15 @@ class Media3VodEngine(
         return !released && player?.isPlaying == true
     }
 
+    /** Frame rate of the selected video format, or -1 when unknown/no video. */
+    @MainThread
+    override fun videoFrameRate(): Float {
+        checkMainThread()
+        if (released) return -1f
+        val frameRate = player?.videoFormat?.frameRate ?: return -1f
+        return if (frameRate > 0f) frameRate else -1f
+    }
+
     @MainThread
     override fun videoLiveness(): VodVideoLiveness? {
         checkMainThread()
@@ -486,6 +501,50 @@ class Media3VodEngine(
 
     private fun buildRenderersFactory(): DefaultRenderersFactory =
         object : DefaultRenderersFactory(context) {
+            override fun buildAudioRenderers(
+                context: Context,
+                extensionRendererMode: Int,
+                mediaCodecSelector: MediaCodecSelector,
+                enableDecoderFallback: Boolean,
+                audioSink: AudioSink,
+                eventHandler: Handler,
+                eventListener: AudioRendererEventListener,
+                out: ArrayList<Renderer>,
+            ) {
+                super.buildAudioRenderers(
+                    context, extensionRendererMode, mediaCodecSelector, enableDecoderFallback,
+                    audioSink, eventHandler, eventListener, out,
+                )
+                // Same policy as the live engine: platform MediaCodec audio first,
+                // FFmpeg software decode (when packaged) only for what it rejects.
+                // VOD libraries are where AC-3/E-AC-3/DTS/FLAC show up most, so
+                // this removes most "unsupported audio" hops to libVLC for films.
+                val plan = FfmpegAudioRendererOrder.plan(
+                    ffmpegAvailable = FfmpegAudio.available,
+                    preferSoftwareAudio = PlaybackQoeRuntime.devicePlaybackProfile().compatibilityMode,
+                    allowPassthrough = config.allowAudioPassthrough,
+                )
+                val platform = ArrayList<Renderer>(out)
+                out.clear()
+                out.addAll(
+                    FfmpegAudioRendererOrder.arrange(
+                        plan = plan,
+                        platform = platform,
+                        leading = if (plan.hasLeading) {
+                            FfmpegAudio.audioRenderers(context, eventHandler, eventListener, audioSink)
+                                .map { CodecGatedAudioRenderer(it, plan.leadingMimes) }
+                        } else {
+                            emptyList()
+                        },
+                        trailing = if (plan.trailing) {
+                            FfmpegAudio.audioRenderers(context, eventHandler, eventListener, audioSink)
+                        } else {
+                            emptyList()
+                        },
+                    ),
+                )
+            }
+
             @Suppress("DEPRECATION", "UNUSED_PARAMETER")
             override fun buildAudioSink(
                 context: Context,

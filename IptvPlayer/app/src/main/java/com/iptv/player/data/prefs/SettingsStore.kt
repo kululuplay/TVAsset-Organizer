@@ -28,6 +28,7 @@ import com.iptv.player.data.model.PlaybackSelection
 import com.iptv.player.data.model.PlaybackSelectionPolicy
 import com.iptv.player.data.model.PlayerMode
 import com.iptv.player.data.model.StreamFormat
+import com.iptv.player.player.AfrMode
 import com.iptv.player.player.LiveSubtitlePreference
 import com.iptv.player.data.model.SourceConfig
 import com.iptv.player.data.model.SourceType
@@ -64,6 +65,7 @@ class SettingsStore(
         val LIVE_STREAM_FORMAT = stringPreferencesKey("live_stream_format")
         val BUFFER_MODE = stringPreferencesKey("buffer_mode")
         val AUDIO_PASSTHROUGH = booleanPreferencesKey("audio_passthrough")
+        val AFR_MODE = stringPreferencesKey("afr_mode")
         val DEBUG_OVERLAY = booleanPreferencesKey("debug_overlay")
         val LIVE_PREVIEW = booleanPreferencesKey("live_preview")
         val LAST_CHANNEL = stringPreferencesKey("last_channel")
@@ -224,6 +226,30 @@ class SettingsStore(
 
     suspend fun setBufferMode(mode: BufferMode) =
         dataStore.edit { it[Keys.BUFFER_MODE] = mode.name }
+
+    /**
+     * Automatic frame-rate matching. Default OFF: a wrong display-mode switch
+     * blanks the screen on some TVs, so the user opts in explicitly.
+     */
+    val afrMode: Flow<AfrMode> = dataStore.data.map { AfrMode.fromName(it[Keys.AFR_MODE]) }
+
+    suspend fun getAfrMode(): AfrMode =
+        AfrMode.fromName(dataStore.data.first()[Keys.AFR_MODE])
+
+    suspend fun setAfrMode(mode: AfrMode) {
+        // Mirror first (same pattern as the locale): the player reads the value
+        // synchronously on the first-frame path where suspend reads are not possible.
+        afrPrefs.edit().putString(Keys.AFR_MODE.name, mode.name).apply()
+        dataStore.edit { it[Keys.AFR_MODE] = mode.name }
+    }
+
+    /** Synchronous, non-blocking read of [afrMode] for the playback controllers. */
+    fun afrModeBlocking(): AfrMode =
+        AfrMode.fromName(afrPrefs.getString(Keys.AFR_MODE.name, null))
+
+    private val afrPrefs by lazy {
+        context.getSharedPreferences("afr_mirror", Context.MODE_PRIVATE)
+    }
 
     /**
      * Audio passthrough (encoded bitstream over HDMI/SPDIF for AV receivers).

@@ -7,9 +7,14 @@
  *   - Audio prefers decoded PCM (passthrough disabled by default); codec
  *     availability is checked below. Tunneling is off unless ExoTunnelingPolicy
  *     enables it (remote opt-in, never Amlogic: a common green/black cause).
- *   - A bundled MPEG-1 audio-only renderer covers missing Layer-I/II/III codecs
- *     while keeping hardware video. Other unsupported codecs (e.g. AC-3/E-AC-3)
- *     still report onAudioUnavailable so the controller can fall back to libVLC.
+ *   - Production builds bundle the Media3 FFmpeg audio extension (see
+ *     FfmpegAudio / docs/ffmpeg-audio.md): MP2/MP3/AAC/AC-3/E-AC-3/DTS/Opus/
+ *     Vorbis/FLAC/ALAC/MLP/TrueHD decode in software AFTER the platform codecs
+ *     while keeping hardware video. A bundled JLayer MPEG-1 renderer stays last
+ *     for builds without the extension. Anything still unsupported reports
+ *     onAudioUnavailable so the controller can fall back to libVLC: the track
+ *     support check below reads aggregated renderer capabilities, so it needs
+ *     no FFmpeg-specific branch.
  *   - Video uses a SurfaceView (required: Amlogic and most TV SoCs composite
  *     hardware-decoded frames on an underlay plane a TextureView cannot show,
  *     which is the real green-screen cause). The PlayerView uses resize_mode=fill
@@ -123,6 +128,13 @@ class ExoPlayerEngine(
     private var subtitlePreference: LiveSubtitlePreference = LiveSubtitlePreference.Auto
 
     private val handler = Handler(Looper.getMainLooper())
+    // Where the FFmpeg software audio renderers (CI-built extension; absent in
+    // local builds) sit relative to the platform MediaCodec audio renderer.
+    private val ffmpegPlan = FfmpegAudioRendererOrder.plan(
+        ffmpegAvailable = FfmpegAudio.available,
+        preferSoftwareAudio = preferSoftwareAudio,
+        allowPassthrough = allowPassthrough,
+    )
     // Absent in normal builds. This observer never feeds playback/health policy.
     private val playbackDiagnosticGate = if (BuildConfig.LIVE_PLAYBACK_DIAGNOSTICS) {
         LivePlaybackDiagnosticGate()
@@ -156,6 +168,7 @@ class ExoPlayerEngine(
     private var audioUnderrunCheckRunnable: Runnable? = null
     private var audioStallCheckRunnable: Runnable? = null
     private val lastVideoFrameAtMs = AtomicLong(0L)
+    private val frameRateEstimator = FrameRateEstimator()
     private var lastHealthPositionMs = -1L
     private var readyForPlayback = false
     private var streamGeneration = 0L
@@ -576,9 +589,10 @@ class ExoPlayerEngine(
         // Unlike the media clock it stops when video decoding/output freezes while
         // audio keeps playing, which lets the health watchdog recover that case.
         exo.setVideoFrameMetadataListener(
-            VideoFrameMetadataListener { _, _, _, _ ->
+            VideoFrameMetadataListener { presentationTimeUs, _, _, _ ->
                 val nowMs = SystemClock.elapsedRealtime()
                 lastVideoFrameAtMs.set(nowMs)
+                frameRateEstimator.onFrame(presentationTimeUs)
                 // Opt-in observation only: READY refreshes the health timestamp,
                 // so diagnostics keep the actual frame timestamp separately.
                 diagnosticLastVideoFrameAtMs?.set(nowMs)
@@ -824,10 +838,45 @@ class ExoPlayerEngine(
                     context, extensionRendererMode, mediaCodecSelector, enableDecoderFallback,
                     audioSink, eventHandler, eventListener, out,
                 )
+                // FFmpeg software audio (when the CI-built extension is packaged)
+                // sits AFTER the platform MediaCodec renderer: working hardware/
+                // platform codecs keep priority and FFmpeg only claims formats
+                // they reject (MP2/AC-3/E-AC-3/DTS/...). This is the audio-only
+                // equivalent of EXTENSION_RENDERER_MODE_ON; video is untouched.
+                // Constrained devices lead with a gated FFmpeg renderer for
+                // Dolby so those streams decode to PCM predictably.
+                val platform = ArrayList<Renderer>(out)
+                out.clear()
+                out.addAll(
+                    FfmpegAudioRendererOrder.arrange(
+                        plan = ffmpegPlan,
+                        platform = platform,
+                        leading = if (ffmpegPlan.hasLeading) {
+                            FfmpegAudio.audioRenderers(context, eventHandler, eventListener, audioSink)
+                                .map { CodecGatedAudioRenderer(it, ffmpegPlan.leadingMimes) }
+                        } else {
+                            emptyList()
+                        },
+                        trailing = if (ffmpegPlan.trailing) {
+                            FfmpegAudio.audioRenderers(context, eventHandler, eventListener, audioSink)
+                        } else {
+                            emptyList()
+                        },
+                    ),
+                )
                 // Appending (not preferring) preserves every working platform
                 // codec. Unsupported MPEG audio now gets PCM in this SAME player,
                 // instead of forcing hardware video onto the full VLC_SW route.
+                // Kept last: FFmpeg (if present) already handles MPEG audio, and
+                // without it the JLayer renderer remains the MP2/MP3 safety net.
                 out.add(MpegAudioRenderer(eventHandler, eventListener, audioSink))
+                PlaybackLog.log(
+                    context, engineName,
+                    "audioRenderers=" + out.joinToString(",") { it.name } +
+                        " ffmpeg=${FfmpegAudio.available}" +
+                        (FfmpegAudio.version?.let { " ffmpegVersion=$it" } ?: "") +
+                        " leading=${ffmpegPlan.leadingMimes} trailing=${ffmpegPlan.trailing}",
+                )
             }
 
             @Suppress("DEPRECATION", "UNUSED_PARAMETER")
@@ -1626,7 +1675,9 @@ class ExoPlayerEngine(
      */
     override fun getStreamInfo(): StreamInfo? {
         val fmt = player?.videoFormat ?: return null
-        val fps = if (fmt.frameRate > 0f) fmt.frameRate else 0f
+        // MPEG-TS H.264/H.265 formats carry no frame rate; fall back to the
+        // cadence measured from rendered frames so frame-rate matching works.
+        val fps = if (fmt.frameRate > 0f) fmt.frameRate else frameRateEstimator.estimate()
         val bits = fmt.peakBitrate.takeIf { it > 0 } ?: fmt.averageBitrate.takeIf { it > 0 }
         return StreamInfo(
             width = fmt.width.coerceAtLeast(0),
