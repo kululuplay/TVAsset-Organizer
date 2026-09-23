@@ -92,6 +92,7 @@ class PlayerController(
 
     /** UI-facing events from the controller (already engine-agnostic). */
     interface Callback {
+        fun onObservation(sample: com.iptv.player.playback.core.PlaybackObservation) {}
         fun onBuffering()
         fun onPlaying(engineName: String)
         /**
@@ -824,6 +825,10 @@ class PlayerController(
     private fun engineListener(source: PlayerEngine, epoch: Long = attemptEpoch) = object : PlayerListener {
         private fun dispatch(action: () -> Unit) = post {
             if (source === engine && epoch == attemptEpoch) action()
+        }
+
+        override fun onObservation(sample: com.iptv.player.playback.core.PlaybackObservation) = dispatch {
+            if (!suspended) callback.onObservation(sample)
         }
 
         override fun onTransportConnecting() = dispatch {

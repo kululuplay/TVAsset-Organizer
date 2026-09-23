@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.withContext
@@ -192,6 +193,32 @@ internal class VodCatalogRepository(
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
             e.toOutcomeFailure()
+        }
+    }
+
+    /** Sequential movie refresh shared by the Movies reload and explicit dashboard refresh. */
+    suspend fun refreshMovieCatalog(
+        config: SourceConfig,
+        forceAll: Boolean,
+        onProgress: suspend (Int, Int) -> Unit = { _, _ -> },
+    ): MovieCatalogRefreshReport = withContext(Dispatchers.IO) {
+        if (config.type != SourceType.XTREAM) {
+            return@withContext MovieCatalogRefreshReport(0, 0, emptyList())
+        }
+        var indexFailure: Outcome.Failure? = null
+        if (forceAll || vodCategoryDao.getAll().isEmpty()) {
+            when (val result = refreshVodCategories(config)) {
+                is Outcome.Success -> Unit
+                is Outcome.Failure -> indexFailure = result
+            }
+        }
+        // Failed index retrieval still refreshes known categories, without hiding that failure.
+        val hidden = settings.hiddenCategories(ContentType.VOD).first()
+        val categories = vodCategoryDao.getAll()
+            .filter { it.id !in hidden && (forceAll || !it.loaded) }
+            .map { MovieRefreshCategory(it.id, it.name) }
+        MovieCatalogRefresh.run(categories, indexFailure, onProgress) { id ->
+            refreshVodCategory(config, id, force = forceAll)
         }
     }
 

@@ -37,6 +37,8 @@ import com.iptv.player.databinding.ActivityHomeBinding
 import com.iptv.player.playback.android.PlaybackQoeRuntime
 import com.iptv.player.playback.android.PlaybackProcessRecovery
 import com.iptv.player.playback.core.PlaybackEndReason
+import com.iptv.player.playback.core.PlaybackContentIdentity
+import com.iptv.player.playback.core.PlaybackObservation
 import com.iptv.player.playback.core.PlaybackEngineKind
 import com.iptv.player.playback.core.PlaybackFailure
 import com.iptv.player.playback.core.PlaybackResourceGovernor
@@ -63,6 +65,7 @@ import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NewContentNotifier
 import com.iptv.player.util.NowPlaying
 import com.iptv.player.util.PlaybackRemotePolicy
+import com.iptv.player.util.PlaybackProblemDialog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -322,6 +325,16 @@ class HomeActivity : BaseActivity() {
                     get() = this@HomeActivity.castController
 
                 override fun togglePreviewFavorite() = this@HomeActivity.togglePreviewFavorite()
+                override fun reportPlaybackProblem() {
+                    val channel = this@HomeActivity.previewingChannel ?: return
+                    val kind = LivePlaybackQoePolicy.sessionDescriptor(radio = radioMode).content
+                    PlaybackProblemDialog.show(
+                        this@HomeActivity,
+                        previewQoeSessionId,
+                        PlaybackContentIdentity.forStream(channel.streamUrl, kind, channel.id),
+                        channel.name,
+                    )
+                }
             },
         )
     }
@@ -521,6 +534,11 @@ class HomeActivity : BaseActivity() {
         if (inlineFullscreen) {
             if (dispatchFullscreenKey(event)) return true
             return super.dispatchKeyEvent(event)
+        }
+
+        if (event.keyCode == KeyEvent.KEYCODE_MENU && previewingChannel != null) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) inlinePlayerMenu.show()
+            return true
         }
 
         if (event.action == KeyEvent.ACTION_DOWN) {
@@ -1823,6 +1841,11 @@ class HomeActivity : BaseActivity() {
 
     /** UI callback: TV becomes READY only after a real frame; radio on audio playback. */
     private fun buildPreviewCallback() = object : PlayerController.Callback {
+        override fun onObservation(sample: PlaybackObservation) {
+            if (castOwnsPreviewPlayback || castLoadPending) return
+            PlaybackQoeRuntime.observe(previewQoeSessionId, sample)
+        }
+
         override fun onBuffering() {
             if (castOwnsPreviewPlayback || castLoadPending) return
             previewLoadingPolicy.onBuffering()
@@ -1864,6 +1887,7 @@ class HomeActivity : BaseActivity() {
         }
         override fun onPlaybackRestarting() {
             if (castOwnsPreviewPlayback || castLoadPending) return
+            PlaybackQoeRuntime.resetOutputEvidence(previewQoeSessionId)
             previewState = LivePreviewPressPolicy.Phase.STARTING
             previewLoadingPolicy.requireFreshFrame()
             binding.previewPlaybackCover.visibility = View.VISIBLE
@@ -2210,6 +2234,10 @@ class HomeActivity : BaseActivity() {
             kind = descriptor.content,
             engine = PlaybackEngineKind.UNKNOWN,
             transport = descriptor.transport,
+            contentLabel = previewingChannel?.name,
+            contentKey = PlaybackContentIdentity.forStream(
+                previewingChannel?.streamUrl, descriptor.content, previewingChannel?.id,
+            ),
         )
     }
 

@@ -427,10 +427,25 @@ class DashboardActivity : BaseActivity() {
                     return@launch
                 }
                 toast(getString(R.string.dash_refreshing))
-                val ok = runCatching { ServiceLocator.repository.syncAll(config) }
-                    .getOrDefault(false)
-                toast(getString(if (ok) R.string.dash_refreshed else R.string.dash_refresh_failed))
+                val report = ServiceLocator.repository.syncAllReport(config, includeMovieContents = true)
+                val ok = if (config.type == com.iptv.player.data.model.SourceType.XTREAM) {
+                    report.manualRefreshSucceeded
+                } else report.allRefreshSucceeded
+                if (ok) {
+                    toast(getString(R.string.dash_refreshed))
+                } else if (report.allRefreshSucceeded && report.movieContents?.total == 0) {
+                    toast(getString(R.string.catalog_refresh_no_visible_movies))
+                } else {
+                    toast(getString(R.string.dash_refresh_failed))
+                    report.movieContents?.takeIf { !it.successful }?.let {
+                        com.iptv.player.ui.common.MovieRefreshFeedback.show(this@DashboardActivity, it)
+                    }
+                }
                 loadFooter()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                toast(getString(R.string.dash_refresh_failed))
             } finally {
                 setRefreshBusy(false)
             }

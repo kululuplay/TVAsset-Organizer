@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="catalog_refresh_incomplete">Films niet volledig bijgewerkt. Sommige inhoud kon niet worden bijgewerkt.</string>
+    <string name="catalog_refresh_details">Fouten bij vernieuwen tonen</string>
+    <string name="catalog_movie_index_failed">De filmcategorieën konden niet worden bijgewerkt</string>
+    <string name="catalog_refresh_no_visible_movies">Er zijn geen zichtbare filmcategorieën om te vernieuwen.</string>
+</resources>

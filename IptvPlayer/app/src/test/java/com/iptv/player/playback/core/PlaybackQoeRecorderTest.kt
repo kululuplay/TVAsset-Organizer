@@ -121,8 +121,10 @@ class PlaybackQoeRecorderTest {
                 "rebuffer_count",
                 "rebuffer_duration_ms",
                 "engine_switch_count",
-                "rendered_frames",
-                "dropped_frames",
+                "state",
+                "state_duration_ms",
+                "paused_duration_ms",
+                "frames_known",
                 "failure_codes",
                 "failure_categories",
                 "failure_phases",
@@ -250,6 +252,78 @@ class PlaybackQoeRecorderTest {
 
         assertTrue(recorder.finish(first, PlaybackEndReason.USER_STOP, 2_000) != null)
         assertTrue(recorder.start(session(rejected)))
+    }
+
+    @Test
+    fun `loading is observable before first frame and optional counters remain unknown`() {
+        val clock = FakeClock()
+        val recorder = PlaybackQoeRecorder(clock)
+        val id = PlaybackSessionId.random()
+        recorder.start(session(id))
+        recorder.setRebuffering(id, true)
+        clock.advance(12_000)
+        val record = recorder.activeSnapshot().single()
+        assertEquals(PlaybackObservedState.STARTING, record.observedState)
+        assertEquals(12_000L, record.stateDurationMs)
+        assertEquals(0, record.rebufferCount)
+        recorder.markFirstFrame(id)
+        val fields = recorder.snapshotActive(id)!!.toSafeFields()
+        assertEquals(false, fields["frames_known"])
+        assertFalse(fields.containsKey("rendered_frames"))
+        assertFalse(fields.containsKey("dropped_frames"))
+        assertFalse(fields.containsKey("last_frame_age_ms"))
+    }
+
+    @Test
+    fun `frozen output retains last observed frame age without inventing frames`() {
+        val clock = FakeClock()
+        val recorder = PlaybackQoeRecorder(clock)
+        val id = PlaybackSessionId.random()
+        recorder.start(session(id))
+        recorder.markFirstFrame(id)
+        recorder.observe(id, PlaybackObservation("decoder1", rendered = 30, dropped = 2, bufferMs = 4_000))
+        clock.advance(10_000)
+        recorder.observe(id, PlaybackObservation("decoder1", rendered = 30, dropped = 2, bufferMs = 3_000))
+        val record = recorder.snapshotActive(id)!!
+        assertEquals(10_000L, record.lastFrameAgeMs)
+        assertEquals(30L, record.renderedFrames)
+        assertEquals(3_000L, record.currentBufferMs)
+        assertTrue(record.framesKnown)
+    }
+
+    @Test
+    fun `pause closes rebuffer and native replacement clears stale frame evidence`() {
+        val clock = FakeClock()
+        val recorder = PlaybackQoeRecorder(clock)
+        val id = PlaybackSessionId.random()
+        recorder.start(session(id))
+        recorder.markFirstFrame(id)
+        recorder.observe(id, PlaybackObservation("first", rendered = 30, dropped = 1))
+        recorder.setRebuffering(id, true)
+        clock.advance(2_000)
+        recorder.setPaused(id, true)
+        clock.advance(30_000)
+        var record = recorder.snapshotActive(id)!!
+        assertEquals(PlaybackObservedState.PAUSED, record.observedState)
+        assertEquals(2_000L, record.rebufferDurationMs)
+        recorder.observe(id, PlaybackObservation("replacement", paused = false))
+        record = recorder.snapshotActive(id)!!
+        assertEquals(PlaybackObservedState.PLAYING, record.observedState)
+        assertFalse(record.framesKnown)
+        assertNull(record.lastFrameAgeMs)
+    }
+
+    @Test
+    fun `background state and failure completion remain distinct`() {
+        val recorder = PlaybackQoeRecorder(FakeClock())
+        val id = PlaybackSessionId.random()
+        recorder.start(session(id))
+        recorder.pauseAll()
+        assertEquals(PlaybackObservedState.PAUSED, recorder.activeSnapshot().single().observedState)
+        val record = recorder.finish(id, PlaybackEndReason.FATAL_FAILURE, 5_000)!!
+        assertEquals(PlaybackObservedState.FAILED, record.observedState)
+        assertTrue(record.isFinal)
+        assertTrue(recorder.activeSnapshot().isEmpty())
     }
 
     private fun session(id: PlaybackSessionId) = PlaybackSession(

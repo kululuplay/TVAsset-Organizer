@@ -74,6 +74,8 @@ import com.iptv.player.BuildConfig
 import com.iptv.player.R
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.playback.android.PlaybackQoeRuntime
+import com.iptv.player.playback.android.PlaybackSupportEvidence
+import com.iptv.player.playback.android.PlaybackSupportObserver
 import com.iptv.player.playback.core.AudioFailureEvidence
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.PlaybackLog
@@ -115,6 +117,8 @@ class ExoPlayerEngine(
     override val engineName: String = "ExoPlayer"
     override val supportsPreciseSourceErrors: Boolean = true
 
+    private val supportEvidence = PlaybackSupportEvidence()
+    private var supportObserver: PlaybackSupportObserver? = null
     private var player: ExoPlayer? = null
     private var playerView: PlayerView? = null
     private val playbackClockWindow = Timeline.Window()
@@ -305,7 +309,7 @@ class ExoPlayerEngine(
             providerConnection.wrap(http)
         }
         val mediaSourceFactory = ProgressiveMediaSource.Factory(
-            DirectMediaDataSource.Factory(httpDataSourceFactory),
+            DirectMediaDataSource.Factory(supportEvidence.wrap(httpDataSourceFactory)),
             ExtractorsFactory { arrayOf(TsExtractor()) },
         )
 
@@ -786,6 +790,9 @@ class ExoPlayerEngine(
         container.addView(view)
 
         player = exo
+        supportObserver = PlaybackSupportObserver(exo, supportEvidence).apply {
+            onObservation = { sample -> listener?.onObservation(sample) }
+        }
         playerView = view
         applyPreferredTrackLanguages()
     }
@@ -914,7 +921,7 @@ class ExoPlayerEngine(
                     allowPassthrough = allowPassthrough,
                     requiresSecureDecoder = secure,
                     requiresTunnelingDecoder = tunneling,
-                    candidates = MediaCodecSelector.DEFAULT.getDecoderInfos(mime, secure, tunneling),
+                    candidates = MediaCodecSelector.DEFAULT.getDecoderInfos(mime, secure, tunneling).also(supportEvidence::remember),
                     isSoftware = { it.softwareOnly },
                 )
             })
@@ -1518,6 +1525,7 @@ class ExoPlayerEngine(
     }
 
     private fun submitMedia(exo: ExoPlayer, url: String, mediaId: String) {
+        supportObserver?.start(mediaId)
         exo.setMediaItem(
             MediaItem.Builder()
                 .setUri(url)
@@ -1531,6 +1539,7 @@ class ExoPlayerEngine(
     }
 
     private fun resetHealth(): String {
+        supportObserver?.stop()
         cancelPlaybackDiagnosticSampler()
         handler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()
@@ -1571,6 +1580,7 @@ class ExoPlayerEngine(
     override fun resume() { player?.playWhenReady = true }
 
     override fun stop() {
+        supportObserver?.stop()
         player?.stop()
         // Media3 stop() is not a socket close: cancel the Loader, then force the
         // blocked HTTP read to unwind now instead of at the 30 s read timeout.
@@ -1626,6 +1636,8 @@ class ExoPlayerEngine(
     }
 
     override fun release() {
+        supportObserver?.release()
+        supportObserver = null
         cancelPlaybackDiagnosticSampler()
         handler.removeCallbacksAndMessages(null)
         surfaceFrameHealth.reset()

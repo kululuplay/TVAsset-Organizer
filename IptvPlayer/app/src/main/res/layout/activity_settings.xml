@@ -197,7 +197,7 @@
                     android:clipToPadding="false"
                     android:descendantFocusability="afterDescendants"
                     android:fillViewport="true"
-                    android:focusable="false"
+                    android:focusable="true"
                     android:focusableInTouchMode="false">
 
                     <LinearLayout

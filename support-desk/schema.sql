@@ -29,3 +29,65 @@ CREATE TABLE IF NOT EXISTS support_audit (
   status TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Structured, credential-free measurements; independent from user-authored tickets.
+CREATE TABLE IF NOT EXISTS support_playback_devices (
+  id BIGSERIAL PRIMARY KEY,
+  installation_id UUID NOT NULL UNIQUE REFERENCES support_installations(id),
+  sampled_at_ms BIGINT NOT NULL,
+  status_sampled_at_ms BIGINT NOT NULL DEFAULT 0,
+  last_seen_at TIMESTAMPTZ NOT NULL,
+  device JSONB NOT NULL,
+  sessions JSONB NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('problem','healthy','unknown')),
+  history_limited BOOLEAN NOT NULL DEFAULT false
+);
+ALTER TABLE support_playback_devices ADD COLUMN IF NOT EXISTS history_limited BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE support_playback_devices ADD COLUMN IF NOT EXISTS status_sampled_at_ms BIGINT NOT NULL DEFAULT 0;
+-- Small receipts preserve retry idempotency even after bounded history is pruned.
+CREATE TABLE IF NOT EXISTS support_playback_receipts (
+  installation_id UUID NOT NULL REFERENCES support_installations(id),
+  sample_id UUID NOT NULL,
+  received_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (installation_id, sample_id)
+);
+CREATE INDEX IF NOT EXISTS support_playback_receipts_retention ON support_playback_receipts(received_at);
+CREATE TABLE IF NOT EXISTS support_playback_samples (
+  id BIGSERIAL PRIMARY KEY,
+  installation_id UUID NOT NULL REFERENCES support_installations(id),
+  sample_id UUID NOT NULL,
+  sampled_at_ms BIGINT NOT NULL,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  payload JSONB NOT NULL,
+  UNIQUE (installation_id, sample_id)
+);
+CREATE INDEX IF NOT EXISTS support_playback_samples_device ON support_playback_samples(installation_id, id DESC);
+CREATE INDEX IF NOT EXISTS support_playback_samples_retention ON support_playback_samples(received_at);
+CREATE INDEX IF NOT EXISTS support_playback_devices_problem ON support_playback_devices(status, last_seen_at DESC);
+
+-- Additional diagnostic records never prevent an older application's installation cleanup.
+CREATE TABLE IF NOT EXISTS support_playback_incidents (
+  id BIGSERIAL PRIMARY KEY,
+  installation_id UUID NOT NULL REFERENCES support_installations(id) ON DELETE CASCADE,
+  incident_id UUID NOT NULL,
+  sampled_at_ms BIGINT NOT NULL,
+  received_at TIMESTAMPTZ NOT NULL,
+  payload JSONB NOT NULL,
+  UNIQUE (installation_id, incident_id)
+);
+CREATE INDEX IF NOT EXISTS support_playback_incidents_device ON support_playback_incidents(installation_id, id DESC);
+CREATE INDEX IF NOT EXISTS support_playback_incidents_retention ON support_playback_incidents(received_at);
+CREATE TABLE IF NOT EXISTS support_playback_interventions (
+  id BIGSERIAL PRIMARY KEY,
+  installation_id UUID NOT NULL REFERENCES support_installations(id) ON DELETE CASCADE,
+  request_id UUID NOT NULL,
+  content_key TEXT NOT NULL,
+  note TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  baseline JSONB NOT NULL,
+  result JSONB,
+  UNIQUE (installation_id, request_id)
+);
+CREATE INDEX IF NOT EXISTS support_playback_interventions_device ON support_playback_interventions(installation_id, id DESC);
+CREATE INDEX IF NOT EXISTS support_playback_interventions_retention ON support_playback_interventions(created_at);

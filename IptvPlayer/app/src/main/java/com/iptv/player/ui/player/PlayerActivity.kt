@@ -35,6 +35,8 @@ import com.iptv.player.playback.android.PlaybackQoeRuntime
 import com.iptv.player.playback.android.PlaybackProcessRecovery
 import com.iptv.player.playback.android.PlaybackProcessRecoveryTargetProvider
 import com.iptv.player.playback.core.PlaybackEndReason
+import com.iptv.player.playback.core.PlaybackContentIdentity
+import com.iptv.player.playback.core.PlaybackObservation
 import com.iptv.player.playback.core.PlaybackEngineKind
 import com.iptv.player.playback.core.PlaybackFailure
 import com.iptv.player.playback.core.PlaybackResourceGovernor
@@ -50,6 +52,7 @@ import com.iptv.player.player.TvPlaybackSession
 import com.iptv.player.player.VlcOps
 import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NowPlaying
+import com.iptv.player.util.PlaybackProblemDialog
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.LogoPlaceholder
 import com.iptv.player.ui.common.LowEndUiBudget
@@ -613,6 +616,17 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         labels.add(getString(R.string.stream_info))
         actions.add { toggleStats() }
 
+        labels.add(getString(R.string.support_playback_problem_channel))
+        actions.add {
+            val channel = currentChannel
+            val kind = LivePlaybackQoePolicy.sessionDescriptor(radio = viewModel.radioMode).content
+            PlaybackProblemDialog.show(
+                this, qoeSessionId,
+                PlaybackContentIdentity.forStream(channel?.streamUrl, kind, channel?.id),
+                channel?.name.orEmpty(),
+            )
+        }
+
         PlayerDialogs.showOptions(
             this,
             getString(R.string.player_menu),
@@ -828,6 +842,11 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         if (!castOwnsPlayback && localPlaybackRequested) playbackSession.setPlaying(true)
     }
 
+    override fun onObservation(sample: PlaybackObservation) {
+        if (castOwnsPlayback || castLoadPending) return
+        PlaybackQoeRuntime.observe(qoeSessionId, sample)
+    }
+
     override fun onPlaying(engineName: String) {
         if (castOwnsPlayback || castLoadPending) return
         val canHideLoading = loadingOverlayPolicy.shouldHideOnPlaying(
@@ -854,6 +873,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
 
     override fun onPlaybackRestarting() {
         if (castOwnsPlayback || castLoadPending) return
+        PlaybackQoeRuntime.resetOutputEvidence(qoeSessionId)
         loadingOverlayPolicy.requireFreshFrame()
         binding.errorOverlay.visibility = View.GONE
         binding.playbackCover.visibility = View.VISIBLE
@@ -1199,6 +1219,10 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
             kind = descriptor.content,
             engine = PlaybackEngineKind.UNKNOWN,
             transport = descriptor.transport,
+            contentLabel = currentChannel?.name,
+            contentKey = PlaybackContentIdentity.forStream(
+                currentChannel?.streamUrl, descriptor.content, currentChannel?.id,
+            ),
         )
     }
 

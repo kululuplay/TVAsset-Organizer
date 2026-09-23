@@ -37,6 +37,7 @@ internal class HomeInlinePlayerMenu(
         val previewController: PlayerController?
         val castController: CastController
         fun togglePreviewFavorite()
+        fun reportPlaybackProblem()
     }
 
     private companion object {
@@ -91,6 +92,11 @@ internal class HomeInlinePlayerMenu(
 
         labels.add(getString(R.string.stream_info))
         actions.add(::showStreamInfo)
+
+        if (channel != null) {
+            labels.add(getString(R.string.support_playback_problem_channel))
+            actions.add(host::reportPlaybackProblem)
+        }
 
         PlayerDialogs.showOptions(
             activity,

@@ -61,6 +61,15 @@ internal object SupportPayloadPolicy {
                 safeMetadata[key] = integral.toInt()
             }
         }
+        if (safeType == "diagnostic") {
+            listOf("playback_session_id", "playback_incident_id").forEach { key ->
+                (metadata[key] as? String)?.takeIf {
+                    Regex("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}").matches(it)
+                }?.let { safeMetadata[key] = it }
+            }
+            (metadata["content_key"] as? String)?.takeIf { Regex("[a-f0-9]{64}").matches(it) }
+                ?.let { safeMetadata["content_key"] = it }
+        }
         return Payload(
             safeType, safeMessage,
             log?.let { utf8Tail(sanitize(it, knownSecrets), MAX_LOG_BYTES) },
@@ -83,6 +92,12 @@ internal object SupportPayloadPolicy {
                 it !in '\u202A'..'\u202E' && it !in '\u2066'..'\u2069'
         }
     }
+
+    internal fun playbackLabel(value: String, knownSecrets: List<String>): String =
+        sanitize(value, knownSecrets)
+            .replace(Regex("(?i)\\b[a-z][a-z0-9+.-]*://\\S+|\\bwww\\.\\S+"), "<url removed>")
+            .replace(Regex("\\b[^\\s@]+@[^\\s@]+\\.[^\\s@]+\\b"), "<redacted>")
+            .replace(Regex("[\\r\\n\\t]+"), " ").trim().take(160)
 
     /** Keep the newest log data, but never split a UTF-8 code point at the byte cap. */
     internal fun utf8Tail(value: String, maxBytes: Int): String {

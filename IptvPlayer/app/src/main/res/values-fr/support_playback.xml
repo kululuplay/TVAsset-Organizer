@@ -1,0 +1,8 @@
+<resources>
+    <string name="support_installation_id">Identifiant appareil du support</string>
+    <string name="support_playback_disclosure">Lorsque l’application est ouverte, l’état de lecture, les titres, les erreurs, le type de réseau et les performances sont envoyés de manière sécurisée au support Kululu. Les identifiants, adresses des flux, captures d’écran et sons du microphone ne sont pas envoyés. Communiquez cet identifiant au support pour retrouver vos diagnostics.</string>
+    <string name="support_playback_problem_channel">Cette chaîne se bloque</string>
+    <string name="support_playback_problem_content">Signaler un problème de lecture</string>
+    <string name="support_playback_problem_title">Problème de lecture</string>
+    <string name="support_playback_problem_message">La lecture se fige, saccade ou reste en chargement.</string>
+</resources>

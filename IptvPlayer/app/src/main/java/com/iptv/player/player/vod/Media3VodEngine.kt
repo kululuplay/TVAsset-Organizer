@@ -46,6 +46,8 @@ import com.iptv.player.player.DirectMediaDataSource
 import com.iptv.player.player.MediaTransportPolicy
 import com.iptv.player.R
 import com.iptv.player.playback.android.PlaybackQoeRuntime
+import com.iptv.player.playback.android.PlaybackSupportEvidence
+import com.iptv.player.playback.android.PlaybackSupportObserver
 import com.iptv.player.playback.core.FailureSignal
 import com.iptv.player.playback.core.PlaybackFailure
 import com.iptv.player.playback.core.PlaybackFailureClassifier
@@ -112,6 +114,8 @@ class Media3VodEngine(
 
     override val engineName: String = ENGINE_NAME
 
+    private val supportEvidence = PlaybackSupportEvidence()
+    private var supportObserver: PlaybackSupportObserver? = null
     private var player: ExoPlayer? = null
     private var playerView: PlayerView? = null
     private var listener: VodEngine.Listener? = null
@@ -237,6 +241,7 @@ class Media3VodEngine(
                 .setMediaId(mediaId)
                 .setUri(url)
                 .build()
+            supportObserver?.start(mediaId)
             exo.setMediaItem(item, resumeMs.coerceAtLeast(0L))
             videoFrameHeartbeatGeneration.set(token)
             exo.prepare()
@@ -429,6 +434,8 @@ class Media3VodEngine(
         checkMainThread()
         if (released) return
         released = true
+        supportObserver?.release()
+        supportObserver = null
         generation += 1L
         activeMediaId = null
         reportedFailureGeneration = VodEngine.NO_GENERATION
@@ -471,7 +478,7 @@ class Media3VodEngine(
             readTimeoutMs = config.readTimeoutMs,
             allowHttpToHttpsRedirects = config.allowHttpToHttpsRedirects,
         )
-        val mediaSourceFactory = DefaultMediaSourceFactory(DirectMediaDataSource.Factory(httpFactory))
+        val mediaSourceFactory = DefaultMediaSourceFactory(DirectMediaDataSource.Factory(supportEvidence.wrap(httpFactory)))
         val selector = DefaultTrackSelector(context).apply {
             val parameters = buildUponParameters()
                 .setTunnelingEnabled(false)
@@ -495,6 +502,9 @@ class Media3VodEngine(
         exo.setVideoFrameMetadataListener(videoFrameMetadataListener)
 
         player = exo
+        supportObserver = PlaybackSupportObserver(exo, supportEvidence).apply {
+            onObservation = { sample -> listener?.onObservation(generation, sample) }
+        }
         applyPreferredLanguages(exo)
         return exo
     }
@@ -563,6 +573,9 @@ class Media3VodEngine(
                     .build()
             }
         }.setEnableDecoderFallback(true)
+            .setMediaCodecSelector(MediaCodecSelector { mime, secure, tunneling ->
+                MediaCodecSelector.DEFAULT.getDecoderInfos(mime, secure, tunneling).also(supportEvidence::remember)
+            })
 
     private fun createPlayerView(container: ViewGroup, exo: ExoPlayer): PlayerView {
         val view = LayoutInflater.from(context)
@@ -668,6 +681,7 @@ class Media3VodEngine(
     }
 
     private fun invalidateActiveGeneration(clearMedia: Boolean) {
+        supportObserver?.stop()
         generation += 1L
         activeMediaId = null
         reportedFailureGeneration = VodEngine.NO_GENERATION

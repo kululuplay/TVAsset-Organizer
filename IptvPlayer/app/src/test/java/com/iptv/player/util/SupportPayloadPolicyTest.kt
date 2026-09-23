@@ -48,6 +48,40 @@ class SupportPayloadPolicyTest {
         assertEquals("one\ntwothree", SupportPayloadPolicy.sanitize("one\r\ntwo\u202E\u0000three"))
     }
 
+    @Test fun `playback ticket links accept strict IDs only for diagnostics`() {
+        val session = "ea4c4ee1-873d-4c43-8934-d55d96e466a4"
+        val incident = "b1d3d692-987f-4af5-8cd5-c0744bc77b10"
+        val metadata = mapOf(
+            "playback_session_id" to session,
+            "playback_incident_id" to incident,
+            "content_key" to "a".repeat(64),
+        )
+        val report = SupportPayloadPolicy.prepare("diagnostic", "Playback problem", null, metadata)!!
+        assertEquals(metadata, report.metadata)
+        assertTrue(SupportPayloadPolicy.prepare("complaint", "Help", null, metadata)!!.metadata.isEmpty())
+        assertTrue(SupportPayloadPolicy.prepare("diagnostic", "Help", null, mapOf(
+            "playback_session_id" to "https://example.test/private-session",
+            "playback_incident_id" to "not-a-uuid",
+            "content_key" to "a".repeat(63),
+        ))!!.metadata.isEmpty())
+        val otherIncident = report.copy(metadata = report.metadata + ("playback_incident_id" to session))
+        assertNotEquals(report.fingerprint(), otherIncident.fingerprint())
+    }
+
+    @Test fun `playback labels omit private addresses and secrets before display or upload`() {
+        val label = SupportPayloadPolicy.playbackLabel(
+            "Channel\nrtsp://private.example/path www.example.test/movie user@example.test " +
+                "secret-account \u202E" + "x".repeat(200),
+            listOf("secret-account"),
+        )
+        listOf("rtsp://", "private.example", "www.example", "user@example", "secret-account")
+            .forEach { assertFalse("Leaked $it", label.contains(it)) }
+        assertFalse(label.contains('\n'))
+        assertFalse(label.contains('\u202E'))
+        assertTrue(label.length <= 160)
+        assertTrue(label.startsWith("Channel "))
+    }
+
     @Test fun `log cap is UTF8 bytes and preserves newest whole codepoints`() {
         val payload = SupportPayloadPolicy.prepare("diagnostic", "report", "🎬ö".repeat(30_000) + "END", emptyMap())!!
         val log = payload.log!!
