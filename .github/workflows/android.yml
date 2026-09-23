@@ -42,20 +42,17 @@ jobs:
           set -euo pipefail
           # shellcheck disable=SC1091
           source scripts/ffmpeg/versions.env
-          for name in MEDIA3_VERSION FFMPEG_TAG NDK_VERSION CMAKE_VERSION; do
+          for name in MEDIA3_VERSION FFMPEG_TAG NDK_VERSION CMAKE_VERSION ANDROID_ABI_LEVEL; do
             if [ -z "${!name}" ]; then
               echo "::error::$name missing from scripts/ffmpeg/versions.env"
               exit 1
             fi
             echo "$name=${!name}" >> "$GITHUB_ENV"
           done
-          app_media3=$(sed -n 's/.*"androidx\.media3:media3-exoplayer:\([^"]*\)".*/\1/p' IptvPlayer/app/build.gradle.kts | head -n 1)
-          if [ "$app_media3" != "$MEDIA3_VERSION" ]; then
-            echo "::error::app uses media3 $app_media3 but versions.env pins $MEDIA3_VERSION"
-            exit 1
-          fi
-          script_hash=$(sha256sum scripts/ffmpeg/build_media3_ffmpeg.sh scripts/ffmpeg/ndk-version.init.gradle scripts/ffmpeg/versions.env | sha256sum | cut -c1-16)
-          echo "cache-key=media3-ffmpeg-aar-v1-media3_${MEDIA3_VERSION}-ffmpeg_${FFMPEG_TAG}-script_${script_hash}-ndk_${NDK_VERSION}" >> "$GITHUB_OUTPUT"
+          python3 scripts/ffmpeg/verify_media3_ffmpeg.py --check-pins
+          python3 scripts/ffmpeg/test_verify_media3_ffmpeg.py
+          script_hash=$(python3 scripts/ffmpeg/verify_media3_ffmpeg.py --recipe-hash)
+          echo "cache-key=media3-ffmpeg-aar-v2-media3_${MEDIA3_VERSION}-ffmpeg_${FFMPEG_TAG}-script_${script_hash}-ndk_${NDK_VERSION}-api_${ANDROID_ABI_LEVEL}" >> "$GITHUB_OUTPUT"
 
       - name: Restore cached extension AAR
         id: aar-cache
@@ -77,7 +74,7 @@ jobs:
         if: steps.aar-cache.outputs.cache-hit != 'true'
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
         with:
-          packages: platform-tools platforms;android-35 build-tools;34.0.0 ndk;${{ env.NDK_VERSION }} cmake;${{ env.CMAKE_VERSION }}
+          packages: platform-tools platforms;android-36 build-tools;36.0.0 ndk;${{ env.NDK_VERSION }} cmake;${{ env.CMAKE_VERSION }}
           log-accepted-android-sdk-licenses: false
 
       - name: Build FFmpeg and the Media3 decoder AAR
@@ -91,20 +88,8 @@ jobs:
         working-directory: .
         run: |
           set -euo pipefail
-          aar=IptvPlayer/app/libs/media3-decoder-ffmpeg-release.aar
-          if [ ! -s "$aar" ]; then
-            echo "::error::$aar is missing after build/restore"
-            exit 1
-          fi
-          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
-            if ! unzip -Z1 "$aar" | grep -qx "jni/$abi/libffmpegJNI.so"; then
-              echo "::error::$aar lacks jni/$abi/libffmpegJNI.so"
-              exit 1
-            fi
-          done
+          python3 scripts/ffmpeg/verify_media3_ffmpeg.py
           echo "cache-hit=${{ steps.aar-cache.outputs.cache-hit }}"
-          cat IptvPlayer/app/libs/media3-decoder-ffmpeg-release.txt || true
-          ls -l "$aar"
 
       - name: Upload extension AAR
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -164,7 +149,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
         with:
-          packages: platform-tools platforms;android-35 build-tools;34.0.0
+          packages: platform-tools platforms;android-36 build-tools;36.0.0
           log-accepted-android-sdk-licenses: false
 
       - name: Scan current tree for secrets
@@ -184,11 +169,7 @@ jobs:
 
       - name: Require the FFmpeg extension
         working-directory: .
-        run: |
-          if [ ! -s IptvPlayer/app/libs/media3-decoder-ffmpeg-release.aar ]; then
-            echo "::error::media3-decoder-ffmpeg-release.aar missing; the build must ship FFmpeg audio"
-            exit 1
-          fi
+        run: python3 scripts/ffmpeg/verify_media3_ffmpeg.py
 
       - name: Test telemetry receiver and release verifier
         working-directory: .
@@ -279,7 +260,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
         with:
-          packages: platform-tools platforms;android-35 build-tools;34.0.0
+          packages: platform-tools platforms;android-36 build-tools;36.0.0
           log-accepted-android-sdk-licenses: false
 
       # Production always ships FFmpeg audio: a missing AAR fails the release
@@ -292,11 +273,7 @@ jobs:
 
       - name: Require the FFmpeg extension
         working-directory: .
-        run: |
-          if [ ! -s IptvPlayer/app/libs/media3-decoder-ffmpeg-release.aar ]; then
-            echo "::error::media3-decoder-ffmpeg-release.aar missing; a release must ship FFmpeg audio"
-            exit 1
-          fi
+        run: python3 scripts/ffmpeg/verify_media3_ffmpeg.py
 
       - name: Validate release secrets
         run: |

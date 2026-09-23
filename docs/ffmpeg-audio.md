@@ -16,13 +16,20 @@ Google does not publish the module to Maven, so CI builds it from source.
 
 | Input | Pin | Where |
 | --- | --- | --- |
-| `androidx/media` (Media3) | tag `1.8.1` (must equal the app's `androidx.media3:*` version) | `scripts/ffmpeg/versions.env` |
-| FFmpeg | tag `n6.0.1` (the `release/6.0` line the Media3 1.8.1 README recommends) | `scripts/ffmpeg/versions.env` |
+| `androidx/media` (Media3) | tag `1.11.1` (must equal the app's `androidx.media3:*` version) | `scripts/ffmpeg/versions.env` |
+| FFmpeg | tag `n6.0.1` (the `release/6.0` line the Media3 1.11.1 README recommends) | `scripts/ffmpeg/versions.env` |
 | Android NDK | `26.1.10909125` (r26b, the version the README documents as tested) | `scripts/ffmpeg/versions.env` |
 | CMake | `3.22.1` (`CMakeLists.txt` needs 3.21+) | `scripts/ffmpeg/versions.env` |
-| ABI level | 21 (= `minSdk`) | `scripts/ffmpeg/versions.env` |
+| ABI level | 23 (= Android 6.0 / app `minSdk`) | `scripts/ffmpeg/versions.env` |
 | ABIs | `armeabi-v7a`, `arm64-v8a`, `x86`, `x86_64` (the app's `abiFilters`) | `build_ffmpeg.sh` in the media checkout |
 | Decoders | `mp3 mp2 aac ac3 eac3 dca opus vorbis flac alac mlp truehd` | `ENABLED_DECODERS` in `versions.env` |
+
+The [upstream 1.11.1 README](https://github.com/androidx/media/blob/1.11.1/libraries/decoder_ffmpeg/README.md)
+still specifies FFmpeg 6.0 and tested NDK r26b. Its separate source build uses
+Gradle 9.1.0, AGP 9.0.1 and compile SDK 36; CI provides JDK 17, SDK 36 and
+build-tools 36.0.0. This source build uses the upstream wrapper and does not
+replace the application's Gradle wrapper. CMake is pinned in the Gradle init
+script after upstream convention plugins finalize their defaults.
 
 FFmpeg is configured by the extension's own `build_ffmpeg.sh`
 (`--disable-everything` plus the listed `--enable-decoder=...`, static libs,
@@ -34,7 +41,8 @@ default **LGPL 2.1+** terms. The build script refuses to continue if
 Output: `IptvPlayer/app/libs/media3-decoder-ffmpeg-release.aar` (classes +
 `jni/<abi>/libffmpegJNI.so`, which statically links `libavcodec`, `libavutil`
 and `libswresample`) and a sidecar `media3-decoder-ffmpeg-release.txt` that
-records the exact commits, NDK and decoder list.
+records the exact commits, NDK/CMake, native API and decoder list, build-recipe
+SHA-256 and AAR SHA-256. Keep the AAR and this matching sidecar together.
 
 ### Pipeline
 
@@ -45,15 +53,18 @@ records the exact commits, NDK and decoder list.
    `./gradlew :lib-decoder-ffmpeg:assembleRelease` inside the media checkout
    with `scripts/ffmpeg/ndk-version.init.gradle` pinning `ndkVersion`, and
    copies the AAR into `app/libs/`. It is idempotent (existing checkouts at the
-   right tag and already built static libs are reused; `FFMPEG_FORCE_REBUILD=1`
+   right tag and static libs with matching API/toolchain/recipe inputs are reused; `FFMPEG_FORCE_REBUILD=1`
    overrides) and fails fast on a missing tool, NDK, CMake, tag or ABI.
 2. `.github/workflows/android.yml` job `ffmpeg-extension`: restores the AAR
    from `actions/cache` keyed by media3 version + FFmpeg tag + hash of the
-   three files under `scripts/ffmpeg/` + NDK version; on a miss it installs the
-   NDK/CMake and runs the script (~15-20 min). The AAR is verified (all four
-   `libffmpegJNI.so`) and uploaded as artifact `media3-decoder-ffmpeg`.
+   build/verification scripts under `scripts/ffmpeg/` + NDK/native API; on a
+   miss it installs NDK/CMake and runs the script (~15-20 min).
+   `verify_media3_ffmpeg.py` verifies exact provenance, binary SHA-256,
+   all four `libffmpegJNI.so`, renderer classes and compile-SDK compatibility
+   before uploading artifact `media3-decoder-ffmpeg`.
 3. `verify` and `release` `needs: ffmpeg-extension`, download the artifact into
-   `IptvPlayer/app/libs/` before Gradle runs, and fail if the AAR is missing.
+   `IptvPlayer/app/libs/` before Gradle runs, and repeat the same provenance
+   validation. A cached or locally copied 1.8.1 AAR cannot pass for 1.11.1.
    The release job additionally checks the final minified APK contains
    `lib/<abi>/libffmpegJNI.so` for every ABI. Production always ships FFmpeg
    audio; there is no "build without it" mode in CI.
@@ -105,11 +116,11 @@ records the exact commits, NDK and decoder list.
 2. FFmpeg: set `FFMPEG_TAG` to a release tag (`nX.Y.Z`). Stay on the line the
    Media3 README recommends; newer majors have broken the JNI glue before.
 3. NDK/CMake: `NDK_VERSION` / `CMAKE_VERSION`. The NDK must ship
-   `toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi21-clang`.
+   `toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi23-clang`.
 4. Decoders: edit `ENABLED_DECODERS`. Only audio decoders are useful; the
    module has no video renderer. Names are FFmpeg decoder names
    (`dca` = DTS, `mlp`/`truehd` = Dolby TrueHD family).
-5. Any change to the three files under `scripts/ffmpeg/` changes the cache
+5. Any change to the pins, build script, Gradle init script or artifact verifier changes the cache
    key, so the next CI run rebuilds automatically. Cache entries expire after
    7 days without use; a rebuild is normal after a quiet week.
 
@@ -120,6 +131,11 @@ Windows is unsupported for the FFmpeg step; copy the CI artifact into
 `IptvPlayer/app/libs/` instead. Do not commit the AAR (binary, ~10 MB,
 regenerated by CI); `IptvPlayer/.gitignore` already excludes the AAR and its
 `.txt` sidecar.
+
+Run `python3 scripts/ffmpeg/test_verify_media3_ffmpeg.py` for the artifact
+contract tests and `python3 scripts/ffmpeg/verify_media3_ffmpeg.py` before
+using a downloaded AAR locally. Branch CI builds and validates the extension
+and debug APK; signed release publication remains restricted to main/master.
 
 ## How to verify on a device
 
@@ -162,10 +178,8 @@ log line) is the linked libavcodec version and must match the pinned tag
 - The app already ships `assets/licenses/LGPL-2.1.txt` for JLayer, so the
   licence text is covered, and `assets/licenses/FFmpeg-NOTICE.txt` names the
   FFmpeg tag, source location, enabled decoders and the Media3 extension.
-  Still open: the release job's packaging check does not yet require
-  `assets/licenses/FFmpeg-NOTICE.txt`, and nothing in the app surfaces the
-  notice files by name (the licence screen would need to list it next to the
-  JLayer notice).
+  The release job also requires `assets/licenses/FFmpeg-NOTICE.txt` in the
+  final APK.
 - Codec patents (AC-3, E-AC-3, DTS, AAC, MLP/TrueHD) are a separate matter
   from copyright; the LGPL grant does not cover them. Check the distribution
   region's obligations before shipping outside the existing markets.

@@ -35,7 +35,7 @@ source "${SCRIPT_DIR}/versions.env"
 : "${MEDIA3_VERSION:?}" "${FFMPEG_TAG:?}" "${NDK_VERSION:?}" "${CMAKE_VERSION:?}" \
   "${ANDROID_ABI_LEVEL:?}" "${ENABLED_DECODERS:?}"
 
-for tool in git bash make nproc java unzip find sed grep; do need_tool "$tool"; done
+for tool in git bash make nproc java unzip find sed grep python3 sha256sum; do need_tool "$tool"; done
 # FFmpeg's configure/make need these host tools; NDK clang provides the rest.
 for tool in pkg-config nasm; do
   command -v "$tool" >/dev/null 2>&1 || log "note: '$tool' not found (x86 asm is disabled by build_ffmpeg.sh, so this is fine)"
@@ -54,6 +54,8 @@ esac
 app_media3="$(sed -n 's/.*"androidx\.media3:media3-exoplayer:\([^"]*\)".*/\1/p' "$APP_GRADLE" | head -n 1)"
 [ -n "$app_media3" ] || die "could not read the androidx.media3 version from $APP_GRADLE"
 [ "$app_media3" = "$MEDIA3_VERSION" ] || die "media3 mismatch: app uses $app_media3, versions.env pins $MEDIA3_VERSION"
+python3 "${SCRIPT_DIR}/verify_media3_ffmpeg.py" --check-pins
+RECIPE_HASH="$(python3 "${SCRIPT_DIR}/verify_media3_ffmpeg.py" --recipe-hash)"
 
 # ---------------------------------------------------------------------------
 # Locate the NDK and CMake.
@@ -129,6 +131,7 @@ ln -s "$FFMPEG_DIR" "${JNI_DIR}/ffmpeg"
 # Build FFmpeg static libs for the four ABIs (LGPL default configuration).
 # ---------------------------------------------------------------------------
 ABIS=(armeabi-v7a arm64-v8a x86 x86_64)
+NATIVE_INPUTS="${MEDIA3_VERSION} ${FFMPEG_TAG} ${NDK_VERSION} ${ANDROID_ABI_LEVEL} ${ENABLED_DECODERS} ${RECIPE_HASH}"
 ffmpeg_built() {
   local abi
   for abi in "${ABIS[@]}"; do
@@ -136,8 +139,8 @@ ffmpeg_built() {
       [ -f "${FFMPEG_DIR}/android-libs/${abi}/${lib}" ] || return 1
     done
   done
-  [ -f "${FFMPEG_DIR}/android-libs/.decoders" ] \
-    && [ "$(cat "${FFMPEG_DIR}/android-libs/.decoders")" = "${FFMPEG_TAG} ${ENABLED_DECODERS}" ]
+  [ -f "${FFMPEG_DIR}/android-libs/.build-inputs" ] \
+    && [ "$(cat "${FFMPEG_DIR}/android-libs/.build-inputs")" = "$NATIVE_INPUTS" ]
 }
 
 if ffmpeg_built && [ "$FORCE" != "1" ]; then
@@ -148,7 +151,7 @@ else
   # shellcheck disable=SC2086
   (cd "$JNI_DIR" && ./build_ffmpeg.sh \
       "$FFMPEG_MODULE_PATH" "$NDK_PATH" "$HOST_PLATFORM" "$ANDROID_ABI_LEVEL" $ENABLED_DECODERS)
-  printf '%s %s' "$FFMPEG_TAG" "$ENABLED_DECODERS" > "${FFMPEG_DIR}/android-libs/.decoders"
+  printf '%s' "$NATIVE_INPUTS" > "${FFMPEG_DIR}/android-libs/.build-inputs"
   ffmpeg_built || die "FFmpeg build finished but static libraries are missing"
 fi
 
@@ -165,7 +168,8 @@ log "assembling lib-decoder-ffmpeg release AAR"
 (
   cd "$MEDIA_DIR"
   chmod +x ./gradlew
-  NDK_VERSION="$NDK_VERSION" ./gradlew --no-daemon \
+  NDK_VERSION="$NDK_VERSION" CMAKE_VERSION="$CMAKE_VERSION" ANDROID_ABI_LEVEL="$ANDROID_ABI_LEVEL" \
+    ./gradlew --no-daemon \
     --init-script "${SCRIPT_DIR}/ndk-version.init.gradle" \
     :lib-decoder-ffmpeg:assembleRelease \
     --stacktrace
@@ -190,8 +194,12 @@ media3_commit=$(git -C "$MEDIA_DIR" rev-parse HEAD)
 ffmpeg=${FFMPEG_TAG}
 ffmpeg_commit=$(git -C "$FFMPEG_DIR" rev-parse HEAD)
 ndk=${NDK_VERSION}
+cmake=${CMAKE_VERSION}
 abi_level=${ANDROID_ABI_LEVEL}
 decoders=${ENABLED_DECODERS}
+build_recipe_sha256=${RECIPE_HASH}
+aar_sha256=$(sha256sum "$OUTPUT_AAR" | cut -d' ' -f1)
 license=LGPL-2.1-or-later (FFmpeg default configuration)
 EOF
+python3 "${SCRIPT_DIR}/verify_media3_ffmpeg.py" --aar "$OUTPUT_AAR"
 log "wrote $OUTPUT_AAR ($(du -h "$OUTPUT_AAR" | cut -f1)) and ${OUTPUT_AAR%.aar}.txt"

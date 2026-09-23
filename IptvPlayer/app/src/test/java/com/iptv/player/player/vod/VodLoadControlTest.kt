@@ -81,7 +81,7 @@ class VodLoadControlTest {
     }
 
     private fun withAllocatedMiB(control: DefaultLoadControl, mib: Int, block: () -> Unit) {
-        val allocator = control.allocator
+        val allocator = control.getAllocator(PlayerId.UNSET)
         val allocations = List(mib * 1_048_576 / C.DEFAULT_BUFFER_SEGMENT_SIZE) {
             allocator.allocate()
         }

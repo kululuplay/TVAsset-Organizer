@@ -9,7 +9,7 @@ mlp, truehd (see scripts/ffmpeg/versions.env in the source repository).
 
 FFmpeg source tag: n6.0.1
 Corresponding source: https://git.ffmpeg.org/ffmpeg.git (tag n6.0.1)
-Media3 decoder extension: https://github.com/androidx/media (tag 1.8.1,
+Media3 decoder extension: https://github.com/androidx/media (tag 1.11.1,
 libraries/decoder_ffmpeg), Apache License 2.0.
 License: LGPL-2.1.txt in this directory.
 

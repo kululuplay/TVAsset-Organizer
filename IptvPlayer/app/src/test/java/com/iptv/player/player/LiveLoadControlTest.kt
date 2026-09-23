@@ -76,7 +76,7 @@ class LiveLoadControlTest {
     @Test
     fun `hitting sample memory target stops loading and allows playback at high bitrate`() {
         val control = control(BufferMode.ADAPTIVE, constrained = true)
-        val allocator = control.allocator
+        val allocator = control.getAllocator(PlayerId.UNSET)
         val allocations = List(32 * 1_048_576 / C.DEFAULT_BUFFER_SEGMENT_SIZE) { allocator.allocate() }
         assertFalse(control.shouldContinueLoading(parameters(800)))
         assertTrue(control.shouldStartPlayback(parameters(800, rebufferAt = 1)))

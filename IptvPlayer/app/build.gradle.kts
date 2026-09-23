@@ -1,5 +1,5 @@
 // App module build script.
-// Targets Android TV + sticks: minSdk 21 for broad coverage, modern targetSdk.
+// Targets Android 6+ TV devices and sticks.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -51,14 +51,14 @@ ksp {
 
 android {
     namespace = "com.iptv.player"
-    // Media3 1.8.x is compiled against Android 15 APIs. compileSdk only affects
+    // Media3 1.11.x and LibVLC 3.7.x require Android 16 build APIs. compileSdk affects
     // build-time symbols; targetSdk deliberately remains 34 in this reliability
     // patch so playback behavior does not change for unrelated platform reasons.
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.iptv.player"
-        minSdk = 21
+        minSdk = 23
         targetSdk = 34
         versionCode = 139
         versionName = "1.5.95"
@@ -222,12 +222,11 @@ dependencies {
 
     // --- Players ---
     // Media3 ExoPlayer = primary engine.
-    // 1.8.1 is the newest Media3 line that keeps minSdk 21. It also fixes TV
-    // multichannel audio being incorrectly marked unsupported by track selection.
-    implementation("androidx.media3:media3-exoplayer:1.8.1")
-    implementation("androidx.media3:media3-exoplayer-dash:1.8.1")
-    implementation("androidx.media3:media3-ui:1.8.1")
-    implementation("androidx.media3:media3-common:1.8.1")
+    // Keep the FFmpeg extension pin in scripts/ffmpeg/versions.env in sync.
+    implementation("androidx.media3:media3-exoplayer:1.11.1")
+    implementation("androidx.media3:media3-exoplayer-dash:1.11.1")
+    implementation("androidx.media3:media3-ui:1.11.1")
+    implementation("androidx.media3:media3-common:1.11.1")
     // FFmpeg software audio decoders (MP2/MP3/AAC/AC-3/E-AC-3/DTS/Opus/Vorbis/
     // FLAC/ALAC/MLP/TrueHD) built from the same media3 tag by CI. Only bundled
     // when the AAR exists; the build stays green without it (libVLC covers audio).
@@ -238,10 +237,8 @@ dependencies {
     // no native video decoder: Media3 retains the device's hardware video path.
     implementation("javazoom:jlayer:1.0.1")
     // libVLC = fallback engine (broadest codec coverage: DTS/AC3/EAC3/etc.).
-    // 3.6.5 keeps Android 5+/compileSdk 35 compatibility while carrying the
-    // current stable 3.x decoder/surface fixes. 3.7.5 declares minCompileSdk 36
-    // and would fail AAR metadata validation with this app's conservative toolchain.
-    implementation("org.videolan.android:libvlc-all:3.6.5")
+    // Use the stable 3.x Android SDK; 4.x EAP artifacts are preview builds.
+    implementation("org.videolan.android:libvlc-all:3.7.6")
     // In-app YouTube trailer playback (WebView IFrame player; no Play-services /
     // YouTube app required, works on plain Android TV boxes).
     implementation("com.pierfrancescosoffritti.androidyoutubeplayer:core:12.1.0")

@@ -24,10 +24,15 @@ internal class LiveLoadControl(
 ) : DefaultLoadControl(
     DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE),
     reserve(configured, constrainedDevice).exoMinBufferMs,
+    reserve(configured, constrainedDevice).exoMinBufferMs,
+    reserve(configured, constrainedDevice).exoMaxBufferMs,
     reserve(configured, constrainedDevice).exoMaxBufferMs,
     configured.exoPlaybackMs,
+    configured.exoPlaybackMs,
+    configured.exoRebufferMs,
     configured.exoRebufferMs,
     targetBytes(constrainedDevice),
+    false,
     false,
     0,
     false,
@@ -72,7 +77,7 @@ internal class LiveLoadControl(
             parameters.playbackSpeed,
         )
         return requiredUs <= 0L || playoutUs >= requiredUs ||
-            allocator.totalBytesAllocated >= targetBytes(constrainedDevice)
+            getAllocator(parameters.playerId).totalBytesAllocated >= targetBytes(constrainedDevice)
     }
 
     private companion object {

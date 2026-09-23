@@ -10,16 +10,23 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 app = Path('IptvPlayer/app')
-version_match = re.search(r'versionName = "([0-9]+\.[0-9]+\.[0-9]+)"', (app/'build.gradle.kts').read_text())
+build_config = (app/'build.gradle.kts').read_text()
+version_match = re.search(r'versionName = "([0-9]+\.[0-9]+\.[0-9]+)"', build_config)
+min_sdk_match = re.search(r'minSdk\s*=\s*(\d+)', build_config)
 assert version_match, 'Missing release version'
+assert min_sdk_match, 'Missing minimum Android SDK'
 version = version_match.group(1) + '-preview1'
 artifact_name = 'KululuIPTV-' + version
 apk = app / 'build/outputs/apk/debug/app-debug.apk'
-sdk = Path(os.environ['ANDROID_HOME']) / 'build-tools/35.0.0'
+build_tools = Path(os.environ['ANDROID_HOME']) / 'build-tools'
+sdk = max(
+    (p for p in build_tools.iterdir() if p.is_dir() and re.fullmatch(r'\d+\.\d+\.\d+', p.name)),
+    key=lambda p: tuple(map(int, p.name.split('.'))),
+)
 badging = subprocess.check_output([str(sdk/'aapt'), 'dump', 'badging', str(apk)], text=True)
 assert "name='com.iptv.player.preview'" in badging
 assert f"versionName='{version}'" in badging
-assert "sdkVersion:'21'" in badging
+assert f"sdkVersion:'{min_sdk_match.group(1)}'" in badging
 assert "application-label:'Kululu IPTV Preview'" in badging
 signature = subprocess.check_output([str(sdk/'apksigner'), 'verify', '--verbose', '--print-certs', str(apk)], text=True)
 assert 'Verified using v1 scheme (JAR signing): true' in signature

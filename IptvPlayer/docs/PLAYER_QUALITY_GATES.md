@@ -9,7 +9,7 @@ MediaCodec, SurfaceView and libVLC behaviour.
 | Device class | Minimum coverage |
 | --- | --- |
 | Fire TV | one older low-memory stick, one current 4K/Max device |
-| Amlogic Android TV | one API 21-25 box and one current Google TV device |
+| Amlogic Android TV | one API 23-25 box and one current Google TV device |
 | Rockchip/MediaTek | at least one low-cost stick/box |
 | Generic Google TV | current certified device |
 

@@ -2,11 +2,23 @@
 // build of lib-decoder-ffmpeg uses exactly the NDK that compiled FFmpeg.
 // AGP would otherwise pick (and try to download) its own default NDK.
 def pinnedNdk = System.getenv('NDK_VERSION')
-if (pinnedNdk == null || pinnedNdk.isEmpty()) {
-    throw new GradleException('NDK_VERSION environment variable is required')
+def pinnedCmake = System.getenv('CMAKE_VERSION')
+def pinnedApi = System.getenv('ANDROID_ABI_LEVEL')
+if (!pinnedNdk || !pinnedCmake || !pinnedApi) {
+    throw new GradleException('NDK_VERSION, CMAKE_VERSION and ANDROID_ABI_LEVEL are required')
 }
 allprojects { project ->
     project.plugins.withId('com.android.library') {
-        project.extensions.getByName('android').ndkVersion = pinnedNdk
+        // Media3 1.11 uses convention plugins. Finalize after their defaults and
+        // the decoder module's CMake range have been applied.
+        project.extensions.getByName('androidComponents').finalizeDsl { android ->
+            android.ndkVersion = pinnedNdk
+            if (project.name == 'lib-decoder-ffmpeg') {
+                android.externalNativeBuild.cmake.version = pinnedCmake
+                if (android.defaultConfig.minSdk != pinnedApi.toInteger()) {
+                    throw new GradleException('FFmpeg native API must match the Media3 module minSdk')
+                }
+            }
+        }
     }
 }
