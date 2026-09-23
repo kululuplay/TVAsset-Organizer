@@ -179,13 +179,14 @@ jobs:
           python3 scripts/test_verify_android_upgrade.py
           python3 scripts/test_activate_release_rollout.py
 
-      - name: Test, lint and assemble debug
+      - name: Test, lint and assemble APKs
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon \
             :app:testDebugUnitTest \
             :app:lintDebug \
             :app:assembleDebug \
+            :app:assembleRelease \
             --stacktrace
 
       - name: Verify Android playback support contract
