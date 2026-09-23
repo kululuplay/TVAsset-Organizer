@@ -18,7 +18,7 @@ memory with every result. Never include portal URLs, credentials or tokens.
 
 ## Required stream fixtures
 
-- MPEG-TS and HLS variants of the same live channel
+- MPEG-TS live channels; HLS URLs must be rejected without opening a connection
 - H.264 576i/720p/1080i50/1080p50
 - HEVC Main/Main10 and one 4K sample
 - MPEG-2 video where supported by the service
@@ -52,6 +52,8 @@ memory with every result. Never include portal URLs, credentials or tokens.
 
 ## Rollout
 
-Ship routing changes behind a remotely reversible configuration, begin with a
-small device cohort and compare time-to-first-frame, rebuffer, recovery and fatal
-rates with the previous release before expanding the rollout.
+Validate routing changes on preview builds and retain a remotely reversible
+configuration. Production releases follow AGENTS.md: enable the verified public
+release for all users unless the user explicitly requests a pause or limited
+rollout. Compare time-to-first-frame, rebuffer, recovery and fatal rates with the
+previous release after activation.
