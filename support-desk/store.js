@@ -107,7 +107,9 @@ class PgStore {
   // any lock: the oldest rows leave first, and only a new device beyond the device cap is ever refused.
   async playbackUsage(now) {
     if (this.usage?.pending) return this.usage.pending;
-    if (this.usage && now - this.usage.at < this.usageIntervalMs) return this.usage.fleet;
+    // A cached figure is reused only while its age is within the interval; a clock that moved backwards
+    // (or a test clock) re-measures instead of extending the cache indefinitely.
+    if (this.usage && now >= this.usage.at && now - this.usage.at < this.usageIntervalMs) return this.usage.fleet;
     const pending = this.pruneFleet(now).then(fleet => { this.usage = { at: now, fleet }; return fleet; }, error => { this.usage = null; throw error; });
     this.usage = { at: now, pending };
     return pending;
