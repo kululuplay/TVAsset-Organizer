@@ -26,6 +26,7 @@ internal class MeasuredPlaybackSession(
     private val live: Boolean,
     private val verifiedOutput: () -> Boolean,
 ) : AnalyticsListener {
+    var onObservation: ((com.iptv.player.playback.core.PlaybackObservation) -> Unit)? = null
     private val handler = Handler(Looper.getMainLooper())
     private var mediaId: String? = null
     private var played = false
@@ -131,6 +132,23 @@ internal class MeasuredPlaybackSession(
 
     private fun sample() {
         if (player.currentMediaItem?.mediaId != mediaId) return
+        val observedCounters = player.videoDecoderCounters?.takeIf { player.videoFormat != null }
+        val observedFormat = player.videoFormat
+        observedCounters?.ensureUpdated()
+        onObservation?.invoke(com.iptv.player.playback.core.PlaybackObservation(
+            source = mediaId.orEmpty(),
+            rendered = observedCounters?.renderedOutputBufferCount?.toLong(),
+            dropped = observedCounters?.droppedBufferCount?.toLong(),
+            bufferMs = player.totalBufferedDuration,
+            paused = !player.playWhenReady,
+            video = observedFormat?.let { format -> com.iptv.player.playback.core.PlaybackVideoFormat(
+                codec = com.iptv.player.playback.core.PlaybackVideoCodec.from(format.sampleMimeType),
+                decoder = codecs.videoDecoder,
+                width = format.width,
+                height = format.height,
+                frameRate = format.frameRate,
+            ) },
+        ))
         PlaybackMemoryPressure.sample(context)
         val now = SystemClock.elapsedRealtime()
         val active = player.playWhenReady && (player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_BUFFERING)

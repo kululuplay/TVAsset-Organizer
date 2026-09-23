@@ -187,9 +187,27 @@ class VlcPlayerEngine(
             }
             val mp = mediaPlayer ?: return
             val session = eventSession.get()
-            if (mp.currentVideoTrack != null) {
+            val observedTrack = mp.currentVideoTrack
+            if (observedTrack != null) {
                 val sample = readHealthSample(mp)
                 sample?.let {
+                    // Reuse the existing native health read; diagnostics never add JNI polls.
+                    // Zero-only hardware stats can mean unsupported output counters.
+                    val known = sample.displayedPictures > 0 || sample.lostPictures > 0
+                    listener?.onObservation(com.iptv.player.playback.core.PlaybackObservation(
+                        source = "vlc-$session",
+                        rendered = sample.displayedPictures.takeIf { known },
+                        dropped = sample.lostPictures.takeIf { known },
+                        video = com.iptv.player.playback.core.PlaybackVideoFormat(
+                            codec = com.iptv.player.playback.core.PlaybackVideoCodec.from(codecLabel(observedTrack.codec)),
+                            decoder = if (forceSoftware) com.iptv.player.playback.core.PlaybackVideoDecoder.SOFTWARE
+                                else com.iptv.player.playback.core.PlaybackVideoDecoder.UNKNOWN,
+                            width = observedTrack.width,
+                            height = observedTrack.height,
+                            frameRate = observedTrack.frameRateDen.takeIf { it > 0 }
+                                ?.let { observedTrack.frameRateNum.toFloat() / it },
+                        ),
+                    ))
                     if (sample.readBytes > 0L && !transportBytesReported) {
                         transportBytesReported = true
                         listener?.onTransportBytes()

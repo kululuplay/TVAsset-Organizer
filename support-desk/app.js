@@ -3,6 +3,7 @@ const express = require("express");
 const crypto = require("node:crypto");
 const path = require("node:path");
 const { UUID, SECRET, TYPES, STATUSES, hash, equal, ticketPayload, RateLimit, verifyPassword } = require("./security");
+const { playbackPayload, MAX_BYTES } = require("./playback");
 
 function createApp({ store, origin, adminUser, adminPasswordHash, secureCookies = true, clock = Date.now }) {
   if (!store || !origin || !adminUser || !/^scrypt\$/.test(adminPasswordHash || "")) throw new Error("Support configuration incomplete");
@@ -24,6 +25,7 @@ function createApp({ store, origin, adminUser, adminPasswordHash, secureCookies 
     if (req.path.startsWith("/api/") && !limit(req, res, `http:${req.ip}`, 240, 60000)) return;
     next();
   });
+  app.use("/api/v1/playback", express.json({ limit: MAX_BYTES, strict: true }));
   app.use(express.json({ limit: "192kb", strict: true }));
   app.get("/healthz", async (_req, res) => {
     try { await store.healthy(); res.json({ ok: true }); } catch { fail(res, 503, "unavailable"); }
@@ -65,6 +67,17 @@ function createApp({ store, origin, adminUser, adminPasswordHash, secureCookies 
     res.clearCookie("kululu_support", { httpOnly: true, secure: secureCookies, sameSite: "strict", path: "/" }); res.json({ ok: true });
   });
   app.get("/api/admin/stats", admin, async (_req, res) => res.json(await store.stats()));
+  app.get("/api/admin/playback", admin, async (req, res) => {
+    const { status = "all", q, before } = req.query;
+    if (Object.keys(req.query).some(key => !["status", "q", "before"].includes(key)) || !["all", "problem"].includes(status) || (q !== undefined && (typeof q !== "string" || q.length > 100)) || (before !== undefined && (typeof before !== "string" || !/^[1-9][0-9]{0,15}$/.test(before)))) return fail(res, 400, "invalid_filter");
+    res.json(await store.playbackList({ status, query: q, before }, clock()));
+  });
+  app.get("/api/admin/playback/:installationId", admin, async (req, res) => {
+    if (!UUID.test(req.params.installationId)) return fail(res, 400, "invalid_id");
+    const result = await store.playbackDetail(req.params.installationId.toLowerCase(), clock());
+    if (!result) return fail(res, 404, "not_found");
+    res.json(result);
+  });
   app.get("/api/admin/tickets", admin, async (req, res) => {
     const { status, type, before, q, scope } = req.query;
     if (scope && scope !== "requests") return fail(res, 400, "invalid_filter");
@@ -94,6 +107,13 @@ function createApp({ store, origin, adminUser, adminPasswordHash, secureCookies 
     if (!match || !UUID.test(match[1]) || !await store.authenticate(match[1].toLowerCase(), hash(match[2]))) return fail(res, 401, "installation_required");
     req.installation = match[1].toLowerCase(); next();
   };
+  app.post("/api/v1/playback", device, async (req, res) => {
+    if (!limit(req, res, `playback:${req.installation}`, 12, 60000) || !limit(req, res, "playback:global", 10000, 60000)) return;
+    const sample = playbackPayload(req.body, clock());
+    if (!sample) return fail(res, 400, "invalid_playback");
+    const ackedSampleId = await store.playback(req.installation, sample, clock());
+    res.json({ ok: true, ackedSampleId });
+  });
   app.post("/api/v1/tickets", device, async (req, res) => {
     if (!limit(req, res, `write:${req.installation}`, 20, 3600000)) return;
     const ticket = ticketPayload(req.body);

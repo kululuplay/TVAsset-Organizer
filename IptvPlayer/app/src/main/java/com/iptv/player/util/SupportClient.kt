@@ -41,7 +41,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * Explicit, customer-initiated support uploads. This client never sends IPTV credentials,
+ * Customer support and bounded playback diagnostics. This client never sends IPTV credentials,
  * uses no shared telemetry key, and cannot redirect its per-installation bearer token.
  * All disk/crypto/network work is on IO and cancellation cancels the active HTTP call.
  */
@@ -57,6 +57,38 @@ object SupportClient {
     private val prefsLock = Any()
     private val registrationMutex = Mutex()
     @Volatile private var client: OkHttpClient? = null
+
+    /** Public matching code only. The installation bearer never leaves this client. */
+    suspend fun installationId(context: Context): String = withContext(Dispatchers.IO) {
+        installation(preferences(context.applicationContext)).id
+    }
+
+    /** Exact sample acknowledgement is mandatory; cancellation leaves the caller's disk queue intact. */
+    internal data class PlaybackUploadResult(val acknowledgedId: String? = null, val rejected: Boolean = false)
+
+    internal suspend fun uploadPlayback(context: Context, sampleId: String, body: String): PlaybackUploadResult =
+        withContext(Dispatchers.IO) {
+            if (body.toByteArray(Charsets.UTF_8).size > 32 * 1024) return@withContext PlaybackUploadResult(rejected = true)
+            try {
+                withTimeoutOrNull(25_000L) {
+                    val app = context.applicationContext
+                    val prefs = preferences(app)
+                    val response = authorized(app, prefs, installation(prefs)) {
+                        Request.Builder().url("$BASE_URL/api/v1/playback")
+                            .post(body.toRequestBody(jsonMediaType))
+                    }
+                    if (response.opt("ok") == true && response.opt("ackedSampleId") == sampleId) {
+                        PlaybackUploadResult(acknowledgedId = sampleId)
+                    } else PlaybackUploadResult()
+                } ?: PlaybackUploadResult()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: SupportFailure) {
+                PlaybackUploadResult(rejected = error.reason.httpStatus in setOf(400, 413, 422))
+            } catch (_: Exception) { PlaybackUploadResult() }
+        }
+
+    internal suspend fun playbackSecrets(): List<String> = knownSecrets()
 
     suspend fun uploadDiagnostic(
         context: Context,

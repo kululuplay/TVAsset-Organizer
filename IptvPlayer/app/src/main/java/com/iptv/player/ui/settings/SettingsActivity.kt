@@ -456,6 +456,8 @@ class SettingsActivity : BaseActivity() {
         addInfoRow(c, getString(R.string.settings_app_version), version)
         addInfoRow(c, getString(R.string.settings_device), "${Build.MANUFACTURER} ${Build.MODEL}")
         addInfoRow(c, getString(R.string.settings_android), "Android ${Build.VERSION.RELEASE}")
+        val supportIdValue = addInfoRow(c, getString(R.string.support_installation_id), "…")
+        addPanelDescription(c, getString(R.string.support_playback_disclosure))
 
         // Focusing the General row rebuilds these rows; cancel the previous fetches
         // so repeated D-pad passes don't spam the public-IP lookup and a full Xtream
@@ -463,6 +465,12 @@ class SettingsActivity : BaseActivity() {
         // write into the just-removed rows. IP + account run in parallel under one job.
         generalJob?.cancel()
         generalJob = lifecycleScope.launch {
+            launch {
+                supportIdValue.text = try {
+                    com.iptv.player.util.SupportClient.installationId(this@SettingsActivity)
+                } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                catch (_: Exception) { "—" }
+            }
             launch { ipValue.text = PublicIpProvider.fetchIpv4() ?: "—" }
             val config = ServiceLocator.settings.getSourceConfig()
             usernameValue.text = config?.username.orEmpty().ifBlank { "—" }

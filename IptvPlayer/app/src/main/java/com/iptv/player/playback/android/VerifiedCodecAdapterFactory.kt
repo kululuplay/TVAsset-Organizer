@@ -9,6 +9,7 @@ import androidx.media3.exoplayer.mediacodec.DefaultMediaCodecAdapterFactory
 import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
 import com.iptv.player.playback.core.CodecQueueMode
 import com.iptv.player.playback.core.VerifiedCodecPolicy
+import com.iptv.player.playback.core.PlaybackVideoDecoder
 import java.util.concurrent.atomic.AtomicLong
 
 /** Selects a queue for an exact firmware/codec/format, never for an entire brand. */
@@ -18,18 +19,31 @@ internal class VerifiedCodecAdapterFactory(private val context: Context) : Media
     private val epoch = AtomicLong()
     @Volatile var attempt: Attempt? = null
         private set
+    @Volatile var videoDecoder: PlaybackVideoDecoder = PlaybackVideoDecoder.UNKNOWN
+        private set
 
     init { VerifiedCodecStore.init(context) }
-    fun reset() { epoch.incrementAndGet(); attempt = null }
+    fun reset() { epoch.incrementAndGet(); attempt = null; videoDecoder = PlaybackVideoDecoder.UNKNOWN }
 
     override fun createAdapter(configuration: MediaCodecAdapter.Configuration): MediaCodecAdapter {
         val token = epoch.get()
         val codec = configuration.codecInfo
         val format = configuration.format
-        if (format.sampleMimeType?.startsWith("video/") == true && token == epoch.get()) attempt = null
+        val video = format.sampleMimeType?.startsWith("video/") == true
+        val decoder = when {
+            codec.hardwareAccelerated -> PlaybackVideoDecoder.HARDWARE
+            codec.softwareOnly -> PlaybackVideoDecoder.SOFTWARE
+            else -> PlaybackVideoDecoder.UNKNOWN
+        }
+        if (video && token == epoch.get()) {
+            attempt = null
+            videoDecoder = PlaybackVideoDecoder.UNKNOWN
+        }
         val eligible = format.sampleMimeType?.startsWith("video/") == true && codec.hardwareAccelerated &&
             !codec.secure && !codec.tunneling && format.drmInitData == null && Build.VERSION.SDK_INT in 23..30
-        if (!eligible) return DefaultMediaCodecAdapterFactory(context).createAdapter(configuration)
+        if (!eligible) return DefaultMediaCodecAdapterFactory(context).createAdapter(configuration).also {
+            if (video && token == epoch.get()) videoDecoder = decoder
+        }
         val formatKey = formatKey(format)
         val key = VerifiedCodecStore.hash("${VerifiedCodecStore.deviceScope}|${codec.name}|$formatKey")
         val mode = VerifiedCodecPolicy.select(Build.VERSION.SDK_INT, true, false,
@@ -47,7 +61,10 @@ internal class VerifiedCodecAdapterFactory(private val context: Context) : Media
             // or silently change the video codec because a queue could not start.
             DefaultMediaCodecAdapterFactory(context).createAdapter(configuration)
         }
-        if (token == epoch.get()) attempt = Attempt(token, key, formatKey, actualMode)
+        if (token == epoch.get()) {
+            attempt = Attempt(token, key, formatKey, actualMode)
+            videoDecoder = decoder
+        }
         return adapter
     }
 
