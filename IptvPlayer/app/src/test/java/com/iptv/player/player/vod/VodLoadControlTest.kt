@@ -4,7 +4,6 @@ import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
-import androidx.media3.common.Timeline
 import androidx.media3.common.TrackGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -13,6 +12,7 @@ import androidx.media3.exoplayer.analytics.PlayerId
 import androidx.media3.exoplayer.source.MediaSource.MediaPeriodId
 import androidx.media3.exoplayer.source.TrackGroupArray
 import androidx.media3.exoplayer.trackselection.FixedTrackSelection
+import com.iptv.player.player.streamingLoadControlTimeline
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -21,6 +21,9 @@ import org.junit.Test
 /** Exercises Media3's actual loader, not a second implementation of its policy. */
 @OptIn(markerClass = [UnstableApi::class])
 class VodLoadControlTest {
+    private val timeline = streamingLoadControlTimeline(live = false)
+    private val periodId = MediaPeriodId(timeline.getUidOfPeriod(0))
+
     @Test
     fun `legacy budget stops loading and permits high bitrate startup and rebuffer`() {
         val control = control(constrained = true)
@@ -93,7 +96,7 @@ class VodLoadControlTest {
     }
 
     private fun parameters(bufferedMs: Long, rebuffering: Boolean = false) = LoadControl.Parameters(
-        PlayerId.UNSET, Timeline.EMPTY, MediaPeriodId("vod"),
+        PlayerId.UNSET, timeline, periodId,
         0L, bufferedMs * 1_000L, 1f, true, rebuffering, C.TIME_UNSET, C.TIME_UNSET,
     )
 }
