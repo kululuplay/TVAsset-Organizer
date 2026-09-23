@@ -494,6 +494,7 @@ class Media3VodEngine(
         measuredSession = MeasuredPlaybackSession(context, exo, measuredBuffer, verifiedCodecs, false) {
             verifiedFirstFrameGeneration == generation && reportedFailureGeneration != generation
         }
+        measuredSession?.onObservation = { sample -> listener?.onObservation(generation, sample) }
         applyPreferredLanguages(exo)
         return exo
     }

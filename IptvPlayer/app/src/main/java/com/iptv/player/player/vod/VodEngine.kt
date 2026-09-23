@@ -82,6 +82,7 @@ interface VodEngine {
     fun release()
 
     interface Listener {
+        fun onObservation(generation: Long, sample: com.iptv.player.playback.core.PlaybackObservation) {}
         fun onSubmitted(generation: Long) {}
         fun onBuffering(generation: Long) {}
         fun onReady(generation: Long) {}

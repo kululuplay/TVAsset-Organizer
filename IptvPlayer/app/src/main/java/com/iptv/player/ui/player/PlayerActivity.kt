@@ -834,6 +834,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
 
     override fun onPlaybackRestarting() {
         if (castOwnsPlayback || castLoadPending) return
+        PlaybackQoeRuntime.resetOutputEvidence(qoeSessionId)
         loadingOverlayPolicy.requireFreshFrame()
         binding.errorOverlay.visibility = View.GONE
         binding.playbackCover.visibility = View.VISIBLE
@@ -1174,7 +1175,12 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
             kind = descriptor.content,
             engine = PlaybackEngineKind.UNKNOWN,
             transport = descriptor.transport,
+            contentLabel = currentChannel?.name,
         )
+    }
+
+    override fun onObservation(sample: com.iptv.player.playback.core.PlaybackObservation) {
+        PlaybackQoeRuntime.observe(qoeSessionId, sample)
     }
 
     private fun finishQoeSession(reason: PlaybackEndReason) {

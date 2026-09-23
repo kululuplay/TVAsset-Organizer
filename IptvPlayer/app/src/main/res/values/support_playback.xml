@@ -1,0 +1,4 @@
+<resources>
+    <string name="support_installation_id">Support device ID</string>
+    <string name="support_playback_disclosure">While the app is open, playback status, content titles, errors, network type and device performance are sent securely to Kululu Support to investigate playback problems. Login details, stream addresses, screen images and microphone audio are not sent. Give Support your device ID to find your diagnostics.</string>
+</resources>

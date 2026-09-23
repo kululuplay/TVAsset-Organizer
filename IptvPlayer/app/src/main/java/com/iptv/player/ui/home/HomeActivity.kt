@@ -2004,6 +2004,9 @@ class HomeActivity : BaseActivity() {
 
     /** UI callback: TV becomes READY only after a real frame; radio on audio playback. */
     private fun buildPreviewCallback() = object : PlayerController.Callback {
+        override fun onObservation(sample: com.iptv.player.playback.core.PlaybackObservation) {
+            PlaybackQoeRuntime.observe(previewQoeSessionId, sample)
+        }
         override fun onBuffering() {
             if (castOwnsPreviewPlayback || castLoadPending) return
             previewLoadingPolicy.onBuffering()
@@ -2047,6 +2050,7 @@ class HomeActivity : BaseActivity() {
         }
         override fun onPlaybackRestarting() {
             if (castOwnsPreviewPlayback || castLoadPending) return
+            PlaybackQoeRuntime.resetOutputEvidence(previewQoeSessionId)
             previewState = LivePreviewPressPolicy.Phase.STARTING
             previewLoadingPolicy.requireFreshFrame()
             binding.previewPlaybackCover.visibility = View.VISIBLE
@@ -2389,6 +2393,7 @@ class HomeActivity : BaseActivity() {
             kind = descriptor.content,
             engine = PlaybackEngineKind.UNKNOWN,
             transport = descriptor.transport,
+            contentLabel = previewingChannel?.name,
         )
     }
 

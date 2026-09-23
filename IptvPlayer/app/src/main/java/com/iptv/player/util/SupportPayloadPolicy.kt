@@ -84,6 +84,12 @@ internal object SupportPayloadPolicy {
         }
     }
 
+    internal fun playbackLabel(value: String, knownSecrets: List<String>): String =
+        sanitize(value, knownSecrets)
+            .replace(Regex("(?i)\\b[a-z][a-z0-9+.-]*://\\S+|\\bwww\\.\\S+"), "<url removed>")
+            .replace(Regex("\\b[^\\s@]+@[^\\s@]+\\.[^\\s@]+\\b"), "<redacted>")
+            .replace(Regex("[\\r\\n\\t]+"), " ").trim().take(160)
+
     /** Keep the newest log data, but never split a UTF-8 code point at the byte cap. */
     internal fun utf8Tail(value: String, maxBytes: Int): String {
         require(maxBytes >= 0)

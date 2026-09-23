@@ -760,6 +760,7 @@ class ExoPlayerEngine(
         measuredSession = MeasuredPlaybackSession(context, exo, measuredBuffer, verifiedCodecs, true) {
             (!expectsVideo || videoOutputReported) && !videoFailureReported
         }
+        measuredSession?.onObservation = { sample -> listener?.onObservation(sample) }
         playerView = view
         applyPreferredTrackLanguages()
     }

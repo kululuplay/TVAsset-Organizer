@@ -1,6 +1,6 @@
 # Kululu Support Desk — self-hosted
 
-Dedicated customer-initiated reports and requests, independent of the old Replit telemetry receiver. No automatic viewing-history collection or remote device controls are included.
+Dedicated customer reports, requests and automatic playback health observations, independent of the old Replit telemetry receiver. The dashboard can correlate a support ticket with its installation's recent playback measurements. It does not control a device remotely.
 
 ## Deployment
 
@@ -24,23 +24,37 @@ curl --fail https://212.95.41.130:8443/healthz
 node support-desk/deploy/verify-live.js
 ```
 
-The last command runs PostgreSQL tests in a randomly named test schema and an HTTPS smoke test with synthetic tickets. It removes only the exact test installation and its records afterwards. Do not run against another database.
+The last command runs PostgreSQL tests in randomly named test schemas and an HTTPS smoke test with synthetic records. It removes only the exact test installation and its records afterwards. Do not run against another database. The schema additions for playback are idempotent and run at service startup; take a database backup before deployment.
 
 ## Data and access
 
 - Device identity is a random per-installation UUID plus 256-bit secret; only the secret hash is stored on the server. No API secret is shared across all APKs. Authorization checks apply to history and acknowledgement endpoints.
-- APK uploads are manual, require confirmation for logs, use a separate bounded/cancellable HTTPS client and do not depend on a share-sheet target. Redirects are disabled. The bundled public ISRG Root X1 supplements old system trust stores only for this client; hostname and chain verification stay enabled.
+- Free-text requests and diagnostic log attachments are manual; logs require confirmation. Playback observations upload automatically while the app is in the foreground, through the separate bounded/cancellable HTTPS client. Redirects are disabled. The bundled public ISRG Root X1 supplements old system trust stores only for this client; hostname and chain verification stay enabled.
 - Diagnostic uploads contain a bounded redacted log, device/Android/app versions and configured player settings. IPTV credentials, full stream URLs and user account names are not deliberately included. Avoid entering personal or secret information into free-text requests; automated masking cannot recognize every possible secret format.
-- Log attachments are scrubbed after 90 days, hourly. Request text, ticket codes and moderation history remain until operator deletion. Unused installations with no tickets expire after 30 days.
+- Log attachments are scrubbed after 90 days, hourly. Request text, ticket codes and moderation history remain until operator deletion. Unused installations with no tickets or active playback records expire after 30 days.
 - Capacity is bounded transactionally: 100,000 installations, 100,000 tickets, 10,000 retained log attachments at <=128 KiB each. Daily global quotas and per-IP/per-device limits supplement those caps. A full store returns a 503 error, never a false success. Operators should export/archive old tickets before caps are reached.
 - Admin: scrypt password hashes, expiring in-memory sessions, HttpOnly/Secure/SameSite cookies, Origin+CSRF checks for mutations, CSP, plain-text rendering of untrusted reports, and status-change audit rows. Service restarts invalidate admin sessions.
 - Public registration is intentionally open to support customers; rate limits/caps are abuse controls, not proof that an uploader is an authenticated IPTV subscriber.
 
 Back up this dedicated database regularly with `pg_dump` as an authorized administrator, encrypt backups and store them separately from this VPS. Backups need their own retention policy; log scrubbing does not erase historical backups. No off-host backup destination has been configured by this task.
 
+## Playback health
+
+The **Oynatma sağlığı** view lists devices by random installation code, model, app/Android version and recent content label. Settings on the device displays the same support code and explains that technical playback measurements are sent. Ticket details link to the associated device.
+
+- Measurements include startup/first-frame delay, buffering count and duration, observed playback state, known rendered/dropped frames, last frame age, available buffer, player/transport, classified failures/HTTP status, network type/connectivity, and available RAM. Safe video format and actual decoder type are included where the engine exposes them; a hardware preference is not reported as proof of hardware decoding.
+- The client reuses existing playback sampling. It uploads at most two envelopes per foreground 30-second cycle, prioritizing current state before retained start/failure/end observations. It does not run a new native polling loop, active speed test or background upload service.
+- Offline storage is bounded to 32 envelopes / 256 KiB. Retries keep immutable sample IDs and use exponential backoff up to 15 minutes. Only a matching acknowledgement removes a successfully delivered sample. Unsuitable/expired samples cannot block the queue indefinitely.
+- The authenticated ingestion endpoint is `POST /api/v1/playback` (32 KiB, 16 sessions, closed schema, per-installation and global limits). Administrative list/detail endpoints are `GET /api/admin/playback` and `GET /api/admin/playback/:installationId` under existing admin session authorization.
+- A fresh report is at most two minutes old, considering both source and receipt time. Missing frame counters, paused/ended sessions, stale reports and clock skew never imply healthy video. Diagnoses describe measured evidence and suggested checks; they cannot establish that a panel or Wi-Fi caused a failure on their own.
+- Timeline retention is **up to** seven days, 2,000 samples per device and 100,000 globally; capacity can shorten history. Detail shows the latest 100 entries and discloses limits. Separate bounded receipts keep retries idempotent after timeline trimming. Late replay cannot replace a newer current state or reopen a finalized session.
+- No screen/audio capture, GPS, Wi-Fi password, raw media URL or IPTV password is sent. Content labels and device strings are length-limited and scrubbed; measurement history is still customer activity metadata and must remain restricted to authorized support staff.
+
+The dashboard refreshes every 30 seconds only while its authenticated health view is visible. This is periodic diagnostics, not a live screen feed. A power loss, crash or connection outage can prevent the final event arriving; absence of data remains unknown. Measurements cannot prove lip-sync, subjective picture quality or every sub-second freeze.
+
 ## Android rollout boundary
 
-Only a new APK containing `SupportClient` uses this endpoint. Previously installed APKs keep their old share-sheet/Replit behavior. No APK version bump, merge or release is part of this dashboard deployment unless separately requested.
+Only an APK containing `PlaybackSupportReporter` sends automatic playback measurements. Existing APKs cannot supply this history retrospectively. Deploy the server/schema before distributing that APK. Manual support uploads from earlier `SupportClient` APKs remain compatible. A local preview build is not a production release and must not activate production rollout.
 
 New request history reads this service. Legacy heartbeat notifications/acknowledgements remain attached to the old receiver so old numeric IDs cannot modify new support tickets. Old records are not silently migrated, and new support tickets do not trigger legacy heartbeat popups.
 
@@ -51,6 +65,6 @@ npm ci --ignore-scripts
 npm run test:server
 ```
 
-By default the PostgreSQL test is skipped locally. On this VPS the verification script supplies the dedicated database URL without printing credentials. Real Android/Fire TV end-to-end and long-duration playback validation require actual devices; server and unit tests do not establish device playback stability.
+By default PostgreSQL tests are skipped locally; set `SUPPORT_TEST_DATABASE_URL` to an isolated test database to include them. On the VPS the verification script supplies the dedicated database URL without printing credentials and tests only temporary schemas. After Android unit tests, run `node scripts/verify_support_contract.js` from the repository root to validate real Kotlin-produced envelopes against the server. Real Android/Fire TV end-to-end and long-duration playback validation require actual devices; server and unit tests do not establish device playback stability.
 
-Optional WebMCP tools mirror the visible ticket opening and status changes. They are feature-detected; authentication and CSRF remain server-side. A supported browser WebMCP contract validation context was not used in this task, so those optional tools are not claimed to be runtime-verified. Browser visual QA was not performed; request/response integration tests are separate from that.
+Optional WebMCP tools mirror visible ticket opening and status changes. They are feature-detected; authentication and CSRF remain server-side. Browser QA of the playback view uses a local synthetic fixture and does not establish production data ingestion or device connectivity.

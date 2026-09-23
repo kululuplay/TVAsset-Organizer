@@ -673,6 +673,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
             },
             engine = qoeEngine(activeVodRoute),
             transport = qoeTransport(streamUrl),
+            contentLabel = binding.titleText.text.toString(),
         )
     }
 
@@ -786,6 +787,9 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         val owner = nativeOwner ?: return
         val now = SystemClock.elapsedRealtime()
         if (!force && now - lastVlcSnapshotRequestAtMs < VLC_SNAPSHOT_INTERVAL_MS) return
+        val observedSession = qoeSessionId
+        val observedRoute = activeVodRoute
+        val observedOperation = playbackOpsSeq.get()
         lastVlcSnapshotRequestAtMs = now
         postBoundedOwnerCommand(
             label = "playback snapshot",
@@ -814,6 +818,25 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                 }
             }.getOrNull()
             if (!owner.abandoned.get()) {
+                val observation = com.iptv.player.playback.core.PlaybackObservation(
+                    source = "vlc-${owner.generation}",
+                    rendered = stats?.displayedPictures?.toLong()?.takeIf { it > 0 },
+                    dropped = stats?.lostPictures?.toLong()?.takeIf { (stats.displayedPictures > 0) },
+                    video = info?.let { video -> com.iptv.player.playback.core.PlaybackVideoFormat(
+                        codec = com.iptv.player.playback.core.PlaybackVideoCodec.from(video.codec),
+                        decoder = if (observedRoute == VodPlaybackRoutingPolicy.Route.VLC_SOFTWARE)
+                            com.iptv.player.playback.core.PlaybackVideoDecoder.SOFTWARE
+                            else com.iptv.player.playback.core.PlaybackVideoDecoder.UNKNOWN,
+                        width = video.width,
+                        height = video.height,
+                        frameRate = video.fps,
+                    ) },
+                )
+                handler.post {
+                    if (playbackOpsSeq.get() == observedOperation && nativeOwner === owner && !owner.abandoned.get()) {
+                        PlaybackQoeRuntime.observe(observedSession, observation)
+                    }
+                }
                 vlcPlaybackSnapshot = VlcPlaybackSnapshot(
                     ownerGeneration = owner.generation,
                     positionMs = player.time.coerceAtLeast(0L),
@@ -2140,6 +2163,9 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     }
 
     private val media3Listener = object : VodEngine.Listener {
+        override fun onObservation(generation: Long, sample: com.iptv.player.playback.core.PlaybackObservation) {
+            if (generation == media3Generation) PlaybackQoeRuntime.observe(qoeSessionId, sample)
+        }
         override fun onSubmitted(generation: Long) {
             if (!isMedia3Route()) return
             media3Generation = generation
@@ -2456,6 +2482,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                 setBuffering(isVlcBuffering(bufferingPercent))
             }
             MediaPlayer.Event.Playing -> {
+                PlaybackQoeRuntime.setPaused(qoeSessionId, false)
                 if (nativeMeasurementPaused) {
                     nativeMeasuredBufferingAtMs = 0L
                     nativeBufferSeekCooldownMs = SystemClock.uptimeMillis() + 10_000
@@ -2553,6 +2580,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                 }
             }
             MediaPlayer.Event.Paused -> {
+                PlaybackQoeRuntime.setPaused(qoeSessionId, true)
                 nativeMeasurementPaused = true
                 nativeMeasuredBufferingAtMs = 0L
                 setVlcPlayingSnapshot(mp, false)
@@ -3160,12 +3188,14 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
             activeRouteStable = false
             forceSoftware = targetRoute == VodPlaybackRoutingPolicy.Route.VLC_SOFTWARE
             PlaybackQoeRuntime.markEngine(qoeSessionId, qoeEngine(targetRoute))
+            PlaybackQoeRuntime.resetOutputEvidence(qoeSessionId)
             // preparePlayback owns the provider gate and builds only after any
             // prior exact owner token has drained.
             preparePlayback(resumeAt)
         }
 
         val retiringMedia3 = media3VodEngine
+        PlaybackQoeRuntime.resetOutputEvidence(qoeSessionId)
         if (retiringMedia3 != null) {
             media3Generation = VodEngine.NO_GENERATION
             media3PreferencesAppliedGeneration = VodEngine.NO_GENERATION

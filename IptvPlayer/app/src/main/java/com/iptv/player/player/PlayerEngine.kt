@@ -148,6 +148,7 @@ data class PlayerTrack(
 
 /** Playback state callbacks routed to the UI. */
 interface PlayerListener {
+    fun onObservation(sample: com.iptv.player.playback.core.PlaybackObservation) {}
     /**
      * The backend has submitted the current stream to its real decoder/native
      * start path. Diagnostic only: the deadline already covers queue/surface wait.

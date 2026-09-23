@@ -71,6 +71,10 @@ jobs:
             :app:assembleDebug \
             --stacktrace
 
+      - name: Verify Android playback support contract
+        working-directory: .
+        run: node scripts/verify_support_contract.js
+
       - name: Upload unit test results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
