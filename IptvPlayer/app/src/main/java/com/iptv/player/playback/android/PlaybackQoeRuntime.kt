@@ -17,6 +17,11 @@ import com.iptv.player.util.QoeSpool
 import com.iptv.player.util.Telemetry
 import org.json.JSONObject
 import java.io.File
+import com.iptv.player.util.PlaybackSupportReporter
+import com.iptv.player.playback.core.PlaybackObservation
+import com.iptv.player.playback.core.PlaybackIncidentRecorder
+import com.iptv.player.playback.core.PlaybackIncidentTrigger
+import android.os.SystemClock
 import java.util.concurrent.Executors
 
 /**
@@ -38,6 +43,65 @@ object PlaybackQoeRuntime {
     private const val OPEN_LEDGER_FILE = "qoe-open.jsonl"
 
     private val recorder = PlaybackQoeRecorder()
+    private val labels = java.util.concurrent.ConcurrentHashMap<PlaybackSessionId, String>()
+    private val keys = java.util.concurrent.ConcurrentHashMap<PlaybackSessionId, String>()
+    private val incidents = PlaybackIncidentRecorder()
+    private val recent = java.util.concurrent.ConcurrentHashMap<PlaybackSessionId, PlaybackQoeRecord>()
+    private val recentOrder = java.util.ArrayDeque<PlaybackSessionId>()
+    private fun fields(record: PlaybackQoeRecord): Map<String, Any> = com.iptv.player.playback.core.PlaybackSupportFields.from(record).toMutableMap().apply {
+        labels[record.session.id]?.let { put("content_label", it) }
+        this@PlaybackQoeRuntime.keys[record.session.id]?.let { put("content_key", it) }
+    }
+    fun supportSnapshot(): List<Map<String, Any>> = recorder.activeSnapshot().map(::fields)
+    fun pauseForBackground() {
+        recorder.pauseAll()
+        sampleIncidents()
+        recorder.activeSnapshot().forEach { incidents.flush(it.session.id) }
+        publishIncidents()
+    }
+    fun resetOutputEvidence(id: PlaybackSessionId?) { id?.let(recorder::resetOutputEvidence) }
+    fun setPaused(id: PlaybackSessionId?, paused: Boolean) { id?.let { recorder.setPaused(it, paused) } }
+    fun observe(id: PlaybackSessionId?, sample: PlaybackObservation) {
+        id?.let { recorder.observe(it, sample) }
+    }
+
+    /** Samples only the existing in-memory recorder: never queries a player, decoder or socket. */
+    fun sampleIncidents() {
+        val now = SystemClock.elapsedRealtime()
+        val epoch = System.currentTimeMillis()
+        recorder.activeSnapshot().forEach { incidents.observe(it, keys[it.session.id], now, epoch) }
+        publishIncidents()
+    }
+
+    private fun publishIncidents() {
+        incidents.drain().forEach { incident ->
+            val id = PlaybackSessionId.from(incident.sessionId)
+            val active = recorder.activeSnapshot()
+            val record = active.firstOrNull { it.session.id == id } ?: recent[id]
+            // A report about a just-ended channel must not hide a newer currently playing session.
+            val rows = (active + listOfNotNull(record?.takeIf { ended -> active.none { it.session.id == ended.session.id } }))
+            PlaybackSupportReporter.capture(
+                rows.map(::fields),
+                incident = incident.toSafeFields(),
+            )
+        }
+    }
+
+    data class ProblemReportContext(val sessionId: String, val contentKey: String?, val incidentId: String, val label: String?)
+
+    /** Same explicit report within one minute reuses an incident and therefore the same ticket fingerprint. */
+    fun reportProblem(id: PlaybackSessionId?, contentKey: String?): ProblemReportContext? {
+        val record = id?.let { recorder.snapshotActive(it) ?: recent[it] }
+            ?: contentKey?.let { key ->
+                (recorder.activeSnapshot() + recent.values).filter { keys[it.session.id] == key }
+                    .maxByOrNull { it.session.startedAtEpochMs }
+            } ?: return null
+        val session = record.session.id
+        val incidentId = incidents.trigger(record, keys[session], PlaybackIncidentTrigger.USER_REPORT,
+            SystemClock.elapsedRealtime(), System.currentTimeMillis()) ?: return null
+        publishIncidents()
+        return ProblemReportContext(session.value, keys[session], incidentId, labels[session])
+    }
     private val diagnostics = com.iptv.player.playback.core.PlaybackDiagnosticState()
     fun diagnosticSnapshot(): Map<String, String> = diagnostics.snapshot()
     private val collector = Executors.newSingleThreadExecutor { runnable ->
@@ -67,6 +131,7 @@ object PlaybackQoeRuntime {
                 ledgerFile = File(app.filesDir, OPEN_LEDGER_FILE)
                 ledgerIo.execute { runCatching { flushOrphanedSessions(System.currentTimeMillis()) } }
             }
+            PlaybackSupportReporter.init(app)
             // Best effort only: even thread creation can fail under severe memory
             // pressure on low-end sticks. QoE continues without a capability hash
             // and application startup must never fail because of telemetry.
@@ -89,6 +154,8 @@ object PlaybackQoeRuntime {
         kind: PlaybackContentKind,
         engine: PlaybackEngineKind,
         transport: PlaybackTransportKind,
+        contentLabel: String? = null,
+        contentKey: String? = null,
     ): PlaybackSessionId {
         val now = System.currentTimeMillis()
         sweepStale(now)
@@ -105,8 +172,13 @@ object PlaybackQoeRuntime {
             transport = transport,
             capabilityFingerprint = capabilityFingerprint,
         )
-        recorder.start(session)
-        ledgerOpen(session)
+        val started = recorder.start(session)
+        if (started) ledgerOpen(session)
+        if (started) {
+            contentLabel?.take(512)?.let { labels[id] = it }
+            contentKey?.takeIf { Regex("[a-f0-9]{64}").matches(it) }?.let { keys[id] = it }
+            recorder.snapshotActive(id)?.let { PlaybackSupportReporter.capture(listOf(fields(it))) }
+        }
         return id
     }
 
@@ -135,6 +207,12 @@ object PlaybackQoeRuntime {
     fun recordFailure(id: PlaybackSessionId?, failure: PlaybackFailure) {
         diagnostics.failure(id, failure)
         id?.let { recorder.recordFailure(it, failure) }
+        id?.let(recorder::snapshotActive)?.let {
+            PlaybackSupportReporter.capture(listOf(fields(it)))
+            incidents.trigger(it, keys[it.session.id], PlaybackIncidentTrigger.PLAYBACK_ERROR,
+                SystemClock.elapsedRealtime(), System.currentTimeMillis())
+            publishIncidents()
+        }
     }
 
     fun finish(id: PlaybackSessionId?, reason: PlaybackEndReason) {
@@ -183,6 +261,18 @@ object PlaybackQoeRuntime {
     }
 
     private fun spoolRecord(record: PlaybackQoeRecord) {
+        recent[record.session.id] = record
+        synchronized(recentOrder) {
+            recentOrder.addLast(record.session.id)
+            while (recentOrder.size > 16) {
+                val removed = recentOrder.removeFirst()
+                recent.remove(removed); labels.remove(removed); keys.remove(removed)
+            }
+        }
+        incidents.observe(record, keys[record.session.id], SystemClock.elapsedRealtime(), System.currentTimeMillis())
+        incidents.flush(record.session.id)
+        publishIncidents()
+        PlaybackSupportReporter.capture(listOf(fields(record)))
         // No upload path without telemetry, so do not even fill the spool.
         if (!Telemetry.isEnabled) return
         val s = spool ?: return

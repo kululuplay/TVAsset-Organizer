@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="catalog_refresh_incomplete">Actualisation des films incomplète. Certains contenus n’ont pas pu être actualisés.</string>
+    <string name="catalog_refresh_details">Afficher les erreurs</string>
+    <string name="catalog_movie_index_failed">La liste des catégories de films n’a pas pu être actualisée</string>
+    <string name="catalog_refresh_no_visible_movies">Aucune catégorie de films visible à actualiser.</string>
+</resources>

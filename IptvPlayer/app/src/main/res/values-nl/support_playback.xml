@@ -1,0 +1,8 @@
+<resources>
+    <string name="support_installation_id">Apparaat-ID voor ondersteuning</string>
+    <string name="support_playback_disclosure">Zolang de app open is, worden afspeelstatus, titels, fouten, netwerktype en apparaatprestaties veilig naar Kululu Support verzonden om afspeelproblemen te onderzoeken. Inloggegevens, streamadressen, schermafbeeldingen en microfoongeluid worden niet verzonden. Geef uw apparaat-ID door om uw diagnose te vinden.</string>
+    <string name="support_playback_problem_channel">Dit kanaal hapert</string>
+    <string name="support_playback_problem_content">Afspeelprobleem melden</string>
+    <string name="support_playback_problem_title">Afspeelprobleem</string>
+    <string name="support_playback_problem_message">Het beeld bevriest, hapert of blijft laden.</string>
+</resources>

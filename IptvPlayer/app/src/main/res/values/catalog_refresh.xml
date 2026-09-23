@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="catalog_refresh_incomplete">Movie refresh incomplete. Some content could not be updated.</string>
+    <string name="catalog_refresh_details">Show refresh errors</string>
+    <string name="catalog_movie_index_failed">Movie category list could not be updated</string>
+    <string name="catalog_refresh_no_visible_movies">No visible movie categories are available to refresh.</string>
+</resources>

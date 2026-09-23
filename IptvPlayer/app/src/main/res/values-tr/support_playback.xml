@@ -1,0 +1,8 @@
+<resources>
+    <string name="support_installation_id">Destek cihaz kimliği</string>
+    <string name="support_playback_disclosure">Uygulama açıkken oynatma durumu, içerik adları, hatalar, ağ türü ve cihaz performansı oynatma sorunlarını incelemek için güvenli biçimde Kululu Destek merkezine gönderilir. Giriş bilgileri, yayın adresleri, ekran görüntüleri ve mikrofon sesi gönderilmez. Tanılama kayıtlarınızı bulmak için desteğe cihaz kimliğinizi iletin.</string>
+    <string name="support_playback_problem_channel">Bu kanal takılıyor</string>
+    <string name="support_playback_problem_content">Oynatma sorunu bildir</string>
+    <string name="support_playback_problem_title">Oynatma sorunu</string>
+    <string name="support_playback_problem_message">Yayında donma, takılma veya sürekli yüklenme yaşıyorum.</string>
+</resources>

@@ -122,7 +122,21 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: support_test
+          POSTGRES_PASSWORD: support_test
+          POSTGRES_DB: kululu_support
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U support_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
+      SUPPORT_TEST_DATABASE_URL: postgresql://support_test:support_test@127.0.0.1:5432/kululu_support
       # Pull requests build without the production keys: a debug APK compiled
       # from an untrusted branch must not carry them, and its artifact is not
       # retained. Pushes to the default branch keep the full behaviour.
@@ -192,6 +206,10 @@ jobs:
             :app:lintDebug \
             :app:assembleDebug \
             --stacktrace
+
+      - name: Verify Android playback support contract
+        working-directory: .
+        run: node scripts/verify_support_contract.js
 
       - name: Upload unit test results
         if: always()

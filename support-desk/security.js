@@ -35,6 +35,11 @@ function ticketPayload(input) {
     const value = input.metadata?.[key];
     if (Number.isSafeInteger(value) && value > 0 && value <= 2147483647) metadata[key] = value;
   }
+  for (const key of ["playback_session_id", "playback_incident_id"]) {
+    const value = input.metadata?.[key];
+    if (typeof value === "string" && UUID.test(value)) metadata[key] = value.toLowerCase();
+  }
+  if (typeof input.metadata?.content_key === "string" && /^[a-f0-9]{64}$/i.test(input.metadata.content_key)) metadata.content_key = input.metadata.content_key.toLowerCase();
   const logBytes = Buffer.from(redact(input.log));
   let start = Math.max(0, logBytes.length - 131072);
   while (start < logBytes.length && (logBytes[start] & 0xc0) === 0x80) start++;

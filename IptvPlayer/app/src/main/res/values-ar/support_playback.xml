@@ -1,0 +1,8 @@
+<resources>
+    <string name="support_installation_id">معرّف الجهاز للدعم</string>
+    <string name="support_playback_disclosure">أثناء فتح التطبيق، تُرسل حالة التشغيل وعناوين المحتوى والأخطاء ونوع الشبكة وأداء الجهاز بأمان إلى دعم Kululu للتحقق من مشاكل التشغيل. لا تُرسل بيانات الدخول أو عناوين البث أو صور الشاشة أو صوت الميكروفون. أعطِ الدعم معرّف جهازك للعثور على بيانات التشخيص.</string>
+    <string name="support_playback_problem_channel">هذه القناة تتقطع</string>
+    <string name="support_playback_problem_content">الإبلاغ عن مشكلة تشغيل</string>
+    <string name="support_playback_problem_title">مشكلة تشغيل</string>
+    <string name="support_playback_problem_message">يتجمد التشغيل أو يتقطع أو يستمر في التحميل.</string>
+</resources>

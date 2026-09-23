@@ -141,13 +141,17 @@ class IptvApp : Application(), ImageLoaderFactory {
         // processes alive for hours — a bare process loop would over-count "live".
         registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
-                if (startedActivities++ == 0) HeartbeatReporter.start(this@IptvApp)
+                if (startedActivities++ == 0) {
+                    HeartbeatReporter.start(this@IptvApp)
+                    com.iptv.player.util.PlaybackSupportReporter.start(this@IptvApp)
+                }
             }
 
             override fun onActivityStopped(activity: Activity) {
                 startedActivities = (startedActivities - 1).coerceAtLeast(0)
                 if (startedActivities == 0) {
                     HeartbeatReporter.stop()
+                    com.iptv.player.util.PlaybackSupportReporter.stop()
                     // Orderly background stop: the next launch must NOT read this as
                     // an abnormal exit. (A native crash / OOM-kill skips this path.)
                     AbnormalExitDetector.markCleanStop(this@IptvApp)

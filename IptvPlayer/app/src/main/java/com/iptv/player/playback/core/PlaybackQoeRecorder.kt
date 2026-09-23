@@ -53,6 +53,19 @@ enum class PlaybackEndReason {
     ABANDONED,
 }
 
+enum class PlaybackObservedState { STARTING, PLAYING, BUFFERING, PAUSED, ENDED, FAILED }
+
+/** Optional counters are evidence; an unavailable decoder never becomes zero dropped frames. */
+data class PlaybackObservation(
+    val source: String,
+    val rendered: Long? = null,
+    val dropped: Long? = null,
+    val bufferMs: Long? = null,
+    val paused: Boolean? = null,
+    val video: PlaybackVideoFormat? = null,
+    val startup: PlaybackStartupTiming? = null,
+)
+
 data class PlaybackSession(
     val id: PlaybackSessionId,
     val kind: PlaybackContentKind,
@@ -83,6 +96,15 @@ data class PlaybackQoeRecord(
     val failures: List<PlaybackFailure>,
     val discardedFailureCount: Int,
     val isFinal: Boolean,
+    val observedState: PlaybackObservedState = PlaybackObservedState.STARTING,
+    val stateDurationMs: Long = 0,
+    val pausedDurationMs: Long = 0,
+    val framesKnown: Boolean = false,
+    val droppedFramesKnown: Boolean = false,
+    val lastFrameAgeMs: Long? = null,
+    val currentBufferMs: Long? = null,
+    val video: PlaybackVideoFormat? = null,
+    val startup: PlaybackStartupTiming? = null,
 ) {
     /**
      * A deliberately closed, URL-free field set. No content title, request URI,
@@ -105,8 +127,16 @@ data class PlaybackQoeRecord(
         put("rebuffer_count", rebufferCount)
         put("rebuffer_duration_ms", rebufferDurationMs)
         put("engine_switch_count", engineSwitchCount)
-        put("rendered_frames", renderedFrames)
-        put("dropped_frames", droppedFrames)
+        put("state", observedState.name)
+        put("state_duration_ms", stateDurationMs)
+        put("paused_duration_ms", pausedDurationMs)
+        put("frames_known", framesKnown)
+        if (framesKnown) put("rendered_frames", renderedFrames)
+        if (droppedFramesKnown) put("dropped_frames", droppedFrames)
+        lastFrameAgeMs?.let { put("last_frame_age_ms", it) }
+        currentBufferMs?.let { put("current_buffer_ms", it) }
+        video?.let { putAll(it.toSafeFields()) }
+        startup?.let { putAll(it.toSafeFields()) }
         put("failure_codes", failures.joinToString(",") { it.code.name })
         put("failure_categories", failures.joinToString(",") { it.category.name })
         put("failure_phases", failures.joinToString(",") { it.phase.name })
@@ -169,7 +199,11 @@ class PlaybackQoeRecorder(
             if (state.currentEngine != engine) {
                 val discoveredInitialEngine = state.currentEngine == PlaybackEngineKind.UNKNOWN
                 state.currentEngine = engine
-                if (!discoveredInitialEngine) state.engineSwitchCount += 1
+                state.clearOutputEvidence()
+                if (!discoveredInitialEngine) {
+                    state.engineSwitchCount += 1
+                    state.initialStartupEligible = false
+                }
             }
         }
 
@@ -187,6 +221,9 @@ class PlaybackQoeRecorder(
 
     fun markFirstFrame(sessionId: PlaybackSessionId): Boolean = mutate(sessionId) { state ->
         if (state.firstFrameAtMs == null) state.firstFrameAtMs = clock.nowMs()
+        if (state.observedState != PlaybackObservedState.PAUSED) {
+            state.transition(PlaybackObservedState.PLAYING, clock.nowMs())
+        }
     }
 
     /** Startup buffering is not counted as a rebuffer until a first frame exists. */
@@ -194,12 +231,18 @@ class PlaybackQoeRecorder(
         mutate(sessionId) { state ->
             val now = clock.nowMs()
             if (rebuffering) {
+                if (state.observedState != PlaybackObservedState.PAUSED) {
+                    state.transition(if (state.firstFrameAtMs == null) PlaybackObservedState.STARTING else PlaybackObservedState.BUFFERING, now)
+                }
                 if (state.firstFrameAtMs != null && state.rebufferStartedAtMs == null) {
                     state.rebufferStartedAtMs = now
                     state.rebufferCount += 1
                 }
             } else {
                 state.closeRebuffer(now)
+                if (state.observedState == PlaybackObservedState.BUFFERING) {
+                    state.transition(if (state.firstFrameAtMs == null) PlaybackObservedState.STARTING else PlaybackObservedState.PLAYING, now)
+                }
             }
         }
 
@@ -211,9 +254,86 @@ class PlaybackQoeRecorder(
         require(renderedDelta >= 0L) { "renderedDelta must not be negative" }
         require(droppedDelta >= 0L) { "droppedDelta must not be negative" }
         return mutate(sessionId) { state ->
+            state.framesKnown = true
+            state.droppedFramesKnown = true
+            if (renderedDelta > 0) state.lastFrameAtMs = clock.nowMs()
             state.renderedFrames = saturatingAdd(state.renderedFrames, renderedDelta)
             state.droppedFrames = saturatingAdd(state.droppedFrames, droppedDelta)
         }
+    }
+
+    /** A decoder restart can retain the same engine enum (for example VLC HW → SW). */
+    fun resetOutputEvidence(sessionId: PlaybackSessionId): Boolean = mutate(sessionId) { state ->
+        state.clearOutputEvidence()
+        state.initialStartupEligible = false
+    }
+
+    fun observe(sessionId: PlaybackSessionId, sample: PlaybackObservation): Boolean = mutate(sessionId) { state ->
+        val now = clock.nowMs()
+        if (sample.source != state.counterSource) {
+            state.counterSource = sample.source
+            state.previousRendered = null
+            state.previousDropped = null
+            state.framesKnown = false
+            state.droppedFramesKnown = false
+            state.lastFrameAtMs = null
+        }
+        if (sample.rendered == null) {
+            state.framesKnown = false
+            state.lastFrameAtMs = null
+        }
+        if (sample.dropped == null) state.droppedFramesKnown = false
+        sample.rendered?.takeIf { it >= 0 }?.let { rendered ->
+            val previous = state.previousRendered
+            val delta = if (previous == null || rendered < previous) rendered else rendered - previous
+            state.framesKnown = true
+            state.renderedFrames = saturatingAdd(state.renderedFrames, delta)
+            if (delta > 0) state.lastFrameAtMs = now
+            state.previousRendered = rendered
+        }
+        sample.dropped?.takeIf { it >= 0 }?.let { dropped ->
+            val previous = state.previousDropped
+            state.droppedFrames = saturatingAdd(state.droppedFrames, if (previous == null || dropped < previous) dropped else dropped - previous)
+            state.droppedFramesKnown = true
+            state.previousDropped = dropped
+        }
+        state.currentBufferMs = sample.bufferMs?.coerceAtLeast(0)
+        state.video = sample.video
+        // Startup detail belongs to the initial engine attempt only. Never combine a fallback
+        // connection with the original session's first frame.
+        if (state.initialStartupEligible) state.startup = sample.startup
+        if (sample.paused == true) {
+            state.closeRebuffer(now)
+            state.lastFrameAtMs = null
+            state.transition(PlaybackObservedState.PAUSED, now)
+        } else if (sample.paused == false && state.observedState == PlaybackObservedState.PAUSED) {
+            state.lastFrameAtMs = null
+            state.transition(if (state.firstFrameAtMs == null) PlaybackObservedState.STARTING else PlaybackObservedState.PLAYING, now)
+        }
+    }
+
+    fun pauseAll() = synchronized(lock) {
+        active.values.forEach { state ->
+            state.closeRebuffer(clock.nowMs())
+            state.lastFrameAtMs = null
+            state.transition(PlaybackObservedState.PAUSED, clock.nowMs())
+        }
+    }
+
+    fun setPaused(sessionId: PlaybackSessionId, paused: Boolean) = mutate(sessionId) { state ->
+        val now = clock.nowMs()
+        if (paused) {
+            state.closeRebuffer(now)
+            state.lastFrameAtMs = null
+            state.transition(PlaybackObservedState.PAUSED, now)
+        } else if (state.observedState == PlaybackObservedState.PAUSED) {
+            state.lastFrameAtMs = null
+            state.transition(if (state.firstFrameAtMs == null) PlaybackObservedState.STARTING else PlaybackObservedState.PLAYING, now)
+        }
+    }
+
+    fun activeSnapshot(): List<PlaybackQoeRecord> = synchronized(lock) {
+        active.values.map { it.snapshot(clock.nowMs(), false) }
     }
 
     fun recordFailure(
@@ -240,6 +360,7 @@ class PlaybackQoeRecorder(
         val state = active.remove(sessionId) ?: return@synchronized null
         val now = clock.nowMs()
         state.closeRebuffer(now)
+        state.transition(if (reason == PlaybackEndReason.FATAL_FAILURE) PlaybackObservedState.FAILED else PlaybackObservedState.ENDED, now)
         val record = state.snapshot(
             nowMs = now,
             isFinal = true,
@@ -310,7 +431,41 @@ class PlaybackQoeRecorder(
         var droppedFrames: Long = 0L,
         val failures: ArrayDeque<PlaybackFailure> = ArrayDeque(),
         var discardedFailureCount: Int = 0,
+        var observedState: PlaybackObservedState = PlaybackObservedState.STARTING,
+        var stateStartedAtMs: Long = startedAtMs,
+        var pausedDurationMs: Long = 0,
+        var framesKnown: Boolean = false,
+        var droppedFramesKnown: Boolean = false,
+        var lastFrameAtMs: Long? = null,
+        var currentBufferMs: Long? = null,
+        var counterSource: String? = null,
+        var previousRendered: Long? = null,
+        var previousDropped: Long? = null,
+        var video: PlaybackVideoFormat? = null,
+        var startup: PlaybackStartupTiming? = null,
+        var initialStartupEligible: Boolean = true,
     ) {
+        fun clearOutputEvidence() {
+            counterSource = null
+            previousRendered = null
+            previousDropped = null
+            framesKnown = false
+            droppedFramesKnown = false
+            lastFrameAtMs = null
+            currentBufferMs = null
+            video = null
+            startup = null
+        }
+        fun transition(next: PlaybackObservedState, now: Long) {
+            if (observedState != next) {
+                if (next == PlaybackObservedState.PAUSED && firstFrameAtMs == null) {
+                    initialStartupEligible = false
+                    startup = null
+                }
+                if (observedState == PlaybackObservedState.PAUSED) pausedDurationMs = saturatingAdd(pausedDurationMs, duration(stateStartedAtMs, now))
+                observedState = next; stateStartedAtMs = now
+            }
+        }
         fun closeRebuffer(nowMs: Long) {
             val started = rebufferStartedAtMs ?: return
             rebufferDurationMs = saturatingAdd(rebufferDurationMs, duration(started, nowMs))
@@ -340,6 +495,15 @@ class PlaybackQoeRecorder(
                 failures = failures.toList(),
                 discardedFailureCount = discardedFailureCount,
                 isFinal = isFinal,
+                observedState = observedState,
+                stateDurationMs = duration(stateStartedAtMs, nowMs),
+                pausedDurationMs = saturatingAdd(pausedDurationMs, if (observedState == PlaybackObservedState.PAUSED) duration(stateStartedAtMs, nowMs) else 0),
+                framesKnown = framesKnown,
+                droppedFramesKnown = droppedFramesKnown,
+                lastFrameAgeMs = lastFrameAtMs?.let { duration(it, nowMs) },
+                currentBufferMs = currentBufferMs,
+                video = video,
+                startup = startup,
             )
         }
     }
@@ -376,6 +540,7 @@ class PlaybackQoeRecorder(
                 failures = emptyList(),
                 discardedFailureCount = 0,
                 isFinal = true,
+                observedState = PlaybackObservedState.ENDED,
             )
         }
 

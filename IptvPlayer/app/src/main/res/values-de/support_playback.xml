@@ -1,0 +1,8 @@
+<resources>
+    <string name="support_installation_id">Support-Geräte-ID</string>
+    <string name="support_playback_disclosure">Solange die App geöffnet ist, werden Wiedergabestatus, Inhaltstitel, Fehler, Netzwerktyp und Geräteleistung sicher an Kululu Support gesendet, um Wiedergabeprobleme zu untersuchen. Zugangsdaten, Stream-Adressen, Bildschirmbilder und Mikrofonton werden nicht gesendet. Mit Ihrer Geräte-ID kann der Support Ihre Diagnose finden.</string>
+    <string name="support_playback_problem_channel">Dieser Sender ruckelt</string>
+    <string name="support_playback_problem_content">Wiedergabeproblem melden</string>
+    <string name="support_playback_problem_title">Wiedergabeproblem</string>
+    <string name="support_playback_problem_message">Die Wiedergabe friert ein, ruckelt oder lädt ständig.</string>
+</resources>
