@@ -87,6 +87,11 @@ test("health UI marks stale evidence unknown and retains failed final session st
   assert.equal(run('healthState({lastSeenAt:new Date(Date.now()-180000).toISOString(),online:true,status:"healthy"})'), "unknown");
   assert.equal(run('healthState({lastSeenAt:new Date().toISOString(),online:true,status:"healthy"},true)'), "unknown");
   assert.equal(run('healthState({lastSeenAt:new Date().toISOString(),online:true,status:"healthy"},false)'), "healthy");
+  // An idle card carries a six-minute window from the server; without one the two-minute default applies.
+  assert.equal(run('healthStateName({lastSeenAt:new Date(Date.now()-300000).toISOString(),online:true,status:"unknown",freshWindowMs:360000},false)'), "Yetersiz ölçüm");
+  assert.equal(run('healthStateName({lastSeenAt:new Date(Date.now()-300000).toISOString(),online:true,status:"unknown"},false)'), "Güncel ölçüm yok");
+  assert.equal(run('healthState({lastSeenAt:new Date(Date.now()-300000).toISOString(),online:true,status:"healthy",freshWindowMs:360000},false)'), "healthy");
+  assert.equal(run('healthState({lastSeenAt:new Date(Date.now()-361000).toISOString(),online:true,status:"healthy",freshWindowMs:360000},false)'), "unknown");
   assert.equal(run("sessionOf({sessions:[{started_at_epoch_ms:1,final:false},{started_at_epoch_ms:2,final:true}]}).started_at_epoch_ms"), 2);
   assert.equal(run('sessionState({final:true,state:"FAILED"})'), "Son oturum · hata ile bitti");
   assert.equal(run('sessionState({state:"PLAYING"},true)'), "Son kayıtta oynatılıyordu");

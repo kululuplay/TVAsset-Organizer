@@ -4,4 +4,11 @@
     <string name="catalog_refresh_details">Fouten bij vernieuwen tonen</string>
     <string name="catalog_movie_index_failed">De filmcategorieën konden niet worden bijgewerkt</string>
     <string name="catalog_refresh_no_visible_movies">Er zijn geen zichtbare filmcategorieën om te vernieuwen.</string>
+    <string name="catalog_series_refresh_incomplete">Series niet volledig bijgewerkt. Sommige inhoud kon niet worden bijgewerkt.</string>
+    <string name="catalog_sync_incomplete">Vernieuwen niet voltooid. Sommige inhoud kon niet worden bijgewerkt.</string>
+    <string name="catalog_dataset_failed">%1$s niet bijgewerkt: %2$s</string>
+    <string name="catalog_dataset_movie_categories">Filmcategorieën</string>
+    <string name="catalog_dataset_series_categories">Seriecategorieën</string>
+    <string name="catalog_refresh_skipped">Vernieuwen vroegtijdig gestopt: %1$d categorieën zijn niet gecontroleerd.</string>
+    <string name="catalog_refresh_progress">Films vernieuwen… %1$d/%2$d</string>
 </resources>

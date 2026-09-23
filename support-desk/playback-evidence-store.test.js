@@ -14,8 +14,10 @@ test("PostgreSQL channel comparison, incident lifecycle, measured interventions 
   assert.match(schema, /^evidence_test_[a-f0-9]{16}$/); await admin.query(`CREATE SCHEMA ${schema}`);
   const pool = new Pool({ connectionString: url.toString(), options: `-c search_path=${schema}` });
   try {
+    // Every unqualified statement below must land in the throwaway schema, never in live tables.
+    assert.equal((await pool.query("SELECT current_schema() AS schema")).rows[0].schema, schema);
     await pool.query(fs.readFileSync(path.join(__dirname, "schema.sql"), "utf8"));
-    const store = new PgStore(pool, { incidents: 3, incidentsPerDevice: 2, interventions: 4, interventionsPerDevice: 2 });
+    const store = new PgStore(pool, { incidents: 3, incidentsPerDevice: 2, interventions: 4, interventionsPerDevice: 2 }, { usageIntervalMs: 0 });
     const [a, b, c, d] = Array.from({ length: 4 }, () => crypto.randomUUID());
     for (const device of [a, b, c, d]) await store.register(device, device);
     const now = Date.now(), content = "a".repeat(64), otherContent = "b".repeat(64), sid = crypto.randomUUID();
@@ -40,7 +42,7 @@ test("PostgreSQL channel comparison, incident lifecycle, measured interventions 
     assert.equal(details.interventions[0].comparison.after.rebufferCount, 0);
     assert.ok(details.interventions[0].comparison.change.bufferingPercentagePoints < 0);
     // Final before/after evidence survives bounded heartbeat history trimming.
-    await pool.query("DELETE FROM support_playback_samples WHERE installation_id=$1", [a]);
+    await pool.query(`DELETE FROM ${schema}.support_playback_samples WHERE installation_id=$1`, [a]);
     assert.equal((await store.playbackDetail(a, now + 160000)).interventions[0].comparison.status, "comparable");
     const event = { incidentId: crypto.randomUUID(), sessionId: sid, contentKey: otherContent, trigger: "BUFFERING", triggeredAtMs: now, complete: false, points: [{ offsetMs: 0, state: "BUFFERING", stateDurationMs: 1000, sessionDurationMs: 300000, rebufferCount: 1, rebufferDurationMs: 1000, framesKnown: false }] };
     const initial = { ...make(now, 0, { content_key: otherContent }), incidents: [event] }; await store.playback(d, initial, now);
@@ -61,14 +63,18 @@ test("PostgreSQL channel comparison, incident lifecycle, measured interventions 
     for (let i = 0; i < 2; i++) await store.playback(d, { ...make(now + 3000 + i, 0, { content_key: otherContent }), incidents: [{ ...event, incidentId: crypto.randomUUID() }] }, now + 3000 + i);
     assert.equal((await store.playbackDetail(d, now + 4000)).incidents.length, 2);
     assert.equal((await store.playbackDetail(d, now + 4000)).historyLimited, true);
+    // The fleet-wide incident ring prunes the oldest rows at the usage check instead of refusing uploads.
+    for (let i = 0; i < 2; i++) await store.playback(a, { ...make(now + 5000 + i, 0), incidents: [{ ...event, incidentId: crypto.randomUUID() }] }, now + 5000 + i);
+    assert.equal((await pool.query("SELECT count(*)::int n FROM support_playback_incidents")).rows[0].n, 3);
+    assert.equal((await pool.query("SELECT count(*)::int n FROM support_playback_incidents WHERE installation_id=$1", [d])).rows[0].n, 1);
     const markerD = await store.createIntervention(d, { ...marker, requestId: crypto.randomUUID(), contentKey: otherContent }, "operator", now + 4000);
     assert.ok(markerD);
     // Additional tables cascade on a legacy installation cleanup; they cannot block rollback.
-    for (const table of ["support_playback_samples", "support_playback_receipts", "support_playback_devices"]) await pool.query(`DELETE FROM ${table} WHERE installation_id=$1`, [d]);
-    await pool.query("DELETE FROM support_installations WHERE id=$1", [d]);
+    for (const table of ["support_playback_samples", "support_playback_receipts", "support_playback_devices"]) await pool.query(`DELETE FROM ${schema}.${table} WHERE installation_id=$1`, [d]);
+    await pool.query(`DELETE FROM ${schema}.support_installations WHERE id=$1`, [d]);
     assert.equal((await pool.query("SELECT count(*)::int n FROM support_playback_incidents WHERE installation_id=$1", [d])).rows[0].n, 0);
     assert.equal((await pool.query("SELECT count(*)::int n FROM support_playback_interventions WHERE installation_id=$1", [d])).rows[0].n, 0);
-    await pool.query("UPDATE support_playback_interventions SET created_at=now()-interval '8 days'");
+    await pool.query(`UPDATE ${schema}.support_playback_interventions SET created_at=now()-interval '8 days' WHERE installation_id=ANY($1::uuid[])`, [[a, b, c, d]]);
     await store.maintain(); assert.equal((await pool.query("SELECT count(*)::int n FROM support_playback_interventions")).rows[0].n, 0);
   } finally {
     await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end();

@@ -51,6 +51,8 @@ object ReleaseNotesPolicy {
     private fun isTechnical(line: String): Boolean {
         val normalized = line.lowercase()
         return normalized in GENERIC_HEADINGS ||
+            // Machine-readable minimum Android API written by CI (first line).
+            normalized.startsWith("min-android-api") ||
             normalized.contains("commit") ||
             normalized.contains("merge pull request") ||
             normalized.contains("full changelog") ||

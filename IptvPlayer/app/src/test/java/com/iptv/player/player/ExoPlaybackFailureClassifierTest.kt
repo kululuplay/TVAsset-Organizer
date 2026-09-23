@@ -96,6 +96,37 @@ class ExoPlaybackFailureClassifierTest {
     }
 
     @Test
+    fun `stuck-player timeouts are transport stalls whatever renderer was active`() {
+        listOf(C.TRACK_TYPE_AUDIO, C.TRACK_TYPE_VIDEO, null).forEach { rendererType ->
+            assertEquals(
+                ExoPlaybackFailureClassifier.Failure.STALL,
+                ExoPlaybackFailureClassifier.classifyError(
+                    errorCode = PlaybackException.ERROR_CODE_TIMEOUT,
+                    rendererType = rendererType,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `other player-level codes stay ordinary errors, not stalls`() {
+        listOf(
+            PlaybackException.ERROR_CODE_UNSPECIFIED,
+            PlaybackException.ERROR_CODE_FAILED_RUNTIME_CHECK,
+            PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW,
+            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+        ).forEach { errorCode ->
+            assertEquals(
+                ExoPlaybackFailureClassifier.Failure.ERROR,
+                ExoPlaybackFailureClassifier.classifyError(
+                    errorCode = errorCode,
+                    rendererType = null,
+                ),
+            )
+        }
+    }
+
+    @Test
     fun `audio first TV snapshot remains unresolved until video group arrives`() {
         assertNull(
             ExoPlaybackFailureClassifier.classifyTracks(

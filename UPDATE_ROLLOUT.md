@@ -79,8 +79,9 @@ GH_TOKEN=... python3 scripts/activate_release_rollout.py \
 
 ## How the app decides
 
-For the newest published production release `candidate` (prereleases, drafts
-and non-`x.y.z` tags are skipped) the app fetches the policy and:
+For the newest published production release `candidate` (prereleases, drafts,
+non-`x.y.z` tags and, from client 1.5.97, releases whose minimum Android API
+is above the device are skipped, see below) the app fetches the policy and:
 
 - `candidate == targetVersion`: allowed when `emergency`, otherwise when not
   `paused` and the device's cohort bucket is below `rolloutPercent`; else held.
@@ -97,6 +98,40 @@ already-installed higher version.
 
 v1.5.83 was the one-time bootstrap release that installed this client-side
 gate; v1.5.82 and older builds cannot enforce this GitHub policy.
+
+## Minimum Android version (`Min-Android-API`)
+
+`update-rollout.json` deliberately has no Android-version field: every client
+checks the policy against a strict key allowlist, so a new key would make the
+whole fleet fail closed. A release's minimum Android API travels in the GitHub
+release itself.
+
+- The release workflow writes `Min-Android-API: <api>` as the first line of
+  the release body (`Min-Android-API: 23` for Android 6.0), taken from `minSdk`
+  in `IptvPlayer/app/build.gradle.kts`. `IptvPlayer/release-notes/v<version>.md`
+  stays human-only; the line is prepended when the body is staged.
+- `scripts/verify_android_upgrade.py` fails the release when the line is
+  missing, when it differs from the signed APK's `sdkVersion`, or when the
+  APK's minSdk is lower than the previous release's (minSdk only ever rises).
+- Clients from 1.5.97 read the line. When it is absent (releases published
+  before 1.5.97, or a hand-written body) they assume API 23 for 1.5.96 and
+  newer and API 21 for anything older.
+- A release whose minimum API is above the device is skipped and the next
+  older production release becomes `candidate`, subject to the same rollout
+  gate (its `stableVersion` fallback is also limited to installable
+  releases). A device that already runs the newest release it can install
+  reports "up to date". The launch prompt never announces such a release,
+  the About screen never downloads it, and the APK validator refuses a
+  package whose manifest requires a newer Android before the verified-digest
+  shortcut can accept it ("This update requires Android N or newer").
+- "Later" on the launch prompt is remembered per version: the same version is
+  announced again after 24 h at the earliest. Manual checks are unaffected.
+
+Clients older than 1.5.97 ignore the line and take the newest production
+release regardless of its minimum API; their system installer then refuses
+the package ("App not installed"), which is what Android 5 devices on 1.5.95
+saw with 1.5.96. Raising `minSdk` again is therefore only clean for the fleet
+once the devices below the new minimum run 1.5.97 or newer.
 
 ## Automatic emergency brake (release health gate)
 

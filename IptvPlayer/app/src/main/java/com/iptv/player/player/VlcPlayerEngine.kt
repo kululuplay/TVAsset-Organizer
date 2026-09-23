@@ -461,6 +461,12 @@ class VlcPlayerEngine(
         } finally {
             StrictMode.setThreadPolicy(previousThreadPolicy)
         }
+        // Once per engine: support logs must pin the native libVLC build, which
+        // is upgraded independently of the app and changes decoder behaviour.
+        PlaybackLog.log(
+            context, engineName,
+            "libVLC version=${runCatching { LibVLC.version() }.getOrNull() ?: "unknown"}",
+        )
         // Belt-and-braces: also set it on the instance (name + http UA).
         try {
             vlc.setUserAgent(AppInfo.USER_AGENT, AppInfo.USER_AGENT)

@@ -13,6 +13,8 @@ import androidx.media3.common.util.UnstableApi
  *
  *  - Audio renderer/AudioTrack failures use VLC's audio compatibility path.
  *  - Video (or otherwise unidentified) codec failures use the decode fallback.
+ *  - Media3's own stuck-player timeout is a transport stall: same-stage
+ *    reconnect through the controller, never the decoder ladder.
  *  - Network, source and manifest failures remain ordinary source errors.
  *
  * [TrackGroupState] is a tiny Media3-free snapshot so the selected/supported
@@ -24,6 +26,8 @@ internal object ExoPlaybackFailureClassifier {
     enum class Failure {
         AUDIO,
         DECODE,
+        /** ERROR_CODE_TIMEOUT: Media3's watchdog stopped a frozen player. */
+        STALL,
         ERROR,
     }
 
@@ -54,6 +58,9 @@ internal object ExoPlaybackFailureClassifier {
      * decode/video compatibility failures.
      */
     fun classifyError(errorCode: Int, rendererType: Int?): Failure = when {
+        // Checked first: a stuck detection is not renderer evidence even when
+        // Media3 attributes it to the audio or video renderer index.
+        ExoStuckDetectionPolicy.isStuckPlayerError(errorCode) -> Failure.STALL
         errorCode in AUDIO_OUTPUT_ERROR_CODES -> Failure.AUDIO
         errorCode in VIDEO_PROCESSING_ERROR_CODES -> Failure.DECODE
         errorCode in DECODER_ERROR_CODES && rendererType == C.TRACK_TYPE_AUDIO ->

@@ -89,12 +89,11 @@ internal class PlaybackSupportObserver(
     }
     override fun onVideoDecoderInitialized(eventTime: AnalyticsListener.EventTime, decoderName: String,
         initializedTimestampMs: Long, initializationDurationMs: Long) {
-        if (current(eventTime)) decoder = evidence.decoder(decoderName)
+        if (current(eventTime)) decoder = nextObservedDecoder(decoder, decoderName, evidence::decoder)
     }
     override fun onVideoInputFormatChanged(eventTime: AnalyticsListener.EventTime, format: Format,
         decoderReuseEvaluation: DecoderReuseEvaluation?) {
-        if (current(eventTime)) decoder = decoderReuseEvaluation?.decoderName?.let(evidence::decoder)
-            ?: PlaybackVideoDecoder.UNKNOWN
+        if (current(eventTime)) decoder = nextObservedDecoder(decoder, decoderReuseEvaluation?.decoderName, evidence::decoder)
     }
     override fun onRenderedFirstFrame(eventTime: AnalyticsListener.EventTime, output: Any, renderTimeMs: Long) {
         if (current(eventTime)) evidence.startup.firstFrame(renderTimeMs)
@@ -122,3 +121,14 @@ internal class PlaybackSupportObserver(
         ))
     }
 }
+
+/**
+ * Media3 1.11 delivers onVideoDecoderInitialized and then onVideoInputFormatChanged(format, null) for the same
+ * codec: an absent reuse evaluation carries no decoder fact, so the last observed decoder stays until an
+ * evaluation names one. A named but unlisted decoder is honestly UNKNOWN.
+ */
+internal fun nextObservedDecoder(
+    current: PlaybackVideoDecoder,
+    evaluatedDecoderName: String?,
+    lookup: (String) -> PlaybackVideoDecoder,
+): PlaybackVideoDecoder = evaluatedDecoderName?.let(lookup) ?: current

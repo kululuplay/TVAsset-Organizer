@@ -111,7 +111,8 @@ function compareIntervention(beforePoints, afterPoints, createdAtMs, now = Date.
   const base = { before, after, windowMs: WINDOW_MS, evidence: ["Yalnızca aynı cihaz ve içerikte, aynı oturum içindeki artan sayaçların farkları karşılaştırılır. Duraklama, sayaç sıfırlanması, oturum geçişi ve saat uyumsuzluğu aralıkları dışlanır."] };
   if (now < createdAtMs + WINDOW_MS) return { ...base, status: "waiting", evidence: [...base.evidence, "Müdahaleden sonraki iki dakikalık ölçüm penceresi bekleniyor."] };
   const keys = new Set([...beforePoints, ...afterPoints].map(point => point.session?.content_key).filter(Boolean));
-  if (keys.size !== 1) return { ...base, status: "insufficient", evidence: [...base.evidence, "İçerik kimlikleri eşleşmediği için karşılaştırma yapılamaz."] };
+  if (!keys.size) return { ...base, status: "insufficient", evidence: [...base.evidence, "Ölçüm pencerelerinde bu içerik için kayıt bulunmadığından karşılaştırma yapılamaz."] };
+  if (keys.size > 1) return { ...base, status: "insufficient", evidence: [...base.evidence, "İçerik kimlikleri eşleşmediği için karşılaştırma yapılamaz."] };
   if ([before, after].some(window => window.intervals < 2 || window.observedMs < 30000)) return { ...base, status: "insufficient", evidence: [...base.evidence, "Her iki tarafta en az iki geçerli aralık ve 30 saniyelik gözlem bulunmadığı için sonuç çıkarılamaz."] };
   const change = { bufferingPercentagePoints: Math.round((after.bufferingPercent - before.bufferingPercent) * 100) / 100, rebuffersPerMinute: Math.round((after.rebuffersPerMinute - before.rebuffersPerMinute) * 100) / 100 };
   if (before.droppedPercent !== undefined && after.droppedPercent !== undefined) change.droppedPercentagePoints = Math.round((after.droppedPercent - before.droppedPercent) * 100) / 100;

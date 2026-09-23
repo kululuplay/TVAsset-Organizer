@@ -4,4 +4,11 @@
     <string name="catalog_refresh_details">Show refresh errors</string>
     <string name="catalog_movie_index_failed">Movie category list could not be updated</string>
     <string name="catalog_refresh_no_visible_movies">No visible movie categories are available to refresh.</string>
+    <string name="catalog_series_refresh_incomplete">Series refresh incomplete. Some content could not be updated.</string>
+    <string name="catalog_sync_incomplete">Refresh incomplete. Some content could not be updated.</string>
+    <string name="catalog_dataset_failed">%1$s could not be updated: %2$s</string>
+    <string name="catalog_dataset_movie_categories">Movie categories</string>
+    <string name="catalog_dataset_series_categories">Series categories</string>
+    <string name="catalog_refresh_skipped">Refresh stopped early: %1$d categories were not checked.</string>
+    <string name="catalog_refresh_progress">Refreshing movies… %1$d/%2$d</string>
 </resources>

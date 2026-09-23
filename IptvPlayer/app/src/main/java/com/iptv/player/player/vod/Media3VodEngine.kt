@@ -43,6 +43,7 @@ import androidx.media3.exoplayer.video.VideoFrameMetadataListener
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.iptv.player.player.DirectMediaDataSource
+import com.iptv.player.player.ExoStuckDetectionPolicy
 import com.iptv.player.player.MediaTransportPolicy
 import com.iptv.player.R
 import com.iptv.player.playback.android.PlaybackQoeRuntime
@@ -491,10 +492,21 @@ class Media3VodEngine(
             setParameters(parameters)
         }
         val renderersFactory = buildRenderersFactory()
+        // Media3 1.9+ stuck-player detection (ExoStuckDetectionPolicy.VOD): keep
+        // the 10 s no-progress detector (classifyError turns it into a same-route
+        // stall) but never end a file early because its declared duration was
+        // wrong. Any MAX_VALUE timeout silently flips the builder's default wake
+        // mode to NONE, so pin the WAKE_MODE_LOCAL 1.5.96 ships with.
+        val stuckDetection = ExoStuckDetectionPolicy.VOD
         val exo = ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
             .setTrackSelector(selector)
             .setLoadControl(loadControl)
+            .setStuckPlayingDetectionTimeoutMs(stuckDetection.playingNoProgressMs)
+            .setStuckPlayingNotEndingTimeoutMs(stuckDetection.playingNotEndingMs)
+            .setStuckBufferingDetectionTimeoutMs(stuckDetection.bufferingNoProgressMs)
+            .setStuckSuppressedDetectionTimeoutMs(stuckDetection.suppressedMs)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
         // The Activity's TvPlaybackSession is the single audio-focus owner for
         // both Media3 and VLC routes, keeping UI/lifecycle state synchronized.
@@ -798,6 +810,14 @@ class Media3VodEngine(
         }
 
         val code = error.errorCode
+        // Media3's own watchdog (10 s isPlaying without clock progress) is a
+        // recoverable stall on this route: TIMEOUT/PLAYBACK_STALL feeds the
+        // coordinator's source ladder, whose first step re-opens Media3 from the
+        // current position. It never enters the decoder ladder; only real
+        // decoder/output evidence in a later error can do that.
+        if (ExoStuckDetectionPolicy.isStuckPlayerError(code)) {
+            return ExoStuckDetectionPolicy.stallFailure(phase)
+        }
         if (code in DRM_ERROR_RANGE) {
             val kind = when (code) {
                 PlaybackException.ERROR_CODE_DRM_PROVISIONING_FAILED ->

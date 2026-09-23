@@ -86,6 +86,8 @@
     <string name="about_update_wrong_package">ملف APK الذي تم تنزيله يخص تطبيقًا آخر.</string>
     <string name="about_update_not_newer">ملف APK هذا ليس أحدث من التطبيق المثبت.</string>
     <string name="about_update_signature_mismatch">توقيع التحديث لا يطابق التطبيق المثبت. لا يستطيع Android تحديث هذا التثبيت بأمان دون إزالته أولًا.</string>
+    <string name="update_requires_newer_android">يتطلب هذا التحديث Android %1$d أو أحدث. سيبقى جهازك على الإصدار الحالي.</string>
+    <string name="about_update_install_failed">تعذّر فتح المثبّت. نزّل ملف APK من الموقع الإلكتروني للتحديث يدويًا.</string>
     <string name="about_download_preparing">جارٍ التحضير…</string>
     <string name="about_download_size">%1$s / %2$s</string>
     <string name="about_download_meta">%1$s/ث · بقي %2$s</string>

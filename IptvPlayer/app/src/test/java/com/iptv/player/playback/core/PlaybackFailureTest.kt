@@ -106,4 +106,19 @@ class PlaybackFailureTest {
         assertEquals(evidence, failure.audioEvidence)
         assertFalse(failure.toString().contains("url", ignoreCase = true))
     }
+
+    @Test
+    fun `stall timeouts advise the same route and blame no transport or decoder`() {
+        // Both Media3 engines classify a stuck-player timeout with this signal.
+        val failure = PlaybackFailureClassifier.classify(
+            FailureSignal.Timeout(FailureSignal.TimeoutKind.STALL),
+            PlaybackFailure.Phase.PLAYBACK,
+        )
+
+        assertEquals(PlaybackFailure.Category.TIMEOUT, failure.category)
+        assertEquals(PlaybackFailure.Code.PLAYBACK_STALL, failure.code)
+        assertEquals(PlaybackFailure.Component.PLAYER, failure.component)
+        assertEquals(PlaybackFailure.RetryAdvice.RETRY_SAME_ROUTE, failure.retryAdvice)
+        assertEquals(PlaybackFailure.Phase.PLAYBACK, failure.phase)
+    }
 }

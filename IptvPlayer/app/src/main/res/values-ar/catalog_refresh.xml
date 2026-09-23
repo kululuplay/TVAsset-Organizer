@@ -4,4 +4,11 @@
     <string name="catalog_refresh_details">عرض أخطاء التحديث</string>
     <string name="catalog_movie_index_failed">تعذر تحديث قائمة فئات الأفلام</string>
     <string name="catalog_refresh_no_visible_movies">لا توجد فئات أفلام ظاهرة لتحديثها.</string>
+    <string name="catalog_series_refresh_incomplete">لم يكتمل تحديث المسلسلات. تعذر تحديث بعض المحتوى.</string>
+    <string name="catalog_sync_incomplete">لم يكتمل التحديث. تعذر تحديث بعض المحتوى.</string>
+    <string name="catalog_dataset_failed">تعذر تحديث %1$s: %2$s</string>
+    <string name="catalog_dataset_movie_categories">فئات الأفلام</string>
+    <string name="catalog_dataset_series_categories">فئات المسلسلات</string>
+    <string name="catalog_refresh_skipped">توقف التحديث مبكرًا: لم يتم فحص %1$d من الفئات.</string>
+    <string name="catalog_refresh_progress">جارٍ تحديث الأفلام… %1$d/%2$d</string>
 </resources>

@@ -1,16 +1,29 @@
 "use strict";
 const crypto = require("node:crypto");
 const { equal, redact } = require("./security");
-const { RETENTION_MS, FRESH_MS, diagnose, presentDevice } = require("./playback");
+const { RETENTION_MS, FRESH_MS, IDLE_FRESH_MS, freshWindowMs, diagnose, presentDevice } = require("./playback");
 const { WINDOW_MS, mergeIncident, compareChannelGroup, measurementPoints, compareIntervention } = require("./playback-analysis");
+// One fleet-wide prune deletes at most this many rows so a lowered cap cannot hit the statement timeout.
+const PRUNE_BATCH = 20000;
+// Each device row carries its own freshness window: the client refreshes an idle card only every five minutes.
+const DEVICES = `SELECT *,CASE WHEN EXISTS (SELECT 1 FROM jsonb_array_elements(sessions) AS s(value) WHERE s.value->>'final'='false') THEN ${FRESH_MS} ELSE ${IDLE_FRESH_MS} END AS fresh_ms FROM support_playback_devices WHERE last_seen_at >= $1`;
+const ONLINE = "last_seen_at >= to_timestamp(($2::bigint - fresh_ms)::double precision / 1000)";
+const FRESH_ROW = `${ONLINE} AND sampled_at_ms BETWEEN $2::bigint - fresh_ms AND $2::bigint + fresh_ms AND status_sampled_at_ms BETWEEN $2::bigint - fresh_ms AND $2::bigint + fresh_ms`;
 class PgStore {
-  constructor(pool, caps = {}) { this.pool = pool; this.caps = { installations: 100000, tickets: 100000, logs: 10000, playbackDevices: 25000, playbackSamples: 100000, playbackPerDevice: 2000, playbackReceipts: 1000000, incidents: 50000, incidentsPerDevice: 200, interventions: 10000, interventionsPerDevice: 100, ...caps }; }
-  async transaction(action) {
+  constructor(pool, caps = {}, { usageIntervalMs = 60000 } = {}) {
+    this.pool = pool;
+    this.caps = { installations: 100000, tickets: 100000, logs: 10000, playbackDevices: 25000, playbackSamples: 100000, playbackPerDevice: 2000, playbackReceipts: 1000000, playbackReceiptsPerDevice: 500, incidents: 50000, incidentsPerDevice: 200, interventions: 10000, interventionsPerDevice: 100, ...caps };
+    // Fleet-wide playback tables are measured at most once per interval per process, never per upload.
+    this.usageIntervalMs = usageIntervalMs; this.usage = null;
+  }
+  async transaction(action, installationId) {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      // One local database lock makes capacity checks atomic, including across workers.
-      await client.query("SELECT pg_advisory_xact_lock(584027163)");
+      // One local database lock keeps ticket and installation capacity checks atomic, including across workers.
+      // Playback uploads only serialise retries of the same installation; fleet-wide caps are pruned outside any lock.
+      if (installationId) await client.query("SELECT pg_advisory_xact_lock(584027163, hashtext($1))", [installationId]);
+      else await client.query("SELECT pg_advisory_xact_lock(584027163)");
       const result = await action(client);
       await client.query("COMMIT"); return result;
     } catch (error) { await client.query("ROLLBACK"); throw error; }
@@ -90,65 +103,94 @@ class PgStore {
       count(DISTINCT installation_id)::int AS devices FROM support_tickets`);
     return rows[0];
   }
+  // Fleet-wide playback tables are counted and ring-pruned at most once per interval per process, outside
+  // any lock: the oldest rows leave first, and only a new device beyond the device cap is ever refused.
+  async playbackUsage(now) {
+    if (this.usage?.pending) return this.usage.pending;
+    if (this.usage && now - this.usage.at < this.usageIntervalMs) return this.usage.fleet;
+    const pending = this.pruneFleet(now).then(fleet => { this.usage = { at: now, fleet }; return fleet; }, error => { this.usage = null; throw error; });
+    this.usage = { at: now, pending };
+    return pending;
+  }
+  async pruneFleet(now) {
+    for (const table of ["support_playback_samples", "support_playback_receipts", "support_playback_incidents"]) await this.pool.query(`DELETE FROM ${table} WHERE received_at < $1`, [new Date(now - RETENTION_MS)]);
+    const fleet = (await this.pool.query(`SELECT (SELECT count(*) FROM support_playback_devices)::int AS devices,(SELECT count(*) FROM support_playback_samples)::int AS samples,
+      (SELECT count(*) FROM support_playback_receipts)::int AS receipts,(SELECT count(*) FROM support_playback_incidents)::int AS incidents`)).rows[0];
+    if (fleet.samples >= this.caps.playbackSamples) await this.trimOldest(this.pool, "support_playback_samples", Math.min(fleet.samples - this.caps.playbackSamples + 1, PRUNE_BATCH));
+    if (fleet.incidents >= this.caps.incidents) await this.trimOldest(this.pool, "support_playback_incidents", Math.min(fleet.incidents - this.caps.incidents + 1, PRUNE_BATCH));
+    if (fleet.receipts >= this.caps.playbackReceipts) await this.trimReceipts(this.pool, Math.min(fleet.receipts - this.caps.playbackReceipts + 1, PRUNE_BATCH));
+    return fleet;
+  }
+  // Ring pruning removes the oldest rows of one device or of the whole fleet and discloses trimmed history
+  // on the affected devices. Table names come only from fixed internal callers, never request input.
+  async trimOldest(client, table, count, installationId) {
+    if (!["support_playback_samples", "support_playback_incidents", "support_playback_interventions"].includes(table)) throw Error("Invalid observation table");
+    await client.query(`WITH removed AS (DELETE FROM ${table} WHERE id IN (SELECT id FROM ${table} ${installationId ? "WHERE installation_id=$2" : ""} ORDER BY id ASC LIMIT $1) RETURNING installation_id)
+      UPDATE support_playback_devices SET history_limited=true WHERE installation_id IN (SELECT installation_id FROM removed)`, installationId ? [count, installationId] : [count]);
+  }
+  async trimReceipts(client, count, installationId) {
+    await client.query(`DELETE FROM support_playback_receipts WHERE (installation_id,sample_id) IN (SELECT installation_id,sample_id FROM support_playback_receipts ${installationId ? "WHERE installation_id=$2" : ""} ORDER BY received_at ASC LIMIT $1)`, installationId ? [count, installationId] : [count]);
+  }
   async playback(installationId, sample, now = Date.now()) {
+    // A device clock ahead of the server is clamped to receipt time, so one skewed envelope cannot outrank
+    // every later measurement; the stored payload keeps the device's own timestamp.
+    const sampledAtMs = Math.min(sample.sampledAtMs, now);
+    const fleet = await this.playbackUsage(now);
     return this.transaction(async client => {
-      const existing = await client.query("SELECT sample_id FROM support_playback_receipts WHERE installation_id=$1 AND sample_id=$2", [installationId, sample.sampleId]);
-      // A retry acknowledges the original durable write without changing freshness.
-      if (existing.rows.length) return sample.sampleId;
-      await client.query("DELETE FROM support_playback_samples WHERE received_at < $1", [new Date(now - RETENTION_MS)]);
-      await client.query("DELETE FROM support_playback_receipts WHERE received_at < $1", [new Date(now - RETENTION_MS)]);
-      const usage = await client.query("SELECT count(*)::int AS total, count(*) FILTER (WHERE installation_id=$1)::int AS device FROM support_playback_samples", [installationId]);
-      if ((await client.query("SELECT count(*)::int AS n FROM support_playback_receipts")).rows[0].n >= this.caps.playbackReceipts) this.capacity();
+      // A retry acknowledges the original durable write without changing freshness, whether its receipt
+      // or its retained timeline row is the surviving evidence.
+      const seen = await client.query(`SELECT 1 FROM support_playback_receipts WHERE installation_id=$1 AND sample_id=$2
+        UNION ALL SELECT 1 FROM support_playback_samples WHERE installation_id=$1 AND sample_id=$2 LIMIT 1`, [installationId, sample.sampleId]);
+      if (seen.rows.length) return sample.sampleId;
       const prior = (await client.query("SELECT * FROM support_playback_devices WHERE installation_id=$1", [installationId])).rows[0];
-      if (!prior && (await client.query("SELECT count(*)::int AS n FROM support_playback_devices")).rows[0].n >= this.caps.playbackDevices) this.capacity();
-      if (usage.rows[0].device >= this.caps.playbackPerDevice) {
-        await client.query("DELETE FROM support_playback_samples WHERE id IN (SELECT id FROM support_playback_samples WHERE installation_id=$1 ORDER BY id ASC LIMIT $2)", [installationId, usage.rows[0].device - this.caps.playbackPerDevice + 1]);
-        await client.query("UPDATE support_playback_devices SET history_limited=true WHERE installation_id=$1", [installationId]);
-      } else if (usage.rows[0].total >= this.caps.playbackSamples) {
-        await client.query(`WITH removed AS (DELETE FROM support_playback_samples WHERE id IN (SELECT id FROM support_playback_samples ORDER BY id ASC LIMIT $1) RETURNING installation_id)
-          UPDATE support_playback_devices SET history_limited=true WHERE installation_id IN (SELECT installation_id FROM removed)`, [usage.rows[0].total - this.caps.playbackSamples + 1]);
-      }
+      if (!prior && fleet.devices >= this.caps.playbackDevices) this.capacity();
+      // Per-device rings are bounded index lookups; they never scan a whole table.
+      const mine = (await client.query(`SELECT (SELECT count(*) FROM support_playback_samples WHERE installation_id=$1)::int AS samples,
+        (SELECT count(*) FROM support_playback_receipts WHERE installation_id=$1)::int AS receipts`, [installationId])).rows[0];
+      if (mine.samples >= this.caps.playbackPerDevice) await this.trimOldest(client, "support_playback_samples", mine.samples - this.caps.playbackPerDevice + 1, installationId);
+      if (mine.receipts >= this.caps.playbackReceiptsPerDevice) await this.trimReceipts(client, mine.receipts - this.caps.playbackReceiptsPerDevice + 1, installationId);
       await client.query("INSERT INTO support_playback_receipts(installation_id,sample_id,received_at) VALUES($1,$2,$3)", [installationId, sample.sampleId, new Date(now)]);
-      await client.query("INSERT INTO support_playback_samples(installation_id,sample_id,sampled_at_ms,received_at,payload) VALUES($1,$2,$3,$4,$5)", [installationId, sample.sampleId, sample.sampledAtMs, new Date(now), sample]);
+      await client.query("INSERT INTO support_playback_samples(installation_id,sample_id,sampled_at_ms,received_at,payload) VALUES($1,$2,$3,$4,$5)", [installationId, sample.sampleId, sampledAtMs, new Date(now), sample]);
       for (const incident of sample.incidents || []) {
         const previous = (await client.query("SELECT payload,sampled_at_ms FROM support_playback_incidents WHERE installation_id=$1 AND incident_id=$2", [installationId, incident.incidentId])).rows[0];
-        const merged = mergeIncident(previous?.payload, incident, Number(previous?.sampled_at_ms || 0), sample.sampledAtMs);
+        const merged = mergeIncident(previous?.payload, incident, Number(previous?.sampled_at_ms || 0), sampledAtMs);
         if (previous && merged === previous.payload) continue;
-        if (!previous) await this.trimObservations(client, "support_playback_incidents", "received_at", installationId, this.caps.incidents, this.caps.incidentsPerDevice, now);
+        if (!previous) {
+          const count = (await client.query("SELECT count(*)::int AS n FROM support_playback_incidents WHERE installation_id=$1", [installationId])).rows[0].n;
+          if (count >= this.caps.incidentsPerDevice) await this.trimOldest(client, "support_playback_incidents", count - this.caps.incidentsPerDevice + 1, installationId);
+        }
         await client.query(`INSERT INTO support_playback_incidents(installation_id,incident_id,sampled_at_ms,received_at,payload) VALUES($1,$2,$3,$4,$5)
-          ON CONFLICT(installation_id,incident_id) DO UPDATE SET sampled_at_ms=EXCLUDED.sampled_at_ms,payload=EXCLUDED.payload`, [installationId, incident.incidentId, sample.sampledAtMs, new Date(now), merged]);
+          ON CONFLICT(installation_id,incident_id) DO UPDATE SET sampled_at_ms=EXCLUDED.sampled_at_ms,payload=EXCLUDED.payload`, [installationId, incident.incidentId, sampledAtMs, new Date(now), merged]);
       }
       // Offline retries and out-of-order samples cannot rewind a live device or session.
-      if (!prior || sample.sampledAtMs > Number(prior.sampled_at_ms)) {
+      if (!prior || sampledAtMs > Number(prior.sampled_at_ms)) {
         const previous = new Map((prior?.sessions || []).map(row => [row.session_id, row]));
         const sessions = new Map();
         for (const row of sample.sessions) {
           const old = previous.get(row.session_id);
           if (old && (old.session_duration_ms > row.session_duration_ms || (old.final && !row.final))) { sessions.set(row.session_id, old); continue; }
-          sessions.set(row.session_id, { ...row, sampledAt: new Date(sample.sampledAtMs).toISOString(), receivedAt: new Date(now).toISOString() });
+          sessions.set(row.session_id, { ...row, sampledAt: new Date(sampledAtMs).toISOString(), receivedAt: new Date(now).toISOString() });
         }
         const latest = [...sessions.values()].sort((a, b) => (b.started_at_epoch_ms || 0) - (a.started_at_epoch_ms || 0)).slice(0, 16);
-        const statusSampledAt = sample.device.lowMemory || sample.device.networkConnected === false ? sample.sampledAtMs : Math.min(sample.sampledAtMs, latest[0] ? Date.parse(latest[0].sampledAt) : sample.sampledAtMs);
-        const status = diagnose(sample.device, latest.filter(row => Math.abs(now - Date.parse(row.sampledAt)) <= FRESH_MS), Math.abs(now - sample.sampledAtMs) <= FRESH_MS).status;
+        const statusSampledAt = sample.device.lowMemory || sample.device.networkConnected === false ? sampledAtMs : Math.min(sampledAtMs, latest[0] ? Date.parse(latest[0].sampledAt) : sampledAtMs);
+        const freshMs = freshWindowMs(latest);
+        const status = diagnose(sample.device, latest.filter(row => Math.abs(now - Date.parse(row.sampledAt)) <= freshMs), Math.abs(now - sampledAtMs) <= freshMs).status;
         await client.query(`INSERT INTO support_playback_devices(installation_id,sampled_at_ms,last_seen_at,device,sessions,status,status_sampled_at_ms)
           VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(installation_id) DO UPDATE SET sampled_at_ms=EXCLUDED.sampled_at_ms,last_seen_at=EXCLUDED.last_seen_at,device=EXCLUDED.device,sessions=EXCLUDED.sessions,status=EXCLUDED.status,status_sampled_at_ms=EXCLUDED.status_sampled_at_ms`,
-          [installationId, sample.sampledAtMs, new Date(now), sample.device, JSON.stringify(latest), status, statusSampledAt]);
+          [installationId, sampledAtMs, new Date(now), sample.device, JSON.stringify(latest), status, statusSampledAt]);
       }
       return sample.sampleId;
-    });
+    }, installationId);
   }
   async playbackList({ status, query, before }, now = Date.now()) {
-    const bounds = [new Date(now - RETENTION_MS), new Date(now - FRESH_MS), now - FRESH_MS, now + FRESH_MS];
-    const values = [bounds[0]];
-    const where = ["last_seen_at >= $1"];
-    if (status === "problem") { values.push(...bounds.slice(1)); where.push("status='problem' AND last_seen_at >= $2 AND sampled_at_ms BETWEEN $3 AND $4 AND status_sampled_at_ms BETWEEN $3 AND $4"); }
+    const values = [new Date(now - RETENTION_MS)];
+    const where = [];
+    if (status === "problem") { values.push(now); where.push(`status='problem' AND ${FRESH_ROW}`); }
     if (before) { values.push(before); where.push(`id < $${values.length}`); }
     if (query) { values.push(`%${query.replace(/[\\%_]/g, "\\$&")}%`); where.push(`(installation_id::text || ' ' || device::text || ' ' || sessions::text) ILIKE $${values.length}`); }
-    const { rows } = await this.pool.query(`SELECT * FROM support_playback_devices WHERE ${where.join(" AND ")} ORDER BY id DESC LIMIT 31`, values);
-    const summary = (await this.pool.query(`SELECT count(*)::int AS devices,
-      count(*) FILTER(WHERE last_seen_at >= $2)::int AS online,
-      count(*) FILTER(WHERE status='problem' AND last_seen_at >= $2 AND sampled_at_ms BETWEEN $3 AND $4 AND status_sampled_at_ms BETWEEN $3 AND $4)::int AS problems
-      FROM support_playback_devices WHERE last_seen_at >= $1`, bounds)).rows[0];
+    const { rows } = await this.pool.query(`SELECT * FROM (${DEVICES}) d ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY id DESC LIMIT 31`, values);
+    const summary = (await this.pool.query(`SELECT count(*)::int AS devices,count(*) FILTER(WHERE ${ONLINE})::int AS online,
+      count(*) FILTER(WHERE status='problem' AND ${FRESH_ROW})::int AS problems FROM (${DEVICES}) d`, [values[0], now])).rows[0];
     const page = rows.slice(0, 30);
     return { items: page.map(row => presentDevice(row, now)), nextCursor: rows.length > 30 ? String(page.at(-1).id) : null, summary, serverTime: new Date(now).toISOString() };
   }
@@ -166,13 +208,12 @@ class PgStore {
       interventions, interventionsTruncated: interventionRows.length > 10, serverTime: new Date(now).toISOString() };
   }
 
-  async trimObservations(client, table, timestamp, installationId, globalCap, deviceCap, now) {
-    // Names come only from the two fixed internal callers, never request input.
-    if (!new Set(["support_playback_incidents:received_at", "support_playback_interventions:created_at"]).has(`${table}:${timestamp}`)) throw Error("Invalid observation table");
-    await client.query(`DELETE FROM ${table} WHERE ${timestamp} < $1`, [new Date(now - RETENTION_MS)]);
-    const { rows } = await client.query(`SELECT count(*)::int AS total,count(*) FILTER(WHERE installation_id=$1)::int AS device FROM ${table}`, [installationId]);
-    if (rows[0].device >= deviceCap) await client.query(`WITH removed AS (DELETE FROM ${table} WHERE id IN (SELECT id FROM ${table} WHERE installation_id=$1 ORDER BY id ASC LIMIT $2) RETURNING installation_id) UPDATE support_playback_devices SET history_limited=true WHERE installation_id IN (SELECT installation_id FROM removed)`, [installationId, rows[0].device - deviceCap + 1]);
-    else if (rows[0].total >= globalCap) await client.query(`WITH removed AS (DELETE FROM ${table} WHERE id IN (SELECT id FROM ${table} ORDER BY id ASC LIMIT $1) RETURNING installation_id) UPDATE support_playback_devices SET history_limited=true WHERE installation_id IN (SELECT installation_id FROM removed)`, [rows[0].total - globalCap + 1]);
+  async trimInterventions(client, installationId, now) {
+    // Operator markers are rare, so exact counts under the global lock remain affordable here.
+    await client.query("DELETE FROM support_playback_interventions WHERE created_at < $1", [new Date(now - RETENTION_MS)]);
+    const { rows } = await client.query("SELECT count(*)::int AS total,count(*) FILTER(WHERE installation_id=$1)::int AS device FROM support_playback_interventions", [installationId]);
+    if (rows[0].device >= this.caps.interventionsPerDevice) await this.trimOldest(client, "support_playback_interventions", rows[0].device - this.caps.interventionsPerDevice + 1, installationId);
+    else if (rows[0].total >= this.caps.interventions) await this.trimOldest(client, "support_playback_interventions", rows[0].total - this.caps.interventions + 1);
   }
 
   async playbackChannels({ query, before }, now = Date.now()) {
@@ -215,7 +256,7 @@ class PgStore {
       if (!device) return null;
       const baseline = await this.interventionPoints(client, installationId, marker.contentKey, now - WINDOW_MS, now);
       if (!baseline.length && !device.sessions.some(session => session.content_key === marker.contentKey)) return null;
-      await this.trimObservations(client, "support_playback_interventions", "created_at", installationId, this.caps.interventions, this.caps.interventionsPerDevice, now);
+      await this.trimInterventions(client, installationId, now);
       return (await client.query(`INSERT INTO support_playback_interventions(installation_id,request_id,content_key,note,actor,created_at,baseline) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`, [installationId, marker.requestId, marker.contentKey, marker.note, actor, new Date(now), JSON.stringify(baseline)])).rows[0];
     });
     return row ? this.presentIntervention(row, now) : null;

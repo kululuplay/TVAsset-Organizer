@@ -193,6 +193,22 @@ jobs:
             :app:assembleRelease \
             --stacktrace
 
+      - name: Verify the Room schema export is committed
+        # Room's exportSchema rewrites app/schemas/<db>/<version>.json during
+        # KSP. A changed identity hash that was not committed would ship a
+        # database every existing install fails to open (Room refuses a hash
+        # mismatch on first access), so any drift from the tracked JSON, or a
+        # new untracked version file, fails the job before it can be released.
+        working-directory: .
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- IptvPlayer/app/schemas
+          untracked=$(git ls-files --others --exclude-standard -- IptvPlayer/app/schemas)
+          if [ -n "$untracked" ]; then
+            echo "::error::Uncommitted Room schema export: $untracked"
+            exit 1
+          fi
+
       - name: Verify Android playback support contract
         working-directory: .
         run: node scripts/verify_support_contract.js
@@ -337,13 +353,15 @@ jobs:
           name=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
           code=$(sed -n 's/.*versionCode = \([0-9][0-9]*\).*/\1/p' app/build.gradle.kts | head -n 1)
           package=$(sed -n 's/.*applicationId = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
-          if [ -z "$name" ] || [ -z "$code" ] || [ -z "$package" ]; then
-            echo "::error::Could not read applicationId/versionCode/versionName"
+          min_sdk=$(sed -n 's/^[[:space:]]*minSdk = \([0-9][0-9]*\).*/\1/p' app/build.gradle.kts | head -n 1)
+          if [ -z "$name" ] || [ -z "$code" ] || [ -z "$package" ] || [ -z "$min_sdk" ]; then
+            echo "::error::Could not read applicationId/versionCode/versionName/minSdk"
             exit 1
           fi
           echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "package=$package" >> "$GITHUB_OUTPUT"
+          echo "min_sdk=$min_sdk" >> "$GITHUB_OUTPUT"
 
       - name: Locate immutable release baseline
         id: existing
@@ -382,6 +400,25 @@ jobs:
           fi
           echo "apk=${apks[0]}" >> "$GITHUB_OUTPUT"
 
+      - name: Stage release APK and release notes
+        run: |
+          mkdir -p release-assets
+          cp app/build/outputs/apk/release/app-release.apk \
+            "release-assets/KululuIPTV-v${{ steps.version.outputs.name }}.apk"
+          # The first body line carries the release's minimum Android API for
+          # the in-app updater (UPDATE_ROLLOUT.md, "Minimum Android version");
+          # the verifier below checks it against the signed APK. Clients before
+          # 1.5.97 ignore the line; release-notes/*.md itself stays human-only.
+          notes="release-notes/v${{ steps.version.outputs.name }}.md"
+          {
+            printf 'Min-Android-API: %s\n\n' "${{ steps.version.outputs.min_sdk }}"
+            if [ -f "$notes" ]; then
+              cat "$notes"
+            else
+              printf '%s\n' 'Bug fixes and stability improvements.'
+            fi
+          } > release-assets/RELEASE_NOTES.md
+
       - name: Verify signed APK and static upgrade compatibility
         run: |
           build_tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
@@ -396,6 +433,8 @@ jobs:
             --expected-package "${{ steps.version.outputs.package }}"
             --expected-version-code "${{ steps.version.outputs.code }}"
             --expected-version-name "${{ steps.version.outputs.name }}"
+            --expected-min-sdk "${{ steps.version.outputs.min_sdk }}"
+            --release-notes release-assets/RELEASE_NOTES.md
             --aapt "$aapt"
             --apksigner "$apksigner"
           )
@@ -406,18 +445,6 @@ jobs:
             args+=(--allow-same-version)
           fi
           python3 ../scripts/verify_android_upgrade.py "${args[@]}"
-
-      - name: Stage release APK
-        run: |
-          mkdir -p release-assets
-          cp app/build/outputs/apk/release/app-release.apk \
-            "release-assets/KululuIPTV-v${{ steps.version.outputs.name }}.apk"
-          notes="release-notes/v${{ steps.version.outputs.name }}.md"
-          if [ -f "$notes" ]; then
-            cp "$notes" release-assets/RELEASE_NOTES.md
-          else
-            printf '%s\n' 'Bug fixes and stability improvements.' > release-assets/RELEASE_NOTES.md
-          fi
 
       - name: Publish GitHub release
         if: steps.existing.outputs.exists == 'false'

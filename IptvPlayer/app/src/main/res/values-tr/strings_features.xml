@@ -85,6 +85,8 @@
     <string name="about_update_wrong_package">İndirilen APK farklı bir uygulamaya ait.</string>
     <string name="about_update_not_newer">Bu APK, yüklü uygulamadan daha yeni değil.</string>
     <string name="about_update_signature_mismatch">Güncelleme imzası yüklü uygulamayla eşleşmiyor. Android, uygulama kaldırılmadan bu kurulumu güvenli şekilde güncelleyemez.</string>
+    <string name="update_requires_newer_android">Bu güncelleme Android %1$d veya daha yenisini gerektirir. Cihazınız mevcut sürümde kalır.</string>
+    <string name="about_update_install_failed">Yükleyici açılamadı. Elle güncellemek için APK dosyasını web sitesinden indirin.</string>
     <string name="about_download_preparing">Hazırlanıyor…</string>
     <string name="about_download_size">%1$s / %2$s</string>
     <string name="about_download_meta">%1$s/sn · %2$s kaldı</string>

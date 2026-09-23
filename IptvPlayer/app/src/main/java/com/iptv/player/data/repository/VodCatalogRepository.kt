@@ -135,9 +135,15 @@ internal class VodCatalogRepository(
      * This is cheap and lets the Movies rail render immediately. The per-category
      * [loaded] flag is preserved across refreshes so re-syncing the category list
      * never forces a re-download of categories whose movies are already cached.
+     * The splash, the Dashboard and the Movies screen all ask for this; one
+     * download serves whoever asks while it runs.
      */
-    suspend fun refreshVodCategories(config: SourceConfig): Outcome<Int> = withContext(Dispatchers.IO) {
-        if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
+    suspend fun refreshVodCategories(config: SourceConfig): Outcome<Int> {
+        if (config.type != SourceType.XTREAM) return Outcome.Success(0)
+        return support.indexWork.join("vod_categories", config) { downloadVodCategories(config) }
+    }
+
+    private suspend fun downloadVodCategories(config: SourceConfig): Outcome<Int> = withContext(Dispatchers.IO) {
         val generation = support.refreshGenerations.begin("vod_categories", config)
         try {
             val api = support.buildXtreamApi(config.serverUrl)
@@ -189,6 +195,7 @@ internal class VodCatalogRepository(
                 if (categories.isNotEmpty()) vodCategoryDao.upsertAll(categories)
             }
             if (!committed) return@withContext staleDataset(CatalogDataset.VOD_CATEGORIES)
+            support.catalogBackoff.clear()
             Outcome.Success(categories.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
@@ -196,15 +203,31 @@ internal class VodCatalogRepository(
         }
     }
 
-    /** Sequential movie refresh shared by the Movies reload and explicit dashboard refresh. */
+    /**
+     * Sequential movie refresh shared by the Movies reload and the explicit
+     * dashboard refresh. [only] restricts a retry to the categories that failed.
+     * One sweep runs at a time: a concurrent caller follows the running sweep's
+     * progress and receives its report instead of racing it (which used to end
+     * as a false "Cannot connect" for whichever request finished second).
+     */
     suspend fun refreshMovieCatalog(
         config: SourceConfig,
         forceAll: Boolean,
+        only: Set<String>? = null,
         onProgress: suspend (Int, Int) -> Unit = { _, _ -> },
-    ): MovieCatalogRefreshReport = withContext(Dispatchers.IO) {
-        if (config.type != SourceType.XTREAM) {
-            return@withContext MovieCatalogRefreshReport(0, 0, emptyList())
+    ): CatalogSweepReport {
+        if (config.type != SourceType.XTREAM) return CatalogSweepReport(0, 0, emptyList())
+        return support.movieSweep.run(config, SweepRequest(forceAll, only), onProgress) { progress ->
+            sweepMovies(config, forceAll, only, progress)
         }
+    }
+
+    private suspend fun sweepMovies(
+        config: SourceConfig,
+        forceAll: Boolean,
+        only: Set<String>?,
+        onProgress: suspend (Int, Int) -> Unit,
+    ): CatalogSweepReport = withContext(Dispatchers.IO) {
         var indexFailure: Outcome.Failure? = null
         if (forceAll || vodCategoryDao.getAll().isEmpty()) {
             when (val result = refreshVodCategories(config)) {
@@ -214,12 +237,18 @@ internal class VodCatalogRepository(
         }
         // Failed index retrieval still refreshes known categories, without hiding that failure.
         val hidden = settings.hiddenCategories(ContentType.VOD).first()
-        val categories = vodCategoryDao.getAll()
-            .filter { it.id !in hidden && (forceAll || !it.loaded) }
-            .map { MovieRefreshCategory(it.id, it.name) }
-        MovieCatalogRefresh.run(categories, indexFailure, onProgress) { id ->
-            refreshVodCategory(config, id, force = forceAll)
+        val cached = vodCategoryDao.getAll()
+        val categories = cached
+            .filter { it.id !in hidden && (forceAll || !it.loaded) && (only == null || it.id in only) }
+            .map { SweepCategory(it.id, it.name) }
+        // The index was just re-read from the panel, so a category still in the
+        // cache is one the panel still lists (see the empty-reply override).
+        val stillListed = forceAll && indexFailure == null
+        val report = CatalogSweep.run(categories, indexFailure, forceAll, onProgress) { id ->
+            syncVodCategory(config, id, force = forceAll, stillListed = stillListed)
         }
+        support.catalogBackoff.noteSweep(report)
+        report.copy(availableCategories = cached.size)
     }
 
     /** True if this category's movies have already been downloaded into the cache. */
@@ -251,12 +280,43 @@ internal class VodCatalogRepository(
         config: SourceConfig,
         categoryId: String,
         force: Boolean = false
-    ): Outcome<Int> = withContext(Dispatchers.IO) {
-        if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
+    ): Outcome<Int> = syncVodCategory(config, categoryId, force).toOutcome(force)
+
+    /**
+     * [refreshVodCategory] with the full per-category result. [stillListed] tells
+     * the refresh gate that the panel's fresh index still has this category, so a
+     * repeated empty reply on a forced refresh may finally be believed. A category
+     * already being downloaded (launch re-sync, another screen's sweep) is joined
+     * rather than fetched twice.
+     */
+    suspend fun syncVodCategory(
+        config: SourceConfig,
+        categoryId: String,
+        force: Boolean = false,
+        stillListed: Boolean = false,
+    ): CategorySync = withContext(Dispatchers.IO) {
+        if (config.type != SourceType.XTREAM) return@withContext CategorySync.Applied(0, 0)
+        if (!force) {
+            if (vodCategoryDao.getById(categoryId)?.loaded == true) {
+                return@withContext CategorySync.Applied(0, 0)
+            }
+            // A panel that just proved unreachable, refusing or throttling is not asked again yet.
+            support.catalogBackoff.activeFailure()?.let { return@withContext CategorySync.Failed(it) }
+        }
+        support.categoryWork.join("vod_category:$categoryId", config) {
+            downloadVodCategory(config, categoryId, force, stillListed)
+        }
+    }
+
+    private suspend fun downloadVodCategory(
+        config: SourceConfig,
+        categoryId: String,
+        force: Boolean,
+        stillListed: Boolean,
+    ): CategorySync {
         val generation = support.refreshGenerations.begin("vod_category:$categoryId", config)
         val category = vodCategoryDao.getById(categoryId)
-        if (!force && category?.loaded == true) return@withContext Outcome.Success(0)
-        try {
+        return try {
             val api = support.buildXtreamApi(config.serverUrl)
             val catName = category?.name ?: "Uncategorized"
             val catPosition = category?.position ?: Int.MAX_VALUE
@@ -307,11 +367,16 @@ internal class VodCatalogRepository(
                         scoped.size,
                         items.size,
                     ),
+                    force,
+                    stillListed,
                 )
             ) {
                 DatasetRefreshDecision.Apply -> Unit
-                is DatasetRefreshDecision.PreserveCache ->
-                    return@withContext preservedDataset(CatalogDataset.VOD_CATEGORY, decision.reason)
+                is DatasetRefreshDecision.PreserveCache -> {
+                    // Not a fetch failure: the panel answered and the cached titles stay.
+                    Logger.w("CatalogSync", "preserved ${CatalogDataset.VOD_CATEGORY} cache: ${decision.reason}")
+                    return CategorySync.Preserved(decision.reason)
+                }
             }
             // How many of these are genuinely new to the cache. Only meaningful on a
             // forced re-check of an already-loaded category (the launch sweep): a first
@@ -337,14 +402,17 @@ internal class VodCatalogRepository(
                 }
                 vodCategoryDao.markLoaded(categoryId)
             }
-            if (!committed) return@withContext staleDataset(CatalogDataset.VOD_CATEGORY)
-            // On a forced launch sweep, return the genuine new-count so the caller can
-            // aggregate across categories and notify once; non-forced loads keep the
-            // legacy item-count contract.
-            Outcome.Success(if (force) newCount else items.size)
+            if (!committed) {
+                Logger.w("CatalogSync", "ignored stale ${CatalogDataset.VOD_CATEGORY} generation")
+                return CategorySync.Superseded
+            }
+            support.catalogBackoff.clear()
+            // The forced launch sweep aggregates the genuine new-count across
+            // categories and notifies once; non-forced loads keep the item count.
+            CategorySync.Applied(itemCount = items.size, newCount = newCount)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
-            e.toOutcomeFailure()
+            CategorySync.Failed(e.toOutcomeFailure())
         }
     }
 
@@ -363,22 +431,21 @@ internal class VodCatalogRepository(
      * Re-syncs every movie category the user has already opened (loaded == true)
      * so newly added movies surface on each app launch. Force-refreshes via upsert
      * (REPLACE on id) — existing items stay put (no flicker), only new ones appear.
-     * Best-effort: a single category's failure never aborts the rest. Xtream only.
+     * Best-effort: one broken category never aborts the rest, but an unreachable
+     * panel stops the sweep after the first timeout. Xtream only.
      */
     suspend fun refreshLoadedVodCategories(config: SourceConfig): Outcome<Int> =
         withContext(Dispatchers.IO) {
             if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
-            var added = 0
-            for (id in vodCategoryDao.loadedIds()) {
-                when (val r = refreshVodCategory(config, id, force = true)) {
-                    is Outcome.Success -> added += r.data
-                    is Outcome.Failure -> Unit // keep going; best-effort per category
-                }
+            val loaded = vodCategoryDao.getAll().filter { it.loaded }.map { SweepCategory(it.id, it.name) }
+            val report = CatalogSweep.run(loaded, forced = true) { id ->
+                syncVodCategory(config, id, force = true)
             }
+            support.catalogBackoff.noteSweep(report)
             // Notify the Movies screen once with the launch's total new count, so it
             // shows a single "N new movies" popup instead of one per category.
-            if (added > 0) NewContentNotifier.addMovies(added)
-            Outcome.Success(added)
+            if (report.itemCount > 0) NewContentNotifier.addMovies(report.itemCount)
+            Outcome.Success(report.itemCount)
         }
 
     /** Loads full VOD detail on demand, enriching with TMDB when a key is set. */

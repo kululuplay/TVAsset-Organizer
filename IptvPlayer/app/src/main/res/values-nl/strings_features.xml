@@ -86,6 +86,8 @@
     <string name="about_update_wrong_package">De gedownloade APK hoort bij een andere app.</string>
     <string name="about_update_not_newer">Deze APK is niet nieuwer dan de geïnstalleerde app.</string>
     <string name="about_update_signature_mismatch">De handtekening van de update komt niet overeen met de geïnstalleerde app. Android kan deze installatie niet veilig bijwerken zonder deze eerst te verwijderen.</string>
+    <string name="update_requires_newer_android">Deze update vereist Android %1$d of nieuwer. Uw apparaat blijft op de huidige versie.</string>
+    <string name="about_update_install_failed">Het installatieprogramma kon niet worden geopend. Download de APK van de website om handmatig bij te werken.</string>
     <string name="about_download_preparing">Voorbereiden…</string>
     <string name="about_download_size">%1$s / %2$s</string>
     <string name="about_download_meta">%1$s/s · nog %2$s</string>

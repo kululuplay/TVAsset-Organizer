@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -177,10 +178,15 @@ internal class SeriesCatalogRepository(
      * Fetches and caches only the series *categories* (not the series themselves),
      * mirroring [VodCatalogRepository.refreshVodCategories]. Cheap, so the Series rail renders right
      * away; the per-category [loaded] flag is preserved across refreshes so a
-     * re-sync never forces a re-download of an already-cached category.
+     * re-sync never forces a re-download of an already-cached category. One
+     * download serves every concurrent caller (splash, Dashboard, Series screen).
      */
-    suspend fun refreshSeriesCategories(config: SourceConfig): Outcome<Int> = withContext(Dispatchers.IO) {
-        if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
+    suspend fun refreshSeriesCategories(config: SourceConfig): Outcome<Int> {
+        if (config.type != SourceType.XTREAM) return Outcome.Success(0)
+        return support.indexWork.join("series_categories", config) { downloadSeriesCategories(config) }
+    }
+
+    private suspend fun downloadSeriesCategories(config: SourceConfig): Outcome<Int> = withContext(Dispatchers.IO) {
         val generation = support.refreshGenerations.begin("series_categories", config)
         try {
             val api = support.buildXtreamApi(config.serverUrl)
@@ -233,11 +239,57 @@ internal class SeriesCatalogRepository(
                 if (categories.isNotEmpty()) seriesCategoryDao.upsertAll(categories)
             }
             if (!committed) return@withContext staleDataset(CatalogDataset.SERIES_CATEGORIES)
+            support.catalogBackoff.clear()
             Outcome.Success(categories.size)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
             e.toOutcomeFailure()
         }
+    }
+
+    /**
+     * Sequential series refresh for the Series screen's All/Recommended/search
+     * views and its Refresh button, mirroring [VodCatalogRepository.refreshMovieCatalog]:
+     * same continue-past-failure loop, same early stop on a systemic failure,
+     * one sweep at a time. [only] restricts a retry to the categories that failed.
+     */
+    suspend fun refreshSeriesCatalog(
+        config: SourceConfig,
+        forceAll: Boolean,
+        only: Set<String>? = null,
+        onProgress: suspend (Int, Int) -> Unit = { _, _ -> },
+    ): CatalogSweepReport {
+        if (config.type != SourceType.XTREAM) return CatalogSweepReport(0, 0, emptyList())
+        return support.seriesSweep.run(config, SweepRequest(forceAll, only), onProgress) { progress ->
+            sweepSeries(config, forceAll, only, progress)
+        }
+    }
+
+    private suspend fun sweepSeries(
+        config: SourceConfig,
+        forceAll: Boolean,
+        only: Set<String>?,
+        onProgress: suspend (Int, Int) -> Unit,
+    ): CatalogSweepReport = withContext(Dispatchers.IO) {
+        var indexFailure: Outcome.Failure? = null
+        if (forceAll || seriesCategoryDao.getAll().isEmpty()) {
+            when (val result = refreshSeriesCategories(config)) {
+                is Outcome.Success -> Unit
+                is Outcome.Failure -> indexFailure = result
+            }
+        }
+        // Failed index retrieval still refreshes known categories, without hiding that failure.
+        val hidden = settings.hiddenCategories(ContentType.SERIES).first()
+        val cached = seriesCategoryDao.getAll()
+        val categories = cached
+            .filter { it.id !in hidden && (forceAll || !it.loaded) && (only == null || it.id in only) }
+            .map { SweepCategory(it.id, it.name) }
+        val stillListed = forceAll && indexFailure == null
+        val report = CatalogSweep.run(categories, indexFailure, forceAll, onProgress) { id ->
+            syncSeriesCategory(config, id, force = forceAll, stillListed = stillListed)
+        }
+        support.catalogBackoff.noteSweep(report)
+        report.copy(availableCategories = cached.size)
     }
 
     /** True if this category's series have already been downloaded into the cache. */
@@ -333,12 +385,40 @@ internal class SeriesCatalogRepository(
         config: SourceConfig,
         categoryId: String,
         force: Boolean = false
-    ): Outcome<Int> = withContext(Dispatchers.IO) {
-        if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
+    ): Outcome<Int> = syncSeriesCategory(config, categoryId, force).toOutcome(force)
+
+    /**
+     * [refreshSeriesCategory] with the full per-category result, mirroring
+     * [VodCatalogRepository.syncVodCategory]: a category already being downloaded
+     * is joined, a paused panel is not asked again, a kept cache is not a failure.
+     */
+    suspend fun syncSeriesCategory(
+        config: SourceConfig,
+        categoryId: String,
+        force: Boolean = false,
+        stillListed: Boolean = false,
+    ): CategorySync = withContext(Dispatchers.IO) {
+        if (config.type != SourceType.XTREAM) return@withContext CategorySync.Applied(0, 0)
+        if (!force) {
+            if (seriesCategoryDao.getById(categoryId)?.loaded == true) {
+                return@withContext CategorySync.Applied(0, 0)
+            }
+            support.catalogBackoff.activeFailure()?.let { return@withContext CategorySync.Failed(it) }
+        }
+        support.categoryWork.join("series_category:$categoryId", config) {
+            downloadSeriesCategory(config, categoryId, force, stillListed)
+        }
+    }
+
+    private suspend fun downloadSeriesCategory(
+        config: SourceConfig,
+        categoryId: String,
+        force: Boolean,
+        stillListed: Boolean,
+    ): CategorySync {
         val generation = support.refreshGenerations.begin("series_category:$categoryId", config)
         val category = seriesCategoryDao.getById(categoryId)
-        if (!force && category?.loaded == true) return@withContext Outcome.Success(0)
-        try {
+        return try {
             val api = support.buildXtreamApi(config.serverUrl)
             val catName = category?.name ?: "Uncategorized"
             val catPosition = category?.position ?: Int.MAX_VALUE
@@ -383,11 +463,15 @@ internal class SeriesCatalogRepository(
                         scoped.size,
                         items.size,
                     ),
+                    force,
+                    stillListed,
                 )
             ) {
                 DatasetRefreshDecision.Apply -> Unit
-                is DatasetRefreshDecision.PreserveCache ->
-                    return@withContext preservedDataset(CatalogDataset.SERIES_CATEGORY, decision.reason)
+                is DatasetRefreshDecision.PreserveCache -> {
+                    Logger.w("CatalogSync", "preserved ${CatalogDataset.SERIES_CATEGORY} cache: ${decision.reason}")
+                    return CategorySync.Preserved(decision.reason)
+                }
             }
             // How many of these are genuinely new to the cache. Only meaningful on a
             // forced re-check of an already-loaded category (the launch sweep). Guard on
@@ -410,11 +494,15 @@ internal class SeriesCatalogRepository(
                 }
                 seriesCategoryDao.markLoaded(categoryId)
             }
-            if (!committed) return@withContext staleDataset(CatalogDataset.SERIES_CATEGORY)
-            Outcome.Success(if (force) newCount else items.size)
+            if (!committed) {
+                Logger.w("CatalogSync", "ignored stale ${CatalogDataset.SERIES_CATEGORY} generation")
+                return CategorySync.Superseded
+            }
+            support.catalogBackoff.clear()
+            CategorySync.Applied(itemCount = items.size, newCount = newCount)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e // never swallow coroutine cancellation
-            e.toOutcomeFailure()
+            CategorySync.Failed(e.toOutcomeFailure())
         }
     }
 
@@ -433,21 +521,20 @@ internal class SeriesCatalogRepository(
      * Re-syncs every series category the user has already opened (loaded == true)
      * so newly added series surface on each app launch. Force-refreshes via upsert,
      * so existing items stay put (no flicker) and only new ones appear. Best-effort:
-     * a single category's failure never aborts the rest. Xtream only.
+     * one broken category never aborts the rest, but an unreachable panel stops
+     * the sweep after the first timeout. Xtream only.
      */
     suspend fun refreshLoadedSeriesCategories(config: SourceConfig): Outcome<Int> =
         withContext(Dispatchers.IO) {
             if (config.type != SourceType.XTREAM) return@withContext Outcome.Success(0)
-            var added = 0
-            for (id in seriesCategoryDao.loadedIds()) {
-                when (val r = refreshSeriesCategory(config, id, force = true)) {
-                    is Outcome.Success -> added += r.data
-                    is Outcome.Failure -> Unit // keep going; best-effort per category
-                }
+            val loaded = seriesCategoryDao.getAll().filter { it.loaded }.map { SweepCategory(it.id, it.name) }
+            val report = CatalogSweep.run(loaded, forced = true) { id ->
+                syncSeriesCategory(config, id, force = true)
             }
+            support.catalogBackoff.noteSweep(report)
             // Notify the Series screen once with the launch's total new count.
-            if (added > 0) NewContentNotifier.addSeries(added)
-            Outcome.Success(added)
+            if (report.itemCount > 0) NewContentNotifier.addSeries(report.itemCount)
+            Outcome.Success(report.itemCount)
         }
 
     /** Loads seasons + episodes for a series and caches the episodes. */

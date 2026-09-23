@@ -35,10 +35,12 @@ import com.iptv.player.util.Logger
 import com.iptv.player.util.NetworkSignal
 import com.iptv.player.util.WeatherProvider
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
 
@@ -114,6 +116,12 @@ class DashboardActivity : BaseActivity() {
         // Never keep hammering the portal from the background.
         autoResyncJob?.cancel()
         autoResyncJob = null
+        // A manual refresh is abandoned too: its movie sweep is shared and keeps
+        // finishing inside the repository, but nothing on a hidden screen should
+        // wait for it or keep issuing the live/EPG/series requests.
+        manualRefreshJob?.cancel()
+        manualRefreshJob = null
+        setRefreshBusy(false)
     }
 
     // ---- Outage banner + auto-resync -------------------------------------
@@ -180,6 +188,11 @@ class DashboardActivity : BaseActivity() {
 
     private fun showBanner(textRes: Int) {
         binding.statusBanner.setText(textRes)
+        binding.statusBanner.visibility = View.VISIBLE
+    }
+
+    private fun showBanner(text: String) {
+        binding.statusBanner.text = text
         binding.statusBanner.visibility = View.VISIBLE
     }
 
@@ -416,6 +429,11 @@ class DashboardActivity : BaseActivity() {
         startActivity(Intent(this, target))
     }
 
+    /**
+     * Explicit refresh of every dataset. The movie sweep is the slow part, so its
+     * progress is shown in the status banner; leaving the screen abandons the
+     * wait (see [onStop]) while the shared sweep finishes in the repository.
+     */
     private fun refresh() {
         if (manualRefreshJob?.isActive == true) return
         manualRefreshJob = lifecycleScope.launch {
@@ -427,18 +445,34 @@ class DashboardActivity : BaseActivity() {
                     return@launch
                 }
                 toast(getString(R.string.dash_refreshing))
-                val report = ServiceLocator.repository.syncAllReport(config, includeMovieContents = true)
+                val report = ServiceLocator.repository.syncAllReport(
+                    config,
+                    includeMovieContents = true,
+                ) { completed, total ->
+                    // Progress arrives on the sweep's IO context.
+                    withContext(Dispatchers.Main) {
+                        showBanner(getString(R.string.catalog_refresh_progress, completed, total))
+                    }
+                }
+                // A live refresh that went through proves the portal is reachable again.
+                if (report.liveRefreshSucceeded) SplashPrefetch.markRecovered()
                 val ok = if (config.type == com.iptv.player.data.model.SourceType.XTREAM) {
-                    report.manualRefreshSucceeded
+                    // A live-only account has no movie categories to sweep; that is not a failure.
+                    report.manualRefreshSucceeded ||
+                        (report.allRefreshSucceeded && report.movieSweepNotApplicable)
                 } else report.allRefreshSucceeded
-                if (ok) {
-                    toast(getString(R.string.dash_refreshed))
-                } else if (report.allRefreshSucceeded && report.movieContents?.total == 0) {
-                    toast(getString(R.string.catalog_refresh_no_visible_movies))
-                } else {
-                    toast(getString(R.string.dash_refresh_failed))
-                    report.movieContents?.takeIf { !it.successful }?.let {
-                        com.iptv.player.ui.common.MovieRefreshFeedback.show(this@DashboardActivity, it)
+                when {
+                    ok -> toast(getString(R.string.dash_refreshed))
+                    report.allRefreshSucceeded && report.movieContents?.total == 0 ->
+                        toast(getString(R.string.catalog_refresh_no_visible_movies))
+                    else -> {
+                        // Name the dataset that failed (live, guide, categories, movies)
+                        // instead of a bare "Refresh failed"; the dialog has the details.
+                        toast(
+                            com.iptv.player.ui.common.MovieRefreshFeedback.summary(this@DashboardActivity, report)
+                                ?: getString(R.string.dash_refresh_failed),
+                        )
+                        com.iptv.player.ui.common.MovieRefreshFeedback.show(this@DashboardActivity, report)
                     }
                 }
                 loadFooter()
@@ -448,6 +482,9 @@ class DashboardActivity : BaseActivity() {
                 toast(getString(R.string.dash_refresh_failed))
             } finally {
                 setRefreshBusy(false)
+                // Restore the outage banner state; a cancelled (hidden) screen must
+                // not restart the auto-resync loop that onStop just stopped.
+                if (isActive) evaluateOutageState()
             }
         }
     }

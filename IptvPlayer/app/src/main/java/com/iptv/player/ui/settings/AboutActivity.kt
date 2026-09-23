@@ -11,6 +11,7 @@ package com.iptv.player.ui.settings
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
@@ -26,6 +27,7 @@ import com.iptv.player.update.ApkInstaller
 import com.iptv.player.update.ApkInstallValidator
 import com.iptv.player.update.ApkValidationFailure
 import com.iptv.player.update.ApkValidationResult
+import com.iptv.player.update.ReleaseCompatibilityPolicy
 import com.iptv.player.update.UpdateChecker
 import com.iptv.player.update.UpdateInfo
 import com.iptv.player.update.UpdateResult
@@ -52,6 +54,7 @@ class AboutActivity : BaseActivity() {
     private var activeCall: Call? = null
     private var downloadExpectedBytes: Long = -1L
     private var downloadExpectedSha256: String? = null
+    private var downloadMinAndroidApi: Int? = null
 
     /**
      * Set when we arrived from the launch-time prompt (EXTRA_AUTO_CHECK). It makes
@@ -230,6 +233,7 @@ class AboutActivity : BaseActivity() {
         val outFile = File(dir, "update-${System.currentTimeMillis()}.apk")
         downloadExpectedBytes = info.apkSize
         downloadExpectedSha256 = info.apkSha256
+        downloadMinAndroidApi = info.minAndroidApi
 
         downloadJob = lifecycleScope.launch {
             val ok = withContext(Dispatchers.IO) {
@@ -404,13 +408,14 @@ class AboutActivity : BaseActivity() {
                 file = target,
                 expectedSize = downloadExpectedBytes,
                 expectedSha256 = downloadExpectedSha256,
+                releaseMinAndroidApi = downloadMinAndroidApi,
             )
         }
         when (validation) {
             ApkValidationResult.Valid -> Unit
             is ApkValidationResult.Invalid -> {
                 runCatching { target.delete() }
-                showInstallValidationError(validation.failure)
+                showInstallValidationError(validation.failure, validation.requiredAndroidApi)
                 return
             }
         }
@@ -426,9 +431,10 @@ class AboutActivity : BaseActivity() {
         binding.btnCheckUpdate.alpha = 1f
         binding.btnCheckUpdate.requestFocus()
         if (!ApkInstaller.install(this, target)) {
+            // The package is verified; only the OEM installer refused to open.
             binding.updateProgressCard.visibility = View.GONE
             binding.aboutUpdateStatus.visibility = View.VISIBLE
-            binding.aboutUpdateStatus.setText(R.string.about_update_failed)
+            binding.aboutUpdateStatus.setText(R.string.about_update_install_failed)
             binding.aboutUpdateStatus.setTextColor(
                 ContextCompat.getColor(this, R.color.danger),
             )
@@ -437,29 +443,51 @@ class AboutActivity : BaseActivity() {
         }
     }
 
-    private fun showInstallValidationError(failure: ApkValidationFailure) {
-        val message = when (failure) {
-            ApkValidationFailure.MISSING -> R.string.about_update_file_missing
-            ApkValidationFailure.INCOMPLETE -> R.string.about_update_file_incomplete
-            ApkValidationFailure.CHECKSUM_MISMATCH -> R.string.about_update_checksum_mismatch
-            ApkValidationFailure.INSUFFICIENT_STORAGE -> R.string.about_update_storage_low
-            ApkValidationFailure.INVALID_APK -> R.string.about_update_invalid_apk
-            ApkValidationFailure.WRONG_PACKAGE -> R.string.about_update_wrong_package
-            ApkValidationFailure.NOT_NEWER -> R.string.about_update_not_newer
-            ApkValidationFailure.SIGNATURE_MISMATCH -> R.string.about_update_signature_mismatch
+    private fun showInstallValidationError(
+        failure: ApkValidationFailure,
+        requiredAndroidApi: Int?,
+    ) {
+        val message: CharSequence = when (failure) {
+            ApkValidationFailure.MISSING -> getString(R.string.about_update_file_missing)
+            ApkValidationFailure.INCOMPLETE -> getString(R.string.about_update_file_incomplete)
+            ApkValidationFailure.CHECKSUM_MISMATCH ->
+                getString(R.string.about_update_checksum_mismatch)
+            ApkValidationFailure.INSUFFICIENT_STORAGE ->
+                getString(R.string.about_update_storage_low)
+            ApkValidationFailure.INVALID_APK -> getString(R.string.about_update_invalid_apk)
+            ApkValidationFailure.WRONG_PACKAGE -> getString(R.string.about_update_wrong_package)
+            ApkValidationFailure.NOT_NEWER -> getString(R.string.about_update_not_newer)
+            ApkValidationFailure.SIGNATURE_MISMATCH ->
+                getString(R.string.about_update_signature_mismatch)
+            ApkValidationFailure.INCOMPATIBLE_ANDROID -> getString(
+                R.string.update_requires_newer_android,
+                ReleaseCompatibilityPolicy.androidVersion(
+                    requiredAndroidApi ?: (Build.VERSION.SDK_INT + 1),
+                ),
+            )
         }
+        // Every verdict but the Android requirement is worth another attempt.
+        // The platform refuses an incompatible package however often it is
+        // downloaded, so that one only explains and keeps the device where it is.
+        val retryable = failure != ApkValidationFailure.INCOMPATIBLE_ANDROID
         binding.updateProgressCard.visibility = View.GONE
         binding.btnCancelUpdate.visibility = View.GONE
         binding.aboutUpdateStatus.visibility = View.VISIBLE
-        binding.aboutUpdateStatus.setText(message)
+        binding.aboutUpdateStatus.text = message
         binding.aboutUpdateStatus.setTextColor(
-            ContextCompat.getColor(this, R.color.danger),
+            ContextCompat.getColor(this, if (retryable) R.color.danger else R.color.text_secondary),
         )
         binding.btnCheckUpdate.visibility = View.VISIBLE
         binding.btnCheckUpdate.isClickable = true
         binding.btnCheckUpdate.alpha = 1f
-        binding.btnUpdateNow.visibility = View.VISIBLE
-        binding.btnUpdateNow.requestFocus()
+        if (retryable) {
+            binding.btnUpdateNow.visibility = View.VISIBLE
+            binding.btnUpdateNow.requestFocus()
+        } else {
+            pendingUpdate = null
+            binding.btnUpdateNow.visibility = View.GONE
+            binding.btnCheckUpdate.requestFocus()
+        }
     }
 
     /** Human-readable byte count (B / KB / MB / GB). */

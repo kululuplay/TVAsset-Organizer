@@ -13,6 +13,10 @@ class PlaybackIncidentRecorderTest {
         val key = "a".repeat(64)
         init { recorder.start(PlaybackSession(id, kind, epoch, PlaybackEngineKind.EXO_PLAYER, PlaybackTransportKind.MPEG_TS)) }
         fun sample(at: Long) { now = at; incidents.observe(record(), key, now, epoch + now) }
+        /** One sampler tick: the player was read and reported this counter (Media3 every 2 s, VLC every 1.5 s). */
+        fun observe(at: Long, rendered: Long, paused: Boolean? = null) {
+            now = at; recorder.observe(id, PlaybackObservation("decoder", rendered = rendered, dropped = 0, paused = paused))
+        }
         fun record() = recorder.snapshotActive(id)!!
     }
 
@@ -38,8 +42,9 @@ class PlaybackIncidentRecorderTest {
     @Test fun `intentional pause stops windows and is never a freeze`() {
         val h = Harness()
         h.recorder.markFirstFrame(h.id)
-        h.recorder.observe(h.id, PlaybackObservation("decoder", rendered = 100, dropped = 0))
+        h.observe(0, rendered = 100)
         h.sample(0)
+        for (at in 2_000L..8_000L step 2_000) h.observe(at, rendered = 100)
         h.sample(8_000)
         assertEquals(PlaybackIncidentTrigger.VIDEO_STALL, h.incidents.drain().single().trigger)
         h.now = 9_000
@@ -51,6 +56,39 @@ class PlaybackIncidentRecorderTest {
         assertEquals("PAUSED", completed.points.last()["state"])
         h.sample(99_000)
         assertTrue(h.incidents.drain().isEmpty())
+    }
+
+    @Test fun `paused session with a frozen counter never opens a video stall`() {
+        val h = Harness()
+        h.recorder.markFirstFrame(h.id)
+        h.observe(0, rendered = 100)
+        h.sample(0)
+        // Remote PAUSE, audio-focus loss or a Cast preflight: the UI reports the pause before the engine stops.
+        h.now = 1_000
+        h.recorder.setPaused(h.id, true)
+        for (at in 2_000L..40_000L step 2_000) { h.observe(at, rendered = 100, paused = true); h.sample(at) }
+        assertTrue(h.incidents.drain().isEmpty())
+        assertEquals(PlaybackObservedState.PAUSED, h.record().observedState)
+        assertNull(h.record().lastFrameAgeMs)
+        assertTrue(h.record().pausedDurationMs >= 39_000)
+    }
+
+    @Test fun `engine stopped without a pause signal is unknown rather than a freeze`() {
+        val h = Harness()
+        h.recorder.markFirstFrame(h.id)
+        h.observe(0, rendered = 100); h.sample(0)
+        h.observe(2_000, rendered = 100); h.sample(2_000)
+        // PlayerController.quiesce(): the engine is stopped and observations are suppressed while the session stays open.
+        for (at in 4_000L..60_000L step 2_000) h.sample(at)
+        assertTrue(h.incidents.drain().isEmpty())
+        assertEquals(PlaybackObservedState.PLAYING, h.record().observedState)
+        assertTrue(h.record().framesKnown)
+        assertNull(h.record().lastFrameAgeMs)
+        // Sampling resumes on a still frozen picture: the freeze clock restarts here and reports after 8 s.
+        for (at in 62_000L..68_000L step 2_000) { h.observe(at, rendered = 100); h.sample(at) }
+        assertTrue(h.incidents.drain().isEmpty())
+        h.observe(70_000, rendered = 100); h.sample(70_000)
+        assertEquals(PlaybackIncidentTrigger.VIDEO_STALL, h.incidents.drain().single().trigger)
     }
 
     @Test fun `unknown frame measurements and audio only streams never create video stall incidents`() {

@@ -209,12 +209,17 @@ class IptvRepository(
     /** Fetches and caches only the movie *categories* (not the movies themselves). */
     suspend fun refreshVodCategories(config: SourceConfig): Outcome<Int> = vod.refreshVodCategories(config)
 
-    /** Downloads each visible movie category and reports every incomplete category. */
+    /**
+     * Downloads each visible movie category and reports every incomplete category.
+     * [only] restricts a retry to the categories that failed last time. One sweep
+     * runs at a time; a concurrent caller follows it instead of starting another.
+     */
     suspend fun refreshMovieCatalog(
         config: SourceConfig,
         forceAll: Boolean,
+        only: Set<String>? = null,
         onProgress: suspend (Int, Int) -> Unit = { _, _ -> },
-    ): MovieCatalogRefreshReport = vod.refreshMovieCatalog(config, forceAll, onProgress)
+    ): CatalogSweepReport = vod.refreshMovieCatalog(config, forceAll, only, onProgress)
 
     /** True if this category's movies have already been downloaded into the cache. */
     suspend fun isVodCategoryLoaded(categoryId: String): Boolean = vod.isVodCategoryLoaded(categoryId)
@@ -231,6 +236,13 @@ class IptvRepository(
         categoryId: String,
         force: Boolean = false
     ): Outcome<Int> = vod.refreshVodCategory(config, categoryId, force)
+
+    /** [refreshVodCategory] with the full result: fresh rows, kept cache, superseded or failed. */
+    suspend fun syncVodCategory(
+        config: SourceConfig,
+        categoryId: String,
+        force: Boolean = false,
+    ): CategorySync = vod.syncVodCategory(config, categoryId, force)
 
     /** Best-effort prefetch of the first movie category. */
     suspend fun prefetchFirstVodCategory(config: SourceConfig): Outcome<Int> =
@@ -320,6 +332,21 @@ class IptvRepository(
         force: Boolean = false
     ): Outcome<Int> = series.refreshSeriesCategory(config, categoryId, force)
 
+    /** [refreshSeriesCategory] with the full result: fresh rows, kept cache, superseded or failed. */
+    suspend fun syncSeriesCategory(
+        config: SourceConfig,
+        categoryId: String,
+        force: Boolean = false,
+    ): CategorySync = series.syncSeriesCategory(config, categoryId, force)
+
+    /** Downloads each visible series category, continuing past broken ones; see [refreshMovieCatalog]. */
+    suspend fun refreshSeriesCatalog(
+        config: SourceConfig,
+        forceAll: Boolean,
+        only: Set<String>? = null,
+        onProgress: suspend (Int, Int) -> Unit = { _, _ -> },
+    ): CatalogSweepReport = series.refreshSeriesCatalog(config, forceAll, only, onProgress)
+
     /** Best-effort prefetch of the first series category. */
     suspend fun prefetchFirstSeriesCategory(config: SourceConfig): Outcome<Int> =
         series.prefetchFirstSeriesCategory(config)
@@ -373,29 +400,38 @@ class IptvRepository(
     suspend fun syncAllReport(
         config: SourceConfig,
         includeMovieContents: Boolean = false,
+        onMovieProgress: suspend (Int, Int) -> Unit = { _, _ -> },
     ): SyncReport = withContext(Dispatchers.IO) {
         val results = mutableListOf<DatasetSyncResult>()
-        var movieContents: MovieCatalogRefreshReport? = null
+        var movieContents: CatalogSweepReport? = null
 
         val liveCached = channelDao.idsForType(ContentType.LIVE.name).size
-        results += datasetSyncResult("live", liveCached, refreshLive(config))
+        results += datasetSyncResult(SyncDatasets.LIVE, liveCached, refreshLive(config))
 
         if (config.type == SourceType.XTREAM) {
             val epgCached = epgDao.count()
-            results += datasetSyncResult("epg", epgCached, refreshEpg(config))
+            results += datasetSyncResult(SyncDatasets.EPG, epgCached, refreshEpg(config))
 
             // Background sync stays lightweight; explicit refresh waits for movie contents.
             val vodCached = vodCategoryDao.getAll().size
-            val movieIndex = if (includeMovieContents) {
-                val report = refreshMovieCatalog(config, forceAll = true)
+            if (includeMovieContents) {
+                val report = refreshMovieCatalog(config, forceAll = true, onProgress = onMovieProgress)
                 movieContents = report
-                report.indexFailure ?: Outcome.Success(report.total)
-            } else refreshVodCategories(config)
-            results += datasetSyncResult("vod_categories", vodCached, movieIndex)
+                // The category index and the per-category downloads are separate
+                // datasets: a refreshed index must not claim that the movies refreshed.
+                results += datasetSyncResult(
+                    SyncDatasets.VOD_CATEGORIES,
+                    vodCached,
+                    report.indexFailure ?: Outcome.Success(report.availableCategories),
+                )
+                results += sweepSyncResult(SyncDatasets.MOVIES, report)
+            } else {
+                results += datasetSyncResult(SyncDatasets.VOD_CATEGORIES, vodCached, refreshVodCategories(config))
+            }
 
             val seriesCached = seriesCategoryDao.getAll().size
             results += datasetSyncResult(
-                "series_categories",
+                SyncDatasets.SERIES_CATEGORIES,
                 seriesCached,
                 refreshSeriesCategories(config),
             )
