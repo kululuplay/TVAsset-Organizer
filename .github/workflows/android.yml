@@ -182,7 +182,10 @@ jobs:
       - name: Test, lint and assemble APKs
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon \
+          # R8 and universal native APK packaging need more heap than local
+          # builds. Bound workers so packaging/lint do not overcommit the runner.
+          ./gradlew --no-daemon --no-parallel --max-workers=2 \
+            "-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8" \
             :app:testDebugUnitTest \
             :app:lintDebug \
             :app:assembleDebug \
@@ -296,7 +299,9 @@ jobs:
           KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon :app:assembleRelease --stacktrace
+          ./gradlew --no-daemon --no-parallel --max-workers=2 \
+            "-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8" \
+            :app:assembleRelease --stacktrace
 
       - name: Verify MPEG decoder resource packaging
         # R8 must preserve JLayer's synthesis resource as well as its license,
