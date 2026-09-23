@@ -22,24 +22,24 @@ class PlaybackContentIdentityTest {
 
     @Test fun `catch-up identity is the archived stream id and never the account, start time or duration`() {
         val a = PlaybackContentIdentity.forStream(
-            "https://provider.test/streaming/timeshift.php?username=acc&password=secret&stream=123&start=2026-09-23:10-00&duration=60",
+            "https://provider.test/streaming/timeshift.php?username=user&password=pass&stream=123&start=2026-09-23:10-00&duration=60",
             PlaybackContentKind.CATCH_UP,
         )
         val b = PlaybackContentIdentity.forStream(
-            "http://PROVIDER.test:80/streaming/timeshift.php?username=other&password=pw&stream=0123&start=2026-09-22:20-00&duration=30",
+            "http://PROVIDER.test:80/streaming/timeshift.php?username=demo&password=sample&stream=0123&start=2026-09-22:20-00&duration=30",
             PlaybackContentKind.CATCH_UP,
         )
-        val c = PlaybackContentIdentity.forStream("https://provider.test/timeshift/acc/secret/60/2026-09-23:10-00/123.ts", PlaybackContentKind.CATCH_UP)
+        val c = PlaybackContentIdentity.forStream("https://provider.test/timeshift/user/pass/60/2026-09-23:10-00/123.ts", PlaybackContentKind.CATCH_UP)
         assertNotNull(a)
         assertEquals(a, b)
         assertEquals(a, c)
         assertEquals(a, PlaybackContentIdentity.key("https://provider.test", PlaybackContentKind.CATCH_UP, "123"))
-        assertNotEquals(a, PlaybackContentIdentity.forStream("https://provider.test/live/acc/secret/123.ts", PlaybackContentKind.LIVE_TV))
+        assertNotEquals(a, PlaybackContentIdentity.forStream("https://provider.test/live/user/pass/123.ts", PlaybackContentKind.LIVE_TV))
         assertNull(PlaybackContentIdentity.forStream(
-            "https://provider.test/streaming/timeshift.php?username=acc&password=secret&start=2026-09-23:10-00", PlaybackContentKind.CATCH_UP,
+            "https://provider.test/streaming/timeshift.php?username=user&password=pass&start=2026-09-23:10-00", PlaybackContentKind.CATCH_UP,
         ))
         assertNull(PlaybackContentIdentity.forStream(
-            "https://provider.test/streaming/timeshift.php?username=acc&password=secret&stream=acc-secret", PlaybackContentKind.CATCH_UP,
+            "https://provider.test/streaming/timeshift.php?username=user&password=pass&stream=acc-secret", PlaybackContentKind.CATCH_UP,
         ))
     }
 
