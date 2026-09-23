@@ -141,10 +141,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     buildFeatures {
         viewBinding = true
         buildConfig = true
@@ -174,6 +170,12 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
 dependencies {
     // --- Kotlin / Coroutines ---
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
@@ -191,11 +193,12 @@ dependencies {
     implementation("androidx.leanback:leanback:1.0.0")
 
     // --- Persistence (Room) ---
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
+    // Room's compiler must support Kotlin 2.2 / KSP2 used by Media3's toolchain.
+    implementation("androidx.room:room-runtime:2.8.5")
+    implementation("androidx.room:room-ktx:2.8.5")
     // Room PagingSource support (Room -> Paging 3 bridge).
-    implementation("androidx.room:room-paging:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.room:room-paging:2.8.5")
+    ksp("androidx.room:room-compiler:2.8.5")
 
     // --- Paging 3 (bounded, lazily-loaded lists for huge catalogs) ---
     implementation("androidx.paging:paging-runtime-ktx:3.3.2")
