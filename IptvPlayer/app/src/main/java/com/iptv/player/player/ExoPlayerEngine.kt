@@ -66,6 +66,7 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.extractor.ExtractorsFactory
+import androidx.media3.extractor.text.DefaultSubtitleParserFactory
 import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.video.VideoFrameMetadataListener
@@ -308,9 +309,15 @@ class ExoPlayerEngine(
             // wait for the real close boundary (Media3 only cancels the Loader).
             providerConnection.wrap(http)
         }
+        // TsExtractor(SubtitleParser.Factory) keeps the old no-arg constructor's
+        // MODE_SINGLE_PMT / default payload readers but parses DVB subtitles into
+        // Media3 cues during extraction. The no-arg form emits raw subtitle
+        // samples (FLAG_EMIT_RAW_SUBTITLE_DATA + Factory.UNSUPPORTED), which the
+        // 1.11 TextRenderer rejects with "Legacy decoding is disabled"
+        // (ERROR_CODE_FAILED_RUNTIME_CHECK) as soon as a DVB track is selected.
         val mediaSourceFactory = ProgressiveMediaSource.Factory(
             DirectMediaDataSource.Factory(supportEvidence.wrap(httpDataSourceFactory)),
-            ExtractorsFactory { arrayOf(TsExtractor()) },
+            ExtractorsFactory { arrayOf(TsExtractor(DefaultSubtitleParserFactory())) },
         )
 
         // Video tunneling stays off unless a remote per-device opt-in AND a
@@ -334,10 +341,22 @@ class ExoPlayerEngine(
             setParameters(parameters)
         }
 
+        // Media3 1.9+ stuck-player detection (ExoStuckDetectionPolicy.LIVE): the
+        // controller's stall/starvation watchdogs and the AC-3 rescue window own
+        // the frozen-clock case, so the 10 s no-progress detector and the
+        // duration-based "not ending" detector are off; stuck-buffering keeps
+        // Media3's default. Any MAX_VALUE timeout silently flips the builder's
+        // default wake mode to NONE, so pin the WAKE_MODE_LOCAL 1.5.96 ships with.
+        val stuckDetection = ExoStuckDetectionPolicy.LIVE
         val exo = ExoPlayer.Builder(context, buildRenderersFactory())
             .setMediaSourceFactory(mediaSourceFactory)
             .setTrackSelector(trackSelector)
             .setLoadControl(loadControl)
+            .setStuckPlayingDetectionTimeoutMs(stuckDetection.playingNoProgressMs)
+            .setStuckPlayingNotEndingTimeoutMs(stuckDetection.playingNotEndingMs)
+            .setStuckBufferingDetectionTimeoutMs(stuckDetection.bufferingNoProgressMs)
+            .setStuckSuppressedDetectionTimeoutMs(stuckDetection.suppressedMs)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
 
         // Surface-size diagnostics are harmless across item changes. Playback
@@ -576,6 +595,19 @@ class ExoPlayerEngine(
                         reportAudioUnavailable(error.errorCodeName)
                     ExoPlaybackFailureClassifier.Failure.DECODE ->
                         reportDecodeFailure(error.errorCodeName)
+                    ExoPlaybackFailureClassifier.Failure.STALL -> {
+                        // Media3's watchdog stopped a frozen player. Reported through
+                        // onError like any transport failure: after the stable window
+                        // that is a same-stage reconnect; before it, the controller's
+                        // usual unconfirmed-start accounting applies. With the live
+                        // no-progress and not-ending detectors disabled, only the 10 min
+                        // buffering/suppressed detectors and ExoTimeoutException reach here.
+                        PlaybackLog.log(
+                            context, engineName,
+                            "stuck-player timeout -> transport stall reconnect",
+                        )
+                        listener?.onError(error.errorCodeName)
+                    }
                     ExoPlaybackFailureClassifier.Failure.ERROR ->
                         if (isSourceOrManifestFailure(error.errorCode)) {
                             listener?.onSourceFailure(
@@ -1120,6 +1152,7 @@ class ExoPlayerEngine(
                         "video track unsupported"
                     },
                 )
+            ExoPlaybackFailureClassifier.Failure.STALL,
             ExoPlaybackFailureClassifier.Failure.ERROR,
             null -> Unit
         }

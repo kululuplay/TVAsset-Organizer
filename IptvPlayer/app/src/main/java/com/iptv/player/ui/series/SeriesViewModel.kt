@@ -15,8 +15,10 @@ import com.iptv.player.data.model.Category
 import com.iptv.player.data.model.ContentSort
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.Series
+import com.iptv.player.data.repository.CategorySync
 import com.iptv.player.ui.common.CatalogLoadState
-import com.iptv.player.util.Outcome
+import com.iptv.player.ui.common.CatalogRetry
+import com.iptv.player.ui.common.CatalogRetryPolicy
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -167,18 +169,29 @@ class SeriesViewModel(
         }
     }
 
+    /** Retries only what failed; the full forced sweep stays reserved for [refreshCatalog]. */
     fun retryLoad() {
-        val categoryId = selectedCategory.value
-        if (query.value.isNotEmpty() || categoryId == null ||
-            categoryId == CAT_ALL || categoryId == CAT_POPULAR
-        ) {
-            ensureFullCatalog()
-            return
-        }
-        selectionLoadJob?.cancel()
-        selectionLoadJob = viewModelScope.launch {
-            catalogLoadJob?.cancelAndJoin()
-            loadSingleCategory(categoryId, force = true)
+        val retry = CatalogRetryPolicy.decide(
+            _loadState.value, query.value, selectedCategory.value, setOf(CAT_ALL, CAT_POPULAR),
+        )
+        when (retry) {
+            is CatalogRetry.Sweep -> {
+                episodeDateJob?.cancel()
+                selectionLoadJob?.cancel()
+                val previousCatalog = catalogLoadJob
+                catalogLoadJob = viewModelScope.launch {
+                    previousCatalog?.cancelAndJoin()
+                    loadFullCatalog(forceAll = retry.forced, only = retry.only)
+                }
+            }
+            CatalogRetry.FullCatalog -> ensureFullCatalog()
+            is CatalogRetry.Category -> {
+                selectionLoadJob?.cancel()
+                selectionLoadJob = viewModelScope.launch {
+                    catalogLoadJob?.cancelAndJoin()
+                    loadSingleCategory(retry.id, force = true)
+                }
+            }
         }
     }
 
@@ -226,83 +239,50 @@ class SeriesViewModel(
             return
         }
         _loadState.value = CatalogLoadState(loading = true, total = 1)
-        when (val result = repo.refreshSeriesCategory(config, categoryId, force)) {
-            is Outcome.Success -> {
+        when (val result = repo.syncSeriesCategory(config, categoryId, force)) {
+            is CategorySync.Failed ->
+                _loadState.value = CatalogLoadState(errorRes = result.failure.error.messageRes)
+            // Fresh rows, a kept cache or a newer request's commit: the category is current.
+            else -> {
                 refreshedCategories += categoryId
                 _loadState.value = CatalogLoadState()
                 refreshEpisodeDates(categoryId)
             }
-            is Outcome.Failure -> {
-                _loadState.value = CatalogLoadState(errorRes = result.error.messageRes)
-            }
         }
     }
 
-    private suspend fun loadFullCatalog(forceAll: Boolean) {
+    /**
+     * All/Recommended/search must represent the complete visible catalog. The
+     * repository sweep continues past a broken category, stops once the panel
+     * itself fails, and reports what it did not finish so Retry redoes only
+     * that; [only] is that retry subset.
+     */
+    private suspend fun loadFullCatalog(forceAll: Boolean, only: Set<String>? = null) {
+        _loadState.value = CatalogLoadState(loading = true)
         val config = settings.getSourceConfig()
         if (config == null) {
             _loadState.value = CatalogLoadState(errorRes = R.string.error_unknown)
             return
         }
-        if (forceAll) {
-            when (val categories = repo.refreshSeriesCategories(config)) {
-                is Outcome.Success -> Unit
-                is Outcome.Failure -> {
-                    _loadState.value =
-                        CatalogLoadState(errorRes = categories.error.messageRes)
-                    return
-                }
-            }
+        val report = repo.refreshSeriesCatalog(config, forceAll, only) { completed, total ->
+            _loadState.value = CatalogLoadState(loading = true, completed = completed, total = total)
         }
-        val hidden = settings.hiddenCategories(ContentType.SERIES).first()
-        var categoryIds = if (forceAll) {
-            repo.seriesCategoryIds(hidden)
-        } else {
-            repo.unloadedSeriesCategoryIds(hidden)
-        }
-        if (categoryIds.isEmpty() && categories.value.size <= 2) {
-            when (val categoriesResult = repo.refreshSeriesCategories(config)) {
-                is Outcome.Success -> {
-                    categoryIds = if (forceAll) repo.seriesCategoryIds(hidden)
-                    else repo.unloadedSeriesCategoryIds(hidden)
-                }
-                is Outcome.Failure -> {
-                    _loadState.value =
-                        CatalogLoadState(errorRes = categoriesResult.error.messageRes)
-                    return
-                }
-            }
-        }
-        if (categoryIds.isEmpty()) {
-            _loadState.value = CatalogLoadState()
-            refreshEpisodeDates(null)
-            return
-        }
-        _loadState.value = CatalogLoadState(loading = true, total = categoryIds.size)
-        categoryIds.forEachIndexed { index, categoryId ->
-            when (val result = repo.refreshSeriesCategory(config, categoryId, force = forceAll)) {
-                is Outcome.Success -> {
-                    refreshedCategories += categoryId
-                    _loadState.value = CatalogLoadState(
-                        loading = true,
-                        completed = index + 1,
-                        total = categoryIds.size,
-                    )
-                }
-                is Outcome.Failure -> {
-                    _loadState.value = CatalogLoadState(
-                        completed = index,
-                        total = categoryIds.size,
-                        errorRes = result.error.messageRes,
-                    )
-                    return
-                }
-            }
-        }
-        if (forceAll) refreshedFullCatalog = true
-        _loadState.value = CatalogLoadState()
-        val category = selectedCategory.value?.takeUnless { it == CAT_ALL || it == CAT_POPULAR }
-        refreshEpisodeDates(category, forceAll)
+        refreshedCategories += report.refreshed.map { it.id }
+        if (forceAll && only == null && report.successful) refreshedFullCatalog = true
+        _loadState.value = CatalogLoadState(
+            completed = report.completed,
+            total = report.total,
+            errorRes = if (report.successful) null else R.string.catalog_series_refresh_incomplete,
+            sweepReport = report,
+        )
+        // A panel that is unreachable, refusing or throttling would fail the
+        // per-series episode-date requests the same way; do not start them.
+        if (report.systemicFailure != null) return
+        val swept = report.total > 0
+        val category = selectedCategory.value
+            ?.takeIf { swept }
+            ?.takeUnless { it == CAT_ALL || it == CAT_POPULAR }
+        refreshEpisodeDates(category, force = forceAll && swept)
     }
 
     private fun refreshEpisodeDates(categoryId: String?, force: Boolean = false) {

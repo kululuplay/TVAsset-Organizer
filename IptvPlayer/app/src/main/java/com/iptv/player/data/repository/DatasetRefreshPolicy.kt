@@ -3,6 +3,7 @@ package com.iptv.player.data.repository
 import android.content.SharedPreferences
 import com.iptv.player.data.model.SourceConfig
 import com.iptv.player.data.model.SourceType
+import com.iptv.player.util.AppError
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** Catalog partitions whose snapshots can be replaced independently. */
@@ -55,6 +56,7 @@ internal object DatasetRefreshPolicy {
     private const val MAX_REMAINING_PERCENT = 25
 
     const val REASON_SHRINK = "suspicious_snapshot_shrink"
+    const val REASON_EMPTY = "empty_response_with_cached_rows"
 
     /**
      * A provider that genuinely dropped most of its catalog keeps answering with
@@ -64,12 +66,24 @@ internal object DatasetRefreshPolicy {
     const val SHRINK_OVERRIDE_AFTER_REJECTIONS = 3
     const val SHRINK_OVERRIDE_AFTER_MS = 24L * 60L * 60L * 1000L
 
+    /**
+     * A category the provider emptied keeps answering with an empty list. Once a
+     * manual refresh has seen that this many times in a row for a category the
+     * panel's fresh index still lists, the empty reply is the truth and the
+     * stale titles go; until then the cache is kept, silently.
+     */
+    const val EMPTY_OVERRIDE_AFTER_RESPONSES = 3
+
     fun evaluate(
         dataset: CatalogDataset,
         snapshot: DatasetSnapshot,
         priorRejections: ShrinkRejection? = null,
         nowMs: Long = 0L,
         force: Boolean = false,
+        /** Consecutive empty replies already recorded for this key, if any. */
+        priorEmptyResponses: ShrinkRejection? = null,
+        /** The panel's freshly fetched index still lists this dataset, so an empty reply is not a stale-id symptom. */
+        stillListed: Boolean = false,
     ): DatasetRefreshDecision {
         val existing = snapshot.existingCount.coerceAtLeast(0)
         val received = snapshot.receivedCount.coerceAtLeast(0)
@@ -79,7 +93,11 @@ internal object DatasetRefreshPolicy {
             return DatasetRefreshDecision.PreserveCache("accepted_count_exceeds_received")
         }
         if (existing > 0 && accepted == 0) {
-            return DatasetRefreshDecision.PreserveCache("empty_response_with_cached_rows")
+            val emptiesSeen = (priorEmptyResponses?.count ?: 0) + 1
+            if (received == 0 && force && stillListed && emptiesSeen >= EMPTY_OVERRIDE_AFTER_RESPONSES) {
+                return DatasetRefreshDecision.Apply
+            }
+            return DatasetRefreshDecision.PreserveCache(REASON_EMPTY)
         }
         if (received >= 10 && accepted * 100 < received * MIN_VALID_PERCENT) {
             return DatasetRefreshDecision.PreserveCache("too_many_invalid_rows")
@@ -216,8 +234,19 @@ internal object SourceIdentity {
 enum class DatasetSyncStatus {
     UPDATED,
     EMPTY,
+    /** Some categories refreshed, others failed or were skipped. */
+    PARTIAL,
     PRESERVED_CACHE,
     FAILED,
+}
+
+/** Dataset names used in [SyncReport]; the UI maps them to localized labels. */
+object SyncDatasets {
+    const val LIVE = "live"
+    const val EPG = "epg"
+    const val VOD_CATEGORIES = "vod_categories"
+    const val SERIES_CATEGORIES = "series_categories"
+    const val MOVIES = "movies"
 }
 
 data class DatasetSyncResult(
@@ -225,6 +254,8 @@ data class DatasetSyncResult(
     val status: DatasetSyncStatus,
     val itemCount: Int = 0,
     val errorCode: String? = null,
+    /** The user-facing error behind a non-refreshed dataset, when known. */
+    val error: AppError? = null,
 ) {
     val refreshed: Boolean get() = status == DatasetSyncStatus.UPDATED || status == DatasetSyncStatus.EMPTY
 }
@@ -232,14 +263,20 @@ data class DatasetSyncResult(
 /** Detailed replacement for the legacy one-bit background-sync result. */
 data class SyncReport(
     val datasets: List<DatasetSyncResult>,
-    val movieContents: MovieCatalogRefreshReport? = null,
+    val movieContents: CatalogSweepReport? = null,
 ) {
-    val live: DatasetSyncResult? get() = datasets.firstOrNull { it.dataset == "live" }
+    val live: DatasetSyncResult? get() = datasets.firstOrNull { it.dataset == SyncDatasets.LIVE }
     val liveRefreshSucceeded: Boolean get() = live?.refreshed == true
     val allRefreshSucceeded: Boolean
         get() = datasets.isNotEmpty() && datasets.all { it.refreshed } && movieContents?.successful != false
 
+    /** Every dataset that did not refresh, in sync order, for the failure toast/dialog. */
+    val failedDatasets: List<DatasetSyncResult> get() = datasets.filterNot { it.refreshed }
+
     /** A category-index-only sync must never claim that movie contents refreshed. */
     val manualRefreshSucceeded: Boolean
         get() = allRefreshSucceeded && movieContents?.let { it.successful && it.total > 0 } == true
+
+    /** A live-only account has no movie categories to sweep; that refresh is simply not applicable. */
+    val movieSweepNotApplicable: Boolean get() = movieContents?.notApplicable == true
 }

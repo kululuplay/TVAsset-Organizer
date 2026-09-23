@@ -29,9 +29,24 @@ object PlaybackContentIdentity {
             PlaybackContentKind.VOD_EPISODE -> "series"
             PlaybackContentKind.CATCH_UP -> null
         }
-        val pathId = if (segments.size == 4 && segments.first() == expected) {
-            segments.last().substringBefore('.').takeIf(numericId::matches)
-        } else null
+        val pathId = when {
+            kind == PlaybackContentKind.CATCH_UP -> catchUpStreamId(uri, segments)
+            segments.size == 4 && segments.first() == expected -> segments.last().substringBefore('.').takeIf(numericId::matches)
+            else -> null
+        }
         return key(url, kind, stableId?.takeIf(numericId::matches) ?: pathId)
+    }
+
+    /**
+     * Xtream catch-up identifies the archived channel by its live stream id, so every device replaying that
+     * archive compares under one key. Only `stream=<id>` of `/streaming/timeshift.php?...` or the last segment of
+     * `/timeshift/<user>/<pass>/<minutes>/<start>/<id>.ts` is read; account, start and duration are never hashed.
+     */
+    private fun catchUpStreamId(uri: URI, segments: List<String>): String? = when {
+        segments.lastOrNull().equals("timeshift.php", ignoreCase = true) -> uri.rawQuery.orEmpty().split('&')
+            .firstOrNull { it.startsWith("stream=") }?.substringAfter('=')?.takeIf(numericId::matches)
+        segments.size == 6 && segments.first().equals("timeshift", ignoreCase = true) ->
+            segments.last().substringBefore('.').takeIf(numericId::matches)
+        else -> null
     }
 }

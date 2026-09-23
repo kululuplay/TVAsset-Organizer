@@ -15,8 +15,10 @@ import com.iptv.player.data.model.Category
 import com.iptv.player.data.model.ContentSort
 import com.iptv.player.data.model.ContentType
 import com.iptv.player.data.model.VodItem
+import com.iptv.player.data.repository.CategorySync
 import com.iptv.player.ui.common.CatalogLoadState
-import com.iptv.player.util.Outcome
+import com.iptv.player.ui.common.CatalogRetry
+import com.iptv.player.ui.common.CatalogRetryPolicy
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -161,20 +163,32 @@ class VodViewModel(
         }
     }
 
-    /** Retries whichever single-category or whole-catalog request is visible. */
+    /**
+     * Retries only what failed: the unfinished part of the last sweep, the
+     * visible category, or the non-forced catalog completion. The full forced
+     * sweep stays reserved for the explicit Refresh button.
+     */
     fun retryLoad() {
-        val categoryId = selectedCategory.value
-        if (_loadState.value.movieRefreshReport?.successful == false ||
-            query.value.isNotEmpty() || categoryId == null ||
-            categoryId == CAT_ALL || categoryId == CAT_POPULAR
-        ) {
-            refreshCatalog()
-            return
-        }
-        selectionLoadJob?.cancel()
-        selectionLoadJob = viewModelScope.launch {
-            catalogLoadJob?.cancelAndJoin()
-            loadSingleCategory(categoryId, force = true)
+        val retry = CatalogRetryPolicy.decide(
+            _loadState.value, query.value, selectedCategory.value, setOf(CAT_ALL, CAT_POPULAR),
+        )
+        when (retry) {
+            is CatalogRetry.Sweep -> {
+                selectionLoadJob?.cancel()
+                val previousCatalog = catalogLoadJob
+                catalogLoadJob = viewModelScope.launch {
+                    previousCatalog?.cancelAndJoin()
+                    loadFullCatalog(forceAll = retry.forced, only = retry.only)
+                }
+            }
+            CatalogRetry.FullCatalog -> ensureFullCatalog()
+            is CatalogRetry.Category -> {
+                selectionLoadJob?.cancel()
+                selectionLoadJob = viewModelScope.launch {
+                    catalogLoadJob?.cancelAndJoin()
+                    loadSingleCategory(retry.id, force = true)
+                }
+            }
         }
     }
 
@@ -230,34 +244,35 @@ class VodViewModel(
             return
         }
         _loadState.value = CatalogLoadState(loading = true, total = 1)
-        when (val result = repo.refreshVodCategory(config, categoryId, force)) {
-            is Outcome.Success -> _loadState.value = CatalogLoadState()
-            is Outcome.Failure -> {
-                _loadState.value = CatalogLoadState(errorRes = result.error.messageRes)
-            }
+        when (val result = repo.syncVodCategory(config, categoryId, force)) {
+            is CategorySync.Failed ->
+                _loadState.value = CatalogLoadState(errorRes = result.failure.error.messageRes)
+            // Fresh rows, a kept cache or a newer request's commit: nothing to report.
+            else -> _loadState.value = CatalogLoadState()
         }
     }
 
     /**
      * All/Recommended/search must represent the complete visible catalog, not
      * only categories visited earlier. Categories load sequentially to avoid
-     * overwhelming small providers and low-memory TV devices.
+     * overwhelming small providers and low-memory TV devices; [only] restricts
+     * a retry to the categories the previous sweep did not finish.
      */
-    private suspend fun loadFullCatalog(forceAll: Boolean) {
+    private suspend fun loadFullCatalog(forceAll: Boolean, only: Set<String>? = null) {
         _loadState.value = CatalogLoadState(loading = true)
         val config = settings.getSourceConfig()
         if (config == null) {
             _loadState.value = CatalogLoadState(errorRes = R.string.error_unknown)
             return
         }
-        val report = repo.refreshMovieCatalog(config, forceAll) { completed, total ->
+        val report = repo.refreshMovieCatalog(config, forceAll, only) { completed, total ->
             _loadState.value = CatalogLoadState(loading = true, completed = completed, total = total)
         }
         _loadState.value = CatalogLoadState(
             completed = report.completed,
             total = report.total,
             errorRes = if (report.successful) null else R.string.catalog_refresh_incomplete,
-            movieRefreshReport = report,
+            sweepReport = report,
         )
     }
 

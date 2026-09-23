@@ -4,4 +4,11 @@
     <string name="catalog_refresh_details">Afficher les erreurs</string>
     <string name="catalog_movie_index_failed">La liste des catégories de films n’a pas pu être actualisée</string>
     <string name="catalog_refresh_no_visible_movies">Aucune catégorie de films visible à actualiser.</string>
+    <string name="catalog_series_refresh_incomplete">Actualisation des séries incomplète. Certains contenus n’ont pas pu être actualisés.</string>
+    <string name="catalog_sync_incomplete">Actualisation incomplète. Certains contenus n’ont pas pu être actualisés.</string>
+    <string name="catalog_dataset_failed">%1$s : actualisation impossible (%2$s)</string>
+    <string name="catalog_dataset_movie_categories">Catégories de films</string>
+    <string name="catalog_dataset_series_categories">Catégories de séries</string>
+    <string name="catalog_refresh_skipped">Actualisation interrompue : %1$d catégories n’ont pas été vérifiées.</string>
+    <string name="catalog_refresh_progress">Actualisation des films… %1$d/%2$d</string>
 </resources>

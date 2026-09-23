@@ -75,6 +75,8 @@ class PlaybackIncidentRecorder(
             val trigger = when {
                 record.observedState == PlaybackObservedState.STARTING && record.stateDurationMs >= 15_000 -> PlaybackIncidentTrigger.STARTUP_SLOW
                 record.observedState == PlaybackObservedState.BUFFERING && record.stateDurationMs >= 5_000 -> PlaybackIncidentTrigger.BUFFERING
+                // lastFrameAgeMs is null while paused and while nobody samples (PlaybackQoeRecorder.STALE_OBSERVATION_MS):
+                // a remote pause, audio-focus loss or a quiesced engine is never reported as a freeze.
                 record.observedState == PlaybackObservedState.PLAYING && record.session.kind != PlaybackContentKind.RADIO &&
                     record.framesKnown && (record.lastFrameAgeMs ?: -1) >= 8_000 -> PlaybackIncidentTrigger.VIDEO_STALL
                 else -> null

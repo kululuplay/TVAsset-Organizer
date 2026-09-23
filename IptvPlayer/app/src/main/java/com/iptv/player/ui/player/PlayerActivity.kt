@@ -856,6 +856,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         binding.errorOverlay.visibility = View.GONE
         PlaybackQoeRuntime.markEngine(qoeSessionId, LivePlaybackQoePolicy.engine(engineName))
         PlaybackQoeRuntime.markReady(qoeSessionId)
+        // The engine confirms output: a session paused by a remote or audio-focus loss is playing again.
+        PlaybackQoeRuntime.setPaused(qoeSessionId, false)
         PlaybackQoeRuntime.setRebuffering(qoeSessionId, false)
         if (!castOwnsPlayback) {
             localPlaybackRequested = true
@@ -890,6 +892,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         binding.errorOverlay.visibility = View.GONE
         binding.playbackCover.visibility = View.GONE
         binding.bufferingIndicator.visibility = View.GONE
+        PlaybackQoeRuntime.setPaused(qoeSessionId, false)
         PlaybackQoeRuntime.markFirstFrame(qoeSessionId)
         PlaybackQoeRuntime.setRebuffering(qoeSessionId, false)
         if (!castOwnsPlayback) {
@@ -1089,6 +1092,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
             return
         }
         beginQoeSessionIfNeeded()
+        PlaybackQoeRuntime.setPaused(qoeSessionId, false)
         controller.resume()
     }
 
@@ -1098,6 +1102,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
     ) {
         localPlaybackRequested = false
         PlaybackQoeRuntime.setRebuffering(qoeSessionId, false)
+        // quiesce() stops the engine and its sampler; without this the session would look frozen, not paused.
+        PlaybackQoeRuntime.setPaused(qoeSessionId, true)
         playbackSession.setPlaying(false)
         if (::controller.isInitialized) {
             controller.quiesce { onQuiesced() }
@@ -1128,6 +1134,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         // the remote load actually succeeds.
         localPlaybackRequested = false
         PlaybackQoeRuntime.setRebuffering(qoeSessionId, false)
+        PlaybackQoeRuntime.setPaused(qoeSessionId, true)
         playbackSession.setPlaying(false)
         playbackSession.abandonAudioFocus()
         if (::controller.isInitialized) {

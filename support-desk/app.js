@@ -13,10 +13,12 @@ function createApp({ store, origin, adminUser, adminPasswordHash, secureCookies 
   // Only the local Nginx proxy is trusted; the service binds loopback in production.
   app.set("trust proxy", "loopback");
   const limiter = new RateLimit(10000, clock);
+  // Operator sign-in keeps its own table so device traffic can never evict or crowd out its per-address counters.
+  const loginLimiter = new RateLimit(1000, clock);
   const sessions = new Map();
   const fail = (res, status, code) => res.status(status).json({ ok: false, error: code });
-  const limit = (req, res, key, count, ms) => {
-    if (limiter.take(key, count, ms)) return true;
+  const limit = (req, res, key, count, ms, table = limiter) => {
+    if (table.take(key, count, ms)) return true;
     res.set("Retry-After", String(Math.ceil(ms / 1000))); fail(res, 429, "rate_limited"); return false;
   };
   app.use((req, res, next) => {
@@ -52,7 +54,7 @@ function createApp({ store, origin, adminUser, adminPasswordHash, secureCookies 
     next();
   };
   app.post("/api/admin/login", sameOrigin, async (req, res) => {
-    if (!limit(req, res, `login:${req.ip}`, 8, 15 * 60000)) return;
+    if (!limit(req, res, `login:${req.ip}`, 8, 15 * 60000, loginLimiter)) return;
     if (!equal(req.body?.username || "", adminUser) || !await verifyPassword(req.body?.password, adminPasswordHash)) return fail(res, 401, "invalid_credentials");
     for (const [id, session] of sessions) if (session.until <= clock()) sessions.delete(id);
     if (sessions.size >= 100) return fail(res, 503, "session_limit");

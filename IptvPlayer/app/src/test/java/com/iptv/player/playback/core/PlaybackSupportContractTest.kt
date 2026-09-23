@@ -35,8 +35,11 @@ class PlaybackSupportContractTest {
             video = PlaybackVideoFormat(PlaybackVideoCodec.H264, PlaybackVideoDecoder.HARDWARE, 1920, 1080, 29.97f),
             startup = PlaybackStartupTiming(100, 200, 19_800)))
         capture("recent rendered frames", "healthy")
-        elapsed += 9_000
-        recorder.observe(id, PlaybackObservation("contract-decoder", rendered = 200, dropped = 0, bufferMs = 4_000))
+        // The sampler keeps delivering an unchanged counter: a measured freeze, not a silent (quiesced) engine.
+        repeat(3) {
+            elapsed += 3_000
+            recorder.observe(id, PlaybackObservation("contract-decoder", rendered = 200, dropped = 0, bufferMs = 4_000))
+        }
         capture("renderer stopped advancing", "problem")
         recorder.setPaused(id, true)
         capture("intentional pause", "unknown")

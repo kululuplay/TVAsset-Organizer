@@ -73,7 +73,9 @@ object PlaybackQoeRuntime {
         publishIncidents()
     }
 
-    private fun publishIncidents() {
+    /** Sessions whose current row travelled inside an incident envelope; callers skip a duplicate boundary for them. */
+    private fun publishIncidents(): Set<PlaybackSessionId> {
+        val carried = HashSet<PlaybackSessionId>()
         incidents.drain().forEach { incident ->
             val id = PlaybackSessionId.from(incident.sessionId)
             val active = recorder.activeSnapshot()
@@ -84,7 +86,9 @@ object PlaybackQoeRuntime {
                 rows.map(::fields),
                 incident = incident.toSafeFields(),
             )
+            rows.forEach { carried += it.session.id }
         }
+        return carried
     }
 
     data class ProblemReportContext(val sessionId: String, val contentKey: String?, val incidentId: String, val label: String?)
@@ -93,8 +97,7 @@ object PlaybackQoeRuntime {
     fun reportProblem(id: PlaybackSessionId?, contentKey: String?): ProblemReportContext? {
         val record = id?.let { recorder.snapshotActive(it) ?: recent[it] }
             ?: contentKey?.let { key ->
-                (recorder.activeSnapshot() + recent.values).filter { keys[it.session.id] == key }
-                    .maxByOrNull { it.session.startedAtEpochMs }
+                latestReportableSession(recorder.activeSnapshot() + recent.values, key, { keys[it] }, System.currentTimeMillis())
             } ?: return null
         val session = record.session.id
         val incidentId = incidents.trigger(record, keys[session], PlaybackIncidentTrigger.USER_REPORT,
@@ -208,10 +211,10 @@ object PlaybackQoeRuntime {
         diagnostics.failure(id, failure)
         id?.let { recorder.recordFailure(it, failure) }
         id?.let(recorder::snapshotActive)?.let {
-            PlaybackSupportReporter.capture(listOf(fields(it)))
             incidents.trigger(it, keys[it.session.id], PlaybackIncidentTrigger.PLAYBACK_ERROR,
                 SystemClock.elapsedRealtime(), System.currentTimeMillis())
-            publishIncidents()
+            // One envelope per failure: an incident capture already carries this session's failed row.
+            if (it.session.id !in publishIncidents()) PlaybackSupportReporter.capture(listOf(fields(it)))
         }
     }
 
@@ -271,8 +274,8 @@ object PlaybackQoeRuntime {
         }
         incidents.observe(record, keys[record.session.id], SystemClock.elapsedRealtime(), System.currentTimeMillis())
         incidents.flush(record.session.id)
-        publishIncidents()
-        PlaybackSupportReporter.capture(listOf(fields(record)))
+        // The final row travels inside a closing incident window when there is one; otherwise it is its own boundary.
+        if (record.session.id !in publishIncidents()) PlaybackSupportReporter.capture(listOf(fields(record)))
         // No upload path without telemetry, so do not even fill the spool.
         if (!Telemetry.isEnabled) return
         val s = spool ?: return
@@ -368,3 +371,17 @@ object PlaybackQoeRuntime {
             ?.let { runCatching { CapabilityFingerprint(it) }.getOrNull() },
     )
 }
+
+/** A Cast preview reports without a session id; only playback still active or ended this recently may be linked. */
+internal const val REPORT_LINK_WINDOW_MS = 2 * 60_000L
+
+/** Newest session with [contentKey] that is active or ended within [REPORT_LINK_WINDOW_MS]; orphans carry no evidence. */
+internal fun latestReportableSession(
+    candidates: Collection<PlaybackQoeRecord>,
+    contentKey: String,
+    keyOf: (PlaybackSessionId) -> String?,
+    nowEpochMs: Long,
+): PlaybackQoeRecord? = candidates.filter { record ->
+    keyOf(record.session.id) == contentKey && record.endReason != PlaybackEndReason.ABANDONED &&
+        (record.endedAtEpochMs?.let { ended -> nowEpochMs - ended in 0..REPORT_LINK_WINDOW_MS } ?: !record.isFinal)
+}.maxByOrNull { it.session.startedAtEpochMs }

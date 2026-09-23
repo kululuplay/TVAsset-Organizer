@@ -99,7 +99,11 @@ test("hidden pause counters, missing legacy counters and resets cannot imply imp
 });
 test("content change, timestamp duplication, gaps and unknown frames remain conservative", () => {
   const { before, after } = windows();
-  assert.equal(compareIntervention(before, after.map(row => ({ ...row, session: { ...row.session, content_key: "b".repeat(64) } })), now, now + 150000).status, "insufficient");
+  const mismatched = compareIntervention(before, after.map(row => ({ ...row, session: { ...row.session, content_key: "b".repeat(64) } })), now, now + 150000);
+  assert.equal(mismatched.status, "insufficient"); assert.match(mismatched.evidence.at(-1), /kimlikleri eşleşmediği/);
+  // No measurement at all is reported as absence, not as a content mismatch.
+  const empty = compareIntervention([], [], now, now + 150000);
+  assert.equal(empty.status, "insufficient"); assert.match(empty.evidence.at(-1), /kayıt bulunmadığından/); assert.doesNotMatch(empty.evidence.join(" "), /kimlikleri eşleşmediği/);
   assert.equal(windowMetrics([after[0], after[0]], now, now + 120000).observedMs, 0);
   assert.equal(windowMetrics([after[0], after[3]], now, now + 120000).observedMs, 0);
   const unknown = after.map(row => ({ ...row, session: { ...row.session, frames_known: false } }));

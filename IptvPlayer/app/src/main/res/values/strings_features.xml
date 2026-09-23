@@ -86,6 +86,8 @@
     <string name="about_update_wrong_package">The downloaded APK belongs to a different application.</string>
     <string name="about_update_not_newer">This APK is not newer than the installed application.</string>
     <string name="about_update_signature_mismatch">The update signature does not match the installed application. Android cannot safely update this installation without removing it first.</string>
+    <string name="update_requires_newer_android">This update requires Android %1$d or newer. Your device stays on the current version.</string>
+    <string name="about_update_install_failed">The installer could not be opened. Download the APK from the website to update manually.</string>
     <string name="about_download_preparing">Preparing…</string>
     <string name="about_download_size">%1$s / %2$s</string>
     <string name="about_download_meta">%1$s/s · %2$s left</string>

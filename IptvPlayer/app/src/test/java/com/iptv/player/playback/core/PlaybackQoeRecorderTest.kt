@@ -282,13 +282,41 @@ class PlaybackQoeRecorderTest {
         recorder.start(session(id))
         recorder.markFirstFrame(id)
         recorder.observe(id, PlaybackObservation("decoder1", rendered = 30, dropped = 2, bufferMs = 4_000))
-        clock.advance(10_000)
-        recorder.observe(id, PlaybackObservation("decoder1", rendered = 30, dropped = 2, bufferMs = 3_000))
+        repeat(5) {
+            clock.advance(2_000)
+            recorder.observe(id, PlaybackObservation("decoder1", rendered = 30, dropped = 2, bufferMs = 3_000))
+        }
         val record = recorder.snapshotActive(id)!!
         assertEquals(10_000L, record.lastFrameAgeMs)
         assertEquals(30L, record.renderedFrames)
         assertEquals(3_000L, record.currentBufferMs)
         assertTrue(record.framesKnown)
+    }
+
+    @Test
+    fun `frame age is unknown while the sampler is silent and restarts after the gap`() {
+        val clock = FakeClock()
+        val recorder = PlaybackQoeRecorder(clock)
+        val id = PlaybackSessionId.random()
+        recorder.start(session(id))
+        recorder.markFirstFrame(id)
+        recorder.observe(id, PlaybackObservation("decoder1", rendered = 30, dropped = 0))
+        clock.advance(2_000)
+        recorder.observe(id, PlaybackObservation("decoder1", rendered = 30, dropped = 0))
+        assertEquals(2_000L, recorder.snapshotActive(id)!!.lastFrameAgeMs)
+        // Engine quiesced without a pause signal: nobody samples, so the age is unknown rather than growing.
+        clock.advance(PlaybackQoeRecorder.STALE_OBSERVATION_MS + 1)
+        val silent = recorder.snapshotActive(id)!!
+        assertEquals(PlaybackObservedState.PLAYING, silent.observedState)
+        assertTrue(silent.framesKnown)
+        assertNull(silent.lastFrameAgeMs)
+        assertEquals(30L, silent.renderedFrames)
+        clock.advance(60_000)
+        recorder.observe(id, PlaybackObservation("decoder1", rendered = 30, dropped = 0))
+        assertEquals(0L, recorder.snapshotActive(id)!!.lastFrameAgeMs)
+        clock.advance(2_000)
+        recorder.observe(id, PlaybackObservation("decoder1", rendered = 30, dropped = 0))
+        assertEquals(2_000L, recorder.snapshotActive(id)!!.lastFrameAgeMs)
     }
 
     @Test

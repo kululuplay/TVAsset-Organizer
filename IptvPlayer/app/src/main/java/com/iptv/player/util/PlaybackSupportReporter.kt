@@ -43,6 +43,8 @@ object PlaybackSupportReporter {
     private var incidentSampler: Job? = null
     private val wake = Channel<Unit>(Channel.CONFLATED)
     private var lastCycleAt = -10_000L
+    private val cadence = PlaybackSupportCadence()
+    private var persisted: String? = null
 
     @Synchronized fun init(context: Context) {
         app = context.applicationContext
@@ -100,6 +102,7 @@ object PlaybackSupportReporter {
                 delay(2_000L)
             }
         }
+        cadence.reset()
         loop = scope.launch {
             while (foreground) {
                 // Even incident bursts stay below the service limit: two attempts per >=10s.
@@ -107,9 +110,14 @@ object PlaybackSupportReporter {
                 val cycleStartedAt = SystemClock.elapsedRealtime()
                 lastCycleAt = cycleStartedAt
                 try {
-                    persistCapture(Capture(PlaybackQoeRuntime.supportSnapshot(), false, System.currentTimeMillis()))
+                    val rows = PlaybackQoeRuntime.supportSnapshot()
+                    val backlog = mutex.withLock { load(context); queue.expire(System.currentTimeMillis()); queue.entries().isNotEmpty() }
+                    // An idle Home neither rewrites the queue file nor uploads an unchanged empty state every 30 s;
+                    // active playback keeps the 30-second cadence and an acknowledged backlog stays quiet.
+                    val captured = cadence.shouldCapture(active = rows.isNotEmpty(), now = cycleStartedAt)
+                    if (captured) persistCapture(Capture(rows, false, System.currentTimeMillis()))
                     // Incidents wake this loop; ordinary health stays at a 30-second cadence.
-                    for (attempt in 0..1) {
+                    if (captured || backlog) for (attempt in 0..1) {
                         val entry = mutex.withLock { load(context); queue.next(System.currentTimeMillis()) } ?: break
                         if (!foreground) break
                         val delivery = SupportClient.uploadPlayback(context, entry.id, entry.body)
@@ -163,10 +171,14 @@ object PlaybackSupportReporter {
         val json = JSONObject().put("failures", queue.failureCount).put("next", queue.nextAttemptMs)
             .put("queue", JSONArray(queue.entries().map { entry -> JSONObject().put("id", entry.id)
                 .put("body", entry.body).put("at", entry.sampledAtMs).put("boundary", entry.boundary).put("urgent", entry.urgent) }))
+            .toString()
+        // Flash wear and IO on low-end sticks: rewrite the file only when the queue or its backoff changed.
+        if (json == persisted) return
         val file = store ?: return
         val output = file.startWrite()
-        try { output.write(json.toString().toByteArray(Charsets.UTF_8)); file.finishWrite(output) }
+        try { output.write(json.toByteArray(Charsets.UTF_8)); file.finishWrite(output) }
         catch (error: Exception) { file.failWrite(output); throw error }
+        persisted = json
     }
 
     @Suppress("DEPRECATION")
@@ -198,4 +210,21 @@ object PlaybackSupportReporter {
         }
         return result
     }
+}
+
+/**
+ * Pure reporting cadence. Active playback is captured every cycle; an idle device only refreshes its support
+ * card once per [aliveIntervalMs], so a fleet of idle Home screens neither rewrites its queue file nor uploads
+ * an unchanged empty state every 30 seconds.
+ */
+internal class PlaybackSupportCadence(private val aliveIntervalMs: Long = 5 * 60_000L) {
+    private var lastCaptureAt: Long? = null
+    fun shouldCapture(active: Boolean, now: Long): Boolean {
+        val last = lastCaptureAt
+        if (!active && last != null && now - last < aliveIntervalMs) return false
+        lastCaptureAt = now
+        return true
+    }
+    /** A fresh foreground start refreshes the card immediately. */
+    fun reset() { lastCaptureAt = null }
 }

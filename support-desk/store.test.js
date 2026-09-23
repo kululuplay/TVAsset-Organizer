@@ -16,6 +16,8 @@ test("PostgreSQL ownership, atomic cap, retention, status audit and request pagi
   await admin.query(`CREATE SCHEMA ${schema}`);
   const pool = new Pool({ connectionString: databaseUrl.toString(), options: `-c search_path=${schema}` });
   try {
+    // Every unqualified statement below must land in the throwaway schema, never in live tables.
+    assert.equal((await pool.query("SELECT current_schema() AS schema")).rows[0].schema, schema);
     await pool.query(fs.readFileSync(path.join(__dirname, "schema.sql"), "utf8"));
     const store = new PgStore(pool, { installations: 2, tickets: 3, logs: 1 });
     const a = crypto.randomUUID(), b = crypto.randomUUID();
@@ -31,7 +33,7 @@ test("PostgreSQL ownership, atomic cap, retention, status audit and request pagi
     assert.equal(await store.status(one.id, "done", "admin"), true);
     await store.status(one.id, "done", "admin");
     assert.equal((await pool.query("SELECT count(*)::int AS n FROM support_audit")).rows[0].n, 1);
-    await pool.query("UPDATE support_tickets SET created_at=now()-interval '91 days' WHERE id=$1", [one.id]);
+    await pool.query(`UPDATE ${schema}.support_tickets SET created_at=now()-interval '91 days' WHERE id=$1 AND installation_id=$2`, [one.id, a]);
     await store.maintain(); assert.equal((await store.detail(one.id)).log, ""); assert.equal((await store.stats()).total, 2);
     const parallel = await Promise.allSettled([1, 2].map(() => store.create(a, { ...payload, requestId: crypto.randomUUID(), log: "" })));
     assert.equal(parallel.filter(result => result.status === "fulfilled").length, 1);

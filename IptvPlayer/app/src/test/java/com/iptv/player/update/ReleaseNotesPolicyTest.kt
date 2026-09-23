@@ -46,4 +46,15 @@ class ReleaseNotesPolicyTest {
         assertFalse(result.contains("http"))
         assertFalse(result.contains("abcdef"))
     }
+
+    @Test
+    fun minAndroidApiMarkerIsNotCustomerFacing() {
+        assertEquals(
+            "• Faster channel switching",
+            ReleaseNotesPolicy.customerFacing(
+                "Min-Android-API: 23\n\n- Faster channel switching",
+            ),
+        )
+        assertNull(ReleaseNotesPolicy.customerFacing("Min-Android-API: 23"))
+    }
 }

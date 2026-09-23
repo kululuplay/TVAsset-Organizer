@@ -4,6 +4,10 @@ const { incidentPayload } = require("./playback-analysis");
 
 const RETENTION_MS = 7 * 86400000;
 const FRESH_MS = 120000;
+// The client refreshes an idle card only every five minutes, so a snapshot without an unfinished session
+// stays fresh for six minutes; active playback keeps reporting every 30 seconds and the two-minute window.
+const IDLE_FRESH_MS = 360000;
+const freshWindowMs = sessions => (sessions || []).some(session => session?.final === false) ? FRESH_MS : IDLE_FRESH_MS;
 const MAX_BYTES = 32768;
 const states = new Set(["STARTING", "PLAYING", "BUFFERING", "PAUSED", "ENDED", "FAILED"]);
 const sets = values => new Set(values.split(" "));
@@ -117,11 +121,12 @@ function diagnose(info, sessions, fresh = true) {
 
 function presentDevice(row, now = Date.now()) {
   const lastSeen = new Date(row.last_seen_at).getTime(); const sampled = Number(row.sampled_at_ms);
-  const online = now - lastSeen <= FRESH_MS;
-  const sampleFresh = sampled <= now + FRESH_MS && now - sampled <= FRESH_MS;
   const info = row.device; const sessions = row.sessions || [];
-  const currentSessions = sessions.filter(session => !session.sampledAt || Math.abs(now - Date.parse(session.sampledAt)) <= FRESH_MS);
+  const freshMs = freshWindowMs(sessions);
+  const online = now - lastSeen <= freshMs;
+  const sampleFresh = sampled <= now + freshMs && now - sampled <= freshMs;
+  const currentSessions = sessions.filter(session => !session.sampledAt || Math.abs(now - Date.parse(session.sampledAt)) <= freshMs);
   const diagnosis = diagnose(info, currentSessions, online && sampleFresh);
-  return { installationId: row.installation_id, deviceCode: row.installation_id, lastSeenAt: new Date(lastSeen).toISOString(), sampledAt: new Date(sampled).toISOString(), info, sessions, online, status: diagnosis.status, diagnosis };
+  return { installationId: row.installation_id, deviceCode: row.installation_id, lastSeenAt: new Date(lastSeen).toISOString(), sampledAt: new Date(sampled).toISOString(), info, sessions, online, freshWindowMs: freshMs, status: diagnosis.status, diagnosis };
 }
-module.exports = { RETENTION_MS, FRESH_MS, MAX_BYTES, playbackPayload, diagnose, presentDevice };
+module.exports = { RETENTION_MS, FRESH_MS, IDLE_FRESH_MS, MAX_BYTES, freshWindowMs, playbackPayload, diagnose, presentDevice };

@@ -17,11 +17,17 @@ enum class ApkValidationFailure {
     WRONG_PACKAGE,
     NOT_NEWER,
     SIGNATURE_MISMATCH,
+    /** The package's minSdkVersion is above this device's Android version. */
+    INCOMPATIBLE_ANDROID,
 }
 
 sealed interface ApkValidationResult {
     data object Valid : ApkValidationResult
-    data class Invalid(val failure: ApkValidationFailure) : ApkValidationResult
+    data class Invalid(
+        val failure: ApkValidationFailure,
+        /** For [ApkValidationFailure.INCOMPATIBLE_ANDROID]: the API level required. */
+        val requiredAndroidApi: Int? = null,
+    ) : ApkValidationResult
 }
 
 /** Pure decision core kept separate so update compatibility is regression-testable. */
@@ -36,9 +42,23 @@ internal object ApkInstallPolicy {
         archiveSigners: Set<String>?,
         installedSigners: Set<String>?,
         artifactDigestVerified: Boolean = false,
+        /** minSdkVersion read from the archive itself (API 24+), when readable. */
+        archiveMinSdk: Int? = null,
+        /** Minimum API declared by the GitHub release ([UpdateInfo.minAndroidApi]). */
+        releaseMinSdk: Int? = null,
+        deviceSdkInt: Int,
     ): ApkValidationFailure? = when {
         fileSize <= 0L -> ApkValidationFailure.MISSING
         expectedSize > 0L && fileSize != expectedSize -> ApkValidationFailure.INCOMPLETE
+        // Compatibility is settled before every other verdict: a package the
+        // platform cannot install must not surface as a storage, package or,
+        // through the verified-digest shortcut below, a valid update.
+        archiveMinSdk != null && archiveMinSdk > deviceSdkInt ->
+            ApkValidationFailure.INCOMPATIBLE_ANDROID
+        // Older Android returns no archive metadata at all for an APK whose
+        // minSdk exceeds the device; the release's declared minimum explains it.
+        packageMatches == null && releaseMinSdk != null && releaseMinSdk > deviceSdkInt ->
+            ApkValidationFailure.INCOMPATIBLE_ANDROID
         availableBytes >= 0L && availableBytes < fileSize * 2L ->
             ApkValidationFailure.INSUFFICIENT_STORAGE
         packageMatches == false -> ApkValidationFailure.WRONG_PACKAGE
@@ -92,6 +112,8 @@ object ApkInstallValidator {
         file: File,
         expectedSize: Long = -1L,
         expectedSha256: String? = null,
+        /** Minimum Android API declared by the release being installed. */
+        releaseMinAndroidApi: Int? = null,
     ): ApkValidationResult {
         if (!file.isFile || file.length() <= 0L) {
             return ApkValidationResult.Invalid(ApkValidationFailure.MISSING)
@@ -116,6 +138,7 @@ object ApkInstallValidator {
         val packageManager = context.packageManager
         val archive = packageInfo(packageManager, file.absolutePath)
         val installed = installedPackageInfo(packageManager, context.packageName)
+        val archiveMinSdk = archive?.minSdkCompat()
 
         val failure = ApkInstallPolicy.evaluate(
             fileSize = file.length(),
@@ -129,12 +152,19 @@ object ApkInstallValidator {
             archiveSigners = archive?.signerDigests(),
             installedSigners = installed?.signerDigests(),
             artifactDigestVerified = digestVerified,
+            archiveMinSdk = archiveMinSdk,
+            releaseMinSdk = releaseMinAndroidApi,
+            deviceSdkInt = Build.VERSION.SDK_INT,
         )
-        return if (failure == null) {
-            ApkValidationResult.Valid
-        } else {
-            ApkValidationResult.Invalid(failure)
-        }
+        if (failure == null) return ApkValidationResult.Valid
+        return ApkValidationResult.Invalid(
+            failure,
+            requiredAndroidApi = if (failure == ApkValidationFailure.INCOMPATIBLE_ANDROID) {
+                archiveMinSdk ?: releaseMinAndroidApi
+            } else {
+                null
+            },
+        )
     }
 
     @Suppress("DEPRECATION")
@@ -176,6 +206,14 @@ object ApkInstallValidator {
     private fun PackageInfo.versionCodeCompat(): Long =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) longVersionCode
         else versionCode.toLong()
+
+    /** The archive's own minSdkVersion; only API 24+ exposes it on ApplicationInfo. */
+    private fun PackageInfo.minSdkCompat(): Int? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            applicationInfo?.minSdkVersion?.takeIf { it > 0 }
+        } else {
+            null
+        }
 
     @Suppress("DEPRECATION")
     private fun PackageInfo.signerDigests(): Set<String> {

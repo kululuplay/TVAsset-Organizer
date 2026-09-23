@@ -7,6 +7,17 @@ const { execFileSync } = require("node:child_process");
 const { Pool } = require("pg");
 async function main() {
   const config = Object.fromEntries(fs.readFileSync("/etc/kululu-support/service.env", "utf8").trim().split("\n").map(line => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]));
+  // The database tests isolate themselves through the search_path connection option. Refuse to run them
+  // unless this server demonstrably honours it, so no unqualified test statement can reach live tables.
+  const probe = "verify_probe_" + crypto.randomBytes(8).toString("hex");
+  assert.match(probe, /^verify_probe_[a-f0-9]{16}$/);
+  const guard = new Pool({ connectionString: config.DATABASE_URL, max: 1 });
+  try {
+    await guard.query(`CREATE SCHEMA ${probe}`);
+    const scoped = new Pool({ connectionString: config.DATABASE_URL, options: `-c search_path=${probe}`, max: 1 });
+    try { assert.equal((await scoped.query("SELECT current_schema() AS schema")).rows[0].schema, probe, "search_path connection option is not honoured; refusing to run database tests"); }
+    finally { await scoped.end(); }
+  } finally { await guard.query(`DROP SCHEMA IF EXISTS ${probe}`).catch(() => {}); await guard.end(); }
   const sqlTests = fs.readdirSync("/opt/kululu-support/support-desk").filter(name => /(?:^|-)store\.test\.js$/.test(name)).map(name => "support-desk/" + name);
   execFileSync(process.execPath, ["--test", ...sqlTests], { cwd: "/opt/kululu-support", env: { ...process.env, SUPPORT_TEST_DATABASE_URL: config.DATABASE_URL }, stdio: "inherit" });
   const origin = config.SUPPORT_ORIGIN;

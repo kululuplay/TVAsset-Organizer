@@ -44,6 +44,11 @@ CREATE TABLE IF NOT EXISTS support_playback_devices (
 );
 ALTER TABLE support_playback_devices ADD COLUMN IF NOT EXISTS history_limited BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE support_playback_devices ADD COLUMN IF NOT EXISTS status_sampled_at_ms BIGINT NOT NULL DEFAULT 0;
+-- Ingest clamps a device clock ahead of the server to receipt time (store.js playback()). Rows stored before that
+-- clamp may still carry a future stamp that no later, clamped sample could outrank; align them once with their receipt time.
+UPDATE support_playback_devices SET sampled_at_ms = LEAST(sampled_at_ms, (extract(epoch FROM last_seen_at) * 1000)::bigint),
+  status_sampled_at_ms = LEAST(status_sampled_at_ms, (extract(epoch FROM last_seen_at) * 1000)::bigint)
+  WHERE sampled_at_ms > (extract(epoch FROM last_seen_at) * 1000)::bigint OR status_sampled_at_ms > (extract(epoch FROM last_seen_at) * 1000)::bigint;
 -- Small receipts preserve retry idempotency even after bounded history is pruned.
 CREATE TABLE IF NOT EXISTS support_playback_receipts (
   installation_id UUID NOT NULL REFERENCES support_installations(id),

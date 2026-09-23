@@ -29,3 +29,9 @@ All 21 existing tickets were preserved. The support service and both other exist
 The final Android JVM suite passed 748 tests without failures, errors or skips. Nine actual Kotlin-produced playback/incident envelopes passed server validation and immutable-completion checks. `testDebugUnitTest lintDebug assembleDebug` succeeded; lint has zero errors and 438 warnings. Startup regressions cover actual render timestamps, invalid timestamps, interrupted startup, engine fallback, same-engine retry and cumulative pauses.
 
 Local browser fixtures verified mixed and insufficient channel evidence, expanded incident points, startup stages, comparable/insufficient/waiting intervention states and ticket-to-incident navigation. These are synthetic functional checks. No physical-device quality or overhead measurement was performed: the ADB device list was empty. The preview package is separate from production and does not activate customer rollout.
+
+## Follow-up (2026-09-24)
+
+- The fleet-wide incident cap (50,000) is now pruned oldest-first by the once-a-minute usage check instead of a full-table count on every new incident; the per-device cap (200) is still applied on upload with a bounded index lookup. Intervention caps are unchanged and remain transactional.
+- An intervention comparison whose two-minute windows contain no measurement for the content now reports that absence ("Ölçüm pencerelerinde bu içerik için kayıt bulunmadığından karşılaştırma yapılamaz.") instead of a content-identity mismatch, which is reserved for windows that mix different content keys.
+- Sample timestamps ahead of the server clock are clamped to receipt time on ingest, so before/after windows and freshness use server-ordered times; the envelope's own timestamp stays in the stored payload.

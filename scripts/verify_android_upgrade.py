@@ -22,6 +22,10 @@ CERT_RE = re.compile(
     re.IGNORECASE,
 )
 SCHEME_RE_TEMPLATE = r"^Verified using v{scheme} scheme[^:]*:\s*true\s*$"
+SDK_RE = re.compile(r"^sdkVersion:'(?P<sdk>\d+)'", re.MULTILINE)
+# Machine-readable first line of the GitHub release body: the in-app updater
+# (1.5.97+) reads it to skip releases the device cannot run (UPDATE_ROLLOUT.md).
+MIN_ANDROID_API_RE = re.compile(r"^Min-Android-API:\s*(?P<api>\d+)$")
 
 
 class VerificationError(RuntimeError):
@@ -34,6 +38,7 @@ class ApkIdentity:
     version_code: int
     version_name: str
     certificate_sha256: frozenset[str]
+    min_sdk: int
 
 
 def parse_badging(output: str) -> tuple[str, int, str]:
@@ -41,6 +46,23 @@ def parse_badging(output: str) -> tuple[str, int, str]:
     if not match:
         raise VerificationError("aapt did not return package/version metadata")
     return match.group("package"), int(match.group("code")), match.group("name")
+
+
+def parse_min_sdk(output: str) -> int:
+    match = SDK_RE.search(output)
+    if not match:
+        raise VerificationError("aapt did not return the APK minSdkVersion (sdkVersion)")
+    return int(match.group("sdk"))
+
+
+def parse_min_android_api(release_notes: str) -> int | None:
+    """The `Min-Android-API: <api>` marker, which must be the first non-blank line."""
+    for line in release_notes.splitlines():
+        if not line.strip():
+            continue
+        match = MIN_ANDROID_API_RE.match(line.strip())
+        return int(match.group("api")) if match else None
+    return None
 
 
 def parse_apksigner(output: str) -> frozenset[str]:
@@ -78,13 +100,13 @@ def run(command: Sequence[str]) -> str:
 def inspect_apk(apk: pathlib.Path, aapt: pathlib.Path, apksigner: pathlib.Path) -> ApkIdentity:
     if not apk.is_file():
         raise VerificationError(f"APK does not exist: {apk}")
-    package, version_code, version_name = parse_badging(
-        run((str(aapt), "dump", "badging", str(apk)))
-    )
+    badging = run((str(aapt), "dump", "badging", str(apk)))
+    package, version_code, version_name = parse_badging(badging)
+    min_sdk = parse_min_sdk(badging)
     certificates = parse_apksigner(
         run((str(apksigner), "verify", "--verbose", "--print-certs", str(apk)))
     )
-    return ApkIdentity(package, version_code, version_name, certificates)
+    return ApkIdentity(package, version_code, version_name, certificates, min_sdk)
 
 
 def verify_upgrade(
@@ -95,6 +117,8 @@ def verify_upgrade(
     expected_version_code: int,
     expected_version_name: str,
     allow_same_version: bool,
+    expected_min_sdk: int | None = None,
+    release_notes: str | None = None,
 ) -> None:
     if current.package != expected_package:
         raise VerificationError(
@@ -110,6 +134,21 @@ def verify_upgrade(
             "versionName mismatch: "
             f"APK={current.version_name!r}, Gradle={expected_version_name!r}"
         )
+    if expected_min_sdk is not None and current.min_sdk != expected_min_sdk:
+        raise VerificationError(
+            f"minSdk mismatch: APK={current.min_sdk}, Gradle={expected_min_sdk}"
+        )
+    if release_notes is not None:
+        declared = parse_min_android_api(release_notes)
+        if declared is None:
+            raise VerificationError(
+                "release notes must start with 'Min-Android-API: <api>'; "
+                "the in-app updater reads it from the release body"
+            )
+        if declared != current.min_sdk:
+            raise VerificationError(
+                f"Min-Android-API mismatch: release notes={declared}, APK={current.min_sdk}"
+            )
     if previous is None:
         return
     if current.package != previous.package:
@@ -118,6 +157,13 @@ def verify_upgrade(
         )
     if current.certificate_sha256 != previous.certificate_sha256:
         raise VerificationError("release signing certificate does not match previous APK")
+    if current.min_sdk < previous.min_sdk:
+        # Clients only ever step forward; a lower minSdk would let a device
+        # skip the release that first required its current Android version.
+        raise VerificationError(
+            "minSdkVersion must not decrease between releases: "
+            f"{previous.min_sdk} -> {current.min_sdk}"
+        )
     if allow_same_version:
         if (
             current.version_code != previous.version_code
@@ -150,6 +196,16 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--aapt", required=True, type=pathlib.Path)
     result.add_argument("--apksigner", required=True, type=pathlib.Path)
     result.add_argument(
+        "--expected-min-sdk",
+        type=int,
+        help="minSdk from Gradle; must equal the APK's sdkVersion.",
+    )
+    result.add_argument(
+        "--release-notes",
+        type=pathlib.Path,
+        help="Release body about to be published; its first line must declare Min-Android-API.",
+    )
+    result.add_argument(
         "--allow-same-version",
         action="store_true",
         help="Only for rebuilding an immutable tag that already exists.",
@@ -166,6 +222,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.previous_apk
             else None
         )
+        release_notes = None
+        if args.release_notes is not None:
+            try:
+                release_notes = args.release_notes.read_text(encoding="utf-8")
+            except OSError as error:
+                raise VerificationError(f"cannot read release notes: {error}") from error
         verify_upgrade(
             current,
             previous,
@@ -173,6 +235,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             expected_version_code=args.expected_version_code,
             expected_version_name=args.expected_version_name,
             allow_same_version=args.allow_same_version,
+            expected_min_sdk=args.expected_min_sdk,
+            release_notes=release_notes,
         )
     except VerificationError as error:
         print(f"APK verification failed: {error}", file=sys.stderr)
@@ -180,6 +244,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(
         "APK verified: "
         f"{current.package} v{current.version_name} ({current.version_code}), "
+        f"minSdk={current.min_sdk}, "
         f"signer={','.join(sorted(current.certificate_sha256))}"
     )
     return 0

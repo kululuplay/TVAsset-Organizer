@@ -254,6 +254,7 @@ class PlaybackQoeRecorder(
         require(renderedDelta >= 0L) { "renderedDelta must not be negative" }
         require(droppedDelta >= 0L) { "droppedDelta must not be negative" }
         return mutate(sessionId) { state ->
+            state.noteObservation(clock.nowMs())
             state.framesKnown = true
             state.droppedFramesKnown = true
             if (renderedDelta > 0) state.lastFrameAtMs = clock.nowMs()
@@ -270,6 +271,7 @@ class PlaybackQoeRecorder(
 
     fun observe(sessionId: PlaybackSessionId, sample: PlaybackObservation): Boolean = mutate(sessionId) { state ->
         val now = clock.nowMs()
+        state.noteObservation(now)
         if (sample.source != state.counterSource) {
             state.counterSource = sample.source
             state.previousRendered = null
@@ -437,6 +439,7 @@ class PlaybackQoeRecorder(
         var framesKnown: Boolean = false,
         var droppedFramesKnown: Boolean = false,
         var lastFrameAtMs: Long? = null,
+        var lastObservedAtMs: Long? = null,
         var currentBufferMs: Long? = null,
         var counterSource: String? = null,
         var previousRendered: Long? = null,
@@ -452,9 +455,20 @@ class PlaybackQoeRecorder(
             framesKnown = false
             droppedFramesKnown = false
             lastFrameAtMs = null
+            lastObservedAtMs = null
             currentBufferMs = null
             video = null
             startup = null
+        }
+        /**
+         * A quiesced or paused engine stops sampling (PlayerController suppresses observations while
+         * suspended). What the picture did meanwhile is unknown, so after a silent gap the freeze clock
+         * restarts at this observation instead of blaming the gap on the renderer.
+         */
+        fun noteObservation(now: Long) {
+            val previous = lastObservedAtMs
+            if (previous != null && now - previous > STALE_OBSERVATION_MS && lastFrameAtMs != null) lastFrameAtMs = now
+            lastObservedAtMs = now
         }
         fun transition(next: PlaybackObservedState, now: Long) {
             if (observedState != next) {
@@ -479,6 +493,8 @@ class PlaybackQoeRecorder(
             endReason: PlaybackEndReason? = null,
         ): PlaybackQoeRecord {
             val activeRebufferMs = rebufferStartedAtMs?.let { duration(it, nowMs) } ?: 0L
+            // Frame age is evidence only while the sampler still delivers; a silent sampler makes it unknown, not a freeze.
+            val sampling = lastObservedAtMs?.let { duration(it, nowMs) <= STALE_OBSERVATION_MS } == true
             return PlaybackQoeRecord(
                 session = session.copy(transport = currentTransport),
                 finalEngine = currentEngine,
@@ -500,7 +516,9 @@ class PlaybackQoeRecorder(
                 pausedDurationMs = saturatingAdd(pausedDurationMs, if (observedState == PlaybackObservedState.PAUSED) duration(stateStartedAtMs, nowMs) else 0),
                 framesKnown = framesKnown,
                 droppedFramesKnown = droppedFramesKnown,
-                lastFrameAgeMs = lastFrameAtMs?.let { duration(it, nowMs) },
+                // Age as of the last observation: a quiesced engine (no observations) must not
+                // let the clock run into a false freeze before the 6 s silence gate closes.
+                lastFrameAgeMs = lastFrameAtMs?.takeIf { sampling }?.let { duration(it, lastObservedAtMs ?: nowMs) },
                 currentBufferMs = currentBufferMs,
                 video = video,
                 startup = startup,
@@ -516,6 +534,12 @@ class PlaybackQoeRecorder(
 
         /** Sessions still open after this long are closed as [PlaybackEndReason.ABANDONED]. */
         const val ABANDON_AFTER_MS = 6L * 60L * 60L * 1000L
+
+        /**
+         * Media3 samples every 2 s and the VLC health poll every 1.5 s. Without an observation for this long
+         * the engine is stopped, paused or hung, and a last frame age nobody measures is reported as unknown.
+         */
+        const val STALE_OBSERVATION_MS = 6_000L
 
         /**
          * Summary for a session a previous process left open (no measurements

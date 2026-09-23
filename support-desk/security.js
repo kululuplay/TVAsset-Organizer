@@ -51,14 +51,22 @@ class RateLimit {
   take(key, limit, windowMs) {
     const now = this.clock();
     let row = this.rows.get(key);
-    if (!row || row.until <= now) {
-      if (this.rows.size >= this.maxKeys) {
-        for (const [id, value] of this.rows) if (value.until <= now) this.rows.delete(id);
-        if (this.rows.size >= this.maxKeys && !this.rows.has(key)) return false;
-      }
+    if (row && row.until <= now) { row.count = 0; row.until = now + windowMs; }
+    else if (!row) {
+      if (this.rows.size >= this.maxKeys) this.evict(now);
       row = { count: 0, until: now + windowMs }; this.rows.set(key, row);
     }
     return ++row.count <= limit;
+  }
+  // A full table drops expired rows, then the earliest-expiring live row, so a new device or a new
+  // operator address is never refused merely because the table is full. Existing rows keep their counts.
+  evict(now) {
+    let victim = null;
+    for (const [id, row] of this.rows) {
+      if (row.until <= now) this.rows.delete(id);
+      else if (!victim || row.until < victim.until) victim = { id, until: row.until };
+    }
+    if (this.rows.size >= this.maxKeys && victim) this.rows.delete(victim.id);
   }
 }
 

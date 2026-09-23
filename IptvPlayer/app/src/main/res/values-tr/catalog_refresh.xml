@@ -4,4 +4,11 @@
     <string name="catalog_refresh_details">Yenileme hatalarını göster</string>
     <string name="catalog_movie_index_failed">Film kategori listesi güncellenemedi</string>
     <string name="catalog_refresh_no_visible_movies">Yenilenecek görünür film kategorisi bulunamadı.</string>
+    <string name="catalog_series_refresh_incomplete">Dizi yenilemesi tamamlanamadı. Bazı içerikler güncellenemedi.</string>
+    <string name="catalog_sync_incomplete">Yenileme tamamlanamadı. Bazı içerikler güncellenemedi.</string>
+    <string name="catalog_dataset_failed">%1$s güncellenemedi: %2$s</string>
+    <string name="catalog_dataset_movie_categories">Film kategorileri</string>
+    <string name="catalog_dataset_series_categories">Dizi kategorileri</string>
+    <string name="catalog_refresh_skipped">Yenileme erken durdu: %1$d kategori kontrol edilmedi.</string>
+    <string name="catalog_refresh_progress">Filmler yenileniyor… %1$d/%2$d</string>
 </resources>

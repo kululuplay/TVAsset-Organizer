@@ -2,7 +2,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
-const { playbackPayload, diagnose, presentDevice, RETENTION_MS } = require("./playback");
+const { playbackPayload, diagnose, presentDevice, freshWindowMs, RETENTION_MS } = require("./playback");
 const { createApp } = require("./app");
 const { passwordHash, hash } = require("./security");
 const now = 1790000000000;
@@ -71,6 +71,18 @@ test("freshness uses receipt and sample times; uploading an offline sample does 
   assert.equal(presentDevice(row, now).online, true); assert.equal(presentDevice(row, now).status, "unknown");
   row.sampled_at_ms = now + 240000; assert.equal(presentDevice(row, now).status, "unknown");
   row.sampled_at_ms = now; row.last_seen_at = new Date(now - 240000); assert.equal(presentDevice(row, now).online, false);
+});
+test("an idle snapshot stays fresh for six minutes because the client refreshes it only every five", () => {
+  assert.equal(freshWindowMs([]), 360000); assert.equal(freshWindowMs([session()]), 120000);
+  assert.equal(freshWindowMs([session({ state: "ENDED", end_reason: "COMPLETED", final: true })]), 360000);
+  assert.equal(freshWindowMs([session({ state: "ENDED", final: true }), session({ state: "PAUSED" })]), 120000);
+  const row = { installation_id: crypto.randomUUID(), device: {}, sessions: [], last_seen_at: new Date(now - 300000), sampled_at_ms: now - 300000 };
+  const idle = presentDevice(row, now);
+  assert.equal(idle.online, true); assert.equal(idle.freshWindowMs, 360000); assert.equal(idle.status, "unknown"); assert.equal(idle.diagnosis.headline, "Etkin oynatma yok");
+  assert.equal(presentDevice({ ...row, last_seen_at: new Date(now - 361000), sampled_at_ms: now - 361000 }, now).online, false);
+  assert.equal(presentDevice({ ...row, sessions: [session({ state: "ENDED", final: true })] }, now).online, true);
+  const active = presentDevice({ ...row, sessions: [session()] }, now);
+  assert.equal(active.online, false); assert.equal(active.freshWindowMs, 120000); assert.equal(active.diagnosis.headline, "Güncel ölçüm yok");
 });
 test("low-memory evidence does not infer an unavailable numeric measurement", () => {
   const d = diagnose({ lowMemory: true }, [session()]); assert.equal(d.status, "problem"); assert.doesNotMatch(d.evidence.join(" "), /0 MB/);

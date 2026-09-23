@@ -84,6 +84,8 @@
     <string name="about_update_wrong_package">Die heruntergeladene APK gehört zu einer anderen Anwendung.</string>
     <string name="about_update_not_newer">Diese APK ist nicht neuer als die installierte Anwendung.</string>
     <string name="about_update_signature_mismatch">Die Update-Signatur stimmt nicht mit der installierten App überein. Android kann diese Installation nicht sicher aktualisieren, ohne sie vorher zu entfernen.</string>
+    <string name="update_requires_newer_android">Dieses Update erfordert Android %1$d oder neuer. Ihr Gerät bleibt auf der aktuellen Version.</string>
+    <string name="about_update_install_failed">Der Installer konnte nicht geöffnet werden. Laden Sie die APK von der Website herunter, um manuell zu aktualisieren.</string>
 
     <!-- Added by the 2026-09 translation audit -->
     <string name="about_download_preparing">Wird vorbereitet…</string>

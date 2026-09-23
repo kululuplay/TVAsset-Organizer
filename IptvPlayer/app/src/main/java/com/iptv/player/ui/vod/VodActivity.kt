@@ -241,7 +241,7 @@ class VodActivity : BaseActivity() {
             viewModel.setSort(next)
         }
         binding.refreshDetailsButton.setOnClickListener {
-            viewModel.loadState.value.movieRefreshReport?.let {
+            viewModel.loadState.value.sweepReport?.let {
                 com.iptv.player.ui.common.MovieRefreshFeedback.show(this, it)
             }
         }
@@ -449,7 +449,7 @@ class VodActivity : BaseActivity() {
             )
         } else getString(R.string.loading)
         binding.loadErrorContainer.visibility = if (failed) View.VISIBLE else View.GONE
-        val report = state.movieRefreshReport?.takeIf { !it.successful }
+        val report = state.sweepReport?.takeIf { !it.successful }
         binding.refreshDetailsButton.visibility = if (report != null) View.VISIBLE else View.GONE
         if (report != null) {
             val names = report.failures.take(2).joinToString("\n") { it.category.name }

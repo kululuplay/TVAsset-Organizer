@@ -1,11 +1,14 @@
 /*
  * UpdateChecker.kt
  * Checks the project's GitHub Releases for a newer build and, when found, exposes
- * the APK asset download URL. Network + JSON parsing run on Dispatchers.IO.
+ * the APK asset download URL. Releases whose minimum Android API exceeds the
+ * device are skipped (see ReleaseCompatibilityPolicy). Network + JSON parsing
+ * run on Dispatchers.IO.
  */
 package com.iptv.player.update
 
 import android.content.Context
+import android.os.Build
 import com.google.gson.JsonParser
 import com.iptv.player.util.DeviceId
 import kotlinx.coroutines.CancellationException
@@ -45,7 +48,12 @@ data class UpdateInfo(
     /** Canonical lowercase SHA-256 reported by GitHub, or null when unavailable. */
     val apkSha256: String?,
     val releaseUrl: String,
-    val notes: String?
+    val notes: String?,
+    /**
+     * Minimum Android API the release runs on: the `Min-Android-API:` line of
+     * the release body, else the version-based default. Never below 21.
+     */
+    val minAndroidApi: Int,
 )
 
 sealed class UpdateResult {
@@ -149,7 +157,7 @@ internal object UpdateRolloutGatePolicy {
         return (value % 10_000L).toInt()
     }
 
-    private fun compareVersions(left: String, right: String): Int {
+    fun compareVersions(left: String, right: String): Int {
         val l = versionParts(left)
         val r = versionParts(right)
         repeat(maxOf(l.size, r.size)) { index ->
@@ -181,14 +189,10 @@ internal object UpdateRolloutGatePolicy {
 class UpdateChecker(
     private val httpClient: OkHttpClient,
     context: Context,
+    private val deviceSdkInt: Int = Build.VERSION.SDK_INT,
 ) {
     /** Non-null by construction so the rollout gate can never fail open. */
     private val appContext: Context = context.applicationContext
-
-    private data class ReleaseRecord(
-        val versionName: String,
-        val info: UpdateInfo,
-    )
 
     private sealed interface RolloutGate {
         object Allow : RolloutGate
@@ -214,32 +218,39 @@ class UpdateChecker(
                 // The list is ordered newest first; skip drafts, prereleases and
                 // malformed entries (blank or non-x.y.z tag) instead of letting a
                 // preview or a stray tag mask the newest hotfix behind it.
-                val records = (0 until releases.length())
+                val published = (0 until releases.length())
                     .asSequence()
                     .map { releases.getJSONObject(it) }
                     .filterNot { it.optBoolean("draft", false) }
                     .filterNot { it.optBoolean("prerelease", false) }
                     .map { it to it.optString("tag_name").ifBlank { it.optString("name") } }
                     .filter { (_, tag) -> tag.isNotBlank() }
-                    .map { (json, tag) -> releaseRecord(json, tag) }
+                    .map { (json, tag) -> releaseInfo(json, tag) }
                     .filter { UpdateRolloutGatePolicy.VERSION.matches(it.versionName) }
                     .toList()
+                if (published.isEmpty()) return@withContext UpdateResult.Failed
+                // A release this device cannot run is never offered. Drop it and
+                // consider the next older production release instead, so a
+                // raised minSdk does not strand older devices while a compatible
+                // newer release exists. Nothing installable and newer means the
+                // device already runs the latest release it can.
+                val records = UpdateCandidatePolicy.installable(published, deviceSdkInt)
                 val candidate = records.firstOrNull()
-                    ?: return@withContext UpdateResult.Failed
-                if (!isNewer(candidate.versionName, currentVersionName)) {
+                if (candidate == null || !isNewer(candidate.versionName, currentVersionName)) {
                     return@withContext UpdateResult.UpToDate
                 }
                 when (val gate = rolloutGate(candidate.versionName)) {
-                    RolloutGate.Allow -> UpdateResult.Available(candidate.info)
+                    RolloutGate.Allow -> UpdateResult.Available(candidate)
                     is RolloutGate.Hold -> {
                         // The fallback comes from the verified policy itself: the
                         // gate admits any release at or below stableVersion, so
                         // offering it here is consistent with a second gate call.
+                        // It is looked up among installable releases only.
                         val stable = gate.stableVersion?.let { version ->
                             records.firstOrNull { it.versionName == version }
                         }
                         if (stable != null && isNewer(stable.versionName, currentVersionName)) {
-                            UpdateResult.Available(stable.info)
+                            UpdateResult.Available(stable)
                         } else {
                             UpdateResult.Deferred(candidate.versionName)
                         }
@@ -254,26 +265,25 @@ class UpdateChecker(
         }
     }
 
-    private fun releaseRecord(json: JSONObject, tag: String): ReleaseRecord {
+    private fun releaseInfo(json: JSONObject, tag: String): UpdateInfo {
         val apkAsset = json.optJSONArray("assets")?.let { assets ->
             (0 until assets.length())
                 .map { assets.getJSONObject(it) }
                 .firstOrNull { it.optString("name").endsWith(".apk", ignoreCase = true) }
         }
         val version = tag.removePrefix("v").removePrefix("V")
-        return ReleaseRecord(
+        val body = json.optString("body")
+        return UpdateInfo(
             versionName = version,
-            info = UpdateInfo(
-                versionName = version,
-                apkUrl = apkAsset?.optString("browser_download_url")
-                    ?.takeIf { it.isNotBlank() },
-                apkSize = apkAsset?.optLong("size", -1L)?.takeIf { it > 0L } ?: -1L,
-                apkSha256 = ApkIntegrityPolicy.normalizeSha256(
-                    apkAsset?.optString("digest"),
-                ),
-                releaseUrl = json.optString("html_url"),
-                notes = ReleaseNotesPolicy.customerFacing(json.optString("body")),
+            apkUrl = apkAsset?.optString("browser_download_url")
+                ?.takeIf { it.isNotBlank() },
+            apkSize = apkAsset?.optLong("size", -1L)?.takeIf { it > 0L } ?: -1L,
+            apkSha256 = ApkIntegrityPolicy.normalizeSha256(
+                apkAsset?.optString("digest"),
             ),
+            releaseUrl = json.optString("html_url"),
+            notes = ReleaseNotesPolicy.customerFacing(body),
+            minAndroidApi = ReleaseCompatibilityPolicy.minAndroidApi(version, body),
         )
     }
 

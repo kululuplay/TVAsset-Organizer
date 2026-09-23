@@ -52,6 +52,27 @@ class DatasetRefreshPolicyTest {
     }
 
     @Test
+    fun `a listed category emptied by the provider is believed on the third forced empty reply`() {
+        val empty = DatasetSnapshot(existingCount = 40, receivedCount = 0, acceptedCount = 0)
+        val twice = ShrinkRejection(count = 2, firstRejectedAt = 1L)
+        // Background refreshes and categories the index no longer vouches for keep the cache, however often.
+        assertTrue(DatasetRefreshPolicy.evaluate(CatalogDataset.VOD_CATEGORY, empty, priorEmptyResponses = twice, stillListed = true) is DatasetRefreshDecision.PreserveCache)
+        assertTrue(DatasetRefreshPolicy.evaluate(CatalogDataset.VOD_CATEGORY, empty, force = true, priorEmptyResponses = twice) is DatasetRefreshDecision.PreserveCache)
+        // The first two forced empty replies of a listed category keep it too.
+        assertTrue(DatasetRefreshPolicy.evaluate(CatalogDataset.VOD_CATEGORY, empty, force = true, stillListed = true) is DatasetRefreshDecision.PreserveCache)
+        val once = ShrinkRejection(count = 1, firstRejectedAt = 1L)
+        assertTrue(DatasetRefreshPolicy.evaluate(CatalogDataset.VOD_CATEGORY, empty, force = true, priorEmptyResponses = once, stillListed = true) is DatasetRefreshDecision.PreserveCache)
+        // The third consecutive one is the truth: the stale titles go.
+        assertTrue(DatasetRefreshPolicy.evaluate(CatalogDataset.VOD_CATEGORY, empty, force = true, priorEmptyResponses = twice, stillListed = true) is DatasetRefreshDecision.Apply)
+        // Rows that all failed to parse are not an empty reply.
+        val malformed = DatasetSnapshot(existingCount = 40, receivedCount = 5, acceptedCount = 0)
+        assertTrue(DatasetRefreshPolicy.evaluate(CatalogDataset.VOD_CATEGORY, malformed, force = true, priorEmptyResponses = twice, stillListed = true) is DatasetRefreshDecision.PreserveCache)
+        // The reason is stable because the ledger glue keys on it.
+        val kept = DatasetRefreshPolicy.evaluate(CatalogDataset.VOD_CATEGORY, empty) as DatasetRefreshDecision.PreserveCache
+        assertEquals(DatasetRefreshPolicy.REASON_EMPTY, kept.reason)
+    }
+
+    @Test
     fun `repeated or day old shrink rejections are eventually accepted`() {
         val shrink = DatasetSnapshot(existingCount = 100, receivedCount = 10, acceptedCount = 10)
         val now = 1_000_000L

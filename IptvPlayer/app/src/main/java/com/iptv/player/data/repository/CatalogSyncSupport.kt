@@ -3,7 +3,9 @@
  * Process-wide state and helpers shared by every catalog domain repository:
  * the single commit mutex + generation gate that serialise snapshot swaps, the
  * shrink-guard ledger glue, the Xtream API factory, panel timezone memory, the
- * episode-date sweep backoff, and the Throwable -> Outcome/AppError mapping.
+ * episode-date sweep backoff, the shared in-flight registries that keep two
+ * screens from downloading the same category twice, the post-failure catalog
+ * backoff, and the Throwable -> Outcome/AppError mapping.
  * Exactly one instance exists per IptvRepository so the gates stay global.
  */
 package com.iptv.player.data.repository
@@ -18,6 +20,15 @@ import com.iptv.player.util.AppError
 import com.iptv.player.util.HttpAppErrorPolicy
 import com.iptv.player.util.Logger
 import com.iptv.player.util.Outcome
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import retrofit2.HttpException
@@ -31,6 +42,8 @@ internal class CatalogSyncSupport(
     private val retrofitBuilder: Retrofit.Builder,
     private val settings: SettingsStore,
     private val shrinkLedger: ShrinkGuardLedger,
+    /** Shared downloads outlive the screen that started them, so they run here, not in a caller's scope. */
+    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
     private val catalogCommitMutex = Mutex()
     val refreshGenerations = DatasetGenerationGate()
@@ -38,6 +51,14 @@ internal class CatalogSyncSupport(
     /** Episode-date sweeps pause until this instant after a 429/5xx from the panel. */
     @Volatile
     var seriesDatesBackoffUntil = 0L
+
+    /** Per-category downloads in flight, keyed like their generation ("vod_category:<id>"). */
+    val categoryWork = SharedWork<String, CategorySync>(scope)
+    /** Category-index downloads in flight ("vod_categories", "series_categories"). */
+    val indexWork = SharedWork<String, Outcome<Int>>(scope)
+    val movieSweep = SharedSweep(scope)
+    val seriesSweep = SharedSweep(scope)
+    val catalogBackoff = CatalogBackoff()
 
     private suspend fun mayCommit(
         config: SourceConfig,
@@ -66,8 +87,9 @@ internal class CatalogSyncSupport(
         generation: DatasetGenerationGate.Token,
         snapshot: DatasetSnapshot,
         force: Boolean = false,
+        stillListed: Boolean = false,
     ): DatasetRefreshDecision = evaluateRefreshWithLedger(
-        shrinkLedger, dataset, generation, snapshot, force, System.currentTimeMillis(),
+        shrinkLedger, dataset, generation, snapshot, force, System.currentTimeMillis(), stillListed,
     )
 
     fun buildXtreamApi(serverUrl: String): XtreamApi {
@@ -75,6 +97,169 @@ internal class CatalogSyncSupport(
         return retrofitBuilder.baseUrl(base).build().create(XtreamApi::class.java)
     }
 }
+
+/**
+ * De-duplicates concurrent catalog work: a second caller for the same key and
+ * source awaits the in-flight result instead of starting a duplicate request
+ * (the generation gate used to turn whichever request finished second into a
+ * false "Cannot connect"). Work runs on [scope] so an abandoned caller (screen
+ * closed, playback started) never cancels a result another caller still waits
+ * for. A caller for a different source waits for the current work to finish,
+ * then runs its own.
+ */
+internal class SharedWork<K : Any, V>(private val scope: CoroutineScope) {
+    private inner class Entry(val config: SourceConfig, val deferred: Deferred<V>)
+
+    private val lock = Any()
+    private val entries = HashMap<K, Entry>()
+
+    fun isRunning(key: K): Boolean = synchronized(lock) { entries[key]?.deferred?.isActive == true }
+
+    suspend fun join(key: K, config: SourceConfig, block: suspend () -> V): V {
+        while (true) {
+            val claim: Pair<Entry?, Deferred<V>?> = synchronized(lock) {
+                val running = entries[key]?.takeIf { it.deferred.isActive }
+                when {
+                    running == null -> start(key, config, block) to null
+                    SourceIdentity.matches(running.config, config) -> running to null
+                    else -> null to running.deferred
+                }
+            }
+            val (entry, busy) = claim
+            if (entry != null) return entry.deferred.await()
+            busy?.join()
+        }
+    }
+
+    private fun start(key: K, config: SourceConfig, block: suspend () -> V): Entry {
+        val deferred = scope.async(start = CoroutineStart.LAZY) { block() }
+        val entry = Entry(config, deferred)
+        entries[key] = entry
+        deferred.invokeOnCompletion {
+            synchronized(lock) { if (entries[key] === entry) entries.remove(key) }
+        }
+        deferred.start()
+        return entry
+    }
+}
+
+/** What a caller asked a catalog sweep to cover. */
+internal data class SweepRequest(
+    val forceAll: Boolean,
+    /** Restrict the sweep to these category ids (a retry of what failed); null = every eligible category. */
+    val only: Set<String>? = null,
+) {
+    /** A running sweep serves a later request when it forces at least as much and visits every category asked for. */
+    fun covers(other: SweepRequest): Boolean =
+        (forceAll || !other.forceAll) &&
+            (only == null || (other.only != null && only.containsAll(other.only)))
+}
+
+/**
+ * One catalog sweep at a time. The Dashboard refresh, the Movies screen and the
+ * launch re-sync used to race each other over the same categories; now a second
+ * caller follows the running sweep's progress and receives its report. A request
+ * the running sweep does not cover (forced after non-forced, or a wider set)
+ * waits for it and then runs. Sweeps run on the shared scope, so a caller that
+ * stops waiting (Dashboard hidden) abandons the progress, not the sweep.
+ */
+internal class SharedSweep(private val scope: CoroutineScope) {
+    private class Handle(
+        val config: SourceConfig,
+        val request: SweepRequest,
+        val progress: MutableStateFlow<Pair<Int, Int>>,
+        val deferred: Deferred<CatalogSweepReport>,
+    )
+
+    private val lock = Any()
+    private var active: Handle? = null
+
+    val isRunning: Boolean get() = synchronized(lock) { active?.deferred?.isActive == true }
+
+    suspend fun run(
+        config: SourceConfig,
+        request: SweepRequest,
+        onProgress: suspend (completed: Int, total: Int) -> Unit,
+        sweep: suspend (onProgress: suspend (Int, Int) -> Unit) -> CatalogSweepReport,
+    ): CatalogSweepReport {
+        while (true) {
+            val claim: Pair<Handle?, Deferred<CatalogSweepReport>?> = synchronized(lock) {
+                val running = active?.takeIf { it.deferred.isActive }
+                when {
+                    running == null -> start(config, request, sweep) to null
+                    SourceIdentity.matches(running.config, config) && running.request.covers(request) ->
+                        running to null
+                    else -> null to running.deferred
+                }
+            }
+            val (handle, busy) = claim
+            if (handle != null) return handle.follow(onProgress)
+            busy?.join()
+        }
+    }
+
+    private fun start(
+        config: SourceConfig,
+        request: SweepRequest,
+        sweep: suspend (onProgress: suspend (Int, Int) -> Unit) -> CatalogSweepReport,
+    ): Handle {
+        val progress = MutableStateFlow(0 to 0)
+        val deferred = scope.async { sweep { completed, total -> progress.value = completed to total } }
+        return Handle(config, request, progress, deferred).also { active = it }
+    }
+
+    /** Relays progress to this caller until the report arrives; cancelling the caller cancels only the relay. */
+    private suspend fun Handle.follow(onProgress: suspend (Int, Int) -> Unit): CatalogSweepReport =
+        coroutineScope {
+            val relay = launch { progress.collect { (completed, total) -> onProgress(completed, total) } }
+            try {
+                deferred.await()
+            } finally {
+                relay.cancel()
+            }
+        }
+}
+
+/**
+ * Pauses non-forced catalog downloads after a systemic panel failure so a dead,
+ * refusing or throttling panel is not asked category by category, 15 s at a
+ * time. Forced (manual, launch) requests always go to the network; any
+ * successful download clears the pause.
+ */
+internal class CatalogBackoff {
+    @Volatile
+    private var until = 0L
+
+    @Volatile
+    private var failure: Outcome.Failure? = null
+
+    /** Records the sweep's systemic failure, if any; returns the pause length in ms (0 = none). */
+    fun noteSweep(report: CatalogSweepReport, now: Long = System.currentTimeMillis()): Long {
+        val systemic = report.systemicFailure ?: return 0L
+        return pauseAfter(systemic, now)
+    }
+
+    fun pauseAfter(failure: Outcome.Failure, now: Long = System.currentTimeMillis()): Long {
+        val ms = CatalogSweepPolicy.backoffMs(failure)
+        if (ms <= 0L) return 0L
+        this.failure = failure
+        until = now + ms
+        Logger.w("CatalogSync", "catalog downloads paused ${ms / 1000} s after ${failure.error}")
+        return ms
+    }
+
+    /** The failure that still pauses downloads, or null when requests may proceed. */
+    fun activeFailure(now: Long = System.currentTimeMillis()): Outcome.Failure? =
+        if (now < until) failure else null
+
+    fun clear() {
+        until = 0L
+        failure = null
+    }
+}
+
+/** Ledger key for consecutive empty replies, kept apart from the shrink count of the same dataset. */
+internal fun emptyResponseKey(generationKey: String): String = "$generationKey:empty"
 
 /** Ledger-aware refresh gate, separated from the clock so it is unit-testable. */
 internal fun evaluateRefreshWithLedger(
@@ -84,9 +269,13 @@ internal fun evaluateRefreshWithLedger(
     snapshot: DatasetSnapshot,
     force: Boolean,
     now: Long,
+    stillListed: Boolean = false,
 ): DatasetRefreshDecision {
+    val emptyKey = emptyResponseKey(generation.key)
     val decision = DatasetRefreshPolicy.evaluate(
         dataset, snapshot, shrinkLedger.get(generation.key), now, force,
+        priorEmptyResponses = shrinkLedger.get(emptyKey),
+        stillListed = stillListed,
     )
     when {
         decision is DatasetRefreshDecision.PreserveCache &&
@@ -94,7 +283,21 @@ internal fun evaluateRefreshWithLedger(
             val rejection = shrinkLedger.recordRejection(generation.key, now)
             Logger.w("CatalogSync", "$dataset shrink rejected ${rejection.count}x since ${rejection.firstRejectedAt}")
         }
-        decision is DatasetRefreshDecision.Apply -> shrinkLedger.clear(generation.key)
+        decision is DatasetRefreshDecision.PreserveCache &&
+            decision.reason == DatasetRefreshPolicy.REASON_EMPTY -> {
+            // Only a forced sweep of a category the panel still lists counts towards
+            // accepting the empty reply (the Movies Refresh button, or the series
+            // screen's first full catalog load); non-forced background checks and
+            // the launch loaded-sweep stay neutral.
+            if (force && stillListed) {
+                val seen = shrinkLedger.recordRejection(emptyKey, now)
+                Logger.w("CatalogSync", "$dataset empty reply kept cache ${seen.count}x")
+            }
+        }
+        decision is DatasetRefreshDecision.Apply -> {
+            shrinkLedger.clear(generation.key)
+            shrinkLedger.clear(emptyKey)
+        }
     }
     return decision
 }
@@ -137,9 +340,33 @@ internal fun datasetSyncResult(
             DatasetSyncStatus.FAILED
         },
         itemCount = cachedBefore,
-        errorCode = outcome.httpStatus?.let { "HTTP_$it" } ?: outcome.error.name,
+        errorCode = outcome.errorCode(),
+        error = outcome.error,
     )
 }
+
+/**
+ * The per-category sweep as a dataset row: item count is what the sweep really
+ * added, and a sweep with failed or skipped categories is PARTIAL (some
+ * refreshed) or FAILED (none did), never UPDATED.
+ */
+internal fun sweepSyncResult(name: String, report: CatalogSweepReport): DatasetSyncResult {
+    val firstFailure = report.indexFailure ?: report.failures.firstOrNull()?.failure
+    val status = when {
+        report.successful -> if (report.total == 0) DatasetSyncStatus.EMPTY else DatasetSyncStatus.UPDATED
+        report.completed > report.failures.size -> DatasetSyncStatus.PARTIAL
+        else -> DatasetSyncStatus.FAILED
+    }
+    return DatasetSyncResult(
+        dataset = name,
+        status = status,
+        itemCount = report.itemCount,
+        errorCode = firstFailure?.errorCode(),
+        error = firstFailure?.error,
+    )
+}
+
+private fun Outcome.Failure.errorCode(): String = httpStatus?.let { "HTTP_$it" } ?: error.name
 
 /**
  * Turns raw user input into a safe FTS4 MATCH expression: splits on

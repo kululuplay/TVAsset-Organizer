@@ -1869,6 +1869,8 @@ class HomeActivity : BaseActivity() {
                 LivePlaybackQoePolicy.engine(engineName),
             )
             PlaybackQoeRuntime.markReady(previewQoeSessionId)
+            // The engine confirms output: a preview paused by a remote or audio-focus loss is playing again.
+            PlaybackQoeRuntime.setPaused(previewQoeSessionId, false)
             PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, false)
             if (!castOwnsPreviewPlayback) {
                 localPreviewPlaybackRequested = true
@@ -1901,6 +1903,7 @@ class HomeActivity : BaseActivity() {
             if (castOwnsPreviewPlayback || castLoadPending) return
             previewLoadingPolicy.onVideoResumed()
             binding.infoLogo.visibility = View.GONE
+            PlaybackQoeRuntime.setPaused(previewQoeSessionId, false)
             PlaybackQoeRuntime.markFirstFrame(previewQoeSessionId)
             PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, false)
             markPreviewReady()
@@ -2115,6 +2118,7 @@ class HomeActivity : BaseActivity() {
         }
         val controller = previewController ?: return
         beginPreviewQoe()
+        PlaybackQoeRuntime.setPaused(previewQoeSessionId, false)
         previewState = LivePreviewPressPolicy.Phase.STARTING
         controller.resume()
     }
@@ -2122,6 +2126,8 @@ class HomeActivity : BaseActivity() {
     private fun pausePreviewPlayback(abandonFocus: Boolean) {
         localPreviewPlaybackRequested = false
         PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, false)
+        // pause() quiesces the engine and its sampler; without this the preview would look frozen, not paused.
+        PlaybackQoeRuntime.setPaused(previewQoeSessionId, true)
         playbackSession.setPlaying(false)
         previewController?.pause()
         if (abandonFocus) playbackSession.abandonAudioFocus()
@@ -2147,6 +2153,7 @@ class HomeActivity : BaseActivity() {
         castLoadPending = true
         localPreviewPlaybackRequested = false
         PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, false)
+        PlaybackQoeRuntime.setPaused(previewQoeSessionId, true)
         playbackSession.setPlaying(false)
         playbackSession.abandonAudioFocus()
         previewState = LivePreviewPressPolicy.Phase.STARTING
