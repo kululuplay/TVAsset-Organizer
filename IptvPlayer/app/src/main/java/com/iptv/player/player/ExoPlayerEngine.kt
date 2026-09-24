@@ -70,6 +70,7 @@ import androidx.media3.extractor.text.DefaultSubtitleParserFactory
 import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.video.VideoFrameMetadataListener
+import androidx.media3.exoplayer.video.VideoRendererEventListener
 import androidx.media3.ui.PlayerView
 import com.iptv.player.BuildConfig
 import com.iptv.player.R
@@ -78,6 +79,7 @@ import com.iptv.player.playback.android.PlaybackQoeRuntime
 import com.iptv.player.playback.android.PlaybackSupportEvidence
 import com.iptv.player.playback.android.PlaybackSupportObserver
 import com.iptv.player.playback.core.AudioFailureEvidence
+import com.iptv.player.util.DeviceQuirkMemory
 import com.iptv.player.util.AppInfo
 import com.iptv.player.util.PlaybackLog
 import com.iptv.player.util.PlaybackRemotePolicy
@@ -158,6 +160,8 @@ class ExoPlayerEngine(
     private var firstFrameRendered = false
     private var videoFailureReported = false
     private var videoOutputReported = false
+    /** From the SPS of the current stream; null until known or when not H.264. */
+    private var currentVideoInterlaced: Boolean? = null
     private var audioReported = false
     private var audioCodec = AudioFailureEvidence.Codec.UNKNOWN
     private var audioDecoder = AudioFailureEvidence.Decoder.UNKNOWN
@@ -259,10 +263,22 @@ class ExoPlayerEngine(
                 minimumClockAdvanceMs = VIDEO_CLOCK_EVIDENCE_MS,
             )
             if (decision == LiveVideoLivenessPolicy.Decision.VIDEO_STALL) {
-                    reportVideoInvalid(
-                        "decoder stopped producing video frames for ${VIDEO_FRAME_STALL_MS}ms",
+                if (
+                    InterlacedExoPolicy.shouldRecordStall(
+                        interlaced = currentVideoInterlaced,
+                        amlogicDecoder = DeviceVideoDecoders.bypassVlcHardware,
                     )
-                    return
+                ) {
+                    DeviceQuirkMemory.recordAmlogicInterlacedStall(context, System.currentTimeMillis())
+                    PlaybackLog.log(
+                        context, engineName,
+                        "interlaced stall on an Amlogic decoder recorded -> later interlaced streams skip Exo",
+                    )
+                }
+                reportVideoInvalid(
+                    "decoder stopped producing video frames for ${VIDEO_FRAME_STALL_MS}ms",
+                )
+                return
             }
             handler.postDelayed(this, VIDEO_HEALTH_POLL_MS)
         }
@@ -767,11 +783,27 @@ class ExoPlayerEngine(
                 // Never inherit old healthy pixels across a real source change.
                 if (decoderChanged || sourceChanged) revalidateVideoOutput()
                 logReadbackModeChange(previousMode)
+                val interlaced = SpsInterlaceProbe.isInterlaced(format.sampleMimeType, format.initializationData)
+                currentVideoInterlaced = interlaced
                 PlaybackLog.log(
                     context, engineName,
                     "videoInputFormat ${format.width}x${format.height} " +
-                        "${format.sampleMimeType} fps=${format.frameRate}"
+                        "${format.sampleMimeType} fps=${format.frameRate} " +
+                        "interlaced=${interlaced ?: "unknown"}"
                 )
+                // Interlaced H.264 on a decoder family this device already saw
+                // stall (InterlacedExoPolicy): leave before the first frame instead
+                // of paying the 7 s watchdog on every first visit.
+                if (
+                    InterlacedExoPolicy.failFast(
+                        interlaced = interlaced,
+                        amlogicDecoder = DeviceVideoDecoders.bypassVlcHardware,
+                        stallLearnedAtMs = DeviceQuirkMemory.amlogicInterlacedStallAtMs(context),
+                        nowMs = System.currentTimeMillis(),
+                    )
+                ) {
+                    reportVideoInvalid("interlaced H.264 on a decoder that stalled on it before")
+                }
             }
 
             override fun onDroppedVideoFrames(
@@ -915,6 +947,32 @@ class ExoPlayerEngine(
                         " ffmpeg=${FfmpegAudio.available}" +
                         (FfmpegAudio.version?.let { " ffmpegVersion=$it" } ?: "") +
                         " leading=${ffmpegPlan.leadingMimes} trailing=${ffmpegPlan.trailing}",
+                )
+            }
+
+            override fun buildVideoRenderers(
+                context: Context,
+                extensionRendererMode: Int,
+                mediaCodecSelector: MediaCodecSelector,
+                enableDecoderFallback: Boolean,
+                eventHandler: Handler,
+                eventListener: VideoRendererEventListener,
+                allowedVideoJoiningTimeMs: Long,
+                out: ArrayList<Renderer>,
+            ) {
+                if (!BuildConfig.LIVE_PLAYBACK_DIAGNOSTICS) {
+                    super.buildVideoRenderers(
+                        context, extensionRendererMode, mediaCodecSelector, enableDecoderFallback,
+                        eventHandler, eventListener, allowedVideoJoiningTimeMs, out,
+                    )
+                    return
+                }
+                // Diagnostics builds only: same platform renderer, instrumented.
+                out.add(
+                    DiagnosticVideoRenderer(
+                        context, mediaCodecSelector, allowedVideoJoiningTimeMs, enableDecoderFallback,
+                        eventHandler, eventListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY,
+                    ) { message -> handler.post { PlaybackLog.log(context, engineName, message) } },
                 )
             }
 
@@ -1583,6 +1641,7 @@ class ExoPlayerEngine(
         firstFrameRendered = false
         videoFailureReported = false
         videoOutputReported = false
+        currentVideoInterlaced = null
         audioReported = false
         audioCodec = AudioFailureEvidence.Codec.UNKNOWN
         audioDecoder = AudioFailureEvidence.Decoder.UNKNOWN

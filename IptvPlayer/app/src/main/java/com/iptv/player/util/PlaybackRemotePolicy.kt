@@ -32,6 +32,8 @@ object PlaybackRemotePolicy {
         val livePreviewEnabled: Boolean? = null,
         val allowSoftwareHdFallback: Boolean? = null,
         val compatibilityProfile: Boolean? = null,
+        /** true = libVLC's default deinterlacer, false = off; null = device rule. */
+        val vlcDeinterlace: Boolean? = null,
     )
 
     @Volatile private var current = Snapshot()
@@ -220,7 +222,8 @@ object PlaybackRemotePolicy {
  * `{"match":{"manufacturer":re,"model":re,"hardware":re,"board":re,"socModel":re,
  *   "sdkMin":21,"sdkMax":27,"lowRam":true,"totalRamMaxMb":1536},
  *  "set":{"bufferMode":"HIGH","startEngine":"EXOPLAYER","tunneling":true,
- *   "livePreview":false,"allowSoftwareHdFallback":false,"compatibilityProfile":true}}`
+ *   "livePreview":false,"allowSoftwareHdFallback":false,"compatibilityProfile":true,
+ *   "vlcDeinterlace":false}}`
  * Regexes are case-insensitive and matched with `find` (unanchored). A rule with
  * an invalid or over-long regex, or with nothing valid to set, is ignored.
  */
@@ -282,6 +285,7 @@ object DeviceOverrideMatcher {
             livePreviewEnabled = raw.set["livePreview"] as? Boolean,
             allowSoftwareHdFallback = raw.set["allowSoftwareHdFallback"] as? Boolean,
             compatibilityProfile = raw.set["compatibilityProfile"] as? Boolean,
+            vlcDeinterlace = raw.set["vlcDeinterlace"] as? Boolean,
         )
         if (set == PlaybackRemotePolicy.DeviceOverrides()) return null
         return Rule(
@@ -330,6 +334,7 @@ object DeviceOverrideMatcher {
                 livePreviewEnabled = s.livePreviewEnabled ?: merged.livePreviewEnabled,
                 allowSoftwareHdFallback = s.allowSoftwareHdFallback ?: merged.allowSoftwareHdFallback,
                 compatibilityProfile = s.compatibilityProfile ?: merged.compatibilityProfile,
+                vlcDeinterlace = s.vlcDeinterlace ?: merged.vlcDeinterlace,
             )
         }
         return merged

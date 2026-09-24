@@ -54,7 +54,8 @@ panel reports how many were dropped) and never fails the whole policy.
         "tunneling": true,
         "livePreview": false,
         "allowSoftwareHdFallback": false,
-        "compatibilityProfile": true
+        "compatibilityProfile": true,
+        "vlcDeinterlace": false
       }
     }
   ]
@@ -123,6 +124,7 @@ data class DeviceOverrides(
     val tunneling: Boolean? = null,
     val livePreviewEnabled: Boolean? = null,
     val allowSoftwareHdFallback: Boolean? = null,
+    val vlcDeinterlace: Boolean? = null,
     val compatibilityProfile: Boolean? = null,
 )
 fun deviceOverrides(nowMs: Long = System.currentTimeMillis()): DeviceOverrides
@@ -131,3 +133,12 @@ fun deviceFacts(context: Context): DeviceOverrideMatcher.DeviceFacts
 
 The pure matcher lives in `DeviceOverrideMatcher` (same file, no Android
 imports) and is covered by `PlaybackRemotePolicyDeviceOverridesTest`.
+
+## `vlcDeinterlace` (1.5.98)
+
+`set.vlcDeinterlace` controls libVLC's deinterlacer on the **software** route
+only. The device rule (`VlcDeinterlacePolicy`) turns it off on Amlogic and
+other 32-bit devices, where every filter mode costs the zero-copy output path
+(1080i measured at 10 fps with the filter and 25 fps without on a MiTV Stick).
+`false` forces it off, `true` restores libVLC's default on a device class that
+copes with the filter; hardware routes and progressive streams are unaffected.

@@ -180,6 +180,8 @@ class TvPlaybackSession(
      * provider socket; this gate only controls platform callback delivery.
      */
     fun setActive(active: Boolean) {
+        // Activation changes what controllers see; publish the next state anew.
+        lastPublished = null
         if (!active) {
             resumeAfterFocusGain = false
             playing = false
@@ -207,6 +209,9 @@ class TvPlaybackSession(
         if (controls.onSeekBy != null) {
             actions = actions or PlaybackState.ACTION_FAST_FORWARD or PlaybackState.ACTION_REWIND
         }
+        val next = MediaSessionStatePolicy.Published(state, actions, positionMs)
+        if (!MediaSessionStatePolicy.shouldPublish(lastPublished, next)) return
+        lastPublished = next
         mediaSession.setPlaybackState(
             PlaybackState.Builder()
                 .setActions(actions)
@@ -219,6 +224,8 @@ class TvPlaybackSession(
                 .build(),
         )
     }
+
+    private var lastPublished: MediaSessionStatePolicy.Published? = null
 
     private fun registerNoisyReceiver() {
         if (registeredNoisyReceiver) return

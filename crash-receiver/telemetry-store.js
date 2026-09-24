@@ -184,6 +184,7 @@ const OVERRIDE_BOOL_SETS = [
   "livePreview",
   "allowSoftwareHdFallback",
   "compatibilityProfile",
+  "vlcDeinterlace",
 ];
 
 function sanitizeOverrideRule(rule) {

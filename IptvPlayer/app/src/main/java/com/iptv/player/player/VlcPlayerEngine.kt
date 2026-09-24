@@ -57,7 +57,9 @@ class VlcPlayerEngine(
     /** When false (default) audio is decoded to PCM; true allows SPDIF passthrough. */
     private val allowPassthrough: Boolean = false,
     /** Network/live caching in ms (user "Buffer size" setting). */
-    private val networkCachingMs: Int = 3000
+    private val networkCachingMs: Int = 3000,
+    /** Skip libVLC's deinterlacer on this route (see [VlcDeinterlacePolicy]). */
+    private val disableDeinterlace: Boolean = false,
 ) : PlayerEngine {
 
     override val engineName: String = "VLC"
@@ -448,7 +450,13 @@ class VlcPlayerEngine(
     override fun bind(container: ViewGroup) {
         // LibVLC mutates the list it is given (adds aout/chroma), so hand it a
         // copy of the memoized option set for this configuration.
-        val options = ArrayList(libVlcOptions(vlcCachingMs, forceSoftware, allowPassthrough))
+        val options = ArrayList(
+            libVlcOptions(vlcCachingMs, forceSoftware, allowPassthrough, disableDeinterlace),
+        )
+        DiagnosticSwitches.extraVlcOptions(context).takeIf { it.isNotEmpty() }?.let { extra ->
+            options.addAll(extra)
+            PlaybackLog.log(context, engineName, "diag extra libVLC options: $extra")
+        }
         // LibVLC lazily reads its native plugin cache during construction. Scope
         // that known, bounded read so debug StrictMode does not misclassify the
         // library bootstrap as an accidental app disk access. Construction stays
@@ -1138,7 +1146,11 @@ class VlcPlayerEngine(
         // previous channel cannot be mistaken for this one.
         audioHealAttempted = false
         audioHandler.removeCallbacksAndMessages(null)
-        PlaybackLog.log(context, engineName, "play forceSoftware=$forceSoftware passthrough=$allowPassthrough")
+        PlaybackLog.log(
+            context, engineName,
+            "play forceSoftware=$forceSoftware passthrough=$allowPassthrough " +
+                "deinterlace=${if (disableDeinterlace) "off" else "auto"}",
+        )
         val mySeq = opsSeq.incrementAndGet()
         val finishPending = newPendingCompletion()
         if (previousPlayer == null) {
@@ -2120,7 +2132,14 @@ class VlcPlayerEngine(
         private const val GREEN_PRONE_MIN_WIDTH = 1920
         private const val GREEN_PRONE_MIN_FPS = 49f
 
-        private val libVlcOptionsCache = ConcurrentHashMap<Triple<Int, Boolean, Boolean>, List<String>>()
+        private data class OptionsKey(
+            val cachingMs: Int,
+            val forceSoftware: Boolean,
+            val allowPassthrough: Boolean,
+            val disableDeinterlace: Boolean,
+        )
+
+        private val libVlcOptionsCache = ConcurrentHashMap<OptionsKey, List<String>>()
 
         /**
          * Keep VLC close to its proven defaults. The old global clock overrides,
@@ -2133,7 +2152,10 @@ class VlcPlayerEngine(
             cachingMs: Int,
             forceSoftware: Boolean,
             allowPassthrough: Boolean,
-        ): List<String> = libVlcOptionsCache.getOrPut(Triple(cachingMs, forceSoftware, allowPassthrough)) {
+            disableDeinterlace: Boolean,
+        ): List<String> = libVlcOptionsCache.getOrPut(
+            OptionsKey(cachingMs, forceSoftware, allowPassthrough, disableDeinterlace),
+        ) {
             val options = arrayListOf(
                 "--network-caching=$cachingMs",
                 "--live-caching=$cachingMs",
@@ -2144,6 +2166,11 @@ class VlcPlayerEngine(
                 "--http-user-agent=${AppInfo.USER_AGENT}",
             )
             if (forceSoftware) options.add("--avcodec-hw=none")
+            // Software route on Amlogic/32-bit sticks: every libVLC deinterlace
+            // mode (even discard) drops the zero-copy output path; 1080i measured
+            // 10 fps with the filter and 25 fps without on a MiTV Stick. Combing
+            // on fast motion beats a slideshow (VlcDeinterlacePolicy).
+            if (disableDeinterlace) options.add("--deinterlace=0")
             // Default = decode audio to PCM (no passthrough). Disable SPDIF so AC-3/
             // E-AC-3/DTS are software-decoded to PCM that any HDMI sink plays, and
             // force a STEREO downmix so the output is 2.0.

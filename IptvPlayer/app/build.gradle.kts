@@ -60,8 +60,8 @@ android {
         applicationId = "com.iptv.player"
         minSdk = 23
         targetSdk = 34
-        versionCode = 141
-        versionName = "1.5.97"
+        versionCode = 142
+        versionName = "1.5.98"
         manifestPlaceholders["appLabel"] = "@string/app_name"
         buildConfigField("boolean", "TS_ONLY_TEST_BUILD", tsOnlyTestBuild.toString())
         if (livePlaybackDiagnostics) versionNameSuffix = "-diag1"
@@ -88,6 +88,14 @@ android {
         // Limit native ABIs to keep APK small and cover common TV/stick chipsets.
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+        }
+        // Device A/B test builds: -PabiFilter=armeabi-v7a packages a single ABI
+        // (about a third of the size) so a debug build fits a nearly full stick.
+        providers.gradleProperty("abiFilter").orNull?.let { abis ->
+            ndk {
+                abiFilters.clear()
+                abiFilters += abis.split(",")
+            }
         }
     }
 
