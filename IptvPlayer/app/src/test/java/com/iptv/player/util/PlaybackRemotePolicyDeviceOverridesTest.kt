@@ -171,4 +171,13 @@ class PlaybackRemotePolicyDeviceOverridesTest {
         )
         assertEquals(PlaybackRemotePolicy.Snapshot(), PlaybackRemotePolicy.snapshot(nowMs = 1L))
     }
+
+    @Test
+    fun `vlcDeinterlace is a nullable boolean override`() {
+        val rules = DeviceOverrideMatcher.parseRules(
+            listOf(raw(mapOf("model" to "aftt"), mapOf("vlcDeinterlace" to false))),
+        )
+        assertEquals(false, DeviceOverrideMatcher.resolve(rules, fireTvStick).vlcDeinterlace)
+        assertNull(DeviceOverrideMatcher.resolve(rules, shield).vlcDeinterlace)
+    }
 }

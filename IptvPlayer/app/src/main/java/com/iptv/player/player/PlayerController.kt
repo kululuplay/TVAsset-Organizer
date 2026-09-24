@@ -721,13 +721,19 @@ class PlayerController(
                             forceSoftware,
                             allowPassthrough,
                             effectiveBuffer.networkCachingMs,
+                            disableDeinterlace = VlcDeinterlacePolicy.disableDeinterlace(
+                                softwareDecode = forceSoftware,
+                                amlogicDecoder = DeviceVideoDecoders.bypassVlcHardware,
+                                is64Bit = Build.SUPPORTED_64_BIT_ABIS.isNotEmpty(),
+                                remoteOverride = overrides.vlcDeinterlace,
+                            ),
                         )
                     } else {
                         tunnelingActive = ExoTunnelingPolicy.shouldEnable(
                             remoteOptIn = overrides.tunneling,
                             videoDecoderNames = DeviceVideoDecoders.names,
                             retryWithoutTunnelingUsed = tunnelingRetryUsed,
-                        )
+                        ) || (DiagnosticSwitches.forceTunneling(context) && !tunnelingRetryUsed)
                         ExoPlayerEngine(
                             context = context,
                             allowPassthrough = allowPassthrough,
@@ -970,6 +976,13 @@ class PlayerController(
                 // Authorization/resource rejection cannot be repaired by a decoder swap.
                 PlaybackLog.log(context, "Controller", "terminal source HTTP $httpStatus")
                 failPlayback()
+                return@dispatch
+            }
+            if (StartupErrorRoutingPolicy.retrySameStage(httpStatus)) {
+                // 5xx is the panel (cold start, overload): a decoder swap cannot
+                // help and used to park the channel on the software route.
+                PlaybackLog.log(context, "Controller", "server HTTP $httpStatus -> retry same stage $stage")
+                engageReconnect()
                 return@dispatch
             }
             handleEngineFailure(Reason.ERROR, reportFailure = false)
