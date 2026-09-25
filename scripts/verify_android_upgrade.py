@@ -26,6 +26,9 @@ SDK_RE = re.compile(r"^sdkVersion:'(?P<sdk>\d+)'", re.MULTILINE)
 # Machine-readable first line of the GitHub release body: the in-app updater
 # (1.5.97+) reads it to skip releases the device cannot run (UPDATE_ROLLOUT.md).
 MIN_ANDROID_API_RE = re.compile(r"^Min-Android-API:\s*(?P<api>\d+)$")
+# Clients before 1.5.76 show the release body verbatim in an update dialog
+# whose notes pane cannot scroll; a longer body hides the Update button.
+MAX_RELEASE_BODY_CHARS = 600
 
 
 class VerificationError(RuntimeError):
@@ -139,6 +142,11 @@ def verify_upgrade(
             f"minSdk mismatch: APK={current.min_sdk}, Gradle={expected_min_sdk}"
         )
     if release_notes is not None:
+        if len(release_notes) > MAX_RELEASE_BODY_CHARS:
+            raise VerificationError(
+                f"release body is {len(release_notes)} characters; at most "
+                f"{MAX_RELEASE_BODY_CHARS} fit the update dialog of clients before 1.5.76"
+            )
         declared = parse_min_android_api(release_notes)
         if declared is None:
             raise VerificationError(
