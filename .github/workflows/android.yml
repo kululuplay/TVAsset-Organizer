@@ -413,7 +413,12 @@ jobs:
           {
             printf 'Min-Android-API: %s\n\n' "${{ steps.version.outputs.min_sdk }}"
             if [ -f "$notes" ]; then
-              cat "$notes"
+              # First paragraph only. Clients before 1.5.76 render the body
+              # verbatim in a dialog whose notes pane cannot scroll, so a long
+              # body pushes the Update button off screen (most of the fleet sat
+              # on 1.5.62 until the 1.5.97/1.5.98 bodies were shortened by hand
+              # on 2026-09-25). The full file stays in the repository.
+              awk 'NF == 0 { if (started) exit; next } { started = 1; print }' "$notes"
             else
               printf '%s\n' 'Bug fixes and stability improvements.'
             fi

@@ -137,6 +137,13 @@ INFO  Signer #1 certificate SHA-256 digest: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
             with self.subTest(body=body):
                 self.assertIsNone(parse_min_android_api(body))
 
+    def test_release_body_stays_short_enough_for_old_update_dialogs(self):
+        short = "Min-Android-API: 23\n\n" + "x" * 500 + "\n"
+        self.verify(self.identity(min_sdk=23), release_notes=short)
+        long = "Min-Android-API: 23\n\n" + "x" * 700 + "\n"
+        with self.assertRaisesRegex(VerificationError, "release body is"):
+            self.verify(self.identity(min_sdk=23), release_notes=long)
+
     def test_release_body_must_declare_the_apk_min_android_api(self):
         self.verify(self.identity(min_sdk=23), release_notes="Min-Android-API: 23\n\nNotes\n")
         with self.assertRaisesRegex(VerificationError, "must start with 'Min-Android-API"):

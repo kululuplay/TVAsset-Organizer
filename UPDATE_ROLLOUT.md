@@ -167,3 +167,15 @@ visibly and the rollout is unaffected.
 
 The app's local playback recovery remains automatic; every other fleet rollout
 change is still an explicit GitHub policy edit.
+
+## Release body length
+
+Clients before 1.5.76 show the GitHub release body verbatim inside the update
+dialog; its notes pane cannot scroll and a body longer than a few lines pushes
+the Update button off screen, so those devices can never update (most of the
+fleet sat on 1.5.62 until the 1.5.97/1.5.98 bodies were shortened by hand on
+2026-09-25). The release workflow therefore publishes only the **first
+paragraph** of `IptvPlayer/release-notes/v<version>.md` after the
+`Min-Android-API` line, and `scripts/verify_android_upgrade.py` rejects a body
+longer than 600 characters. Keep that first paragraph a short, customer-facing
+sentence; the rest of the file stays in the repository for maintainers.
