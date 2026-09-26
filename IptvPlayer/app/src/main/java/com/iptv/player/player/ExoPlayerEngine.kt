@@ -115,6 +115,13 @@ class ExoPlayerEngine(
      * black frames); only [ExoTunnelingPolicy] may turn it on per device.
      */
     private val tunnelingEnabled: Boolean = false,
+    /**
+     * Whether a VIDEO verdict for a stream of this width/height/codec would
+     * reach another video stage (the controller's ladder). Where it would not,
+     * pixel-only verdicts are advisory (LiveSurfaceVerdictPolicy). The default
+     * keeps every pixel verdict authoritative, as in 1.5.98.
+     */
+    private val videoFallbackAvailable: (Int, Int, String?) -> Boolean = { _, _, _ -> true },
 ) : PlayerEngine {
 
     override val engineName: String = "ExoPlayer"
@@ -162,6 +169,16 @@ class ExoPlayerEngine(
     private var videoOutputReported = false
     /** From the SPS of the current stream; null until known or when not H.264. */
     private var currentVideoInterlaced: Boolean? = null
+    /** Local log/family mapping only; never forwarded to the controller raw. */
+    private var currentVideoDecoderName: String? = null
+    // Decoder-side frame evidence for LiveSurfaceVerdictPolicy. Unlike
+    // lastVideoFrameAtMs it is written only by the frame metadata listener.
+    private val nativeCadence = NativeFrameCadence()
+    // One healthy PixelCopy sample on any output of this stream makes pixel
+    // verdicts authoritative again for the rest of it.
+    private var pixelsProvenThisStream = false
+    private var firstFrameAtMs = 0L
+    private var submittedAtMs = 0L
     private var audioReported = false
     private var audioCodec = AudioFailureEvidence.Codec.UNKNOWN
     private var audioDecoder = AudioFailureEvidence.Decoder.UNKNOWN
@@ -192,25 +209,34 @@ class ExoPlayerEngine(
     // socket-close completion must still reach the controller.
     private val providerConnection = ExoProviderConnection(Handler(Looper.getMainLooper()))
 
-    private val surfaceFrameHealth = SurfaceFrameHealthMonitor(
+    private val surfaceFrameHealth: SurfaceFrameHealthMonitor = SurfaceFrameHealthMonitor(
         handler = handler,
         onSolidGreen = {
-            reportVideoInvalid("persistent solid-green SurfaceView output")
+            resolveGateVerdict(
+                VideoVerdict.Check.SOLID_GREEN,
+                "persistent solid-green SurfaceView output",
+            )
         },
         onPersistentBlank = {
-            reportVideoInvalid("persistent blank SurfaceView output")
+            resolveGateVerdict(
+                VideoVerdict.Check.PERSISTENT_BLANK,
+                "persistent blank SurfaceView output",
+            )
         },
         onHealthyFrame = {
-            reportVerifiedVideoOutput()
+            pixelsProvenThisStream = true
+            reportVerifiedVideoOutput(VideoProof.PIXELS)
         },
         onSamplingUnavailable = {
             if (firstFrameRendered && !videoFailureReported && !videoOutputReported) {
                 PlaybackLog.log(
                     context,
                     engineName,
-                    "PixelCopy capability unavailable -> accept Media3 rendered-frame signal",
+                    "PixelCopy capability unavailable " +
+                        "(${surfaceFrameHealth.unavailableReason()?.name ?: "UNKNOWN"}) " +
+                        "-> accept Media3 rendered-frame signal",
                 )
-                reportVerifiedVideoOutput()
+                reportVerifiedVideoOutput(VideoProof.NATIVE_UNSAMPLEABLE)
             }
         },
         // Even a tiny destination can require a full-resolution GPU readback on
@@ -219,6 +245,18 @@ class ExoPlayerEngine(
         continueAfterHealthy = !constrainedDevice,
         allowPeriodicSampling = {
             surfaceReadbackPolicy.mode == SurfaceReadbackPolicy.Mode.CONTINUOUS
+        },
+        // A copy that blocks the main thread this long (inline PixelCopy on
+        // old platforms) makes the surface unsampleable for this stream.
+        inlineCopyBudgetMs = {
+            if (
+                constrainedDevice &&
+                nativeFrameTrust() != LiveSurfaceVerdictPolicy.Trust.STRICT
+            ) {
+                CONSTRAINED_INLINE_COPY_BUDGET_MS
+            } else {
+                INLINE_COPY_BUDGET_MS
+            }
         },
     )
 
@@ -234,7 +272,37 @@ class ExoPlayerEngine(
             !videoFailureReported &&
             !videoOutputReported
         ) {
-            reportVideoInvalid("video surface could not be validated before deadline")
+            resolveDeadline()
+        }
+    }
+
+    // Where pixel verdicts are advisory, sustained native frames settle the
+    // cover early instead of at the deadline (LiveSurfaceVerdictPolicy).
+    private val nativeAcceptPoll = object : Runnable {
+        override fun run() {
+            if (
+                !expectsVideo ||
+                !firstFrameRendered ||
+                videoFailureReported ||
+                videoOutputReported
+            ) {
+                return
+            }
+            val trust = nativeFrameTrust()
+            val nowMs = SystemClock.elapsedRealtime()
+            val advisory = pixelsAdvisory(trust)
+            if (
+                LiveSurfaceVerdictPolicy.earlyAccept(
+                    advisory = advisory,
+                    live = advisory && nativeFramesLive(nowMs),
+                    sinceFirstFrameMs = nowMs - firstFrameAtMs,
+                    greenSeen = surfaceFrameHealth.sampleTally().green > 0,
+                )
+            ) {
+                acceptNative("early", trust)
+                return
+            }
+            handler.postDelayed(this, NATIVE_ACCEPT_POLL_MS)
         }
     }
 
@@ -267,6 +335,8 @@ class ExoPlayerEngine(
                     InterlacedExoPolicy.shouldRecordStall(
                         interlaced = currentVideoInterlaced,
                         amlogicDecoder = DeviceVideoDecoders.bypassVlcHardware,
+                        framesSinceFirstFrame =
+                            nativeCadence.snapshot(SystemClock.elapsedRealtime()).total,
                     )
                 ) {
                     DeviceQuirkMemory.recordAmlogicInterlacedStall(context, System.currentTimeMillis())
@@ -276,6 +346,7 @@ class ExoPlayerEngine(
                     )
                 }
                 reportVideoInvalid(
+                    VideoVerdict.Check.FRAME_STALL,
                     "decoder stopped producing video frames for ${VIDEO_FRAME_STALL_MS}ms",
                 )
                 return
@@ -546,20 +617,26 @@ class ExoPlayerEngine(
                 if (!isCurrentEvent(eventTime)) return
                 firstFrameRendered = true
                 val nowMs = SystemClock.elapsedRealtime()
+                // The first one per stream: the deadline's deferral bound is absolute.
+                if (firstFrameAtMs == 0L) firstFrameAtMs = nowMs
                 lastVideoFrameAtMs.set(nowMs)
                 droppedFrameHealth.onFirstFrame(nowMs)
                 cancelNoFrameCheck()
                 if (exo.playbackState == Player.STATE_BUFFERING) {
                     scheduleAudioClockStallCheck()
                 }
-                PlaybackLog.log(context, engineName, "onRenderedFirstFrame")
+                PlaybackLog.log(
+                    context, engineName,
+                    "onRenderedFirstFrame sinceSubmitMs=" +
+                        (if (submittedAtMs > 0L) nowMs - submittedAtMs else -1L),
+                )
                 if (PlaybackRemotePolicy.snapshot().disablePixelCopyValidation) {
                     PlaybackLog.log(
                         context,
                         engineName,
                         "remote policy -> accept Media3 rendered-frame signal",
                     )
-                    reportVerifiedVideoOutput()
+                    reportVerifiedVideoOutput(VideoProof.NATIVE_REMOTE)
                     return
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -571,8 +648,10 @@ class ExoPlayerEngine(
                         surfaceValidationDeadlineRunnable,
                         PIXEL_VALIDATION_DEADLINE_MS,
                     )
+                    handler.removeCallbacks(nativeAcceptPoll)
+                    handler.postDelayed(nativeAcceptPoll, LiveSurfaceVerdictPolicy.EARLY_ACCEPT_MS)
                 } else {
-                    reportVerifiedVideoOutput()
+                    reportVerifiedVideoOutput(VideoProof.NATIVE_PRE_N)
                 }
             }
 
@@ -644,6 +723,7 @@ class ExoPlayerEngine(
             VideoFrameMetadataListener { presentationTimeUs, _, _, _ ->
                 val nowMs = SystemClock.elapsedRealtime()
                 lastVideoFrameAtMs.set(nowMs)
+                nativeCadence.onFrame(nowMs)
                 frameRateEstimator.onFrame(presentationTimeUs)
                 // Opt-in observation only: READY refreshes the health timestamp,
                 // so diagnostics keep the actual frame timestamp separately.
@@ -761,6 +841,7 @@ class ExoPlayerEngine(
                 initializationDurationMs: Long
             ) {
                 if (!isCurrentEvent(eventTime)) return
+                currentVideoDecoderName = decoderName
                 val previousMode = surfaceReadbackPolicy.mode
                 val decoderChanged = surfaceReadbackPolicy.onVideoDecoderInitialized(decoderName)
                 if (decoderChanged) revalidateVideoOutput()
@@ -776,6 +857,7 @@ class ExoPlayerEngine(
                 if (!isCurrentEvent(eventTime)) return
                 val previousMode = surfaceReadbackPolicy.mode
                 // A reused MediaCodec may not emit another initialized event.
+                decoderReuseEvaluation?.decoderName?.let { currentVideoDecoderName = it }
                 val decoderChanged = decoderReuseEvaluation?.decoderName
                     ?.let(surfaceReadbackPolicy::onVideoDecoderInitialized) == true
                 val sourceChanged = surfaceReadbackPolicy.onVideoFormat(format.width, format.height)
@@ -793,16 +875,37 @@ class ExoPlayerEngine(
                 )
                 // Interlaced H.264 on a decoder family this device already saw
                 // stall (InterlacedExoPolicy): leave before the first frame instead
-                // of paying the 7 s watchdog on every first visit.
-                if (
-                    InterlacedExoPolicy.failFast(
-                        interlaced = interlaced,
-                        amlogicDecoder = DeviceVideoDecoders.bypassVlcHardware,
-                        stallLearnedAtMs = DeviceQuirkMemory.amlogicInterlacedStallAtMs(context),
-                        nowMs = System.currentTimeMillis(),
+                // of paying the 7 s watchdog on every first visit. Only when the
+                // controller has another video stage: without one, failing fast
+                // just reopens this Exo stage and turns every such channel into
+                // a ~1 s loop for the lifetime of the learned quirk.
+                val stallLearnedAtMs = DeviceQuirkMemory.amlogicInterlacedStallAtMs(context)
+                val wallClockMs = System.currentTimeMillis()
+                fun failFast(alternativeRouteAvailable: Boolean) = InterlacedExoPolicy.failFast(
+                    interlaced = interlaced,
+                    amlogicDecoder = DeviceVideoDecoders.bypassVlcHardware,
+                    stallLearnedAtMs = stallLearnedAtMs,
+                    nowMs = wallClockMs,
+                    alternativeRouteAvailable = alternativeRouteAvailable,
+                )
+                if (failFast(alternativeRouteAvailable = true)) {
+                    val alternativeRoute = videoFallbackAvailable(
+                        format.width.coerceAtLeast(0),
+                        format.height.coerceAtLeast(0),
+                        codecLabel(format.sampleMimeType),
                     )
-                ) {
-                    reportVideoInvalid("interlaced H.264 on a decoder that stalled on it before")
+                    if (failFast(alternativeRoute)) {
+                        reportVideoInvalid(
+                            VideoVerdict.Check.INTERLACED_FAIL_FAST,
+                            "interlaced H.264 on a decoder that stalled on it before",
+                        )
+                    } else {
+                        PlaybackLog.log(
+                            context, engineName,
+                            "interlaced stall learned but no alternative video stage " +
+                                "-> keep Exo, frame watchdog decides",
+                        )
+                    }
                 }
             }
 
@@ -1454,6 +1557,7 @@ class ExoPlayerEngine(
         cancelTrackSupportCheck()
         cancelNoFrameCheck()
         handler.removeCallbacks(surfaceValidationDeadlineRunnable)
+        handler.removeCallbacks(nativeAcceptPoll)
         handler.removeCallbacks(videoProgressRunnable)
         PlaybackLog.log(context, engineName, "$detail -> decoder compatibility fallback")
         listener?.onDecodeError(detail)
@@ -1481,7 +1585,10 @@ class ExoPlayerEngine(
                 if (tunnelingEnabled) {
                     reportTunnelingNoFrame()
                 } else {
-                    reportVideoInvalid("no first frame for expected video")
+                    reportVideoInvalid(
+                        VideoVerdict.Check.NO_FIRST_FRAME,
+                        "no first frame for expected video",
+                    )
                 }
             }
         }
@@ -1504,6 +1611,7 @@ class ExoPlayerEngine(
         cancelTrackSupportCheck()
         cancelNoFrameCheck()
         handler.removeCallbacks(surfaceValidationDeadlineRunnable)
+        handler.removeCallbacks(nativeAcceptPoll)
         handler.removeCallbacks(videoProgressRunnable)
         PlaybackLog.log(context, engineName, "no first frame with tunneling -> retry untunneled")
         listener?.onTunnelingNoFrame()
@@ -1519,8 +1627,10 @@ class ExoPlayerEngine(
         handler.postDelayed(videoProgressRunnable, VIDEO_HEALTH_POLL_MS)
     }
 
-    private fun reportVideoInvalid(detail: String) {
+    private fun reportVideoInvalid(check: VideoVerdict.Check, detail: String) {
         if (videoFailureReported) return
+        // Before the monitor reset below clears the per-output sample tally.
+        val verdict = videoVerdict(check)
         videoFailureReported = true
         cancelAudioClockStallCheck()
         cancelAudioUnderrunCheck()
@@ -1529,22 +1639,131 @@ class ExoPlayerEngine(
         cancelTrackSupportCheck()
         cancelNoFrameCheck()
         handler.removeCallbacks(surfaceValidationDeadlineRunnable)
+        handler.removeCallbacks(nativeAcceptPoll)
         handler.removeCallbacks(videoProgressRunnable)
         PlaybackLog.log(context, engineName, "$detail -> compatibility fallback")
-        listener?.onVideoInvalid()
+        listener?.onVideoInvalid(verdict)
     }
 
-    private fun reportVerifiedVideoOutput() {
+    private fun videoVerdict(check: VideoVerdict.Check): VideoVerdict {
+        val nowMs = SystemClock.elapsedRealtime()
+        val frames = nativeCadence.snapshot(nowMs)
+        val sinceFirstFrameMs = if (firstFrameAtMs > 0L) nowMs - firstFrameAtMs else -1L
+        return VideoVerdict(
+            check = check,
+            decoderFamily = VideoVerdictTelemetry.familyOf(currentVideoDecoderName),
+            interlaced = currentVideoInterlaced,
+            logEvidence = "frames=${frames.total} last1s=${frames.lastSecond} " +
+                "sinceFirstFrameMs=$sinceFirstFrameMs px=${surfaceFrameHealth.sampleTally().compact()}",
+        )
+    }
+
+    private fun nativeFrameTrust(): LiveSurfaceVerdictPolicy.Trust =
+        LiveSurfaceVerdictPolicy.trustOf(PlaybackRemotePolicy.deviceOverrides().nativeFrameTrust)
+
+    /**
+     * Pixel-only verdicts are advisory where a VIDEO failure could only reopen
+     * this same stage, until PixelCopy proves one healthy frame on the stream.
+     * Without a video format the controller's answer is unknown: strict.
+     */
+    private fun pixelsAdvisory(trust: LiveSurfaceVerdictPolicy.Trust): Boolean {
+        if (!expectsVideo) return false
+        val fallbackAvailable =
+            if (trust == LiveSurfaceVerdictPolicy.Trust.DEAD_END_ONLY && !pixelsProvenThisStream) {
+                val format = player?.videoFormat
+                format == null || videoFallbackAvailable(
+                    format.width.coerceAtLeast(0),
+                    format.height.coerceAtLeast(0),
+                    codecLabel(format.sampleMimeType),
+                )
+            } else {
+                true // Not consulted for STRICT, ALWAYS or proven pixels.
+            }
+        return LiveSurfaceVerdictPolicy.pixelsAdvisory(trust, fallbackAvailable, pixelsProvenThisStream)
+    }
+
+    private fun nativeFramesLive(nowMs: Long): Boolean =
+        LiveSurfaceVerdictPolicy.nativeLive(nativeCadence.snapshot(nowMs), readyForPlayback)
+
+    /** Startup solid-green / persistent-blank verdict of the surface monitor. */
+    private fun resolveGateVerdict(check: VideoVerdict.Check, detail: String) {
+        val trust = nativeFrameTrust()
+        val advisory = pixelsAdvisory(trust)
+        val live = advisory && nativeFramesLive(SystemClock.elapsedRealtime())
+        when (LiveSurfaceVerdictPolicy.onGateVerdict(advisory, live, videoOutputReported)) {
+            LiveSurfaceVerdictPolicy.Verdict.INVALID -> reportVideoInvalid(check, detail)
+            LiveSurfaceVerdictPolicy.Verdict.ACCEPT_NATIVE -> acceptNative(check.name, trust)
+            LiveSurfaceVerdictPolicy.Verdict.IGNORE,
+            LiveSurfaceVerdictPolicy.Verdict.DEFER -> PlaybackLog.log(
+                context, engineName,
+                "$detail is advisory (PixelCopy unproven) -> " +
+                    if (videoOutputReported) "video already confirmed" else "deadline decides",
+            )
+        }
+    }
+
+    private fun resolveDeadline() {
+        val trust = nativeFrameTrust()
+        val advisory = pixelsAdvisory(trust)
+        val nowMs = SystemClock.elapsedRealtime()
+        when (
+            LiveSurfaceVerdictPolicy.onDeadline(
+                advisory = advisory,
+                live = advisory && nativeFramesLive(nowMs),
+                ready = readyForPlayback,
+                sinceFirstFrameMs = nowMs - firstFrameAtMs,
+            )
+        ) {
+            LiveSurfaceVerdictPolicy.Verdict.INVALID -> reportVideoInvalid(
+                VideoVerdict.Check.VALIDATION_DEADLINE,
+                "video surface could not be validated before deadline",
+            )
+            LiveSurfaceVerdictPolicy.Verdict.ACCEPT_NATIVE -> acceptNative("deadline", trust)
+            LiveSurfaceVerdictPolicy.Verdict.DEFER -> {
+                PlaybackLog.log(
+                    context, engineName,
+                    "validation deadline while rebuffering -> recheck in ${DEADLINE_DEFER_MS}ms",
+                )
+                handler.postDelayed(surfaceValidationDeadlineRunnable, DEADLINE_DEFER_MS)
+            }
+            LiveSurfaceVerdictPolicy.Verdict.IGNORE -> Unit
+        }
+    }
+
+    /**
+     * Native frames stand in for pixel proof. Sampling stops for this stream:
+     * the provider is dropped, so later output transitions re-run no PixelCopy.
+     */
+    private fun acceptNative(trigger: String, trust: LiveSurfaceVerdictPolicy.Trust) {
+        if (videoFailureReported || videoOutputReported) return
+        val frames = nativeCadence.snapshot(SystemClock.elapsedRealtime())
+        val why = if (trust == LiveSurfaceVerdictPolicy.Trust.ALWAYS) {
+            "remote nativeFrameTrust"
+        } else {
+            "no alternative video stage"
+        }
+        PlaybackLog.log(
+            context, engineName,
+            "PixelCopy advisory ($trigger; $why) -> accept Media3 native frames " +
+                "total=${frames.total} last1s=${frames.lastSecond} " +
+                "px=${surfaceFrameHealth.sampleTally().compact()}",
+        )
+        surfaceFrameHealth.reset()
+        reportVerifiedVideoOutput(VideoProof.NATIVE_ADVISORY)
+    }
+
+    private fun reportVerifiedVideoOutput(proof: VideoProof) {
         if (videoFailureReported || videoOutputReported) return
         videoOutputReported = true
         handler.removeCallbacks(surfaceValidationDeadlineRunnable)
-        PlaybackLog.log(context, engineName, "healthy SurfaceView frame confirmed")
+        handler.removeCallbacks(nativeAcceptPoll)
+        PlaybackLog.log(context, engineName, "video output confirmed proof=${proof.name}")
         // The controller uses onPlaying as its engine-success signal. For TV that
         // signal is intentionally withheld until this verified pixel output.
         if (readyForPlayback) {
             listener?.onPlaying()
         }
-        listener?.onVideoOutput()
+        listener?.onVideoOutput(proof)
     }
 
     /**
@@ -1625,6 +1844,7 @@ class ExoPlayerEngine(
         )
         exo.playWhenReady = true
         exo.prepare()
+        submittedAtMs = SystemClock.elapsedRealtime()
         schedulePlaybackDiagnosticSampler()
         listener?.onPlaybackSubmitted()
     }
@@ -1642,6 +1862,11 @@ class ExoPlayerEngine(
         videoFailureReported = false
         videoOutputReported = false
         currentVideoInterlaced = null
+        currentVideoDecoderName = null
+        nativeCadence.reset()
+        pixelsProvenThisStream = false
+        firstFrameAtMs = 0L
+        submittedAtMs = 0L
         audioReported = false
         audioCodec = AudioFailureEvidence.Codec.UNKNOWN
         audioDecoder = AudioFailureEvidence.Decoder.UNKNOWN
@@ -1686,6 +1911,18 @@ class ExoPlayerEngine(
         activeMediaId = null
     }
 
+    /**
+     * A failed stream must not keep reading from the provider (tens of MB per
+     * short session) or playing audio through the controller's retry backoff.
+     * The replacement engine still waits for this socket's close boundary in
+     * releaseAndThen; a fast zap re-sets the listener and re-prepares.
+     */
+    override fun quiesceForRetry(): Boolean {
+        listener = null
+        stop()
+        return true
+    }
+
     override fun stopAndThen(onStopped: (Boolean) -> Unit) {
         stop()
         providerConnection.awaitClosed(PROVIDER_CLOSE_TIMEOUT_MS) { closed ->
@@ -1704,6 +1941,7 @@ class ExoPlayerEngine(
     private fun cancelStreamHealthChecks() {
         handler.removeCallbacks(videoProgressRunnable)
         handler.removeCallbacks(surfaceValidationDeadlineRunnable)
+        handler.removeCallbacks(nativeAcceptPoll)
         surfaceFrameHealth.reset()
     }
 
@@ -1913,6 +2151,13 @@ class ExoPlayerEngine(
         private const val VIDEO_CLOCK_EVIDENCE_MS = 500L
         private const val MIN_BUFFER_PROGRESS_EVIDENCE_MS = 250L
         private const val PIXEL_VALIDATION_DEADLINE_MS = 9_000L
+        /** Recheck of a deferred deadline (LiveSurfaceVerdictPolicy.DEFER). */
+        private const val DEADLINE_DEFER_MS = 1_000L
+        private const val NATIVE_ACCEPT_POLL_MS = 250L
+        /** Longest a PixelCopy request may block the main thread (SAMPLE_TIMEOUT_MS). */
+        private const val INLINE_COPY_BUDGET_MS = 4_000L
+        /** Weak devices where native frames can stand in for pixels. */
+        private const val CONSTRAINED_INLINE_COPY_BUDGET_MS = 1_500L
         private const val PLAYBACK_DIAGNOSTIC_POLL_MS = 1_000L
         /** Bound on waiting for the loader thread to close the provider socket. */
         private const val PROVIDER_CLOSE_TIMEOUT_MS = 1_500L

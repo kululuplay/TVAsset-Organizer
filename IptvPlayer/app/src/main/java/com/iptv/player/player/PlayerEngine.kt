@@ -45,6 +45,15 @@ interface PlayerEngine {
     fun stop()
 
     /**
+     * A same-stage retry was just scheduled after a failure: stop reading from
+     * the provider during the backoff instead of letting the failed player keep
+     * streaming (and playing audio) until the replacement engine is created.
+     * Returns true when the engine stopped. VLC keeps the default: its stop
+     * timing and provider-ownership recovery stay with the engine swap.
+     */
+    fun quiesceForRetry(): Boolean = false
+
+    /**
      * Stop the provider connection and report when backend shutdown really
      * completed. Neither backend is synchronous here: libVLC's JNI stop is
      * bounded on a worker, and Media3's stop only cancels its Loader (the socket
@@ -168,6 +177,49 @@ data class PlayerTrack(
     val selected: Boolean,
 )
 
+/**
+ * Which check declared the video invalid, reduced to closed values at the
+ * engine boundary: the raw decoder name never reaches controller telemetry.
+ * [logEvidence] is for the local playback log only.
+ */
+data class VideoVerdict(
+    val check: Check,
+    val decoderFamily: DecoderFamily = DecoderFamily.UNKNOWN,
+    val interlaced: Boolean? = null,
+    val logEvidence: String = "",
+) {
+    enum class Check {
+        SOLID_GREEN,
+        PERSISTENT_BLANK,
+        VALIDATION_DEADLINE,
+        FRAME_STALL,
+        NO_FIRST_FRAME,
+        INTERLACED_FAIL_FAST,
+        UNSPECIFIED,
+    }
+
+    companion object {
+        val UNSPECIFIED = VideoVerdict(Check.UNSPECIFIED)
+    }
+}
+
+enum class DecoderFamily { AMLOGIC, SOFTWARE, OTHER, UNKNOWN }
+
+/** How the engine proved that video reached the screen. */
+enum class VideoProof {
+    UNSPECIFIED,
+    /** PixelCopy saw healthy pixels. */
+    PIXELS,
+    /** Pixel verdicts were advisory (no other video stage) and native frames flowed. */
+    NATIVE_ADVISORY,
+    /** PixelCopy could not sample this surface; Media3's rendered frame stands in. */
+    NATIVE_UNSAMPLEABLE,
+    /** Remote disablePixelCopyValidation. */
+    NATIVE_REMOTE,
+    /** No PixelCopy before Android 7.0. */
+    NATIVE_PRE_N,
+}
+
 /** Playback state callbacks routed to the UI. */
 interface PlayerListener {
     fun onObservation(sample: com.iptv.player.playback.core.PlaybackObservation) {}
@@ -186,7 +238,7 @@ interface PlayerListener {
      * [onPlaying], which can fire on audio/cache state before any picture is visible
      * — used to clear the black gap while a surface hand-off warms up.
      */
-    fun onVideoOutput() {}
+    fun onVideoOutput(proof: VideoProof = VideoProof.UNSPECIFIED) {}
     fun onEnded() {}
     /** A fatal playback error. The controller may trigger fallback/retry. */
     fun onError(message: String?) {}
@@ -233,9 +285,9 @@ interface PlayerListener {
     /**
      * Video is reporting "playing" but the surface is a green/blank/invalid frame
      * (the classic 1080p@50fps high-bitrate H.264 hardware-decoder failure). The
-     * controller falls back to a software decode path.
+     * controller falls back to a software decode path. [verdict] names the check.
      */
-    fun onVideoInvalid() {}
+    fun onVideoInvalid(verdict: VideoVerdict = VideoVerdict.UNSPECIFIED) {}
 
     /**
      * Tunneled video (remote opt-in only) reached READY but never rendered a

@@ -1,0 +1,104 @@
+package com.iptv.player.player
+
+import com.iptv.player.player.LiveSurfaceVerdictPolicy.Trust
+import com.iptv.player.player.LiveSurfaceVerdictPolicy.Verdict
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class LiveSurfaceVerdictPolicyTest {
+
+    private fun frames(total: Long, lastSecond: Int) =
+        NativeFrameCadence.Snapshot(total = total, lastSecond = lastSecond, lastAgeMs = 40L)
+
+    @Test
+    fun `customer case - blind PixelCopy on a stick without another video stage accepts native frames`() {
+        // API 25 constrained Amlogic stick, 1080i H.264, software HD withheld:
+        // no remote rule, no fallback stage, PixelCopy never saw a healthy frame.
+        val trust = LiveSurfaceVerdictPolicy.trustOf(null)
+        val advisory = LiveSurfaceVerdictPolicy.pixelsAdvisory(trust, fallbackAvailable = false, provenThisStream = false)
+        val live = LiveSurfaceVerdictPolicy.nativeLive(frames(total = 30, lastSecond = 24), ready = true)
+        assertTrue(advisory)
+        assertTrue(live)
+        assertTrue(LiveSurfaceVerdictPolicy.earlyAccept(advisory, live, sinceFirstFrameMs = 1_000L, greenSeen = false))
+        // A zeroed-YUV readback classifies as green: wait out the settling window.
+        assertFalse(LiveSurfaceVerdictPolicy.earlyAccept(advisory, live, sinceFirstFrameMs = 1_000L, greenSeen = true))
+        assertTrue(LiveSurfaceVerdictPolicy.earlyAccept(advisory, live, sinceFirstFrameMs = 3_000L, greenSeen = true))
+    }
+
+    @Test
+    fun `pixels are advisory only at the dead end or under remote trust and never once proven`() {
+        assertFalse(LiveSurfaceVerdictPolicy.pixelsAdvisory(Trust.STRICT, fallbackAvailable = false, provenThisStream = false))
+        assertFalse(LiveSurfaceVerdictPolicy.pixelsAdvisory(Trust.STRICT, fallbackAvailable = true, provenThisStream = false))
+        assertFalse(LiveSurfaceVerdictPolicy.pixelsAdvisory(Trust.DEAD_END_ONLY, fallbackAvailable = true, provenThisStream = false))
+        assertTrue(LiveSurfaceVerdictPolicy.pixelsAdvisory(Trust.DEAD_END_ONLY, fallbackAvailable = false, provenThisStream = false))
+        assertTrue(LiveSurfaceVerdictPolicy.pixelsAdvisory(Trust.ALWAYS, fallbackAvailable = true, provenThisStream = false))
+        assertTrue(LiveSurfaceVerdictPolicy.pixelsAdvisory(Trust.ALWAYS, fallbackAvailable = false, provenThisStream = false))
+        for (trust in Trust.entries) {
+            for (fallback in listOf(true, false)) {
+                assertFalse(LiveSurfaceVerdictPolicy.pixelsAdvisory(trust, fallback, provenThisStream = true))
+            }
+        }
+    }
+
+    @Test
+    fun `gate verdicts stay authoritative when strict and accept only live unverified video`() {
+        assertEquals(Verdict.ACCEPT_NATIVE, LiveSurfaceVerdictPolicy.onGateVerdict(advisory = true, live = true, verified = false))
+        assertEquals(Verdict.IGNORE, LiveSurfaceVerdictPolicy.onGateVerdict(advisory = true, live = false, verified = false))
+        assertEquals(Verdict.IGNORE, LiveSurfaceVerdictPolicy.onGateVerdict(advisory = true, live = true, verified = true))
+        assertEquals(Verdict.INVALID, LiveSurfaceVerdictPolicy.onGateVerdict(advisory = false, live = true, verified = false))
+        assertEquals(Verdict.INVALID, LiveSurfaceVerdictPolicy.onGateVerdict(advisory = false, live = false, verified = false))
+    }
+
+    @Test
+    fun `deadline rejects stalls and trickles and defers only while rebuffering`() {
+        fun deadline(advisory: Boolean, snapshot: NativeFrameCadence.Snapshot, ready: Boolean, sinceMs: Long) =
+            LiveSurfaceVerdictPolicy.onDeadline(
+                advisory = advisory,
+                live = LiveSurfaceVerdictPolicy.nativeLive(snapshot, ready),
+                ready = ready,
+                sinceFirstFrameMs = sinceMs,
+            )
+        // Xiaomi MiTV interlaced stall: ~5 frames, then nothing.
+        assertEquals(Verdict.INVALID, deadline(true, frames(total = 5, lastSecond = 0), ready = true, sinceMs = 9_000L))
+        // 1 fps trickle after a long run is not live video.
+        assertEquals(Verdict.INVALID, deadline(true, frames(total = 200, lastSecond = 1), ready = true, sinceMs = 9_000L))
+        // Rebuffer exactly at the deadline: recheck, but never past 15 s.
+        assertEquals(Verdict.DEFER, deadline(true, frames(total = 200, lastSecond = 0), ready = false, sinceMs = 9_000L))
+        assertEquals(Verdict.DEFER, deadline(true, frames(total = 200, lastSecond = 0), ready = false, sinceMs = 14_999L))
+        assertEquals(Verdict.INVALID, deadline(true, frames(total = 200, lastSecond = 0), ready = false, sinceMs = 15_000L))
+        // Proven pixels (or a strict trust) make the deadline authoritative again.
+        val proven = LiveSurfaceVerdictPolicy.pixelsAdvisory(Trust.DEAD_END_ONLY, fallbackAvailable = false, provenThisStream = true)
+        assertEquals(Verdict.INVALID, deadline(proven, frames(total = 225, lastSecond = 25), ready = true, sinceMs = 9_000L))
+        assertEquals(Verdict.INVALID, deadline(false, frames(total = 225, lastSecond = 25), ready = false, sinceMs = 9_000L))
+        // Remote trust on a route that still has a fallback.
+        val trusted = LiveSurfaceVerdictPolicy.pixelsAdvisory(Trust.ALWAYS, fallbackAvailable = true, provenThisStream = false)
+        assertEquals(Verdict.ACCEPT_NATIVE, deadline(trusted, frames(total = 225, lastSecond = 25), ready = true, sinceMs = 9_000L))
+    }
+
+    @Test
+    fun `native liveness needs READY plus total and last-second frame floors`() {
+        assertFalse(LiveSurfaceVerdictPolicy.nativeLive(frames(total = 23, lastSecond = 23), ready = true))
+        assertTrue(LiveSurfaceVerdictPolicy.nativeLive(frames(total = 24, lastSecond = 8), ready = true))
+        assertFalse(LiveSurfaceVerdictPolicy.nativeLive(frames(total = 500, lastSecond = 7), ready = true))
+        assertFalse(LiveSurfaceVerdictPolicy.nativeLive(frames(total = 500, lastSecond = 25), ready = false))
+    }
+
+    @Test
+    fun `early accept waits exactly one second, or three after a green readback`() {
+        assertFalse(LiveSurfaceVerdictPolicy.earlyAccept(true, true, sinceFirstFrameMs = 999L, greenSeen = false))
+        assertTrue(LiveSurfaceVerdictPolicy.earlyAccept(true, true, sinceFirstFrameMs = 1_000L, greenSeen = false))
+        assertFalse(LiveSurfaceVerdictPolicy.earlyAccept(true, true, sinceFirstFrameMs = 2_999L, greenSeen = true))
+        assertTrue(LiveSurfaceVerdictPolicy.earlyAccept(true, true, sinceFirstFrameMs = 3_000L, greenSeen = true))
+        assertFalse(LiveSurfaceVerdictPolicy.earlyAccept(advisory = false, live = true, sinceFirstFrameMs = 60_000L, greenSeen = false))
+        assertFalse(LiveSurfaceVerdictPolicy.earlyAccept(advisory = true, live = false, sinceFirstFrameMs = 60_000L, greenSeen = false))
+    }
+
+    @Test
+    fun `remote override maps false to strict, unset to dead end only and true to always`() {
+        assertEquals(Trust.STRICT, LiveSurfaceVerdictPolicy.trustOf(false))
+        assertEquals(Trust.DEAD_END_ONLY, LiveSurfaceVerdictPolicy.trustOf(null))
+        assertEquals(Trust.ALWAYS, LiveSurfaceVerdictPolicy.trustOf(true))
+    }
+}

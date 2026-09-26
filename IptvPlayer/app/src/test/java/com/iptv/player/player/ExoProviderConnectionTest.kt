@@ -125,6 +125,46 @@ class ExoProviderConnectionTest {
         }
     }
 
+    @Test fun retryStopThenReleaseDoesNotRepeatACompletedClose() {
+        Fixture().run {
+            val source = Delegate()
+            connection.wrap(source).open(spec())
+            // quiesceForRetry -> stop(): the failed stream's socket is forced closed.
+            assertTrue(connection.retireAndClose())
+            val atStop = mutableListOf<Boolean>()
+            connection.awaitClosed(1_500L) { atStop += it }
+            assertTrue(atStop.isEmpty())
+            closeJobs.removeFirst().run()
+            runMain()
+            assertEquals(listOf(true), atStop)
+            // Backoff over -> releaseAndThen(): nothing is open, so no second close
+            // job and the replacement engine is released to start inline.
+            assertFalse(connection.retireAndClose())
+            assertTrue(closeJobs.isEmpty())
+            assertEquals(1, source.closes)
+            var atRelease: Boolean? = null
+            connection.awaitClosed(1_500L) { atRelease = it }
+            assertEquals(true, atRelease)
+            assertTrue(mainTasks.isEmpty())
+        }
+    }
+
+    @Test fun releaseDuringBackoffWaitsOnlyForTheStillOpenSocket() {
+        Fixture().run {
+            val source = Delegate()
+            connection.wrap(source).open(spec())
+            assertTrue(connection.retireAndClose()) // stop() when the retry is scheduled
+            assertTrue(connection.retireAndClose()) // release() before that close ran
+            val results = mutableListOf<Boolean>()
+            connection.awaitClosed(1_500L) { results += it }
+            assertTrue(results.isEmpty())
+            while (closeJobs.isNotEmpty()) closeJobs.removeFirst().run()
+            runMain()
+            assertEquals(listOf(true), results)
+            assertFalse(connection.hasRetiredOpenConnection())
+        }
+    }
+
     private class Delegate(private val onOpen: () -> Unit = {}) : DataSource {
         var opens = 0
         var closes = 0
