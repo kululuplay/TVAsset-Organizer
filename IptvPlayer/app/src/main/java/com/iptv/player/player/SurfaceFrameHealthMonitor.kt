@@ -36,6 +36,13 @@ internal class SurfaceFrameHealthMonitor(
      * surface counts as unsampleable. Off by default (VLC/VOD monitors).
      */
     private val inlineCopyBudgetMs: () -> Long = { Long.MAX_VALUE },
+    /**
+     * Whether the next sample waits at least twice as long as the last copy
+     * blocked its caller. Off by default (VLC/VOD monitors): spacing delays the
+     * second healthy sample, which can then miss an engine's fixed 9 s
+     * validation deadline on devices with multi-second readbacks.
+     */
+    private val spaceSlowInlineCopies: () -> Boolean = { false },
     private val sdkInt: Int = Build.VERSION.SDK_INT,
     private val nowMs: () -> Long = SystemClock::elapsedRealtime,
 ) {
@@ -358,9 +365,12 @@ internal class SurfaceFrameHealthMonitor(
                         GreenFrameRecoveryGate.Decision.WAIT -> Unit
                     }
                     nextDelayMs?.let {
-                        // Keep the caller's thread free at least 2/3 of the time
-                        // when each copy blocks it.
-                        val spaced = if (inlineCopyMs >= INLINE_COPY_SPACING_MIN_MS) {
+                        // Opt-in: keep the caller's thread free at least 2/3 of
+                        // the time when each copy blocks it.
+                        val spaced = if (
+                            inlineCopyMs >= INLINE_COPY_SPACING_MIN_MS &&
+                            spaceSlowInlineCopies()
+                        ) {
                             maxOf(it, 2 * inlineCopyMs)
                         } else {
                             it

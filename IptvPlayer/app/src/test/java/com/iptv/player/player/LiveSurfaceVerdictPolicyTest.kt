@@ -96,6 +96,53 @@ class LiveSurfaceVerdictPolicyTest {
     }
 
     @Test
+    fun `inline copy budget applies only while pixels are advisory`() {
+        fun budget(trust: Trust, fallbackAvailable: Boolean, proven: Boolean, constrained: Boolean) =
+            LiveSurfaceVerdictPolicy.inlineCopyBudgetMs(
+                advisory = LiveSurfaceVerdictPolicy.pixelsAdvisory(trust, fallbackAvailable, proven),
+                constrainedDevice = constrained,
+            )
+        // Customer stick: constrained, no other video stage.
+        assertEquals(1_500L, budget(Trust.DEAD_END_ONLY, fallbackAvailable = false, proven = false, constrained = true))
+        assertEquals(4_000L, budget(Trust.ALWAYS, fallbackAvailable = true, proven = false, constrained = false))
+        // A constrained stick whose SD or light-codec stream still reaches VLC:
+        // slow copies are classified as in 1.5.98, so real green is still caught.
+        assertEquals(Long.MAX_VALUE, budget(Trust.DEAD_END_ONLY, fallbackAvailable = true, proven = false, constrained = true))
+        // nativeFrameTrust=false and proven pixels: 1.5.98 monitor, no budget.
+        assertEquals(Long.MAX_VALUE, budget(Trust.STRICT, fallbackAvailable = false, proven = false, constrained = true))
+        assertEquals(Long.MAX_VALUE, budget(Trust.ALWAYS, fallbackAvailable = false, proven = true, constrained = true))
+    }
+
+    @Test
+    fun `slow inline copy is no proof and accepts only what the early-accept poll would`() {
+        val live = LiveSurfaceVerdictPolicy.nativeLive(frames(total = 40, lastSecond = 25), ready = true)
+        assertEquals(
+            Verdict.ACCEPT_NATIVE,
+            LiveSurfaceVerdictPolicy.onSlowInlineCopy(advisory = true, live = live, sinceFirstFrameMs = 1_620L, greenSeen = false),
+        )
+        // Xiaomi MiTV interlaced stall: ~5 frames, then none. Not accepted.
+        val stalled = LiveSurfaceVerdictPolicy.nativeLive(frames(total = 5, lastSecond = 0), ready = true)
+        assertEquals(
+            Verdict.IGNORE,
+            LiveSurfaceVerdictPolicy.onSlowInlineCopy(advisory = true, live = stalled, sinceFirstFrameMs = 1_620L, greenSeen = false),
+        )
+        // Authoritative pixels never accept on slowness alone.
+        assertEquals(
+            Verdict.IGNORE,
+            LiveSurfaceVerdictPolicy.onSlowInlineCopy(advisory = false, live = live, sinceFirstFrameMs = 1_620L, greenSeen = false),
+        )
+        // An earlier green readback keeps the three-second settling wait.
+        assertEquals(
+            Verdict.IGNORE,
+            LiveSurfaceVerdictPolicy.onSlowInlineCopy(advisory = true, live = live, sinceFirstFrameMs = 2_999L, greenSeen = true),
+        )
+        assertEquals(
+            Verdict.ACCEPT_NATIVE,
+            LiveSurfaceVerdictPolicy.onSlowInlineCopy(advisory = true, live = live, sinceFirstFrameMs = 3_000L, greenSeen = true),
+        )
+    }
+
+    @Test
     fun `remote override maps false to strict, unset to dead end only and true to always`() {
         assertEquals(Trust.STRICT, LiveSurfaceVerdictPolicy.trustOf(false))
         assertEquals(Trust.DEAD_END_ONLY, LiveSurfaceVerdictPolicy.trustOf(null))

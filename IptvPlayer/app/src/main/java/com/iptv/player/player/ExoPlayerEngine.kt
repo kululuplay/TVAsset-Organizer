@@ -229,14 +229,20 @@ class ExoPlayerEngine(
         },
         onSamplingUnavailable = {
             if (firstFrameRendered && !videoFailureReported && !videoOutputReported) {
-                PlaybackLog.log(
-                    context,
-                    engineName,
-                    "PixelCopy capability unavailable " +
-                        "(${surfaceFrameHealth.unavailableReason()?.name ?: "UNKNOWN"}) " +
-                        "-> accept Media3 rendered-frame signal",
-                )
-                reportVerifiedVideoOutput(VideoProof.NATIVE_UNSAMPLEABLE)
+                val reason = surfaceFrameHealth.unavailableReason()
+                if (reason == SurfaceFrameHealthMonitor.UnavailableReason.SLOW_INLINE_COPY) {
+                    // Only a slow copy, not a capability failure: no bypass
+                    // of the advisory gate and cadence checks.
+                    resolveSlowInlineCopy()
+                } else {
+                    PlaybackLog.log(
+                        context,
+                        engineName,
+                        "PixelCopy capability unavailable (${reason?.name ?: "UNKNOWN"}) " +
+                            "-> accept Media3 rendered-frame signal",
+                    )
+                    reportVerifiedVideoOutput(VideoProof.NATIVE_UNSAMPLEABLE)
+                }
             }
         },
         // Even a tiny destination can require a full-resolution GPU readback on
@@ -246,18 +252,17 @@ class ExoPlayerEngine(
         allowPeriodicSampling = {
             surfaceReadbackPolicy.mode == SurfaceReadbackPolicy.Mode.CONTINUOUS
         },
-        // A copy that blocks the main thread this long (inline PixelCopy on
-        // old platforms) makes the surface unsampleable for this stream.
+        // While pixels are advisory, a copy that blocks the main thread this
+        // long (inline PixelCopy on old platforms) stops sampling this stream,
+        // and shorter blocking copies are spaced out. Authoritative pixels keep
+        // the 1.5.98 cadence: no budget, no spacing.
         inlineCopyBudgetMs = {
-            if (
-                constrainedDevice &&
-                nativeFrameTrust() != LiveSurfaceVerdictPolicy.Trust.STRICT
-            ) {
-                CONSTRAINED_INLINE_COPY_BUDGET_MS
-            } else {
-                INLINE_COPY_BUDGET_MS
-            }
+            LiveSurfaceVerdictPolicy.inlineCopyBudgetMs(
+                advisory = pixelsAdvisory(nativeFrameTrust()),
+                constrainedDevice = constrainedDevice,
+            )
         },
+        spaceSlowInlineCopies = { pixelsAdvisory(nativeFrameTrust()) },
     )
 
     // A successful first copy that caught a transient green/black surface followed
@@ -1731,6 +1736,31 @@ class ExoPlayerEngine(
     }
 
     /**
+     * The monitor stopped on a copy that blocked past its (advisory-only)
+     * budget. Nothing was classified, so this is not proof of video.
+     */
+    private fun resolveSlowInlineCopy() {
+        val trust = nativeFrameTrust()
+        val advisory = pixelsAdvisory(trust)
+        val nowMs = SystemClock.elapsedRealtime()
+        when (
+            LiveSurfaceVerdictPolicy.onSlowInlineCopy(
+                advisory = advisory,
+                live = advisory && nativeFramesLive(nowMs),
+                sinceFirstFrameMs = nowMs - firstFrameAtMs,
+                greenSeen = surfaceFrameHealth.sampleTally().green > 0,
+            )
+        ) {
+            LiveSurfaceVerdictPolicy.Verdict.ACCEPT_NATIVE -> acceptNative("SLOW_INLINE_COPY", trust)
+            else -> PlaybackLog.log(
+                context, engineName,
+                "PixelCopy blocked the main thread past its budget (SLOW_INLINE_COPY) " +
+                    "-> sampling stopped, native frames or deadline decide",
+            )
+        }
+    }
+
+    /**
      * Native frames stand in for pixel proof. Sampling stops for this stream:
      * the provider is dropped, so later output transitions re-run no PixelCopy.
      */
@@ -2154,10 +2184,6 @@ class ExoPlayerEngine(
         /** Recheck of a deferred deadline (LiveSurfaceVerdictPolicy.DEFER). */
         private const val DEADLINE_DEFER_MS = 1_000L
         private const val NATIVE_ACCEPT_POLL_MS = 250L
-        /** Longest a PixelCopy request may block the main thread (SAMPLE_TIMEOUT_MS). */
-        private const val INLINE_COPY_BUDGET_MS = 4_000L
-        /** Weak devices where native frames can stand in for pixels. */
-        private const val CONSTRAINED_INLINE_COPY_BUDGET_MS = 1_500L
         private const val PLAYBACK_DIAGNOSTIC_POLL_MS = 1_000L
         /** Bound on waiting for the loader thread to close the provider socket. */
         private const val PROVIDER_CLOSE_TIMEOUT_MS = 1_500L

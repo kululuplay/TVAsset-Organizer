@@ -162,7 +162,10 @@ player READY) is accepted as video proof instead:
   go to, e.g. a constrained Amlogic stick with software HD withheld. There the
   verdict could only reopen the same ExoPlayer stage in a loop. Wherever
   another stage exists the verdicts stay authoritative, exactly as in 1.5.98.
-- `false`: always authoritative (the exact 1.5.98 behaviour). Use it for a
+- `false`: always authoritative, with the 1.5.98 PixelCopy cadence and no
+  inline-copy budget (see below), i.e. the 1.5.98 live Exo surface validation.
+  It does not undo the other 1.5.99 changes (failed player stopped during the
+  retry wait, narrowed interlaced quick-fail, telemetry fields). Use it for a
   device class seen playing real green or black video.
 - `true`: advisory on every route. For a new SoC whose PixelCopy is blind but
   which still has a fallback stage.
@@ -172,6 +175,15 @@ authoritative again for the rest of that stream, and decoder-side checks (frame
 stall, no first frame) are unaffected. The app log line
 `PixelCopy advisory (...) -> accept Media3 native frames` marks an accept, and
 the `playback_attempt` STABLE row then carries `proof=NATIVE_ADVISORY`.
+
+Only while the pixel verdicts are advisory, a PixelCopy request that blocks the
+main thread for 1.5 s on a constrained device (4 s elsewhere) stops sampling
+for that stream (`SLOW_INLINE_COPY`; the copy is not classified and proves
+nothing, so native frame cadence or the deadline decides), and shorter
+blocking copies are spaced to twice their cost. Authoritative pixel verdicts
+keep the 1.5.98 cadence with no budget and no spacing, so a slow but
+successful copy is still classified before the 9 s deadline. VLC and VOD
+surface sampling is unchanged.
 
 An empty `match` reaches every device, so
 `{"match":{},"set":{"nativeFrameTrust":false}}` is the fleet-wide rollback.

@@ -297,6 +297,7 @@ class SurfaceFrameHealthMonitorTest {
 
     @Test fun inlineCopyUnderBudgetIsClassifiedAndSpacesTheNextSample() {
         Fixture().use { f ->
+            f.spacing = true
             f.inlineMs = 600
             f.start()
             assertTrue(f.runNext())
@@ -305,6 +306,62 @@ class SurfaceFrameHealthMonitorTest {
             assertEquals(1, f.monitor.sampleTally().other)
             // 2 x 600 ms instead of the 220 ms startup cadence.
             assertEquals(1_200L, f.nextTaskDelayMs())
+        }
+    }
+
+    @Test fun slowInlineCopyKeepsTheStartupCadenceUnlessSpacingIsOptedIn() {
+        // VLC/VOD monitors and live Exo with authoritative pixels.
+        Fixture().use { f ->
+            f.inlineMs = 600
+            f.start()
+            assertTrue(f.runNext())
+            f.complete()
+            assertEquals(220L, f.nextTaskDelayMs())
+        }
+    }
+
+    @Test fun spacingOptInIsReadForEverySample() {
+        Fixture().use { f ->
+            f.spacing = true
+            f.inlineMs = 600
+            f.start()
+            f.sample(BLACK)
+            assertEquals(1_200L, f.nextTaskDelayMs())
+            f.spacing = false // e.g. pixels no longer advisory.
+            f.sample()
+            assertEquals(220L, f.nextTaskDelayMs())
+        }
+    }
+
+    @Test fun multiSecondInlineCopiesStillConfirmBeforeTheNineSecondDeadline() {
+        // Xiaomi MiTV-AYFR0 UHD HEVC readbacks take 2.6-2.9 s
+        // (UHD_READBACK_VERIFICATION.md); the engines' deadline fires 9 s
+        // after the first frame, when the monitor starts.
+        for (uhd in listOf(false, true)) {
+            Fixture(uhd = uhd).use { f ->
+                f.inlineMs = 3_000
+                val startedAt = f.now
+                f.start()
+                f.sample()
+                f.sample()
+                assertEquals(1, f.healthy)
+                assertEquals(0, f.unavailable)
+                assertEquals(6_340L, f.now - startedAt) // As in 1.5.98.
+            }
+        }
+    }
+
+    @Test fun transientBlackStartupSampleWithInlineCopiesConfirmsBeforeTheDeadline() {
+        Fixture().use { f ->
+            f.inlineMs = 1_400
+            val startedAt = f.now
+            f.start()
+            f.sample(BLACK)
+            f.sample()
+            assertEquals(0, f.healthy)
+            f.sample()
+            assertEquals(1, f.healthy)
+            assertEquals(4_760L, f.now - startedAt) // As in 1.5.98.
         }
     }
 
@@ -382,6 +439,8 @@ class SurfaceFrameHealthMonitorTest {
         var now = 1_000L
         /** Time PixelCopy.request() blocks its caller (inline copy platforms). */
         var inlineMs = 0L
+        /** The monitor's spaceSlowInlineCopies opt-in; off like VLC/VOD. */
+        var spacing = false
         var copies = 0
         var recycled = 0
         var healthy = 0
@@ -450,6 +509,7 @@ class SurfaceFrameHealthMonitorTest {
             continueAfterHealthy = !constrained,
             allowPeriodicSampling = { policy.mode == SurfaceReadbackPolicy.Mode.CONTINUOUS },
             inlineCopyBudgetMs = { inlineCopyBudgetMs },
+            spaceSlowInlineCopies = { spacing },
             sdkInt = sdkInt,
             nowMs = { now },
         )
