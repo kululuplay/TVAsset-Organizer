@@ -87,6 +87,20 @@ test("device override rules keep only closed-schema matches and sets", () => {
   assert.equal(parsePlaybackPolicy('{"deviceOverrides":[{"set":{"x":1}}]}'), null);
 });
 
+test("nativeFrameTrust is kept only as a boolean device override", () => {
+  assert.deepEqual(
+    sanitizeDeviceOverrides([
+      { match: {}, set: { nativeFrameTrust: false } },
+      { match: { model: "AFTT" }, set: { nativeFrameTrust: true } },
+      { match: {}, set: { nativeFrameTrust: "false" } }, // string: dropped
+    ]),
+    [
+      { match: {}, set: { nativeFrameTrust: false } },
+      { match: { model: "AFTT" }, set: { nativeFrameTrust: true } },
+    ],
+  );
+});
+
 test("panel policy text validation explains rejections and counts dropped rules", () => {
   assert.equal(validatePlaybackPolicyText("").ok, false);
   assert.match(validatePlaybackPolicyText("{oops").error, /invalid JSON/);

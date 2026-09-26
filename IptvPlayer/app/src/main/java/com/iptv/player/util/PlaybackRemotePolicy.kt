@@ -34,6 +34,12 @@ object PlaybackRemotePolicy {
         val compatibilityProfile: Boolean? = null,
         /** true = libVLC's default deinterlacer, false = off; null = device rule. */
         val vlcDeinterlace: Boolean? = null,
+        /**
+         * Live Exo pixel verdicts vs native frames: null = advisory only where no
+         * other video stage exists, false = always authoritative (1.5.98),
+         * true = advisory on every route until PixelCopy proves a healthy frame.
+         */
+        val nativeFrameTrust: Boolean? = null,
     )
 
     @Volatile private var current = Snapshot()
@@ -223,7 +229,7 @@ object PlaybackRemotePolicy {
  *   "sdkMin":21,"sdkMax":27,"lowRam":true,"totalRamMaxMb":1536},
  *  "set":{"bufferMode":"HIGH","startEngine":"EXOPLAYER","tunneling":true,
  *   "livePreview":false,"allowSoftwareHdFallback":false,"compatibilityProfile":true,
- *   "vlcDeinterlace":false}}`
+ *   "vlcDeinterlace":false,"nativeFrameTrust":false}}`
  * Regexes are case-insensitive and matched with `find` (unanchored). A rule with
  * an invalid or over-long regex, or with nothing valid to set, is ignored.
  */
@@ -286,6 +292,7 @@ object DeviceOverrideMatcher {
             allowSoftwareHdFallback = raw.set["allowSoftwareHdFallback"] as? Boolean,
             compatibilityProfile = raw.set["compatibilityProfile"] as? Boolean,
             vlcDeinterlace = raw.set["vlcDeinterlace"] as? Boolean,
+            nativeFrameTrust = raw.set["nativeFrameTrust"] as? Boolean,
         )
         if (set == PlaybackRemotePolicy.DeviceOverrides()) return null
         return Rule(
@@ -335,6 +342,7 @@ object DeviceOverrideMatcher {
                 allowSoftwareHdFallback = s.allowSoftwareHdFallback ?: merged.allowSoftwareHdFallback,
                 compatibilityProfile = s.compatibilityProfile ?: merged.compatibilityProfile,
                 vlcDeinterlace = s.vlcDeinterlace ?: merged.vlcDeinterlace,
+                nativeFrameTrust = s.nativeFrameTrust ?: merged.nativeFrameTrust,
             )
         }
         return merged

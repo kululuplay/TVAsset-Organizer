@@ -55,7 +55,8 @@ panel reports how many were dropped) and never fails the whole policy.
         "livePreview": false,
         "allowSoftwareHdFallback": false,
         "compatibilityProfile": true,
-        "vlcDeinterlace": false
+        "vlcDeinterlace": false,
+        "nativeFrameTrust": false
       }
     }
   ]
@@ -126,6 +127,7 @@ data class DeviceOverrides(
     val allowSoftwareHdFallback: Boolean? = null,
     val vlcDeinterlace: Boolean? = null,
     val compatibilityProfile: Boolean? = null,
+    val nativeFrameTrust: Boolean? = null,
 )
 fun deviceOverrides(nowMs: Long = System.currentTimeMillis()): DeviceOverrides
 fun deviceFacts(context: Context): DeviceOverrideMatcher.DeviceFacts
@@ -142,3 +144,40 @@ other 32-bit devices, where every filter mode costs the zero-copy output path
 (1080i measured at 10 fps with the filter and 25 fps without on a MiTV Stick).
 `false` forces it off, `true` restores libVLC's default on a device class that
 copes with the filter; hardware routes and progressive streams are unaffected.
+
+## `nativeFrameTrust` (1.5.99)
+
+Live TV on ExoPlayer confirms video by sampling the SurfaceView with
+PixelCopy. On overlay/underlay SoCs (Amlogic-class sticks) the decoded picture
+sits on a hardware plane, so the copy can read black, or a zeroed placeholder
+that classifies as solid green, while the viewer sees valid video. Three
+verdicts depend on those pixels alone: startup solid green, persistent blank
+and the 9 s validation deadline.
+
+`set.nativeFrameTrust` decides when those pixel-only verdicts are advisory and
+Media3's own frame cadence (at least 24 frames, at least 8 in the last second,
+player READY) is accepted as video proof instead:
+
+- unset (default): advisory only where the verdict has no other video stage to
+  go to, e.g. a constrained Amlogic stick with software HD withheld. There the
+  verdict could only reopen the same ExoPlayer stage in a loop. Wherever
+  another stage exists the verdicts stay authoritative, exactly as in 1.5.98.
+- `false`: always authoritative (the exact 1.5.98 behaviour). Use it for a
+  device class seen playing real green or black video.
+- `true`: advisory on every route. For a new SoC whose PixelCopy is blind but
+  which still has a fallback stage.
+
+In every mode one healthy PixelCopy sample on a stream makes the pixel verdicts
+authoritative again for the rest of that stream, and decoder-side checks (frame
+stall, no first frame) are unaffected. The app log line
+`PixelCopy advisory (...) -> accept Media3 native frames` marks an accept, and
+the `playback_attempt` STABLE row then carries `proof=NATIVE_ADVISORY`.
+
+An empty `match` reaches every device, so
+`{"match":{},"set":{"nativeFrameTrust":false}}` is the fleet-wide rollback.
+Deploy the crash-receiver that knows the key before any rule uses it: an older
+server drops the key from the rule (and a rule that sets nothing else). Apps
+before 1.5.99 ignore it. The panel's match preview only counts the 500 most
+recent devices, so check a model rule's full match count on the devices table.
+When the policy expires (no heartbeat for `ttlSeconds`) the app returns to the
+default.
