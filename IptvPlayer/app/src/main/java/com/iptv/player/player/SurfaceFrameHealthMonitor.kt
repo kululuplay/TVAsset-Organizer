@@ -31,9 +31,21 @@ internal class SurfaceFrameHealthMonitor(
     private val continueAfterHealthy: Boolean = true,
     /** Re-evaluated when source/decoder metadata arrives, not just at construction. */
     private val allowPeriodicSampling: () -> Boolean = { true },
+    /**
+     * Longest a single PixelCopy.request() call may block its caller before the
+     * surface counts as unsampleable. Off by default (VLC/VOD monitors).
+     */
+    private val inlineCopyBudgetMs: () -> Long = { Long.MAX_VALUE },
     private val sdkInt: Int = Build.VERSION.SDK_INT,
     private val nowMs: () -> Long = SystemClock::elapsedRealtime,
 ) {
+    enum class UnavailableReason { RETRIES_EXHAUSTED, CALLBACK_TIMEOUT, SLOW_INLINE_COPY }
+
+    /** Classified samples on the current output, for logs and the engine's early accept. */
+    data class SampleTally(val blank: Int = 0, val green: Int = 0, val other: Int = 0, val errors: Int = 0) {
+        fun compact(): String = "$blank/$green/$other/$errors"
+    }
+
     // Engines clear their health-handler messages on every zap. Native copy
     // completions must still recycle their bitmap and retire in-flight state;
     // generation checks below suppress all stale playback effects.
@@ -51,6 +63,8 @@ internal class SurfaceFrameHealthMonitor(
     private var sampleRequestId = 0L
     private var classifiedFrame = false
     private var samplingUnavailable = false
+    private var unavailableReason: UnavailableReason? = null
+    private var tally = SampleTally()
     private var surfaceProvider: (() -> SurfaceView?)? = null
     private var progressProbe: ProgressProbe? = null
     // A timed-out native PixelCopy may still complete later. Do not start another
@@ -66,6 +80,8 @@ internal class SurfaceFrameHealthMonitor(
     fun hasClassifiedFrame(): Boolean = synchronized(lock) { classifiedFrame }
     fun hasHealthyFrame(): Boolean = synchronized(lock) { recoveryGate.hasHealthyFrame }
     fun isSamplingUnavailable(): Boolean = synchronized(lock) { samplingUnavailable }
+    fun unavailableReason(): UnavailableReason? = synchronized(lock) { unavailableReason }
+    fun sampleTally(): SampleTally = synchronized(lock) { tally }
 
     @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.N)
     private fun supportsPixelCopy(): Boolean = sdkInt >= Build.VERSION_CODES.N
@@ -77,6 +93,8 @@ internal class SurfaceFrameHealthMonitor(
             sampleInFlight = false
             classifiedFrame = false
             samplingUnavailable = false
+            unavailableReason = null
+            tally = SampleTally()
             recoveryGate.reset()
             unavailableRetry.reset()
             surfaceProvider = null
@@ -180,6 +198,8 @@ internal class SurfaceFrameHealthMonitor(
             sampleInFlight = false
             classifiedFrame = false
             samplingUnavailable = false
+            unavailableReason = null
+            tally = SampleTally()
             surfaceProvider = provider
             recoveryGate.reset()
             unavailableRetry.reset()
@@ -204,6 +224,8 @@ internal class SurfaceFrameHealthMonitor(
             sampleInFlight = false
             classifiedFrame = false
             samplingUnavailable = false
+            unavailableReason = null
+            tally = SampleTally()
             recoveryGate.onOutputTransition()
             unavailableRetry.reset()
             generation
@@ -259,7 +281,12 @@ internal class SurfaceFrameHealthMonitor(
 
         val bitmap = Bitmap.createBitmap(SAMPLE_WIDTH, SAMPLE_HEIGHT, Bitmap.Config.ARGB_8888)
         val timeout = Runnable { onSampleTimedOut(sampleGeneration, requestId) }
-        runCatching {
+        // How long request() itself blocked this (main) thread. Some platform
+        // versions copy inline and only post the result, so the callback
+        // timeout below can never fire for them; ~0 on asynchronous platforms.
+        var inlineCopyMs = 0L
+        val requestStartedMs = nowMs()
+        val requested = runCatching {
             PixelCopy.request(
                 surface,
                 bitmap,
@@ -287,6 +314,11 @@ internal class SurfaceFrameHealthMonitor(
                                 val visuallyBlank =
                                     !solidGreen &&
                                         FrameColorClassifier.isVisuallyBlank(pixels)
+                                tally = when {
+                                    solidGreen -> tally.copy(green = tally.green + 1)
+                                    visuallyBlank -> tally.copy(blank = tally.blank + 1)
+                                    else -> tally.copy(other = tally.other + 1)
+                                }
                                 decision = recoveryGate.onSample(
                                     solidGreen = solidGreen,
                                     nowMs = nowMs(),
@@ -325,14 +357,32 @@ internal class SurfaceFrameHealthMonitor(
                             onPersistentBlank()
                         GreenFrameRecoveryGate.Decision.WAIT -> Unit
                     }
-                    nextDelayMs?.let { scheduleSample(sampleGeneration, it) }
+                    nextDelayMs?.let {
+                        // Keep the caller's thread free at least 2/3 of the time
+                        // when each copy blocks it.
+                        val spaced = if (inlineCopyMs >= INLINE_COPY_SPACING_MIN_MS) {
+                            maxOf(it, 2 * inlineCopyMs)
+                        } else {
+                            it
+                        }
+                        scheduleSample(sampleGeneration, spaced)
+                    }
                 },
                 copyResultHandler,
             )
-            handler.postDelayed(timeout, SAMPLE_TIMEOUT_MS)
         }.onFailure {
             bitmap.recycle()
             retryAfterUnavailableSurface(sampleGeneration)
+        }.isSuccess
+        if (!requested) return
+        inlineCopyMs = (nowMs() - requestStartedMs).coerceAtLeast(0L)
+        if (inlineCopyMs >= inlineCopyBudgetMs()) {
+            // The copy already froze the caller for the whole budget. A
+            // callback timeout cannot help (the result is already queued), so
+            // stop sampling this stream exactly like a hung callback.
+            expireInFlightSample(sampleGeneration, requestId, UnavailableReason.SLOW_INLINE_COPY)
+        } else {
+            handler.postDelayed(timeout, SAMPLE_TIMEOUT_MS)
         }
     }
 
@@ -344,6 +394,14 @@ internal class SurfaceFrameHealthMonitor(
      * generation bump and only recycles its bitmap.
      */
     private fun onSampleTimedOut(sampleGeneration: Int, requestId: Long) {
+        expireInFlightSample(sampleGeneration, requestId, UnavailableReason.CALLBACK_TIMEOUT)
+    }
+
+    private fun expireInFlightSample(
+        sampleGeneration: Int,
+        requestId: Long,
+        reason: UnavailableReason,
+    ) {
         val expired = synchronized(lock) {
             if (
                 sampleGeneration != generation ||
@@ -356,6 +414,7 @@ internal class SurfaceFrameHealthMonitor(
             sampleInFlight = false
             started = false
             samplingUnavailable = true
+            unavailableReason = reason
             generation++
             true
         }
@@ -384,10 +443,12 @@ internal class SurfaceFrameHealthMonitor(
         val delay = synchronized(lock) {
             if (sampleGeneration != generation || !started) return@synchronized null
             sampleInFlight = false
+            tally = tally.copy(errors = tally.errors + 1)
             unavailableRetry.onUnavailable().also { nextDelay ->
                 if (nextDelay == null) {
                     started = false
                     samplingUnavailable = true
+                    unavailableReason = UnavailableReason.RETRIES_EXHAUSTED
                     generation++
                     exhausted = true
                 }
@@ -415,6 +476,8 @@ internal class SurfaceFrameHealthMonitor(
         // cadence as soon as a suspicious green/blank frame is observed.
         private const val STEADY_SAMPLE_INTERVAL_MS = 5_000L
         private const val SUSPECT_SAMPLE_INTERVAL_MS = 500L
+        /** Below this an inline copy costs nothing worth spacing out. */
+        private const val INLINE_COPY_SPACING_MIN_MS = 100L
     }
 }
 
