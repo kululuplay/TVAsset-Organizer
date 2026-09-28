@@ -174,6 +174,12 @@ object VlcOps {
         enqueue(PendingOp(action, timeoutMs, onTimeout, onTimedOutActionFinished))
     }
 
+    /** Compact queue state for stale-process diagnostics. */
+    internal fun debugSnapshot(): String = synchronized(queueLock) {
+        "active:${active != null},pending:${pending.size}," +
+            "rotating:$recoveringFromTimeout,gen:$workerGeneration"
+    }
+
     private fun enqueue(operation: PendingOp) {
         synchronized(queueLock) {
             pending.addLast(operation)

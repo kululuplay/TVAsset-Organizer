@@ -11,6 +11,8 @@ import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.StrictMode
 import android.view.LayoutInflater
 import android.view.View
@@ -26,6 +28,7 @@ import com.iptv.player.playback.android.PlaybackQoeRuntime
 import com.iptv.player.playback.android.PlaybackProcessRecovery
 import com.iptv.player.playback.android.PlaybackWifiLock
 import com.iptv.player.playback.android.PlaybackProcessRecoveryTargetProvider
+import com.iptv.player.playback.android.StaleProcessGuard
 import com.iptv.player.ui.player.PlayerActivity
 import com.iptv.player.ui.player.VodPlayerActivity
 import com.iptv.player.ui.screensaver.ScreensaverActivity
@@ -65,6 +68,38 @@ class IptvApp : Application(), ImageLoaderFactory {
     /** Guards against two dialogs (announcement + resolved) stacking on one resume. */
     @Volatile private var dialogInFlight = false
 
+    private val resumeHandler by lazy { Handler(Looper.getMainLooper()) }
+
+    /** Foreground checks for a screen whose resume has fully completed (main thread). */
+    private fun onResumeSettled(activity: Activity) {
+        if (
+            currentActivityRef?.get() !== activity ||
+            activity.isFinishing ||
+            activity.isDestroyed
+        ) {
+            // Another screen took over meanwhile; its own settled check runs.
+            return
+        }
+        // A background VLC JNI hang may have left the process alive but unable
+        // to prove socket closure. Recover before any foreground screen can open
+        // another provider connection.
+        val recoveryIntent =
+            (activity as? PlaybackProcessRecoveryTargetProvider)
+                ?.playbackProcessRecoveryIntent()
+        if (PlaybackProcessRecovery.requestIfRequired(
+            activity,
+            reason = "foreground_unresolved_native_owner",
+            resumeIntent = recoveryIntent,
+        )) {
+            return
+        }
+        // Back after hours in the background or asleep: start clean instead of
+        // reusing a process that may carry stale state.
+        if (StaleProcessGuard.onResumed(activity)) return
+        maybeShowAnnouncement(activity)
+        maybeShowResolved(activity)
+    }
+
     override fun onCreate() {
         super.onCreate()
 
@@ -79,6 +114,7 @@ class IptvApp : Application(), ImageLoaderFactory {
         if (BuildConfig.DEBUG) enableStrictMode()
 
         ServiceLocator.init(this)
+        StaleProcessGuard.install(this)
 
         // Hold a Wi-Fi performance lock while a stream plays so cheap sticks do
         // not drop into Wi-Fi power-save mid-channel. Best effort only.
@@ -142,6 +178,7 @@ class IptvApp : Application(), ImageLoaderFactory {
         registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
                 if (startedActivities++ == 0) {
+                    StaleProcessGuard.onForeground()
                     HeartbeatReporter.start(this@IptvApp)
                     com.iptv.player.util.PlaybackSupportReporter.start(this@IptvApp)
                 }
@@ -150,6 +187,7 @@ class IptvApp : Application(), ImageLoaderFactory {
             override fun onActivityStopped(activity: Activity) {
                 startedActivities = (startedActivities - 1).coerceAtLeast(0)
                 if (startedActivities == 0) {
+                    StaleProcessGuard.onBackground()
                     HeartbeatReporter.stop()
                     com.iptv.player.util.PlaybackSupportReporter.stop()
                     // Orderly background stop: the next launch must NOT read this as
@@ -160,21 +198,11 @@ class IptvApp : Application(), ImageLoaderFactory {
 
             override fun onActivityResumed(activity: Activity) {
                 currentActivityRef = WeakReference(activity)
-                // A background VLC JNI hang may have left the process alive but
-                // unable to prove socket closure. Recover before any foreground
-                // screen can open another provider connection.
-                val recoveryIntent =
-                    (activity as? PlaybackProcessRecoveryTargetProvider)
-                        ?.playbackProcessRecoveryIntent()
-                if (PlaybackProcessRecovery.requestIfRequired(
-                    activity,
-                    reason = "foreground_unresolved_native_owner",
-                    resumeIntent = recoveryIntent,
-                )) {
-                    return
-                }
-                maybeShowAnnouncement(activity)
-                maybeShowResolved(activity)
+                // Platform resume callbacks run before the AndroidX lifecycle is
+                // RESUMED (ON_RESUME is dispatched post-resume), and a controlled
+                // recovery launch requires RESUMED: calling it here always failed.
+                // Evaluate right after this resume has completed instead.
+                resumeHandler.post { onResumeSettled(activity) }
             }
 
             override fun onActivityPaused(activity: Activity) {

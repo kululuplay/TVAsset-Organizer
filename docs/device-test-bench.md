@@ -68,3 +68,20 @@ is the effective frame rate.
   tunneling (`AUDIO_TRACK_INIT_FAILED`). Handled by `InterlacedExoPolicy`.
 - Same device, software route: any libVLC deinterlace mode → 10 fps,
   `--deinterlace=0` → 25 fps (`VlcDeinterlacePolicy`).
+
+## Stale-process recycle (1.5.99)
+
+`StaleProcessGuard` restarts the app process when the user comes back after
+four hours in the background/asleep, or presses a key after four hours without
+input while no playback runs. To test it without waiting:
+
+```bash
+adb shell settings put global kululu_stale_recycle_ms 60000
+```
+
+Then either press Home, wait a minute and reopen the app, or leave a
+non-playing screen untouched for a minute and press a key. Expect
+`PlaybackLog` lines `ProcessRecovery ... reason=stale_process_recycle detail=...`,
+a new process id (`adb shell pidof <package>`) and the splash (players reopen
+their own screen). Clear with `adb shell settings delete global kululu_stale_recycle_ms`.
+

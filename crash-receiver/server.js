@@ -1135,6 +1135,7 @@ const TELEMETRY_LABELS = {
   qoe_dropped: "Oynatma özeti taşması (QoE spool overflow)",
   safe_mode: "Güvenli mod (crash-loop koruması)",
   process_recovery: "Otomatik oynatıcı süreç yenileme",
+  stale_process_recycle: "Uzun aradan sonra temiz yeniden başlatma",
 };
 const telemetryLabel = (t) => TELEMETRY_LABELS[t] || t || "—";
 app.post("/api/request", rateLimited("request"), async (req, res) => {

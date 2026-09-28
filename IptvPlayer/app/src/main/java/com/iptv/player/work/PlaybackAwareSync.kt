@@ -18,6 +18,9 @@ internal enum class BackgroundSyncOutcome {
 /** One process may contain periodic and deferred WorkManager instances at once. */
 private val syncLease = Mutex()
 
+/** Whether a background catalog sync currently runs in this process (diagnostics). */
+internal fun backgroundSyncBusy(): Boolean = syncLease.isLocked
+
 internal suspend fun runPlaybackAwareSync(context: Context): BackgroundSyncOutcome {
     // A second worker must not wait and then repeat the same complete catalog sync.
     if (!syncLease.tryLock()) return BackgroundSyncOutcome.ALREADY_RUNNING

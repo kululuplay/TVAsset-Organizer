@@ -21,6 +21,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.iptv.player.data.ServiceLocator
+import com.iptv.player.playback.android.StaleProcessGuard
 import com.iptv.player.ui.screensaver.ScreensaverActivity
 import com.iptv.player.util.LocaleManager
 import kotlinx.coroutines.flow.collect
@@ -54,12 +55,15 @@ abstract class BaseActivity : AppCompatActivity() {
         // as this window is no longer visible.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
+        // Every screen, players included, reports input to the stale-process
+        // guard; screens with the idle screensaver also feed its timer.
+        observeWindowInteraction(window)
+
         if (idleScreensaverEnabledForScreen) {
             // Start disabled until DataStore emits the persisted value. This avoids
             // briefly arming the old default when the user's real setting is Off.
             val watcher = IdleWatcher(timeoutMs = 0L, onIdle = ::onIdleTimeout)
             idleWatcher = watcher
-            observeWindowInteraction(window)
             lifecycleScope.launch {
                 repeatOnLifecycle(Lifecycle.State.STARTED) {
                     ServiceLocator.settings.screensaverMinutes
@@ -108,16 +112,23 @@ abstract class BaseActivity : AppCompatActivity() {
         val delegate = target.callback ?: return
         target.callback = object : WindowCallbackWrapper(delegate) {
             override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+                val press = event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0
+                // After a long absence the first press may recycle the process;
+                // the stale UI then never sees it (or anything after it).
+                if (StaleProcessGuard.onInput(this@BaseActivity, press)) return true
                 idleWatcher?.notifyInteraction()
                 return delegate.dispatchKeyEvent(event)
             }
 
             override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                val press = event.actionMasked == MotionEvent.ACTION_DOWN
+                if (StaleProcessGuard.onInput(this@BaseActivity, press)) return true
                 idleWatcher?.notifyInteraction()
                 return delegate.dispatchTouchEvent(event)
             }
 
             override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+                if (StaleProcessGuard.onInput(this@BaseActivity, isPress = false)) return true
                 idleWatcher?.notifyInteraction()
                 return delegate.dispatchGenericMotionEvent(event)
             }
