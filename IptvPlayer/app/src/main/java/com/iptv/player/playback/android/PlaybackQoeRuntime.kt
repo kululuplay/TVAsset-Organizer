@@ -22,6 +22,7 @@ import com.iptv.player.playback.core.PlaybackObservation
 import com.iptv.player.playback.core.PlaybackIncidentRecorder
 import com.iptv.player.playback.core.PlaybackIncidentTrigger
 import android.os.SystemClock
+import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
@@ -53,6 +54,16 @@ object PlaybackQoeRuntime {
         this@PlaybackQoeRuntime.keys[record.session.id]?.let { put("content_key", it) }
     }
     fun supportSnapshot(): List<Map<String, Any>> = recorder.activeSnapshot().map(::fields)
+
+    /** Whether some screen is showing running playback right now. */
+    fun isAnySessionPlaying(): Boolean = runCatching { recorder.hasPlayingSession() }.getOrDefault(false)
+
+    /** e.g. `playing:1,buffering:0`; `none` without active sessions. */
+    fun stateSummary(): String = runCatching {
+        recorder.activeStateCounts().entries
+            .joinToString(",") { (state, count) -> "${state.name.lowercase(Locale.US)}:$count" }
+            .ifEmpty { "none" }
+    }.getOrDefault("?")
     fun pauseForBackground() {
         recorder.pauseAll()
         sampleIncidents()

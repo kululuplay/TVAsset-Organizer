@@ -338,6 +338,16 @@ class PlaybackQoeRecorder(
         active.values.map { it.snapshot(clock.nowMs(), false) }
     }
 
+    /** Whether any active session shows running playback (first frame, not buffering or paused). */
+    fun hasPlayingSession(): Boolean = synchronized(lock) {
+        active.values.any { it.observedState == PlaybackObservedState.PLAYING }
+    }
+
+    /** Active sessions per observed state, for compact diagnostics. */
+    fun activeStateCounts(): Map<PlaybackObservedState, Int> = synchronized(lock) {
+        active.values.groupingBy { it.observedState }.eachCount()
+    }
+
     fun recordFailure(
         sessionId: PlaybackSessionId,
         failure: PlaybackFailure,

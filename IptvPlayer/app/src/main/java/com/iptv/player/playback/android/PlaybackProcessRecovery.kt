@@ -61,18 +61,64 @@ internal object PlaybackProcessRecovery {
         reason: String,
         resumeIntent: Intent? = null,
     ): Boolean {
-        val lifecycle = (activity as? LifecycleOwner)?.lifecycle
-        if (
-            activity.isFinishing ||
-            activity.isDestroyed ||
-            lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) != true
-        ) {
+        if (!isResumedAndAlive(activity)) {
             // Background timeout callbacks leave only the provider recovery bit;
             // the next foreground Activity callback launches the recovery UI.
             return false
         }
         val safety = ProviderConnectionSafety.snapshot()
         if (!safety.canRecoverLocalProcess) return false
+        return launch(
+            activity = activity,
+            reason = reason,
+            resumeIntent = resumeIntent,
+            targetComponent = ComponentName(activity, activity.javaClass),
+            telemetryType = "process_recovery",
+            telemetrySeverity = "fatal",
+            telemetryDetail = reason,
+        )
+    }
+
+    /**
+     * Stale-process recycle requested by [StaleProcessGuard] after a long
+     * absence: the same controlled relaunch without native-owner proof, never
+     * while a Cast receiver may own playback. [target] names the screen to open
+     * (the recovery Activity still accepts only its allowed targets).
+     */
+    fun requestStaleRecycle(activity: Activity, detail: String, target: Intent): Boolean {
+        if (!isResumedAndAlive(activity)) return false
+        val safety = ProviderConnectionSafety.snapshot()
+        if (safety.remoteUncertain || safety.activeRemoteOwnerCount > 0) return false
+        val component = target.component
+            ?.takeIf { it.packageName == activity.packageName }
+            ?: return false
+        return launch(
+            activity = activity,
+            reason = StaleProcessGuard.TELEMETRY_TYPE,
+            resumeIntent = target,
+            targetComponent = component,
+            telemetryType = StaleProcessGuard.TELEMETRY_TYPE,
+            telemetrySeverity = "warn",
+            telemetryDetail = detail,
+        )
+    }
+
+    private fun isResumedAndAlive(activity: Activity): Boolean {
+        val lifecycle = (activity as? LifecycleOwner)?.lifecycle
+        return !activity.isFinishing &&
+            !activity.isDestroyed &&
+            lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) == true
+    }
+
+    private fun launch(
+        activity: Activity,
+        reason: String,
+        resumeIntent: Intent?,
+        targetComponent: ComponentName,
+        telemetryType: String,
+        telemetrySeverity: String,
+        telemetryDetail: String,
+    ): Boolean {
         if (!requestInFlight.compareAndSet(false, true)) return true
 
         val now = System.currentTimeMillis()
@@ -95,7 +141,7 @@ internal object PlaybackProcessRecovery {
         }
 
         val target = Intent(resumeIntent ?: activity.intent).apply {
-            component = ComponentName(activity, activity.javaClass)
+            component = targetComponent
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             putExtra(EXTRA_RECOVERED_PLAYBACK, true)
             clipData = null
@@ -112,14 +158,15 @@ internal object PlaybackProcessRecovery {
 
         return runCatching {
             StabilityTelemetry.record(
-                type = "process_recovery",
-                severity = "fatal",
-                detail = reason,
+                type = telemetryType,
+                severity = telemetrySeverity,
+                detail = telemetryDetail,
             )
             PlaybackLog.log(
                 activity,
                 "ProcessRecovery",
-                "starting controlled playback process recovery reason=$reason",
+                "starting controlled playback process recovery reason=$reason" +
+                    if (telemetryDetail != reason) " detail=$telemetryDetail" else "",
             )
             activity.startActivity(recovery)
             activity.overridePendingTransition(0, 0)
