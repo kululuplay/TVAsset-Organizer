@@ -106,7 +106,10 @@ object StaleProcessGuard {
         val target = (activity as? PlaybackProcessRecoveryTargetProvider)
             ?.playbackProcessRecoveryIntent()
             ?: launcherIntent(activity)
-        val launched = PlaybackProcessRecovery.requestStaleRecycle(activity, detail, target)
+        val launched = PlaybackProcessRecovery.requestStaleRecycle(activity, detail, target) {
+            // Still alive: the recycle failed, give the remote back to the user.
+            tracker.recycleNotLaunched(SystemClock.elapsedRealtime())
+        }
         if (!launched) {
             PlaybackLog.log(activity, TAG, "stale process recycle not launched: $detail")
             tracker.recycleNotLaunched(SystemClock.elapsedRealtime())

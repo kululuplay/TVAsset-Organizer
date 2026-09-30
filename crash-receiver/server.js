@@ -1136,6 +1136,7 @@ const TELEMETRY_LABELS = {
   safe_mode: "Güvenli mod (crash-loop koruması)",
   process_recovery: "Otomatik oynatıcı süreç yenileme",
   stale_process_recycle: "Uzun aradan sonra temiz yeniden başlatma",
+  process_recovery_failed: "Süreç yenileme başarısız (süreç değişmedi)",
 };
 const telemetryLabel = (t) => TELEMETRY_LABELS[t] || t || "—";
 app.post("/api/request", rateLimited("request"), async (req, res) => {
