@@ -84,4 +84,30 @@ non-playing screen untouched for a minute and press a key. Expect
 `PlaybackLog` lines `ProcessRecovery ... reason=stale_process_recycle detail=...`,
 a new process id (`adb shell pidof <package>`) and the splash (players reopen
 their own screen). Clear with `adb shell settings delete global kululu_stale_recycle_ms`.
+`kululu_stale_recycle_any_screen 1` also allows the recycle from the login and
+splash screens, so the path is testable without an account.
+
+## Process recovery must be tested on a non-debuggable build
+
+Debug builds are dumpable, so the `:playback_recovery` process can read
+`/proc/<pid>` of the main process and the old `/proc`-based verification looked
+fine on the emulator. Release builds are not dumpable and `/proc` is mounted
+with `hidepid=2`: `/proc/<pid>` of the main process is invisible to its
+sibling process (`adb shell ls -ln /proc/<pid>/stat` shows owner `0`, and the
+directory does not exist from inside the recovery process). Until 1.5.100 the
+recovery therefore never killed anything in production.
+
+Build a release variant with the diagnostics switches, signed with any keystore
+(the debug keystore is fine for the emulator):
+
+```bash
+cd IptvPlayer
+LIVE_PLAYBACK_DIAGNOSTICS=1 KEYSTORE_FILE=$HOME/.android/debug.keystore KEYSTORE_PASSWORD=android KEY_ALIAS=androiddebugkey KEY_PASSWORD=android ./gradlew -PabiFilter=x86 :app:assembleRelease
+```
+
+Expected after a recycle in `adb logcat`: `ActivityManager: Process com.iptv.player (pid N) has died`
+about 100-200 ms after `Start proc ...:playback_recovery`, then a new
+`Start proc ...:com.iptv.player`. A surviving process now logs
+`controlled process recovery did not replace this process` after six seconds
+and reports `process_recovery_failed` to stability telemetry.
 

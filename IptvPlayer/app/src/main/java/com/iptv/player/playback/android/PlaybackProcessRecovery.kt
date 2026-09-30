@@ -6,7 +6,9 @@ import android.app.Application
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Binder
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
@@ -52,6 +54,13 @@ internal object PlaybackProcessRecovery {
 
     private val requestInFlight = AtomicBoolean(false)
 
+    /**
+     * Lives as long as this process. The recovery process links to its death:
+     * on production devices that is the only way it can recognise this process
+     * and prove that it is gone (see ProcessRecoveryVerifier).
+     */
+    private val processToken = Binder()
+
     fun isRecoveryProcess(context: Context): Boolean =
         currentProcessName(context)?.endsWith(RECOVERY_PROCESS_SUFFIX) == true
 
@@ -85,7 +94,12 @@ internal object PlaybackProcessRecovery {
      * while a Cast receiver may own playback. [target] names the screen to open
      * (the recovery Activity still accepts only its allowed targets).
      */
-    fun requestStaleRecycle(activity: Activity, detail: String, target: Intent): Boolean {
+    fun requestStaleRecycle(
+        activity: Activity,
+        detail: String,
+        target: Intent,
+        onNotReplaced: (() -> Unit)? = null,
+    ): Boolean {
         if (!isResumedAndAlive(activity)) return false
         val safety = ProviderConnectionSafety.snapshot()
         if (safety.remoteUncertain || safety.activeRemoteOwnerCount > 0) return false
@@ -100,6 +114,7 @@ internal object PlaybackProcessRecovery {
             telemetryType = StaleProcessGuard.TELEMETRY_TYPE,
             telemetrySeverity = "warn",
             telemetryDetail = detail,
+            onNotReplaced = onNotReplaced,
         )
     }
 
@@ -118,6 +133,7 @@ internal object PlaybackProcessRecovery {
         telemetryType: String,
         telemetrySeverity: String,
         telemetryDetail: String,
+        onNotReplaced: (() -> Unit)? = null,
     ): Boolean {
         if (!requestInFlight.compareAndSet(false, true)) return true
 
@@ -153,6 +169,12 @@ internal object PlaybackProcessRecovery {
             putExtra(PlaybackProcessRecoveryActivity.EXTRA_REQUESTED_AT_MS, now)
             putExtra(PlaybackProcessRecoveryActivity.EXTRA_TARGET_INTENT, target)
             putExtra(PlaybackProcessRecoveryActivity.EXTRA_REASON, reason)
+            putExtra(
+                PlaybackProcessRecoveryActivity.EXTRA_MAIN_TOKEN,
+                Bundle().apply {
+                    putBinder(PlaybackProcessRecoveryActivity.KEY_MAIN_TOKEN, processToken)
+                },
+            )
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
         }
 
@@ -168,12 +190,28 @@ internal object PlaybackProcessRecovery {
                 "starting controlled playback process recovery reason=$reason" +
                     if (telemetryDetail != reason) " detail=$telemetryDetail" else "",
             )
+            val appContext = activity.applicationContext
             activity.startActivity(recovery)
             activity.overridePendingTransition(0, 0)
-            // Normally this process is gone within a second. If the vendor OS
-            // refuses to launch the recovery Activity, allow a later retry.
+            // Normally this process is gone within a second. Still being here
+            // means the recovery did not replace it (vendor refusal, rate limit,
+            // failed kill): record it so the panel shows it, allow a later retry
+            // and let the caller undo whatever it prepared for the restart.
             Handler(Looper.getMainLooper()).postDelayed(
-                { requestInFlight.set(false) },
+                {
+                    requestInFlight.set(false)
+                    PlaybackLog.log(
+                        appContext,
+                        "ProcessRecovery",
+                        "controlled process recovery did not replace this process reason=$reason",
+                    )
+                    StabilityTelemetry.record(
+                        type = "process_recovery_failed",
+                        severity = "fatal",
+                        detail = reason,
+                    )
+                    onNotReplaced?.invoke()
+                },
                 RECOVERY_LAUNCH_WATCHDOG_MS,
             )
             true
@@ -234,5 +272,6 @@ internal object PlaybackProcessRecovery {
             ?.processName
     }
 
-    private const val RECOVERY_LAUNCH_WATCHDOG_MS = 5_000L
+    /** Longer than the recovery Activity waits for kernel death (50 x 100 ms). */
+    private const val RECOVERY_LAUNCH_WATCHDOG_MS = 6_000L
 }
