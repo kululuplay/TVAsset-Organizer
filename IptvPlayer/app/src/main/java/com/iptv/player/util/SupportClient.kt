@@ -5,7 +5,6 @@ import android.content.SharedPreferences
 import android.os.Build
 import android.util.Base64
 import com.iptv.player.BuildConfig
-import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -26,17 +25,11 @@ import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
-import java.security.KeyStore
 import java.security.SecureRandom
 import java.security.cert.CertificateException
-import java.security.cert.CertificateFactory
-import java.security.cert.X509Certificate
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLException
-import javax.net.ssl.TrustManagerFactory
-import javax.net.ssl.X509TrustManager
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -301,35 +294,10 @@ object SupportClient {
     }
 
     private fun buildHttpClient(app: Context): OkHttpClient {
-        val system = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply {
-            init(null as KeyStore?)
-        }.trustManagers.filterIsInstance<X509TrustManager>().first()
-        val root = app.resources.openRawResource(R.raw.support_isrg_root_x1).use {
-            CertificateFactory.getInstance("X.509").generateCertificate(it)
-        }
-        val anchors = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
-            load(null, null); setCertificateEntry("isrg-root-x1", root)
-        }
-        val fallback = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply {
-            init(anchors)
-        }.trustManagers.filterIsInstance<X509TrustManager>().first()
-        val trust = object : X509TrustManager {
-            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) =
-                system.checkClientTrusted(chain, authType)
-            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
-                try {
-                    system.checkServerTrusted(chain, authType)
-                } catch (original: CertificateException) {
-                    try { fallback.checkServerTrusted(chain, authType) }
-                    catch (secondary: CertificateException) { original.addSuppressed(secondary); throw original }
-                }
-            }
-            override fun getAcceptedIssuers(): Array<X509Certificate> =
-                system.acceptedIssuers + fallback.acceptedIssuers
-        }
-        val tls = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }
+        // System trust first, bundled ISRG Root X1 as the fallback anchor.
         return OkHttpClient.Builder()
-            .sslSocketFactory(tls.socketFactory, trust) // Default hostname/SAN verification remains enabled.
+            // Default hostname/SAN verification remains enabled.
+            .sslSocketFactory(BundledRootTrust.socketFactory(app), BundledRootTrust.trustManager(app))
             .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false)
             .connectTimeout(12, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(20, TimeUnit.SECONDS).callTimeout(25, TimeUnit.SECONDS)

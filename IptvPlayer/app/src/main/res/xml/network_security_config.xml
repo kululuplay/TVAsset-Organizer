@@ -6,6 +6,11 @@
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
+            <!-- ISRG Root X1 (Let's Encrypt). Android 7.0 and 7.1.0 do not ship
+                 it, so the portal certificate was rejected on e.g. 2015 Sony
+                 BRAVIA sets (login error NET-TLS). Android 6.0 ignores this file
+                 and gets the same root in code (BundledRootTrust). -->
+            <certificates src="@raw/isrg_root_x1" />
         </trust-anchors>
     </base-config>
 

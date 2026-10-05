@@ -15,6 +15,7 @@ import com.iptv.player.util.AppInfo
 import com.iptv.player.util.Logger
 import com.iptv.player.util.RetryInterceptor
 import com.iptv.player.util.SensitiveDataRedactor
+import com.iptv.player.util.trustBundledRootOnLegacyAndroid
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -96,6 +97,7 @@ object ServiceLocator {
                     }
                     chain.proceed(request)
                 }
+                .trustBundledRootOnLegacyAndroid()
                 .build()
 
             val retrofitBuilder = Retrofit.Builder()
