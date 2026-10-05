@@ -78,6 +78,7 @@ import com.iptv.player.playback.core.PlaybackSessionId
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.SleepTimer
 import com.iptv.player.util.AppInfo
+import com.iptv.player.util.BundledRootTrust
 import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NowPlaying
 import com.iptv.player.util.PlaybackLog
@@ -1795,7 +1796,9 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     private fun buildPlayer() {
         check(owners.current == null) { "Cannot build over an active VLC owner" }
         val cachingMs = bufferMode.vodNetworkCachingMs
-        val options = VodVlcOptions.libVlcOptions(cachingMs, forceSoftware, allowPassthrough)
+        val options = ArrayList(VodVlcOptions.libVlcOptions(cachingMs, forceSoftware, allowPassthrough))
+        // Android 6.0/7.0: the native trust store lacks the portal's root.
+        options.addAll(BundledRootTrust.vlcOptions())
         val vlc = LibVLC(this, options)
         vlc.setUserAgent(AppInfo.USER_AGENT, AppInfo.USER_AGENT)
         val mp = MediaPlayer(vlc)

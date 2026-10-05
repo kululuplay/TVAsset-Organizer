@@ -111,3 +111,42 @@ about 100-200 ms after `Start proc ...:playback_recovery`, then a new
 `controlled process recovery did not replace this process` after six seconds
 and reports `process_recovery_failed` to stability telemetry.
 
+## Certificate trust on old Android (instrumented tests, 1.5.101)
+
+Android below 7.1.1 does not ship ISRG Root X1, the root of the portal's
+Let's Encrypt certificate; the app bundles it (`BundledRootTrust`, network
+security config, libVLC `--gnutls-dir-trust`). The behaviour depends on the
+platform's own certificate store and TLS stack, so it is tested on real system
+images, not on the JVM:
+
+```bash
+sdkmanager "system-images;android-24;android-tv;x86" "system-images;android-23;android-tv;x86"
+avdmanager create avd -n tv24 -k "system-images;android-24;android-tv;x86" -d tv_1080p
+emulator -avd tv24 -no-window -port 5584
+cd IptvPlayer
+ANDROID_SERIAL=emulator-5584 ./gradlew -PabiFilter=x86 :app:connectedDebugAndroidTest
+```
+
+If Gradle reports `Failed to receive the UTP test results`, install both APKs
+and run the runner directly:
+
+```bash
+adb install -r -t app/build/outputs/apk/debug/app-debug.apk
+adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb shell am instrument -w -r com.iptv.player.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+- `PortalChainTrustTest` checks the app's effective trust against the chain
+  kululu.live served on 5 Oct 2026 (`src/androidTest/assets/tls`). It needs no
+  network. When the leaf has expired the tests skip themselves: save a fresh
+  chain with `openssl s_client -connect kululu.live:443 -showcerts` (run it on
+  a server, not on a PC whose antivirus intercepts TLS).
+- `LibVlcTrustDirectoryTest` proves that libVLC only reaches an HTTPS server
+  with an unknown root when that root is in the trust directory.
+- x86 only: libVLC 3.7.6 crashes in `nettle_memxor` when it encrypts an AES-GCM
+  record (SIGSEGV right after the handshake), so the test removes GCM suites on
+  x86. Real TV devices are ARM and use GCM every day.
+- A live login from an emulator is not a valid trust test on a PC with a
+  TLS-intercepting antivirus: the emulator then sees the antivirus certificate
+  and fails on every Android version.
+

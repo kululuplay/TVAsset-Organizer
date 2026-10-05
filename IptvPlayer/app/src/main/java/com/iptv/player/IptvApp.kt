@@ -37,6 +37,7 @@ import com.iptv.player.ui.common.LowEndUiBudget
 import com.iptv.player.util.AbnormalExitDetector
 import com.iptv.player.util.AnnouncementCenter
 import com.iptv.player.util.AnrWatchdog
+import com.iptv.player.util.BundledRootTrust
 import com.iptv.player.util.CrashReporter
 import com.iptv.player.util.HeartbeatReporter
 import com.iptv.player.util.Logger
@@ -46,10 +47,12 @@ import com.iptv.player.util.LiveTransportMemory
 import com.iptv.player.util.RequestReporter
 import com.iptv.player.util.ResolvedRequestCenter
 import com.iptv.player.util.StabilityTelemetry
+import com.iptv.player.util.trustBundledRootOnLegacyAndroid
 import com.iptv.player.work.SyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
 import java.lang.ref.WeakReference
 
 class IptvApp : Application(), ImageLoaderFactory {
@@ -113,6 +116,9 @@ class IptvApp : Application(), ImageLoaderFactory {
         Logger.init(this)
         if (BuildConfig.DEBUG) enableStrictMode()
 
+        // Before any HTTPS client exists: old Android versions lack the root
+        // of the portal certificate.
+        BundledRootTrust.install(this)
         ServiceLocator.init(this)
         StaleProcessGuard.install(this)
 
@@ -236,6 +242,11 @@ class IptvApp : Application(), ImageLoaderFactory {
             lowRamDevice = isLowRamDevice(),
         )
         return ImageLoader.Builder(this)
+            .apply {
+                if (BundledRootTrust.needsProgrammaticTrust) {
+                    okHttpClient { OkHttpClient.Builder().trustBundledRootOnLegacyAndroid().build() }
+                }
+            }
             .respectCacheHeaders(false)
             .crossfade(policy.crossfade)
             .memoryCache {

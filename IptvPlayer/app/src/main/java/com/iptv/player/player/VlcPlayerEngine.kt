@@ -43,6 +43,7 @@ import java.util.concurrent.atomic.AtomicReference
 import com.iptv.player.cast.ProviderConnectionSafety
 import com.iptv.player.playback.android.PlaybackQoeRuntime
 import com.iptv.player.util.AppInfo
+import com.iptv.player.util.BundledRootTrust
 import com.iptv.player.util.PlaybackLog
 import com.iptv.player.util.PlaybackRemotePolicy
 import org.videolan.libvlc.LibVLC
@@ -453,6 +454,8 @@ class VlcPlayerEngine(
         val options = ArrayList(
             libVlcOptions(vlcCachingMs, forceSoftware, allowPassthrough, disableDeinterlace),
         )
+        // Android 6.0/7.0: the native trust store lacks the portal's root.
+        options.addAll(BundledRootTrust.vlcOptions())
         DiagnosticSwitches.extraVlcOptions(context).takeIf { it.isNotEmpty() }?.let { extra ->
             options.addAll(extra)
             PlaybackLog.log(context, engineName, "diag extra libVLC options: $extra")

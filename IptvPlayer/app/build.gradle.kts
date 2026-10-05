@@ -60,8 +60,11 @@ android {
         applicationId = "com.iptv.player"
         minSdk = 23
         targetSdk = 34
-        versionCode = 144
-        versionName = "1.5.100"
+        versionCode = 145
+        versionName = "1.5.101"
+        // Device-level checks (certificate trust on old Android, libVLC TLS)
+        // that a JVM test cannot cover; run with connectedDebugAndroidTest.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = "@string/app_name"
         buildConfigField("boolean", "TS_ONLY_TEST_BUILD", tsOnlyTestBuild.toString())
         if (livePlaybackDiagnostics) versionNameSuffix = "-diag1"
@@ -260,6 +263,12 @@ dependencies {
     // Mockito provides no-op stubs for the Context/ViewGroup the controller
     // stores but never really uses in tests (engine + scheduler are faked).
     testImplementation("org.mockito:mockito-core:5.12.0")
+
+    // --- Instrumented tests (emulator; see docs/device-test-bench.md) ---
+    androidTestImplementation("androidx.test:runner:1.5.2")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    androidTestImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
 }
 
 // Keep direct local assemble invocations honest too: a failing policy/redaction

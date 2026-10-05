@@ -315,6 +315,7 @@ object SpeedTester {
             maxRequestsPerHost = STREAM_COUNT
         }
         OkHttpClient.Builder()
+            .trustBundledRootOnLegacyAndroid()
             .dispatcher(dispatcher)
             .connectionPool(ConnectionPool(0, 1L, TimeUnit.SECONDS))
             .protocols(listOf(Protocol.HTTP_1_1))
