@@ -145,7 +145,7 @@ other 32-bit devices, where every filter mode costs the zero-copy output path
 `false` forces it off, `true` restores libVLC's default on a device class that
 copes with the filter; hardware routes and progressive streams are unaffected.
 
-## `nativeFrameTrust` (1.5.99)
+## `nativeFrameTrust` (1.6.0)
 
 Live TV on ExoPlayer confirms video by sampling the SurfaceView with
 PixelCopy. On overlay/underlay SoCs (Amlogic-class sticks) the decoded picture
@@ -158,13 +158,21 @@ and the 9 s validation deadline.
 Media3's own frame cadence (at least 24 frames, at least 8 in the last second,
 player READY) is accepted as video proof instead:
 
-- unset (default): advisory only where the verdict has no other video stage to
-  go to, e.g. a constrained Amlogic stick with software HD withheld. There the
-  verdict could only reopen the same ExoPlayer stage in a loop. Wherever
-  another stage exists the verdicts stay authoritative, exactly as in 1.5.98.
+- unset (default): on Fire TV (`Build.MANUFACTURER` Amazon) the same as
+  `true`: advisory on every route until PixelCopy proves a healthy frame.
+  Those sticks composite decoded video on a plane PixelCopy cannot read and
+  always have a VLC fallback stage, so the dead-end rule below never applied
+  to them and healthy channels were moved down the ladder (customer reports
+  of 9 Oct 2026: the same sticks play them in other apps). Everywhere else
+  advisory only where the verdict has no other video stage to go to, e.g. a
+  constrained Amlogic stick with software HD withheld. There the verdict
+  could only reopen the same ExoPlayer stage in a loop. Wherever another
+  stage exists the verdicts stay authoritative, exactly as in 1.5.98.
+  `{"match":{"manufacturer":"^amazon$"},"set":{"nativeFrameTrust":false}}`
+  restores the strict verdicts on Fire TV.
 - `false`: always authoritative, with the 1.5.98 PixelCopy cadence and no
   inline-copy budget (see below), i.e. the 1.5.98 live Exo surface validation.
-  It does not undo the other 1.5.99 changes (failed player stopped during the
+  It does not undo the other 1.6.0 changes (failed player stopped during the
   retry wait, narrowed interlaced quick-fail, telemetry fields). Use it for a
   device class seen playing real green or black video.
 - `true`: advisory on every route. For a new SoC whose PixelCopy is blind but
@@ -189,7 +197,7 @@ An empty `match` reaches every device, so
 `{"match":{},"set":{"nativeFrameTrust":false}}` is the fleet-wide rollback.
 Deploy the crash-receiver that knows the key before any rule uses it: an older
 server drops the key from the rule (and a rule that sets nothing else). Apps
-before 1.5.99 ignore it. The panel's match preview only counts the 500 most
+before 1.6.0 ignore it. The panel's match preview only counts the 500 most
 recent devices, so check a model rule's full match count on the devices table.
 When the policy expires (no heartbeat for `ttlSeconds`) the app returns to the
 default.

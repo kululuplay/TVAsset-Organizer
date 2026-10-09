@@ -148,4 +148,31 @@ class LiveSurfaceVerdictPolicyTest {
         assertEquals(Trust.DEAD_END_ONLY, LiveSurfaceVerdictPolicy.trustOf(null))
         assertEquals(Trust.ALWAYS, LiveSurfaceVerdictPolicy.trustOf(true))
     }
+
+    @Test
+    fun `Fire TV defaults to always-advisory pixels, other devices to the dead-end rule, a remote rule wins`() {
+        assertEquals(Trust.ALWAYS, LiveSurfaceVerdictPolicy.defaultTrust("Amazon"))
+        assertEquals(Trust.ALWAYS, LiveSurfaceVerdictPolicy.defaultTrust(" amazon "))
+        assertEquals(Trust.DEAD_END_ONLY, LiveSurfaceVerdictPolicy.defaultTrust("Xiaomi"))
+        assertEquals(Trust.DEAD_END_ONLY, LiveSurfaceVerdictPolicy.defaultTrust(""))
+        assertEquals(Trust.DEAD_END_ONLY, LiveSurfaceVerdictPolicy.defaultTrust(null))
+        assertEquals(Trust.ALWAYS, LiveSurfaceVerdictPolicy.resolveTrust(null, "Amazon"))
+        assertEquals(Trust.STRICT, LiveSurfaceVerdictPolicy.resolveTrust(false, "Amazon"))
+        assertEquals(Trust.ALWAYS, LiveSurfaceVerdictPolicy.resolveTrust(true, "Xiaomi"))
+        assertEquals(Trust.DEAD_END_ONLY, LiveSurfaceVerdictPolicy.resolveTrust(null, "NVIDIA"))
+    }
+
+    @Test
+    fun `Fire TV stick with a VLC fallback keeps pixel verdicts advisory until proven`() {
+        // 9 Oct 2026: the same Fire TV sticks play the channels in other apps. Under
+        // the 1.5.99 dead-end rule the VLC fallback stage made the blind PixelCopy
+        // authoritative and moved every channel down the ladder; the default must not.
+        val trust = LiveSurfaceVerdictPolicy.resolveTrust(null, "Amazon")
+        assertTrue(LiveSurfaceVerdictPolicy.pixelsAdvisory(trust, fallbackAvailable = true, provenThisStream = false))
+        assertFalse(LiveSurfaceVerdictPolicy.pixelsAdvisory(trust, fallbackAvailable = true, provenThisStream = true))
+        assertEquals("Fire TV default", LiveSurfaceVerdictPolicy.trustReason(null, trust))
+        assertEquals("remote nativeFrameTrust", LiveSurfaceVerdictPolicy.trustReason(true, Trust.ALWAYS))
+        assertEquals("remote nativeFrameTrust", LiveSurfaceVerdictPolicy.trustReason(false, Trust.STRICT))
+        assertEquals("no alternative video stage", LiveSurfaceVerdictPolicy.trustReason(null, Trust.DEAD_END_ONLY))
+    }
 }

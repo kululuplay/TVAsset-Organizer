@@ -1664,7 +1664,10 @@ class ExoPlayerEngine(
     }
 
     private fun nativeFrameTrust(): LiveSurfaceVerdictPolicy.Trust =
-        LiveSurfaceVerdictPolicy.trustOf(PlaybackRemotePolicy.deviceOverrides().nativeFrameTrust)
+        LiveSurfaceVerdictPolicy.resolveTrust(
+            PlaybackRemotePolicy.deviceOverrides().nativeFrameTrust,
+            Build.MANUFACTURER,
+        )
 
     /**
      * Pixel-only verdicts are advisory where a VIDEO failure could only reopen
@@ -1767,11 +1770,10 @@ class ExoPlayerEngine(
     private fun acceptNative(trigger: String, trust: LiveSurfaceVerdictPolicy.Trust) {
         if (videoFailureReported || videoOutputReported) return
         val frames = nativeCadence.snapshot(SystemClock.elapsedRealtime())
-        val why = if (trust == LiveSurfaceVerdictPolicy.Trust.ALWAYS) {
-            "remote nativeFrameTrust"
-        } else {
-            "no alternative video stage"
-        }
+        val why = LiveSurfaceVerdictPolicy.trustReason(
+            PlaybackRemotePolicy.deviceOverrides().nativeFrameTrust,
+            trust,
+        )
         PlaybackLog.log(
             context, engineName,
             "PixelCopy advisory ($trigger; $why) -> accept Media3 native frames " +

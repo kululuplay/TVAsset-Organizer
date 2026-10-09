@@ -20,7 +20,10 @@ package com.iptv.player.player
  */
 internal object LiveSurfaceVerdictPolicy {
 
-    /** Remote `nativeFrameTrust`: false = STRICT, unset = DEAD_END_ONLY, true = ALWAYS. */
+    /**
+     * Remote `nativeFrameTrust`: false = STRICT, true = ALWAYS, unset = the
+     * device-class default of [defaultTrust] (ALWAYS on Fire TV, else DEAD_END_ONLY).
+     */
     enum class Trust { STRICT, DEAD_END_ONLY, ALWAYS }
 
     enum class Verdict {
@@ -50,6 +53,30 @@ internal object LiveSurfaceVerdictPolicy {
         false -> Trust.STRICT
         null -> Trust.DEAD_END_ONLY
         true -> Trust.ALWAYS
+    }
+
+    /**
+     * Device-class default when no remote `nativeFrameTrust` rule targets the
+     * device. Fire TV (Build.MANUFACTURER "Amazon") composites decoded video on
+     * a hardware plane PixelCopy cannot read, and its sticks always have a VLC
+     * fallback stage, so under the dead-end rule the blind copy stayed
+     * authoritative and moved healthy channels down the ladder (customer
+     * reports of 9 Oct 2026: the same sticks play them in other apps). There
+     * the pixel-only verdicts are advisory on every route until PixelCopy
+     * proves a healthy frame; everywhere else the 1.5.99 dead-end rule applies.
+     */
+    fun defaultTrust(manufacturer: String?): Trust =
+        if (manufacturer?.trim().equals("amazon", ignoreCase = true)) Trust.ALWAYS else Trust.DEAD_END_ONLY
+
+    /** The remote rule first, then the device-class default. */
+    fun resolveTrust(override: Boolean?, manufacturer: String?): Trust =
+        if (override != null) trustOf(override) else defaultTrust(manufacturer)
+
+    /** Why an accepted native-frame proof was advisory, for the playback log. */
+    fun trustReason(override: Boolean?, trust: Trust): String = when {
+        override != null -> "remote nativeFrameTrust"
+        trust == Trust.ALWAYS -> "Fire TV default"
+        else -> "no alternative video stage"
     }
 
     /** One healthy PixelCopy sample on the stream makes pixels authoritative again. */

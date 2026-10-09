@@ -35,8 +35,9 @@ object PlaybackRemotePolicy {
         /** true = libVLC's default deinterlacer, false = off; null = device rule. */
         val vlcDeinterlace: Boolean? = null,
         /**
-         * Live Exo pixel verdicts vs native frames: null = advisory only where no
-         * other video stage exists, false = always authoritative (1.5.98),
+         * Live Exo pixel verdicts vs native frames: null = the device-class
+         * default (advisory on every route on Fire TV, elsewhere only where no
+         * other video stage exists), false = always authoritative (1.5.98),
          * true = advisory on every route until PixelCopy proves a healthy frame.
          */
         val nativeFrameTrust: Boolean? = null,
