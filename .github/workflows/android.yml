@@ -109,7 +109,10 @@ jobs:
       contents: read
     services:
       postgres:
-        image: postgres:16
+        # Docker Hub's anonymous pull limit is shared by all GitHub runners and
+        # failed three attempts in a row (toomanyrequests); the official image
+        # from the AWS ECR Public mirror has no such limit.
+        image: public.ecr.aws/docker/library/postgres:16
         env:
           POSTGRES_USER: support_test
           POSTGRES_PASSWORD: support_test
