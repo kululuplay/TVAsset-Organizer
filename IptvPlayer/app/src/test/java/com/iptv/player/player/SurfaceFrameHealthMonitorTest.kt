@@ -259,6 +259,167 @@ class SurfaceFrameHealthMonitorTest {
         }
     }
 
+    @Test fun inlineCopyOverBudgetMakesTheSurfaceUnsampleable() {
+        Fixture(inlineCopyBudgetMs = 1_500).use { f ->
+            f.inlineMs = 1_600 // PixelCopy.request() itself blocked the caller.
+            f.start()
+            assertTrue(f.runNext())
+            assertEquals(1, f.copies)
+            assertEquals(1, f.unavailable)
+            assertEquals(
+                SurfaceFrameHealthMonitor.UnavailableReason.SLOW_INLINE_COPY,
+                f.monitor.unavailableReason(),
+            )
+            assertTrue(f.monitor.isSamplingUnavailable())
+            assertFalse(f.runNext()) // No callback timeout was queued.
+            // The already-queued result is ignored and only recycles its bitmap.
+            f.complete()
+            assertEquals(0, f.healthy)
+            assertFalse(f.monitor.hasHealthyFrame())
+            assertEquals(f.copies, f.recycled)
+            assertFalse(f.runNext())
+        }
+    }
+
+    @Test fun inlineCopyOfTheWholeCallbackTimeoutIsUnsampleable() {
+        Fixture(inlineCopyBudgetMs = 4_000).use { f ->
+            f.inlineMs = 4_000
+            f.start()
+            assertTrue(f.runNext())
+            assertEquals(1, f.unavailable)
+            assertEquals(
+                SurfaceFrameHealthMonitor.UnavailableReason.SLOW_INLINE_COPY,
+                f.monitor.unavailableReason(),
+            )
+            assertFalse(f.runNext())
+        }
+    }
+
+    @Test fun inlineCopyUnderBudgetIsClassifiedAndSpacesTheNextSample() {
+        Fixture().use { f ->
+            f.spacing = true
+            f.inlineMs = 600
+            f.start()
+            assertTrue(f.runNext())
+            f.complete()
+            assertEquals(0, f.unavailable)
+            assertEquals(1, f.monitor.sampleTally().other)
+            // 2 x 600 ms instead of the 220 ms startup cadence.
+            assertEquals(1_200L, f.nextTaskDelayMs())
+        }
+    }
+
+    @Test fun slowInlineCopyKeepsTheStartupCadenceUnlessSpacingIsOptedIn() {
+        // VLC/VOD monitors and live Exo with authoritative pixels.
+        Fixture().use { f ->
+            f.inlineMs = 600
+            f.start()
+            assertTrue(f.runNext())
+            f.complete()
+            assertEquals(220L, f.nextTaskDelayMs())
+        }
+    }
+
+    @Test fun spacingOptInIsReadForEverySample() {
+        Fixture().use { f ->
+            f.spacing = true
+            f.inlineMs = 600
+            f.start()
+            f.sample(BLACK)
+            assertEquals(1_200L, f.nextTaskDelayMs())
+            f.spacing = false // e.g. pixels no longer advisory.
+            f.sample()
+            assertEquals(220L, f.nextTaskDelayMs())
+        }
+    }
+
+    @Test fun multiSecondInlineCopiesStillConfirmBeforeTheNineSecondDeadline() {
+        // Xiaomi MiTV-AYFR0 UHD HEVC readbacks take 2.6-2.9 s
+        // (UHD_READBACK_VERIFICATION.md); the engines' deadline fires 9 s
+        // after the first frame, when the monitor starts.
+        for (uhd in listOf(false, true)) {
+            Fixture(uhd = uhd).use { f ->
+                f.inlineMs = 3_000
+                val startedAt = f.now
+                f.start()
+                f.sample()
+                f.sample()
+                assertEquals(1, f.healthy)
+                assertEquals(0, f.unavailable)
+                assertEquals(6_340L, f.now - startedAt) // As in 1.5.98.
+            }
+        }
+    }
+
+    @Test fun transientBlackStartupSampleWithInlineCopiesConfirmsBeforeTheDeadline() {
+        Fixture().use { f ->
+            f.inlineMs = 1_400
+            val startedAt = f.now
+            f.start()
+            f.sample(BLACK)
+            f.sample()
+            assertEquals(0, f.healthy)
+            f.sample()
+            assertEquals(1, f.healthy)
+            assertEquals(4_760L, f.now - startedAt) // As in 1.5.98.
+        }
+    }
+
+    @Test fun callbackTimeoutAndExhaustedRetriesNameTheirReason() {
+        Fixture(uhd = true).use { f ->
+            f.start()
+            assertTrue(f.runNext())
+            assertTrue(f.runNext()) // The native callback never fires.
+            assertEquals(
+                SurfaceFrameHealthMonitor.UnavailableReason.CALLBACK_TIMEOUT,
+                f.monitor.unavailableReason(),
+            )
+        }
+        Fixture(uhd = true).use { f ->
+            f.start()
+            repeat(20) { if (f.runNext()) f.complete(result = PixelCopy.ERROR_SOURCE_NO_DATA) }
+            assertEquals(
+                SurfaceFrameHealthMonitor.UnavailableReason.RETRIES_EXHAUSTED,
+                f.monitor.unavailableReason(),
+            )
+            f.monitor.reset()
+            assertNull(f.monitor.unavailableReason())
+        }
+    }
+
+    @Test fun tallyCountsEachSampleClassAndErrors() {
+        Fixture().use { f ->
+            f.start()
+            f.sample(BLACK)
+            f.sample(GREEN)
+            f.sample(HEALTHY)
+            assertTrue(f.runNext())
+            f.complete(result = PixelCopy.ERROR_SOURCE_NO_DATA)
+            assertEquals(
+                SurfaceFrameHealthMonitor.SampleTally(blank = 1, green = 1, other = 1, errors = 1),
+                f.monitor.sampleTally(),
+            )
+            assertEquals("1/1/1/1", f.monitor.sampleTally().compact())
+            f.monitor.reset()
+            assertEquals(SurfaceFrameHealthMonitor.SampleTally(), f.monitor.sampleTally())
+        }
+    }
+
+    @Test fun tallyIsPerOutputAndPerStart() {
+        Fixture(uhd = true).use { f ->
+            f.start()
+            f.sample(GREEN)
+            assertEquals(1, f.monitor.sampleTally().green)
+            f.monitor.onOutputTransition()
+            assertEquals(SurfaceFrameHealthMonitor.SampleTally(), f.monitor.sampleTally())
+            while (f.runNext()) { if (f.pendingCopies() > 0) f.complete() }
+            assertTrue(f.monitor.hasHealthyFrame()) // UHD stops after two healthy samples.
+            assertEquals(2, f.monitor.sampleTally().other)
+            f.start() // A stopped monitor restarts with a fresh tally.
+            assertEquals(SurfaceFrameHealthMonitor.SampleTally(), f.monitor.sampleTally())
+        }
+    }
+
     @Test fun preNougatDoesNotSchedulePixelCopy() {
         Fixture(sdkInt = 23).use { f ->
             f.start()
@@ -273,8 +434,13 @@ class SurfaceFrameHealthMonitorTest {
         uhd: Boolean = false,
         constrained: Boolean = false,
         sdkInt: Int = 30,
+        inlineCopyBudgetMs: Long = Long.MAX_VALUE,
     ) : AutoCloseable {
         var now = 1_000L
+        /** Time PixelCopy.request() blocks its caller (inline copy platforms). */
+        var inlineMs = 0L
+        /** The monitor's spaceSlowInlineCopies opt-in; off like VLC/VOD. */
+        var spacing = false
         var copies = 0
         var recycled = 0
         var healthy = 0
@@ -300,6 +466,7 @@ class SurfaceFrameHealthMonitorTest {
         private val pixelCopyMock = Mockito.mockStatic(PixelCopy::class.java) { invocation ->
             if (invocation.method.name == "request") {
                 copies++
+                now += inlineMs
                 callbacks.add(invocation.arguments[2] as PixelCopy.OnPixelCopyFinishedListener)
                 null
             } else Mockito.RETURNS_DEFAULTS.answer(invocation)
@@ -341,6 +508,8 @@ class SurfaceFrameHealthMonitorTest {
             onSamplingUnavailable = { unavailable++ },
             continueAfterHealthy = !constrained,
             allowPeriodicSampling = { policy.mode == SurfaceReadbackPolicy.Mode.CONTINUOUS },
+            inlineCopyBudgetMs = { inlineCopyBudgetMs },
+            spaceSlowInlineCopies = { spacing },
             sdkInt = sdkInt,
             nowMs = { now },
         )
@@ -357,6 +526,8 @@ class SurfaceFrameHealthMonitorTest {
             task.runnable.run()
             return true
         }
+        fun nextTaskDelayMs(): Long? = tasks.peek()?.let { it.at - now }
+        fun pendingCopies(): Int = callbacks.size
         fun complete(color: Int = HEALTHY, result: Int = PixelCopy.SUCCESS) {
             pixel = color
             check(!callbacks.isEmpty()) { "No native request to complete" }

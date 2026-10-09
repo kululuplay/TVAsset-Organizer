@@ -185,6 +185,7 @@ const OVERRIDE_BOOL_SETS = [
   "allowSoftwareHdFallback",
   "compatibilityProfile",
   "vlcDeinterlace",
+  "nativeFrameTrust",
 ];
 
 function sanitizeOverrideRule(rule) {

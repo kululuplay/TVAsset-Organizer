@@ -173,6 +173,53 @@ class PlaybackRemotePolicyDeviceOverridesTest {
     }
 
     @Test
+    fun `nativeFrameTrust is a nullable boolean override and a rule may set only it`() {
+        val rules = DeviceOverrideMatcher.parseRules(
+            listOf(
+                raw(mapOf("model" to "aftt"), mapOf("nativeFrameTrust" to true)),
+                raw(mapOf("model" to "shield"), mapOf("nativeFrameTrust" to false)),
+            ),
+        )
+        assertEquals(2, rules.size)
+        assertEquals(true, DeviceOverrideMatcher.resolve(rules, fireTvStick).nativeFrameTrust)
+        assertEquals(false, DeviceOverrideMatcher.resolve(rules, shield).nativeFrameTrust)
+        assertNull(DeviceOverrideMatcher.resolve(rules, fireTvStick.copy(model = "other")).nativeFrameTrust)
+    }
+
+    @Test
+    fun `non-boolean nativeFrameTrust is ignored`() {
+        assertNull(DeviceOverrideMatcher.parseRule(raw(set = mapOf("nativeFrameTrust" to "false"))))
+        assertNull(DeviceOverrideMatcher.parseRule(raw(set = mapOf("nativeFrameTrust" to 0))))
+        val kept = DeviceOverrideMatcher.parseRule(
+            raw(set = mapOf("nativeFrameTrust" to "yes", "livePreview" to false)),
+        )!!
+        assertNull(kept.set.nativeFrameTrust)
+    }
+
+    @Test
+    fun `later nativeFrameTrust rule wins and an empty match is the fleet-wide rollback`() {
+        val rules = DeviceOverrideMatcher.parseRules(
+            listOf(
+                raw(mapOf("lowRam" to true), mapOf("nativeFrameTrust" to true)),
+                raw(set = mapOf("nativeFrameTrust" to false)),
+            ),
+        )
+        assertEquals(false, DeviceOverrideMatcher.resolve(rules, fireTvStick).nativeFrameTrust)
+        assertEquals(false, DeviceOverrideMatcher.resolve(rules, shield).nativeFrameTrust)
+        val anyDevice = DeviceOverrideMatcher.DeviceFacts(
+            manufacturer = "",
+            model = "",
+            hardware = "",
+            board = "",
+            socModel = null,
+            sdk = 23,
+            lowRam = null,
+            totalRamMb = null,
+        )
+        assertEquals(false, DeviceOverrideMatcher.resolve(rules, anyDevice).nativeFrameTrust)
+    }
+
+    @Test
     fun `vlcDeinterlace is a nullable boolean override`() {
         val rules = DeviceOverrideMatcher.parseRules(
             listOf(raw(mapOf("model" to "aftt"), mapOf("vlcDeinterlace" to false))),

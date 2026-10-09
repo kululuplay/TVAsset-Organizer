@@ -238,6 +238,11 @@ class PlayerController(
     private var tunnelingRetryUsed = false
     // The "too heavy for this device" UI notice fires at most once per channel.
     private var streamTooHeavyReported = false
+    // Which check declared the video invalid, carried on the reconnect/fatal/
+    // fallback/terminal rows until the channel changes or plays stably.
+    private var lastVideoVerdict: VideoVerdict? = null
+    // How the current stage proved its video output (STABLE rows).
+    private var videoProof = VideoProof.UNSPECIFIED
     private val devicePlaybackProfile
         get() = PlaybackQoeRuntime.devicePlaybackProfile()
     private val remoteOverrides: PlaybackRemotePolicy.DeviceOverrides
@@ -346,8 +351,23 @@ class PlayerController(
             PlaybackLog.log(context, "LiveAttempt", "attempt=${attemptTrace?.id} version=${BuildConfig.VERSION_NAME}/${BuildConfig.VERSION_CODE} device=$device sdk=${Build.VERSION.SDK_INT}")
         }
         if (phase in setOf(PlaybackAttemptTrace.Phase.STABLE, PlaybackAttemptTrace.Phase.TIMEOUT, PlaybackAttemptTrace.Phase.TERMINAL)) {
-            recordStability("playback_attempt", if (phase == PlaybackAttemptTrace.Phase.STABLE) "info" else "warn", event)
+            val detail = when {
+                phase == PlaybackAttemptTrace.Phase.STABLE && expectsVideo ->
+                    VideoVerdictTelemetry.append(event, VideoVerdictTelemetry.proofSuffix(videoProof))
+                phase == PlaybackAttemptTrace.Phase.TERMINAL -> withVideoVerdict(event)
+                else -> event
+            }
+            recordStability("playback_attempt", if (phase == PlaybackAttemptTrace.Phase.STABLE) "info" else "warn", detail)
         }
+    }
+
+    /** [detail] plus the closed fields of a pending VIDEO verdict, if any. */
+    private fun withVideoVerdict(detail: String): String {
+        val verdict = lastVideoVerdict ?: return detail
+        return VideoVerdictTelemetry.append(
+            detail,
+            VideoVerdictTelemetry.suffix(verdict, inlinePreview = !displayModeSwitchingAllowed),
+        )
     }
 
     /** A fatal outcome owns cleanup too; no queued callback can reopen this session. */
@@ -450,6 +470,7 @@ class PlayerController(
         adaptiveBufferingActive = false
         tunnelingRetryUsed = false
         streamTooHeavyReported = false
+        lastVideoVerdict = null
         // Tear down the previous channel's stall/startup watchdog; the (re)start
         // path below re-arms it for this channel.
         cancelWatchdog()
@@ -624,6 +645,7 @@ class PlayerController(
         // Fresh (re)start: the new attempt must prove its own frame and progress.
         playbackConfirmed = false
         videoOutputConfirmed = false
+        videoProof = VideoProof.UNSPECIFIED
         progressPolicy.reset()
         starvationPolicy.reset()
         playbackBuffering = true
@@ -734,7 +756,8 @@ class PlayerController(
                             videoDecoderNames = DeviceVideoDecoders.names,
                             retryWithoutTunnelingUsed = tunnelingRetryUsed,
                         ) || (DiagnosticSwitches.forceTunneling(context) && !tunnelingRetryUsed)
-                        ExoPlayerEngine(
+                        lateinit var exo: ExoPlayerEngine
+                        exo = ExoPlayerEngine(
                             context = context,
                             allowPassthrough = allowPassthrough,
                             bufferMode = if (configuredBuffer == BufferMode.ADAPTIVE) {
@@ -747,7 +770,13 @@ class PlayerController(
                             preferSoftwareAudio = constrained || bypassVlcHardware,
                             expectsVideo = expectsVideo,
                             tunnelingEnabled = tunnelingActive,
+                            // Pixel-only verdicts become advisory where a VIDEO
+                            // failure has nowhere else to go (LiveSurfaceVerdictPolicy).
+                            videoFallbackAvailable = { width, height, codec ->
+                                hasAlternativeVideoStage(exo, width, height, codec)
+                            },
                         )
+                        exo
                     }
                 candidate = newEngine
                 newEngine.setPlaybackAttemptId(attemptTrace?.id)
@@ -898,8 +927,9 @@ class PlayerController(
             if (!expectsVideo) onPlaybackProgress()
         }
 
-        override fun onVideoOutput() = dispatch {
+        override fun onVideoOutput(proof: VideoProof) = dispatch {
             if (source !== engine || suspended) return@dispatch
+            videoProof = proof
             adaptiveBufferingActive = false
             val firstVideoOutput = !videoOutputConfirmed
             videoOutputConfirmed = true
@@ -998,8 +1028,18 @@ class PlayerController(
             if (source === engine) handleAudioStall(evidence)
         }
 
-        override fun onVideoInvalid() =
-            dispatch { if (source === engine) handleEngineFailure(Reason.VIDEO) }
+        override fun onVideoInvalid(verdict: VideoVerdict) = dispatch {
+            if (source !== engine) return@dispatch
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "video invalid" +
+                    VideoVerdictTelemetry.suffix(verdict, inlinePreview = !displayModeSwitchingAllowed) +
+                    (verdict.logEvidence.takeIf { it.isNotEmpty() }?.let { " $it" } ?: ""),
+            )
+            lastVideoVerdict = verdict
+            handleEngineFailure(Reason.VIDEO)
+        }
 
         override fun onSoftwareTooSlow() =
             dispatch { if (source === engine) handleEngineFailure(Reason.SOFTWARE_SLOW) }
@@ -1131,6 +1171,7 @@ class PlayerController(
         PlaybackLog.log(context, "Controller", "sustained playback progress -> recovered")
         resetDeadline()
         traceAttempt(PlaybackAttemptTrace.Phase.STABLE)
+        lastVideoVerdict = null
         quickDecodeFailures = 0
         unconfirmedStartFailures = 0
         resetReconnect()
@@ -1453,10 +1494,11 @@ class PlayerController(
                     "Controller",
                     "fallback $stage --$effectiveReason--> $next",
                 )
+                val fallbackDetail = "$stage --$effectiveReason--> $next"
                 recordStability(
                     "fallback",
                     "warn",
-                    "$stage --$effectiveReason--> $next",
+                    if (effectiveReason == Reason.VIDEO) withVideoVerdict(fallbackDetail) else fallbackDetail,
                 )
                 startStage(next)
                 return
@@ -1558,11 +1600,15 @@ class PlayerController(
             reconnectAttempt = 0
             // One event per reconnect EPISODE (not per attempt) so a flaky stream
             // doesn't flood the spool with a row for every backoff retry.
-            recordStability("reconnect", "warn", "stage=$stage")
+            recordStability("reconnect", "warn", withVideoVerdict("stage=$stage"))
         }
         if (now - reconnectWindowStartMs >= RECONNECT_WINDOW_MS) {
             PlaybackLog.log(context, "Controller", "reconnect window elapsed -> fatal")
-            recordStability("fatal", "fatal", "reconnect window elapsed after $reconnectAttempt attempts (stage=$stage)")
+            recordStability(
+                "fatal",
+                "fatal",
+                withVideoVerdict("reconnect window elapsed after $reconnectAttempt attempts (stage=$stage)"),
+            )
             resetReconnect()
             failPlayback()
             return
@@ -1573,6 +1619,12 @@ class PlayerController(
         reconnectPending = true
         PlaybackLog.log(context, "Controller", "reconnect attempt $reconnectAttempt in ${delay}ms (stage=$stage)")
         callback.onRetrying(reconnectAttempt)
+        // Routing already read the failed stream's info in handleFailure; the
+        // failed player must not keep streaming and playing audio for the whole
+        // backoff. startStage still waits for its socket-close boundary.
+        if (engine?.quiesceForRetry() == true) {
+            PlaybackLog.log(context, "Controller", "retry backoff -> Exo player stopped, provider socket closing")
+        }
         reconnectHandler.postDelayed({
             reconnectPending = false
             // Single-connection: startStage -> startEngine fully releases the old
@@ -1612,38 +1664,7 @@ class PlayerController(
         val width = streamInfo?.width ?: 0
         val height = streamInfo?.height ?: 0
         val codec = streamInfo?.codec
-        val softwareCodecUnavailable =
-            !devicePlaybackProfile.allowSoftwareHevcRescue &&
-                isHevcCodec(codec)
-        // Weak sticks must not be pushed onto software HD/HEVC: it trades a
-        // green picture for a CPU-bound slideshow. Remote override re-enables it.
-        val softwareHdExcluded = SoftwareHdFallbackPolicy.excludedStages(
-            constrainedDevice = constrainedDevice,
-            width = width,
-            height = height,
-            codec = codec,
-            allowSoftwareHdFallback = remoteOverrides.allowSoftwareHdFallback == true,
-        )
-        val unavailableAwareTriedStages =
-            triedStages + VlcHardwareDevicePolicy.unavailableStages(
-                bypassVlcHardware = bypassVlcHardware,
-                width = width,
-                height = height,
-            ) + (if (softwareCodecUnavailable) setOf(Stage.VLC_SW) else emptySet()) +
-                softwareHdExcluded
-        val next = PlaybackRoutingPolicy.nextStage(
-            mode = mode,
-            decoderMode = decoderMode,
-            current = current,
-            failure = reason,
-            triedStages = unavailableAwareTriedStages,
-        ) ?: VlcHardwareDevicePolicy.fallbackAfterHardwareSubstitution(
-            mode = mode,
-            current = current,
-            failure = reason,
-            triedStages = unavailableAwareTriedStages,
-            bypassVlcHardware = bypassVlcHardware,
-        )
+        val (next, softwareHdExcluded) = resolveRoute(current, reason, width, height, codec)
         if (
             !streamTooHeavyReported &&
             SoftwareHdFallbackPolicy.shouldReportTooHeavy(next, softwareHdExcluded, reason)
@@ -1660,17 +1681,47 @@ class PlayerController(
         return next
     }
 
+    private fun resolveRoute(
+        current: Stage,
+        reason: Reason,
+        width: Int,
+        height: Int,
+        codec: String?,
+    ): LiveVideoRoute.Resolved = LiveVideoRoute.next(
+        mode = mode,
+        decoderMode = decoderMode,
+        current = current,
+        reason = reason,
+        triedStages = triedStages,
+        bypassVlcHardware = bypassVlcHardware,
+        constrainedDevice = constrainedDevice,
+        allowSoftwareHdFallback = remoteOverrides.allowSoftwareHdFallback == true,
+        allowSoftwareHevcRescue = devicePlaybackProfile.allowSoftwareHevcRescue,
+        width = width,
+        height = height,
+        codec = codec,
+    )
+
+    /**
+     * Whether a VIDEO verdict from [source] would reach another video stage
+     * (or distrust a remembered route) instead of reconnecting the same one.
+     * Mirrors [handleFailure] without its log/toast/telemetry side effects.
+     * Anything unexpected answers true, the strict side: pixel verdicts stay
+     * authoritative wherever a fallback may exist.
+     */
+    private fun hasAlternativeVideoStage(
+        source: PlayerEngine,
+        width: Int,
+        height: Int,
+        codec: String?,
+    ): Boolean {
+        if (source !== engine || suspended) return true
+        if (usingRememberedRoute && !memoryIgnoredThisPlay && baseInitialStage() != stage) return true
+        return resolveRoute(stage, Reason.VIDEO, width, height, codec).next != null
+    }
+
     /** Current video stream info for the diagnostics overlay, or null. */
     fun streamInfo(): StreamInfo? = engine?.getStreamInfo()
-
-    private fun isHevcCodec(codec: String?): Boolean {
-        val normalized = codec?.trim()?.lowercase().orEmpty()
-        return normalized.contains("hevc") ||
-            normalized.contains("h265") ||
-            normalized.contains("h.265") ||
-            normalized.contains("hev1") ||
-            normalized.contains("hvc1")
-    }
 
     fun pause() {
         quiesce { }
