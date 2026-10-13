@@ -20,10 +20,12 @@ internal object AdaptiveBufferPolicy {
     ): BufferMode {
         if (configured != BufferMode.ADAPTIVE) return configured
         val rebuffers = recentRebuffers.coerceIn(0, MAX_REBUFFER_HISTORY)
+        // NORMAL from the first second on every device (1.6.1): starting on
+        // LOW's 0.5 s/1 s thresholds produced a guaranteed stutter in the first
+        // seconds of VBR live channels before the first rebuffer could grow
+        // the reserve. Repeated rebuffers still escalate to HIGH.
         return when {
             rebuffers >= CONSTRAINED_HIGH_REBUFFERS -> BufferMode.HIGH
-            lowRamDevice -> BufferMode.NORMAL
-            rebuffers == 0 -> BufferMode.LOW
             else -> BufferMode.NORMAL
         }
     }

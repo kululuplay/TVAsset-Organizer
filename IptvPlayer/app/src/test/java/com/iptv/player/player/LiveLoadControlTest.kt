@@ -20,10 +20,13 @@ class LiveLoadControlTest {
     @Test
     fun `same player grows restart reserve after distinct rebuffer events`() {
         val control = control(BufferMode.ADAPTIVE)
-        assertTrue(control.shouldStartPlayback(parameters(500)))
+        // NORMAL from the first second (1.6.1): 1.5 s to start, 2.5 s after a rebuffer.
+        assertFalse(control.shouldStartPlayback(parameters(500)))
+        assertTrue(control.shouldStartPlayback(parameters(1_500)))
         assertFalse(control.shouldStartPlayback(parameters(1_000, rebufferAt = 10)))
         repeat(20) { assertTrue(control.shouldStartPlayback(parameters(2_500, rebufferAt = 10))) }
         assertTrue(control.shouldStartPlayback(parameters(2_500, rebufferAt = 20)))
+        // The third distinct rebuffer proves a weak link: HIGH's 5 s reserve.
         assertFalse(control.shouldStartPlayback(parameters(2_500, rebufferAt = 30)))
         assertTrue(control.shouldStartPlayback(parameters(5_000, rebufferAt = 30)))
     }
@@ -53,19 +56,27 @@ class LiveLoadControlTest {
     @Test
     fun `explicit low stays low across repeated rebuffers`() {
         val control = control(BufferMode.LOW)
+        // LOW (1.6.1): 1 s to start, 2 s after a rebuffer, 2 s / 8 s loading window.
+        assertFalse(control.shouldStartPlayback(parameters(500)))
+        assertTrue(control.shouldStartPlayback(parameters(1_000)))
         repeat(10) { index ->
-            assertTrue(control.shouldStartPlayback(parameters(1_000, rebufferAt = index.toLong())))
+            assertFalse(control.shouldStartPlayback(parameters(1_000, rebufferAt = index.toLong())))
+            assertTrue(control.shouldStartPlayback(parameters(2_000, rebufferAt = index.toLong())))
         }
-        assertFalse(control.shouldContinueLoading(parameters(4_000)))
+        assertTrue(control.shouldContinueLoading(parameters(1_000)))
+        assertFalse(control.shouldContinueLoading(parameters(8_000)))
     }
 
     @Test
     fun `new channel on reused engine starts with fresh adaptive history`() {
         val control = control(BufferMode.ADAPTIVE, initialRebuffers = 6)
-        assertFalse(control.shouldStartPlayback(parameters(500)))
+        // Six rebuffers: HIGH's 3 s start reserve.
+        assertFalse(control.shouldStartPlayback(parameters(1_500)))
         control.onStopped(PlayerId.UNSET)
         control.onPrepared(PlayerId.UNSET)
-        assertTrue(control.shouldStartPlayback(parameters(500)))
+        // Fresh history: NORMAL's 1.5 s start reserve.
+        assertFalse(control.shouldStartPlayback(parameters(500)))
+        assertTrue(control.shouldStartPlayback(parameters(1_500)))
     }
 
     @Test

@@ -1808,6 +1808,8 @@ class HomeActivity : BaseActivity() {
                 expectsVideo = !radioMode,
                 preferredAudioLanguage = preferredAudioLanguage,
                 preferredSubtitlePreference = preferredSubtitlePreference,
+                // The thumbnail never pays for a PixelCopy readback.
+                previewSurface = !inlineFullscreen,
                 callback = buildPreviewCallback()
             )
             // A display-mode switch blanks the TV briefly; only the fullscreen
@@ -2269,6 +2271,7 @@ class HomeActivity : BaseActivity() {
 
         inlineFullscreen = true
         previewController?.setDisplayModeSwitchingAllowed(true)
+        previewController?.setPreviewSurface(false)
         fullscreenGuideVisible = false
         fullscreenConfirmPress.clear()
         // Compatibility devices: guide rows bind placeholders only while the
@@ -2299,6 +2302,7 @@ class HomeActivity : BaseActivity() {
         closeFullscreenGuide(showPlayingEpg = false)
         inlineFullscreen = false
         previewController?.setDisplayModeSwitchingAllowed(false)
+        previewController?.setPreviewSurface(true)
         pendingFullscreenChannelId = null
         fullscreenConfirmPress.clear()
         if (channelAdapter.suppressLogos) {

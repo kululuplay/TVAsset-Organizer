@@ -201,3 +201,23 @@ before 1.6.0 ignore it. The panel's match preview only counts the 500 most
 recent devices, so check a model rule's full match count on the devices table.
 When the policy expires (no heartbeat for `ttlSeconds`) the app returns to the
 default.
+
+## PixelCopy readbacks and live buffers (1.6.1)
+
+`SurfaceValidationPolicy` decides per stream whether the live Exo engine samples
+the SurfaceView at all. Where the pixel verdict is advisory (Fire TV default,
+`nativeFrameTrust` true, or no alternative video stage) and on the Home preview
+thumbnail, no PixelCopy is requested: a GPU readback stalls the hardware video
+pipeline on weak sticks, and the verdict could not change the route anyway.
+Sustained native frames (`nativeAcceptPoll`) or the validation deadline decide,
+as they did when PixelCopy was unavailable. Where the verdict is authoritative,
+PixelCopy validates the first output only and stops after the first healthy
+frame; a surface or decoder change re-runs the startup validation. The log line
+`PixelCopy skipped (<reason>) -> native frames decide` marks a skipped stream.
+
+Live buffers: ADAPTIVE starts at NORMAL (1.5 s / 2.5 s), LOW is 1 s / 2 s with a
+2 s / 8 s loading window. Watchdogs: buffer starvation 10 s, decoder frame stall
+10 s (both were shorter than ordinary provider jitter). The TS extractor runs
+with `FLAG_ALLOW_NON_IDR_KEYFRAMES | FLAG_DETECT_ACCESS_UNITS`
+(`LiveTsExtractorPolicy`).
+

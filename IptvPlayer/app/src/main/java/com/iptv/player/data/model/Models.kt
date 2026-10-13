@@ -143,7 +143,10 @@ enum class BufferMode(
 ) {
     /** Learns a bounded per-session target from real rebuffers and device RAM. */
     ADAPTIVE(5000, 3000, 12000, 1500, 2500),
-    LOW(1500, 1000, 4000, 500, 1000),
+    // 1 s to start and 2 s after a rebuffer: 0.5 s/1 s started VBR channels
+    // before the first GOP had arrived and stuttered through the first
+    // seconds on every zap (1.6.1).
+    LOW(1500, 2000, 8000, 1000, 2000),
     NORMAL(5000, 3000, 12000, 1500, 2500),
     HIGH(10000, 6000, 20000, 3000, 5000);
 

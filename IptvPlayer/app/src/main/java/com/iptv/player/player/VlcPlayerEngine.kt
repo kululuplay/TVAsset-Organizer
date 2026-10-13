@@ -61,9 +61,18 @@ class VlcPlayerEngine(
     private val networkCachingMs: Int = 3000,
     /** Skip libVLC's deinterlacer on this route (see [VlcDeinterlacePolicy]). */
     private val disableDeinterlace: Boolean = false,
+    /** Home preview thumbnail: no PixelCopy, displayed pictures prove video. */
+    previewSurface: Boolean = false,
 ) : PlayerEngine {
 
     override val engineName: String = "VLC"
+
+    @Volatile
+    private var previewSurface: Boolean = previewSurface
+
+    override fun setPreviewSurface(preview: Boolean) {
+        previewSurface = preview
+    }
 
     override val supportsDelay: Boolean = true
 
@@ -810,6 +819,20 @@ class VlcPlayerEngine(
                 context,
                 engineName,
                 "remote policy -> accept libVLC displayed-picture signal",
+            )
+            maybeReportVideoOutput()
+            return
+        }
+        if (previewSurface && hasFrameEvidence) {
+            // The preview thumbnail is never sampled (SurfaceValidationPolicy):
+            // a GPU readback would stall the decoder output for a picture the
+            // viewer only glances at.
+            surfaceFrameHealth.reset()
+            surfaceHealthyObserved = true
+            PlaybackLog.log(
+                context,
+                engineName,
+                "preview surface -> accept libVLC displayed-picture signal",
             )
             maybeReportVideoOutput()
             return

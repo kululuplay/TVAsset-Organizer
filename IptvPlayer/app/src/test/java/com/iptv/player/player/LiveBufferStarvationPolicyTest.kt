@@ -28,13 +28,16 @@ class LiveBufferStarvationPolicyTest {
     }
 
     @Test
-    fun `buffering with a flat buffer for six seconds is a stall`() {
+    fun `buffering with a flat buffer for ten seconds is a stall`() {
         policy.start()
         assertFalse(policy.sample(0L, buffering = true, bufferMarker = 5_000L))
         assertFalse(policy.sample(3_000L, buffering = true, bufferMarker = 5_000L))
-        assertTrue(policy.sample(6_000L, buffering = true, bufferMarker = 5_000L))
-        // Fires once; the controller re-arms after its reconnect.
+        // 6 s (the 1.5.x window) is still inside ordinary provider jitter.
+        assertFalse(policy.sample(6_000L, buffering = true, bufferMarker = 5_000L))
         assertFalse(policy.sample(9_000L, buffering = true, bufferMarker = 5_000L))
+        assertTrue(policy.sample(12_000L, buffering = true, bufferMarker = 5_000L))
+        // Fires once; the controller re-arms after its reconnect.
+        assertFalse(policy.sample(15_000L, buffering = true, bufferMarker = 5_000L))
     }
 
     @Test
@@ -46,7 +49,9 @@ class LiveBufferStarvationPolicyTest {
         // A flat spell while playing never seeds the buffering baseline.
         assertFalse(policy.sample(33_000L, buffering = true, bufferMarker = 5_000L))
         assertFalse(policy.sample(36_000L, buffering = true, bufferMarker = 5_000L))
-        assertTrue(policy.sample(39_000L, buffering = true, bufferMarker = 5_000L))
+        assertFalse(policy.sample(39_000L, buffering = true, bufferMarker = 5_000L))
+        assertFalse(policy.sample(42_000L, buffering = true, bufferMarker = 5_000L))
+        assertTrue(policy.sample(45_000L, buffering = true, bufferMarker = 5_000L))
     }
 
     @Test
@@ -69,6 +74,8 @@ class LiveBufferStarvationPolicyTest {
         assertFalse(policy.sample(6_000L, buffering = false, bufferMarker = 5_000L))
         assertFalse(policy.sample(9_000L, buffering = true, bufferMarker = 5_000L))
         assertFalse(policy.sample(12_000L, buffering = true, bufferMarker = 5_000L))
-        assertTrue(policy.sample(15_000L, buffering = true, bufferMarker = 5_000L))
+        assertFalse(policy.sample(15_000L, buffering = true, bufferMarker = 5_000L))
+        assertFalse(policy.sample(18_000L, buffering = true, bufferMarker = 5_000L))
+        assertTrue(policy.sample(21_000L, buffering = true, bufferMarker = 5_000L))
     }
 }

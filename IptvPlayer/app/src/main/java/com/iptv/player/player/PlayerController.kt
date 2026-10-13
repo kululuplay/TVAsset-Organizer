@@ -61,11 +61,23 @@ class PlayerController(
     private val isLive: Boolean = true,
     preferredAudioLanguage: String? = null,
     preferredSubtitlePreference: LiveSubtitlePreference = LiveSubtitlePreference.Auto,
+    /**
+     * True while this controller draws the Home preview thumbnail: engines
+     * never request a PixelCopy readback for it (SurfaceValidationPolicy).
+     * Toggled with [setPreviewSurface] when the preview goes fullscreen.
+     */
+    private var previewSurface: Boolean = false,
     private var callback: Callback
 ) {
 
     /** Swap the UI callback (used when a preview controller is adopted by the player). */
     fun setCallback(cb: Callback) { callback = cb }
+
+    /** Preview thumbnail or fullscreen picture; forwarded to the running engine. */
+    fun setPreviewSurface(preview: Boolean) {
+        previewSurface = preview
+        engine?.setPreviewSurface(preview)
+    }
 
     /**
      * Automatic frame-rate matching is only sensible for fullscreen playback: a
@@ -749,6 +761,7 @@ class PlayerController(
                                 is64Bit = Build.SUPPORTED_64_BIT_ABIS.isNotEmpty(),
                                 remoteOverride = overrides.vlcDeinterlace,
                             ),
+                            previewSurface = previewSurface,
                         )
                     } else {
                         tunnelingActive = ExoTunnelingPolicy.shouldEnable(
@@ -775,6 +788,7 @@ class PlayerController(
                             videoFallbackAvailable = { width, height, codec ->
                                 hasAlternativeVideoStage(exo, width, height, codec)
                             },
+                            previewSurface = previewSurface,
                         )
                         exo
                     }

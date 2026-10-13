@@ -14,10 +14,13 @@ class AdaptiveBufferPolicyTest {
     }
 
     @Test
-    fun `adaptive starts fast and grows with rebuffer history`() {
-        assertEquals(BufferMode.LOW, AdaptiveBufferPolicy.resolve(BufferMode.ADAPTIVE, false, 0))
+    fun `adaptive starts at normal and grows with rebuffer history`() {
+        // 1.6.1: never LOW's 0.5 s/1 s thresholds in the first seconds of a channel.
+        assertEquals(BufferMode.NORMAL, AdaptiveBufferPolicy.resolve(BufferMode.ADAPTIVE, false, 0))
         assertEquals(BufferMode.NORMAL, AdaptiveBufferPolicy.resolve(BufferMode.ADAPTIVE, false, 1))
+        assertEquals(BufferMode.NORMAL, AdaptiveBufferPolicy.resolve(BufferMode.ADAPTIVE, false, 2))
         assertEquals(BufferMode.HIGH, AdaptiveBufferPolicy.resolve(BufferMode.ADAPTIVE, false, 3))
+        assertEquals(BufferMode.HIGH, AdaptiveBufferPolicy.resolve(BufferMode.ADAPTIVE, false, 6))
     }
 
     @Test

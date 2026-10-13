@@ -47,6 +47,7 @@ import androidx.media3.common.Timeline
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
+import androidx.media3.common.util.TimestampAdjuster
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
@@ -67,6 +68,7 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.text.DefaultSubtitleParserFactory
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.video.VideoFrameMetadataListener
@@ -122,10 +124,23 @@ class ExoPlayerEngine(
      * keeps every pixel verdict authoritative, as in 1.5.98.
      */
     private val videoFallbackAvailable: (Int, Int, String?) -> Boolean = { _, _, _ -> true },
+    /**
+     * True while this engine draws the Home preview thumbnail. No PixelCopy
+     * is ever requested for that surface (SurfaceValidationPolicy); the
+     * owner clears it when the same engine goes fullscreen.
+     */
+    previewSurface: Boolean = false,
 ) : PlayerEngine {
 
     override val engineName: String = "ExoPlayer"
     override val supportsPreciseSourceErrors: Boolean = true
+
+    @Volatile
+    private var previewSurface: Boolean = previewSurface
+
+    override fun setPreviewSurface(preview: Boolean) {
+        previewSurface = preview
+    }
 
     private val supportEvidence = PlaybackSupportEvidence()
     private var supportObserver: PlaybackSupportObserver? = null
@@ -245,10 +260,12 @@ class ExoPlayerEngine(
                 }
             }
         },
-        // Even a tiny destination can require a full-resolution GPU readback on
-        // old gralloc implementations. Verify startup/reattach, then let native
-        // frame and clock evidence monitor ongoing playback on constrained TVs.
-        continueAfterHealthy = !constrainedDevice,
+        // Even a tiny destination can require a full-resolution GPU readback that
+        // stalls the hardware video pipeline (dropped frames on weak sticks).
+        // Verify the first output only; a new output (surface/decoder change)
+        // re-runs the startup validation through onOutputTransition, and the
+        // frame/clock watchdogs own ongoing playback (SurfaceValidationPolicy).
+        continueAfterHealthy = false,
         allowPeriodicSampling = {
             surfaceReadbackPolicy.mode == SurfaceReadbackPolicy.Mode.CONTINUOUS
         },
@@ -373,43 +390,52 @@ class ExoPlayerEngine(
             // Snapshot before opening: a retired transfer must keep its old id/listener.
             val attemptId = playbackAttemptId
             val observer = listener
-            val http = DefaultHttpDataSource.Factory()
-                .setUserAgent(AppInfo.USER_AGENT)
-                .setAllowCrossProtocolRedirects(false)
-                .setConnectTimeoutMs(30_000)
-                .setReadTimeoutMs(30_000)
-                .setDefaultRequestProperties(attemptId?.let {
-                    mapOf("X-Kululu-Playback-Attempt" to it)
-                } ?: emptyMap())
-                .createDataSource().apply {
-                    addTransferListener(object : TransferListener {
-                        private var receivedBytes = false
-                        override fun onTransferInitializing(source: DataSource, spec: DataSpec, network: Boolean) {
-                            if (network) observer?.onTransportConnecting()
+            // One HttpDataSource per connection; the upgrade wrapper below may
+            // build a second one for an http -> https redirect, so the listener
+            // and request properties are installed here, per connection.
+            val http = UpgradeOnlyHttpDataSource(
+                sourceFactory = {
+                    DefaultHttpDataSource.Factory()
+                        .setUserAgent(AppInfo.USER_AGENT)
+                        // Same-protocol redirects are followed natively. An explicit
+                        // http -> https upgrade is followed once by the wrapper; a
+                        // downgrade to cleartext never is (credentials in the path).
+                        .setAllowCrossProtocolRedirects(false)
+                        .setConnectTimeoutMs(30_000)
+                        .setReadTimeoutMs(30_000)
+                        .setDefaultRequestProperties(attemptId?.let {
+                            mapOf("X-Kululu-Playback-Attempt" to it)
+                        } ?: emptyMap())
+                        .createDataSource().apply {
+                            addTransferListener(object : TransferListener {
+                                private var receivedBytes = false
+                                override fun onTransferInitializing(source: DataSource, spec: DataSpec, network: Boolean) {
+                                    if (network) observer?.onTransportConnecting()
+                                }
+                                override fun onTransferStart(source: DataSource, spec: DataSpec, network: Boolean) = Unit
+                                override fun onBytesTransferred(source: DataSource, spec: DataSpec, network: Boolean, bytes: Int) {
+                                    if (network && bytes > 0 && !receivedBytes) {
+                                        receivedBytes = true
+                                        observer?.onTransportBytes()
+                                    }
+                                }
+                                override fun onTransferEnd(source: DataSource, spec: DataSpec, network: Boolean) = Unit
+                            })
                         }
-                        override fun onTransferStart(source: DataSource, spec: DataSpec, network: Boolean) = Unit
-                        override fun onBytesTransferred(source: DataSource, spec: DataSpec, network: Boolean, bytes: Int) {
-                            if (network && bytes > 0 && !receivedBytes) {
-                                receivedBytes = true
-                                observer?.onTransportBytes()
-                            }
-                        }
-                        override fun onTransferEnd(source: DataSource, spec: DataSpec, network: Boolean) = Unit
-                    })
-                }
+                },
+                allowHttpToHttpsRedirects = true,
+            )
             // Track the provider socket so stop/release can force-close it and
             // wait for the real close boundary (Media3 only cancels the Loader).
             providerConnection.wrap(http)
         }
-        // TsExtractor(SubtitleParser.Factory) keeps the old no-arg constructor's
-        // MODE_SINGLE_PMT / default payload readers but parses DVB subtitles into
-        // Media3 cues during extraction. The no-arg form emits raw subtitle
-        // samples (FLAG_EMIT_RAW_SUBTITLE_DATA + Factory.UNSUPPORTED), which the
-        // 1.11 TextRenderer rejects with "Legacy decoding is disabled"
-        // (ERROR_CODE_FAILED_RUNTIME_CHECK) as soon as a DVB track is selected.
+        // Same MODE_SINGLE_PMT and DVB subtitle transcoding as the
+        // TsExtractor(SubtitleParser.Factory) constructor (the raw-subtitle form
+        // makes the 1.11 TextRenderer fail with "Legacy decoding is disabled"),
+        // with the IPTV payload-reader flags of LiveTsExtractorPolicy.
         val mediaSourceFactory = ProgressiveMediaSource.Factory(
             DirectMediaDataSource.Factory(supportEvidence.wrap(httpDataSourceFactory)),
-            ExtractorsFactory { arrayOf(TsExtractor(DefaultSubtitleParserFactory())) },
+            ExtractorsFactory { arrayOf(liveTsExtractor()) },
         )
 
         // Video tunneling stays off unless a remote per-device opt-in AND a
@@ -645,8 +671,19 @@ class ExoPlayerEngine(
                     return
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    surfaceFrameHealth.start {
-                        findVideoSurface(playerView?.videoSurfaceView ?: playerView)
+                    val preview = previewSurface
+                    val advisory = pixelsAdvisory(nativeFrameTrust())
+                    when (SurfaceValidationPolicy.mode(preview, advisory)) {
+                        SurfaceValidationPolicy.Mode.PIXEL_COPY -> surfaceFrameHealth.start {
+                            findVideoSurface(playerView?.videoSurfaceView ?: playerView)
+                        }
+                        // No GPU readback on this stream: sustained native frames
+                        // (nativeAcceptPoll) or the deadline decide.
+                        SurfaceValidationPolicy.Mode.NATIVE_FRAMES -> PlaybackLog.log(
+                            context, engineName,
+                            "PixelCopy skipped (${SurfaceValidationPolicy.reason(preview, advisory)}) " +
+                                "-> native frames decide",
+                        )
                     }
                     handler.removeCallbacks(surfaceValidationDeadlineRunnable)
                     handler.postDelayed(
@@ -880,7 +917,7 @@ class ExoPlayerEngine(
                 )
                 // Interlaced H.264 on a decoder family this device already saw
                 // stall (InterlacedExoPolicy): leave before the first frame instead
-                // of paying the 7 s watchdog on every first visit. Only when the
+                // of paying the frame watchdog on every first visit. Only when the
                 // controller has another video stage: without one, failing fast
                 // just reopens this Exo stage and turns every such channel into
                 // a ~1 s loop for the lifetime of the learned quirk.
@@ -968,6 +1005,17 @@ class ExoPlayerEngine(
         playerView = view
         applyPreferredTrackLanguages()
     }
+
+    // Media3 1.11 argument order: mode, extractorFlags (the subtitle-parser
+    // constructor delegates with MODE_SINGLE_PMT, 0; verified in the bytecode).
+    private fun liveTsExtractor(): TsExtractor = TsExtractor(
+        TsExtractor.MODE_SINGLE_PMT,
+        /* extractorFlags= */ 0,
+        DefaultSubtitleParserFactory(),
+        TimestampAdjuster(0),
+        DefaultTsPayloadReaderFactory(LiveTsExtractorPolicy.PAYLOAD_READER_FLAGS),
+        LiveTsExtractorPolicy.TIMESTAMP_SEARCH_BYTES,
+    )
 
     private fun revalidateVideoOutput() {
         if (!firstFrameRendered) return
@@ -1676,6 +1724,9 @@ class ExoPlayerEngine(
      */
     private fun pixelsAdvisory(trust: LiveSurfaceVerdictPolicy.Trust): Boolean {
         if (!expectsVideo) return false
+        // The Home preview thumbnail never gets a readback; its native frames
+        // stand in for pixel proof (SurfaceValidationPolicy).
+        if (previewSurface) return true
         val fallbackAvailable =
             if (trust == LiveSurfaceVerdictPolicy.Trust.DEAD_END_ONLY && !pixelsProvenThisStream) {
                 val format = player?.videoFormat
@@ -2179,7 +2230,10 @@ class ExoPlayerEngine(
         /** If no frame renders this long after READY, treat video as failed. */
         private const val NO_FRAME_TIMEOUT_MS = 8000L
         private const val VIDEO_HEALTH_POLL_MS = 2000L
-        private const val VIDEO_FRAME_STALL_MS = 7000L
+        // A short network hiccup must resolve on the existing socket before the
+        // engine is torn down and rebuilt (that costs a black screen); 7 s was
+        // inside ordinary provider jitter on weak links.
+        private const val VIDEO_FRAME_STALL_MS = 10_000L
         private const val VIDEO_CLOCK_EVIDENCE_MS = 500L
         private const val MIN_BUFFER_PROGRESS_EVIDENCE_MS = 250L
         private const val PIXEL_VALIDATION_DEADLINE_MS = 9_000L
