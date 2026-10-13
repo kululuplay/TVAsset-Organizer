@@ -107,23 +107,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    services:
-      postgres:
-        # Docker Hub's anonymous pull limit is shared by all GitHub runners and
-        # failed three attempts in a row (toomanyrequests); the official image
-        # from the AWS ECR Public mirror has no such limit.
-        image: public.ecr.aws/docker/library/postgres:16
-        env:
-          POSTGRES_USER: support_test
-          POSTGRES_PASSWORD: support_test
-          POSTGRES_DB: kululu_support
-        ports: [5432:5432]
-        options: >-
-          --health-cmd "pg_isready -U support_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     env:
+      # Served by the runner's own PostgreSQL (started in a step below): a
+      # service container needs a registry pull, and both Docker Hub
+      # (toomanyrequests) and ECR Public (data limit exceeded) throttled the
+      # shared GitHub runner addresses.
       SUPPORT_TEST_DATABASE_URL: postgresql://support_test:support_test@127.0.0.1:5432/kululu_support
       # Pull requests build without the production keys: a debug APK compiled
       # from an untrusted branch must not carry them, and its artifact is not
@@ -174,6 +162,14 @@ jobs:
         working-directory: .
         run: python3 scripts/ffmpeg/verify_media3_ffmpeg.py
 
+      - name: Start the runner's PostgreSQL for the support-desk tests
+        working-directory: .
+        run: |
+          sudo systemctl start postgresql
+          for i in $(seq 1 30); do pg_isready -h 127.0.0.1 -p 5432 && break; sleep 1; done
+          pg_isready -h 127.0.0.1 -p 5432
+          sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE support_test LOGIN PASSWORD 'support_test';"
+          sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE kululu_support OWNER support_test;"
       - name: Test telemetry receiver and release verifier
         working-directory: .
         run: |
