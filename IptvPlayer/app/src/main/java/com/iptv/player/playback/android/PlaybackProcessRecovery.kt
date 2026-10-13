@@ -64,11 +64,18 @@ internal object PlaybackProcessRecovery {
     fun isRecoveryProcess(context: Context): Boolean =
         currentProcessName(context)?.endsWith(RECOVERY_PROCESS_SUFFIX) == true
 
-    /** Returns true when recovery was launched or is already being launched. */
+    /**
+     * Returns true when recovery was launched or is already being launched.
+     * [onNotReplaced] runs on the main thread if this process is still alive
+     * after the launch watchdog (a caller that arrives during an in-flight
+     * launch is told as well): the caller then forces the provider gate open
+     * and continues instead of waiting for a Force Stop (1.6.2).
+     */
     fun requestIfRequired(
         activity: Activity,
         reason: String,
         resumeIntent: Intent? = null,
+        onNotReplaced: (() -> Unit)? = null,
     ): Boolean {
         if (!isResumedAndAlive(activity)) {
             // Background timeout callbacks leave only the provider recovery bit;
@@ -85,6 +92,7 @@ internal object PlaybackProcessRecovery {
             telemetryType = "process_recovery",
             telemetrySeverity = "fatal",
             telemetryDetail = reason,
+            onNotReplaced = onNotReplaced,
         )
     }
 
@@ -135,7 +143,12 @@ internal object PlaybackProcessRecovery {
         telemetryDetail: String,
         onNotReplaced: (() -> Unit)? = null,
     ): Boolean {
-        if (!requestInFlight.compareAndSet(false, true)) return true
+        if (!requestInFlight.compareAndSet(false, true)) {
+            // Another screen's launch is in flight; share its watchdog so this
+            // caller is told as well when the process is not replaced.
+            onNotReplaced?.let(::addNotReplacedListener)
+            return true
+        }
 
         val now = System.currentTimeMillis()
         val prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -191,6 +204,7 @@ internal object PlaybackProcessRecovery {
                     if (telemetryDetail != reason) " detail=$telemetryDetail" else "",
             )
             val appContext = activity.applicationContext
+            onNotReplaced?.let(::addNotReplacedListener)
             activity.startActivity(recovery)
             activity.overridePendingTransition(0, 0)
             // Normally this process is gone within a second. Still being here
@@ -210,16 +224,38 @@ internal object PlaybackProcessRecovery {
                         severity = "fatal",
                         detail = reason,
                     )
-                    onNotReplaced?.invoke()
+                    drainNotReplacedListeners().forEach { listener ->
+                        runCatching(listener).onFailure { failure ->
+                            PlaybackLog.log(
+                                appContext,
+                                "ProcessRecovery",
+                                "not-replaced callback failed: $failure",
+                            )
+                        }
+                    }
                 },
                 RECOVERY_LAUNCH_WATCHDOG_MS,
             )
             true
         }.getOrElse {
+            drainNotReplacedListeners()
             requestInFlight.set(false)
             false
         }
     }
+
+    private val notReplacedListeners = ArrayList<() -> Unit>()
+
+    private fun addNotReplacedListener(listener: () -> Unit) {
+        synchronized(notReplacedListeners) { notReplacedListeners += listener }
+    }
+
+    private fun drainNotReplacedListeners(): List<() -> Unit> =
+        synchronized(notReplacedListeners) {
+            val copy = notReplacedListeners.toList()
+            notReplacedListeners.clear()
+            copy
+        }
 
     /** Called only after the separate recovery Activity is actually alive. */
     fun acknowledgeRecovery(context: Context, requestedAtMs: Long): Boolean {

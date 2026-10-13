@@ -35,7 +35,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import com.iptv.player.util.Logger
-import com.iptv.player.cast.ProviderConnectionSafety
+import com.iptv.player.cast.ProviderStartGatePolicy
 import java.util.ArrayDeque
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
@@ -129,21 +129,26 @@ object VlcOps {
     }
 
     /**
-     * UI preflight runs before PlayerController.play, so it needs its own bound.
-     * A queue marker timing out is NOT proof of socket closure. Keep ownership
-     * fail-closed; the caller's existing gate chooses process recovery or error.
+     * Wait behind the shared FIFO for at most [timeoutMs]. [onDrained] runs on
+     * the main thread exactly once: true when the queue reached this marker,
+     * false when the bound elapsed first. A timeout is neither proof of socket
+     * closure nor of a hang; the caller (ProviderStartGate) forces the gate
+     * open, because the server supersedes a stale lease of this device anyway.
+     * Until 1.6.1 this waited 30 s and then blocked ownership for good.
      */
-    fun awaitProviderDrain(onDrained: () -> Unit) {
+    fun awaitProviderDrain(
+        timeoutMs: Long = ProviderStartGatePolicy.DRAIN_WAIT_MS,
+        onDrained: (drained: Boolean) -> Unit,
+    ) {
         val wait = BoundedPlaybackWait(
-            onComplete = onDrained,
+            onComplete = { onDrained(true) },
             onTimeout = {
-                ProviderConnectionSafety.block(ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP)
-                Logger.w(TAG, "provider drain deadline exceeded; ownership remains blocked")
-                onDrained()
+                Logger.w(TAG, "provider drain deadline ($timeoutMs ms) exceeded; caller decides")
+                onDrained(false)
             },
         )
         val timeout = Runnable { wait.timeout() }
-        watchdogHandler.postDelayed(timeout, 30_000L)
+        watchdogHandler.postDelayed(timeout, timeoutMs)
         post {
             watchdogHandler.post {
                 watchdogHandler.removeCallbacks(timeout)

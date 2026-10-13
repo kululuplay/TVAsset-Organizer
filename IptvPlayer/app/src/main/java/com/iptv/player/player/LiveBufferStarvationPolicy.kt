@@ -49,7 +49,12 @@ internal class LiveBufferStarvationPolicy(
     }
 
     companion object {
-        /** Buffering with a completely flat buffer for this long is a dead source. */
-        const val EMPTY_BUFFER_STALL_MS = 6_000L
+        /**
+         * Buffering with a completely flat buffer for this long is a dead source.
+         * 10 s (1.6.1): a 6 s window turned ordinary provider hiccups into a
+         * full engine rebuild and a black screen; Media3 itself recovers most
+         * of them on the open socket within that time.
+         */
+        const val EMPTY_BUFFER_STALL_MS = 10_000L
     }
 }

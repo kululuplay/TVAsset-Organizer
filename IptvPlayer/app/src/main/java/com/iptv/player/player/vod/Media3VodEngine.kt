@@ -1,7 +1,6 @@
 package com.iptv.player.player.vod
 
 import android.content.Context
-import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -20,11 +19,8 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.DataSource
-import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.HttpDataSource
-import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
@@ -53,7 +49,7 @@ import com.iptv.player.playback.core.FailureSignal
 import com.iptv.player.playback.core.PlaybackFailure
 import com.iptv.player.playback.core.PlaybackFailureClassifier
 import com.iptv.player.player.SurfaceFrameHealthMonitor
-import com.iptv.player.player.VodHttpRedirectPolicy
+import com.iptv.player.player.UpgradeOnlyHttpDataSourceFactory
 import com.iptv.player.util.AppInfo
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
@@ -496,7 +492,8 @@ class Media3VodEngine(
         // the 10 s no-progress detector (classifyError turns it into a same-route
         // stall) but never end a file early because its declared duration was
         // wrong. Any MAX_VALUE timeout silently flips the builder's default wake
-        // mode to NONE, so pin the WAKE_MODE_LOCAL 1.5.96 ships with.
+        // mode to NONE, so pin it: WAKE_MODE_NETWORK (1.6.2) also keeps the
+        // Wi-Fi radio awake while a film plays.
         val stuckDetection = ExoStuckDetectionPolicy.VOD
         val exo = ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
@@ -506,7 +503,7 @@ class Media3VodEngine(
             .setStuckPlayingNotEndingTimeoutMs(stuckDetection.playingNotEndingMs)
             .setStuckBufferingDetectionTimeoutMs(stuckDetection.bufferingNoProgressMs)
             .setStuckSuppressedDetectionTimeoutMs(stuckDetection.suppressedMs)
-            .setWakeMode(C.WAKE_MODE_LOCAL)
+            .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
         // The Activity's TvPlaybackSession is the single audio-focus owner for
         // both Media3 and VLC routes, keeping UI/lifecycle state synchronized.
@@ -1060,84 +1057,5 @@ class Media3VodEngine(
         private val AUDIO_OUTPUT_ERROR_RANGE = 5_000..5_999
         private val DRM_ERROR_RANGE = 6_000..6_999
         private val VIDEO_OUTPUT_ERROR_RANGE = 7_000..7_999
-    }
-}
-
-/**
- * DefaultHttpDataSource follows same-protocol redirects itself. Cross-protocol
- * following stays disabled; when an HTTP response explicitly upgrades to HTTPS,
- * this wrapper reopens exactly once at the secure target. A later downgrade is
- * rejected by the fresh delegate and never requested automatically.
- */
-@OptIn(markerClass = [UnstableApi::class])
-private class UpgradeOnlyHttpDataSourceFactory(
-    private val userAgent: String,
-    private val connectTimeoutMs: Int,
-    private val readTimeoutMs: Int,
-    private val allowHttpToHttpsRedirects: Boolean,
-) : DataSource.Factory {
-    override fun createDataSource(): DataSource = UpgradeOnlyHttpDataSource(
-        sourceFactory = {
-            DefaultHttpDataSource.Factory()
-                .setUserAgent(userAgent)
-                .setConnectTimeoutMs(connectTimeoutMs)
-                .setReadTimeoutMs(readTimeoutMs)
-                .setAllowCrossProtocolRedirects(false)
-                .createDataSource()
-        },
-        allowHttpToHttpsRedirects = allowHttpToHttpsRedirects,
-    )
-}
-
-@OptIn(markerClass = [UnstableApi::class])
-private class UpgradeOnlyHttpDataSource(
-    private val sourceFactory: () -> HttpDataSource,
-    private val allowHttpToHttpsRedirects: Boolean,
-) : DataSource {
-    private val transferListeners = ArrayList<TransferListener>()
-    private var source: HttpDataSource = newSource()
-
-    override fun addTransferListener(transferListener: TransferListener) {
-        transferListeners += transferListener
-        source.addTransferListener(transferListener)
-    }
-
-    override fun open(dataSpec: DataSpec): Long {
-        return try {
-            source.open(dataSpec)
-        } catch (error: HttpDataSource.InvalidResponseCodeException) {
-            val location = error.headerFields.entries
-                .firstOrNull { (name, _) -> name.equals("Location", ignoreCase = true) }
-                ?.value
-                ?.firstOrNull()
-            val target = if (allowHttpToHttpsRedirects) {
-                VodHttpRedirectPolicy.httpsUpgradeTarget(
-                    originalUrl = dataSpec.uri.toString(),
-                    status = error.responseCode,
-                    location = location,
-                )
-            } else {
-                null
-            } ?: throw error
-
-            runCatching { source.close() }
-            source = newSource()
-            source.open(dataSpec.withUri(Uri.parse(target)))
-        }
-    }
-
-    override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
-        source.read(buffer, offset, length)
-
-    override fun getUri(): Uri? = source.uri
-
-    override fun getResponseHeaders(): Map<String, List<String>> = source.responseHeaders
-
-    override fun close() {
-        source.close()
-    }
-
-    private fun newSource(): HttpDataSource = sourceFactory().also { next ->
-        transferListeners.forEach(next::addTransferListener)
     }
 }

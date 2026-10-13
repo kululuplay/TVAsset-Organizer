@@ -45,6 +45,7 @@ import com.iptv.player.player.StreamInfo
 import com.iptv.player.player.SurfaceFrameHealthMonitor
 import com.iptv.player.player.TrackLanguage
 import com.iptv.player.player.TvPlaybackSession
+import com.iptv.player.player.ProviderStartGate
 import com.iptv.player.player.VlcOps
 import com.iptv.player.player.VodPlaybackRoutingPolicy
 import com.iptv.player.player.findVideoSurface
@@ -1296,12 +1297,16 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         }
     }
 
-    private fun requestVodProcessRecovery(reason: String): Boolean {
+    private fun requestVodProcessRecovery(
+        reason: String,
+        onNotReplaced: (() -> Unit)? = null,
+    ): Boolean {
         if (!playbackEnded) persistResume(durable = true)
         return PlaybackProcessRecovery.requestIfRequired(
             activity = this,
             reason = reason,
             resumeIntent = playbackProcessRecoveryIntent(),
+            onNotReplaced = onNotReplaced,
         )
     }
 
@@ -1326,105 +1331,91 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     }
 
     /**
-     * Wait for an ordinary prior-owner cleanup. If the shared queue drains while
-     * its exact token remains, only a controlled process recycle can prove every
-     * native socket closed.
+     * Wait for an ordinary prior-owner cleanup, bounded (1.6.2): a proven native
+     * hang asks for a controlled process recycle; anything the queue cannot
+     * settle within DRAIN_WAIT_MS is forced open and [afterDrain] continues.
+     * Returns false when the caller may start right now. Until 1.6.1 the
+     * remote states ended in a terminal "ownership uncertain" error.
      */
     private fun handleBlockedProviderStart(
         reason: String,
         afterDrain: () -> Unit,
     ): Boolean {
-        val safety = ProviderConnectionSafety.snapshot()
-        when (ProviderStartGatePolicy.decide(safety)) {
+        fun continueAfterForcedGate(why: String) {
+            ProviderStartGate.forceOpen(this, "vod_start", why)
+            if (!isFinishing && !isDestroyed && foreground) afterDrain()
+        }
+        when (ProviderStartGatePolicy.decide(ProviderConnectionSafety.snapshot())) {
             ProviderStartGatePolicy.Decision.READY -> return false
+            ProviderStartGatePolicy.Decision.PROCEED_AFTER_RESET -> {
+                ProviderStartGate.forceOpen(this, "vod_start", "$reason: no proof path")
+                return false
+            }
             ProviderStartGatePolicy.Decision.RECOVER_LOCAL_PROCESS -> {
                 setBuffering(true)
                 val resumed = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
-                if (!requestVodProcessRecovery(reason) && resumed) {
-                    setBuffering(false)
-                    showTerminalError(R.string.error_playback_ownership_uncertain)
-                }
-                return true
+                val launched = requestVodProcessRecovery(
+                    reason,
+                    onNotReplaced = { continueAfterForcedGate("$reason: process not replaced") },
+                )
+                if (launched || !resumed) return true
+                ProviderStartGate.forceOpen(this, "vod_start", "$reason: process recovery unavailable")
+                return false
             }
             ProviderStartGatePolicy.Decision.WAIT_FOR_LOCAL_CLEANUP -> Unit
             ProviderStartGatePolicy.Decision.BLOCKED_BY_REMOTE_OWNER,
-            ProviderStartGatePolicy.Decision.BLOCKED -> {
-                showTerminalError(R.string.error_playback_ownership_uncertain)
-                return true
-            }
+            ProviderStartGatePolicy.Decision.BLOCKED -> Unit // screen-level, never from decide()
         }
 
-        // Ordinary local cleanup: retain the loading UI and continue automatically.
-        if (safety.localPendingCount > 0) {
-            val request = providerStartSeq.incrementAndGet()
-            setBuffering(true)
-            VlcOps.post {
-                handler.post providerDrained@{
-                    if (
-                        providerStartSeq.get() != request ||
-                        isFinishing ||
-                        isDestroyed
-                    ) {
-                        return@providerDrained
-                    }
-                    if (!foreground) {
-                        lifecycleScope.launch {
-                            lifecycle.withStarted {
-                                if (
-                                    providerStartSeq.get() == request &&
-                                    !isFinishing &&
-                                    !isDestroyed &&
-                                    !handleBlockedProviderStart(
-                                        reason = "${reason}_foreground",
-                                        afterDrain = afterDrain,
-                                    )
-                                ) {
-                                    afterDrain()
-                                }
-                            }
-                        }
-                        return@providerDrained
-                    }
-                    var after = ProviderConnectionSafety.snapshot()
-                    if (
-                        !after.remoteUncertain &&
-                        after.localPendingCount > 0 &&
-                        !after.localProcessRecoveryRequired
-                    ) {
-                        ProviderConnectionSafety.requireProcessRecoveryForPendingLocalStops()
-                        after = ProviderConnectionSafety.snapshot()
-                    }
-                    when (ProviderStartGatePolicy.decide(after)) {
-                        ProviderStartGatePolicy.Decision.READY -> afterDrain()
-                        ProviderStartGatePolicy.Decision.RECOVER_LOCAL_PROCESS -> {
-                            val resumed = lifecycle.currentState
-                                .isAtLeast(Lifecycle.State.RESUMED)
+        // Ordinary local cleanup: retain the loading UI, wait at most
+        // DRAIN_WAIT_MS behind the shared queue and continue automatically.
+        val request = providerStartSeq.incrementAndGet()
+        setBuffering(true)
+        VlcOps.awaitProviderDrain { drained ->
+            handler.post providerDrained@{
+                if (
+                    providerStartSeq.get() != request ||
+                    isFinishing ||
+                    isDestroyed
+                ) {
+                    return@providerDrained
+                }
+                if (!foreground) {
+                    lifecycleScope.launch {
+                        lifecycle.withStarted {
                             if (
-                                !requestVodProcessRecovery("${reason}_after_drain") &&
-                                resumed
+                                providerStartSeq.get() == request &&
+                                !isFinishing &&
+                                !isDestroyed &&
+                                !handleBlockedProviderStart(
+                                    reason = "${reason}_foreground",
+                                    afterDrain = afterDrain,
+                                )
                             ) {
-                                setBuffering(false)
-                                showTerminalError(R.string.error_playback_ownership_uncertain)
+                                afterDrain()
                             }
                         }
-                        ProviderStartGatePolicy.Decision.WAIT_FOR_LOCAL_CLEANUP -> {
-                            handleBlockedProviderStart(
-                                reason = "${reason}_continued",
-                                afterDrain = afterDrain,
-                            )
-                        }
-                        ProviderStartGatePolicy.Decision.BLOCKED_BY_REMOTE_OWNER,
-                        ProviderStartGatePolicy.Decision.BLOCKED -> {
-                            setBuffering(false)
-                            showTerminalError(R.string.error_playback_ownership_uncertain)
+                    }
+                    return@providerDrained
+                }
+                when (ProviderStartGate.settleAfterWait(this, "vod_start", drained)) {
+                    ProviderStartGatePolicy.Decision.RECOVER_LOCAL_PROCESS -> {
+                        val resumed = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                        val launched = requestVodProcessRecovery(
+                            "${reason}_after_drain",
+                            onNotReplaced = {
+                                continueAfterForcedGate("$reason: process not replaced")
+                            },
+                        )
+                        if (!launched && resumed) {
+                            continueAfterForcedGate("$reason: process recovery unavailable")
                         }
                     }
+                    // READY, possibly after a forced reset.
+                    else -> afterDrain()
                 }
             }
-            return true
         }
-        // Defensive fallback: a closed-schema decision above should own every state.
-        showTerminalError(R.string.error_playback_ownership_uncertain)
         return true
     }
 
@@ -2116,13 +2107,14 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     /**
      * Media3 opens its HTTP source directly from the main thread, outside the
      * shared VLC queue. Trampoline its start through that queue so a previous VOD
-     * Activity's blocking VLC stop/release has definitely completed before this
-     * item consumes a one-connection subscription slot.
+     * Activity's blocking VLC stop/release has normally completed before this
+     * item consumes a one-connection subscription slot. Bounded since 1.6.2:
+     * the server supersedes a stale lease of this device on the new request.
      */
     private fun prepareMedia3AfterProviderDrain(positionMs: Long) {
         val request = providerStartSeq.incrementAndGet()
         setBuffering(true)
-        VlcOps.post {
+        VlcOps.awaitProviderDrain {
             handler.post media3Start@{
                 if (
                     providerStartSeq.get() != request ||
@@ -2639,13 +2631,14 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         val ownerOperation = owners.retireIdleOnMain(retiringOwner)
         if (ownerOperation == null) {
             // Another worker still owns these handles. Quarantine now, but put a
-            // barrier on the shared VLC queue before opening Media3/VLC again.
-            // Without it, a cross-engine fallback could open the same subscription
-            // immediately while the prior operation was still within its liveness
-            // bound. A true JNI timeout remains governed by VlcOps quarantine.
+            // bounded barrier on the shared VLC queue before opening Media3/VLC
+            // again, so a cross-engine fallback does not open the same
+            // subscription while the prior operation is still within its
+            // liveness bound. A true JNI timeout remains governed by VlcOps
+            // quarantine; the server supersedes a stale lease of this device.
             owners.markConnectionUncertain(retiringOwner)
             owners.quarantine(retiringOwner, "rebuild overlapped an active operation")
-            VlcOps.post {
+            VlcOps.awaitProviderDrain {
                 runOnUiThread { continueWithFreshOwner() }
             }
             return

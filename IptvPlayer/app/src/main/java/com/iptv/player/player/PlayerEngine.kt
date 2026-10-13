@@ -89,6 +89,13 @@ interface PlayerEngine {
     fun setPlaybackAttemptId(id: String?) {}
 
     /**
+     * True while the engine draws the Home preview thumbnail: no PixelCopy
+     * readback is ever requested for that surface. Cleared when the same
+     * engine is shown fullscreen.
+     */
+    fun setPreviewSurface(preview: Boolean) {}
+
+    /**
      * Audio sync offset in milliseconds (positive = delay audio). Only libVLC
      * supports this; the ExoPlayer backend ignores it (no public offset API).
      */
