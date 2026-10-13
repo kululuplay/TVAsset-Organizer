@@ -2,6 +2,7 @@ package com.iptv.player.cast
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -249,6 +250,76 @@ class ProviderConnectionSafetyTest {
             ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
             ProviderConnectionSafety.currentUncertainty(),
         )
+    }
+
+    @Test
+    fun `force reset clears every blocking state and reports it`() {
+        ProviderConnectionSafety.resetForTests()
+        ProviderConnectionSafety.block(
+            ProviderConnectionSafety.Uncertainty.REMOTE_LOAD_RESULT,
+        )
+        ProviderConnectionSafety.beginRemoteOwnership()
+        val local = ProviderConnectionSafety.beginLocalNativeStopUncertainty()
+        ProviderConnectionSafety.requireLocalProcessRecovery(local)
+        ProviderConnectionSafety.block(
+            ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
+        )
+
+        val cleared = ProviderConnectionSafety.forceReset()
+
+        assertEquals(
+            "remoteUncertain,remoteOwners=1,localStops=1(hung=1),unownedRecovery",
+            cleared,
+        )
+        val snapshot = ProviderConnectionSafety.snapshot()
+        assertTrue(snapshot.newConnectionAllowed)
+        assertFalse(snapshot.remoteUncertain)
+        assertEquals(0, snapshot.activeRemoteOwnerCount)
+        assertEquals(0, snapshot.localPendingCount)
+        assertFalse(snapshot.localProcessRecoveryRequired)
+        assertNull(ProviderConnectionSafety.currentUncertainty())
+        assertEquals(1, ProviderConnectionSafety.forcedResets)
+    }
+
+    @Test
+    fun `force reset on an open gate reports nothing`() {
+        ProviderConnectionSafety.resetForTests()
+
+        assertNull(ProviderConnectionSafety.forceReset())
+
+        assertEquals(0, ProviderConnectionSafety.forcedResets)
+        assertTrue(ProviderConnectionSafety.newConnectionAllowed)
+    }
+
+    @Test
+    fun `late callbacks for tokens cleared by a force reset are ignored`() {
+        ProviderConnectionSafety.resetForTests()
+        val local = ProviderConnectionSafety.beginLocalNativeStopUncertainty()
+        val remote = ProviderConnectionSafety.beginRemoteOwnership()
+        ProviderConnectionSafety.forceReset()
+
+        ProviderConnectionSafety.requireLocalProcessRecovery(local)
+        ProviderConnectionSafety.resolveDefinitiveLocalStop(local)
+        ProviderConnectionSafety.transferRemoteOwnershipToUncertainty(remote)
+        ProviderConnectionSafety.resolveDefinitiveRemoteOwnership(remote)
+
+        assertTrue(ProviderConnectionSafety.newConnectionAllowed)
+        assertNull(ProviderConnectionSafety.currentUncertainty())
+    }
+
+    @Test
+    fun `new owners after a force reset are tracked again`() {
+        ProviderConnectionSafety.resetForTests()
+        ProviderConnectionSafety.block(
+            ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP,
+        )
+        ProviderConnectionSafety.forceReset()
+
+        val token = ProviderConnectionSafety.beginLocalNativeStopUncertainty()
+
+        assertFalse(ProviderConnectionSafety.newConnectionAllowed)
+        ProviderConnectionSafety.resolveDefinitiveLocalStop(token)
+        assertTrue(ProviderConnectionSafety.newConnectionAllowed)
     }
 
     @Test

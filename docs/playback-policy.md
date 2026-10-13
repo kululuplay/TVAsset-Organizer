@@ -221,3 +221,49 @@ Live buffers: ADAPTIVE starts at NORMAL (1.5 s / 2.5 s), LOW is 1 s / 2 s with a
 with `FLAG_ALLOW_NON_IDR_KEYFRAMES | FLAG_DETECT_ACCESS_UNITS`
 (`LiveTsExtractorPolicy`).
 
+## Provider gate: bounded, never locked (1.6.2)
+
+`ProviderConnectionSafety` tracks who may hold the line's stream connection:
+a libVLC stop still running inside vendor JNI (exact tokens), or a Cast
+receiver whose load result was lost (`remoteUncertain`, owner tokens). Until
+1.6.1 three of its states were permanent: an unresolved Cast detach (cleared
+only by a definitive Cast end), a 30 s queue wait that timed out (unowned
+`LOCAL_NATIVE_STOP`), and a controlled process recycle that could not launch
+(background, 2-minute rate limit, Cast state) or did not replace the process.
+Each left every later start on the loading spinner until the user
+force-stopped the app or unplugged the stick, which matched the field reports
+from Fire TV Sticks.
+
+Since 1.6.2 the gate can delay a start, never refuse one
+(`ProviderStartGatePolicy` decides, `ProviderStartGate` acts):
+
+- Ordinary VLC teardown (`WAIT_FOR_LOCAL_CLEANUP`): one wait of at most
+  `DRAIN_WAIT_MS` (1 s) behind the shared native queue
+  (`VlcOps.awaitProviderDrain`), then `decideAfterWait` forces the gate open.
+- Proven native hang (`RECOVER_LOCAL_PROCESS`): one controlled process
+  recycle. If it cannot launch, or does not replace the process within its 6 s
+  watchdog (`onNotReplaced`, now accepted by every
+  `PlaybackProcessRecovery.requestIfRequired` caller and shared by callers that
+  arrive during an in-flight launch), the gate is forced open and the pending
+  start continues.
+- Remote (Cast) uncertainty or an active remote owner token
+  (`PROCEED_AFTER_RESET`): forced open at once. The server decides whether a
+  second connection is allowed; the app no longer guesses.
+- `PlayerController.play()` resets the gate itself when the previous attempt
+  ended in a terminal failure or a stale recovery flag is set (self-healing
+  start); `resume()` rebuilds the stage when a start stepped aside for a
+  recycle that never happened; `quiesce()` releases the engine fully while the
+  screen is stopped.
+
+Every forced reset writes `ProviderGate: forced open (<where>: <why> ->
+cleared ...)` to the playback log and a `provider_gate_forced` stability event
+(severity warn), so the panel shows how often a device needed it. The server
+replaces a stale lease from the same device on the next request
+(`connection_grace`, 5 s), which is why a forced start is safe for a
+one-connection line. `BLOCKED` and `BLOCKED_BY_REMOTE_OWNER` remain as
+screen-level outcomes only (audio focus refused, a Cast session this screen is
+driving); `decide()` never returns them.
+
+Also in 1.6.2: the live HTTP source times out after 10 s without bytes (was
+30 s), so a zombie socket cannot hold a retiring engine or its lease; both
+Media3 players use `WAKE_MODE_NETWORK` (Wi-Fi lock while playing).

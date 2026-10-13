@@ -1,14 +1,20 @@
 package com.iptv.player.cast
 
 /**
- * Process-wide fail-closed gate for ambiguous Cast/native ownership.
+ * Process-wide gate for ambiguous Cast/native ownership.
  *
  * A timed-out libVLC stop can continue inside vendor JNI and a lost Cast load
  * result can mean the receiver is already fetching media. Opening another local
- * player in either state can violate a one-connection IPTV subscription. Remote
+ * player in either state could briefly overlap two provider connections. Remote
  * uncertainty is cleared by a definitive Cast session end. Local owners use
- * exact tokens; a token is either resolved by proven native shutdown or escalated
- * to controlled main-process recovery without ever failing open.
+ * exact tokens; a token is resolved by proven native shutdown or escalated to a
+ * controlled main-process recovery.
+ *
+ * Since 1.6.2 the gate delays a start but never refuses one: every entry point
+ * waits a bounded time for proof and then calls [forceReset]. The server
+ * replaces a stale lease from the same device on the next request, so a local
+ * flag that nothing can settle must not keep a customer on the loading spinner
+ * (field reports: every channel "loading" until the stick was unplugged).
  */
 internal object ProviderConnectionSafety {
 
@@ -41,6 +47,7 @@ internal object ProviderConnectionSafety {
     private var nextLocalToken = 1L
     /** token -> whether its native owner exceeded the liveness/release contract. */
     private val localNativeStopTokens = linkedMapOf<Long, Boolean>()
+    private var forcedResetCount = 0
 
     val newConnectionAllowed: Boolean
         @Synchronized get() = snapshotLocked().newConnectionAllowed
@@ -130,6 +137,39 @@ internal object ProviderConnectionSafety {
     }
 
     /**
+     * Clear every blocking state at once. Only the bounded gate
+     * (ProviderStartGate) calls this, after the wait or the controlled process
+     * recycle failed to settle ownership. Returns what was cleared, for the log
+     * and the panel, or null when the gate was already open. Late callbacks for
+     * the cleared tokens are ignored by the exact-token checks above.
+     */
+    @Synchronized
+    fun forceReset(): String? {
+        val cleared = ArrayList<String>(4)
+        if (remoteUncertain) cleared += "remoteUncertain"
+        if (activeRemoteOwnerTokens.isNotEmpty()) {
+            cleared += "remoteOwners=${activeRemoteOwnerTokens.size}"
+        }
+        if (localNativeStopTokens.isNotEmpty()) {
+            val hung = localNativeStopTokens.values.count { it }
+            cleared += "localStops=${localNativeStopTokens.size}" +
+                if (hung > 0) "(hung=$hung)" else ""
+        }
+        if (unownedLocalProcessRecoveryRequired) cleared += "unownedRecovery"
+        if (cleared.isEmpty()) return null
+        remoteUncertain = false
+        activeRemoteOwnerTokens.clear()
+        localNativeStopTokens.clear()
+        unownedLocalProcessRecoveryRequired = false
+        forcedResetCount++
+        return cleared.joinToString(",")
+    }
+
+    /** How often the gate was forced open in this process (diagnostics). */
+    val forcedResets: Int
+        @Synchronized get() = forcedResetCount
+
+    /**
      * Converts per-screen Cast state into a process-wide safety decision before
      * its SDK listener is detached. A local native stop that is still running is
      * stronger than remote uncertainty because even a later Cast end cannot
@@ -178,5 +218,6 @@ internal object ProviderConnectionSafety {
         activeRemoteOwnerTokens.clear()
         nextLocalToken = 1L
         localNativeStopTokens.clear()
+        forcedResetCount = 0
     }
 }

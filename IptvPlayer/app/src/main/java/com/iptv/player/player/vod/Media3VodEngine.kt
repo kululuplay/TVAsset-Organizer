@@ -492,7 +492,8 @@ class Media3VodEngine(
         // the 10 s no-progress detector (classifyError turns it into a same-route
         // stall) but never end a file early because its declared duration was
         // wrong. Any MAX_VALUE timeout silently flips the builder's default wake
-        // mode to NONE, so pin the WAKE_MODE_LOCAL 1.5.96 ships with.
+        // mode to NONE, so pin it: WAKE_MODE_NETWORK (1.6.2) also keeps the
+        // Wi-Fi radio awake while a film plays.
         val stuckDetection = ExoStuckDetectionPolicy.VOD
         val exo = ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
@@ -502,7 +503,7 @@ class Media3VodEngine(
             .setStuckPlayingNotEndingTimeoutMs(stuckDetection.playingNotEndingMs)
             .setStuckBufferingDetectionTimeoutMs(stuckDetection.bufferingNoProgressMs)
             .setStuckSuppressedDetectionTimeoutMs(stuckDetection.suppressedMs)
-            .setWakeMode(C.WAKE_MODE_LOCAL)
+            .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
         // The Activity's TvPlaybackSession is the single audio-focus owner for
         // both Media3 and VLC routes, keeping UI/lifecycle state synchronized.

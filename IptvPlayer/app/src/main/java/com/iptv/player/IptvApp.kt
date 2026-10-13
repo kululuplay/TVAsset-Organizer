@@ -27,6 +27,7 @@ import com.iptv.player.data.ServiceLocator
 import com.iptv.player.playback.android.PlaybackQoeRuntime
 import com.iptv.player.playback.android.PlaybackProcessRecovery
 import com.iptv.player.playback.android.PlaybackWifiLock
+import com.iptv.player.player.ProviderStartGate
 import com.iptv.player.playback.android.PlaybackProcessRecoveryTargetProvider
 import com.iptv.player.playback.android.StaleProcessGuard
 import com.iptv.player.ui.player.PlayerActivity
@@ -93,6 +94,16 @@ class IptvApp : Application(), ImageLoaderFactory {
             activity,
             reason = "foreground_unresolved_native_owner",
             resumeIntent = recoveryIntent,
+            onNotReplaced = {
+                // Still alive after the watchdog: the gate must not wait for a
+                // Force Stop. The next start proceeds; the server supersedes a
+                // stale lease of this device (1.6.2).
+                ProviderStartGate.forceOpen(
+                    activity.applicationContext,
+                    "foreground",
+                    "process recovery did not replace the process",
+                )
+            },
         )) {
             return
         }

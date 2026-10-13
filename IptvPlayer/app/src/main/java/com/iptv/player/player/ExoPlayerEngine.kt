@@ -401,8 +401,12 @@ class ExoPlayerEngine(
                         // http -> https upgrade is followed once by the wrapper; a
                         // downgrade to cleartext never is (credentials in the path).
                         .setAllowCrossProtocolRedirects(false)
-                        .setConnectTimeoutMs(30_000)
-                        .setReadTimeoutMs(30_000)
+                        // 1.6.2: a socket that delivers nothing for this long is
+                        // a zombie, not a slow provider (the starvation watchdog
+                        // fires at 10 s anyway). A bounded read also bounds how
+                        // long a retiring engine can keep its lease open.
+                        .setConnectTimeoutMs(LIVE_CONNECT_TIMEOUT_MS)
+                        .setReadTimeoutMs(LIVE_READ_TIMEOUT_MS)
                         .setDefaultRequestProperties(attemptId?.let {
                             mapOf("X-Kululu-Playback-Attempt" to it)
                         } ?: emptyMap())
@@ -464,7 +468,9 @@ class ExoPlayerEngine(
         // the frozen-clock case, so the 10 s no-progress detector and the
         // duration-based "not ending" detector are off; stuck-buffering keeps
         // Media3's default. Any MAX_VALUE timeout silently flips the builder's
-        // default wake mode to NONE, so pin the WAKE_MODE_LOCAL 1.5.96 ships with.
+        // default wake mode to NONE, so pin it: WAKE_MODE_NETWORK (1.6.2) also
+        // holds the Wi-Fi radio awake while playing, so a stick that idles its
+        // radio behind a dimmed screen does not starve the live socket.
         val stuckDetection = ExoStuckDetectionPolicy.LIVE
         val exo = ExoPlayer.Builder(context, buildRenderersFactory())
             .setMediaSourceFactory(mediaSourceFactory)
@@ -474,7 +480,7 @@ class ExoPlayerEngine(
             .setStuckPlayingNotEndingTimeoutMs(stuckDetection.playingNotEndingMs)
             .setStuckBufferingDetectionTimeoutMs(stuckDetection.bufferingNoProgressMs)
             .setStuckSuppressedDetectionTimeoutMs(stuckDetection.suppressedMs)
-            .setWakeMode(C.WAKE_MODE_LOCAL)
+            .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
 
         // Surface-size diagnostics are harmless across item changes. Playback
@@ -2234,6 +2240,9 @@ class ExoPlayerEngine(
         // engine is torn down and rebuilt (that costs a black screen); 7 s was
         // inside ordinary provider jitter on weak links.
         private const val VIDEO_FRAME_STALL_MS = 10_000L
+        /** HTTP connect / read bounds for the live socket (1.6.2; were 30 s). */
+        private const val LIVE_CONNECT_TIMEOUT_MS = 10_000
+        private const val LIVE_READ_TIMEOUT_MS = 10_000
         private const val VIDEO_CLOCK_EVIDENCE_MS = 500L
         private const val MIN_BUFFER_PROGRESS_EVIDENCE_MS = 250L
         private const val PIXEL_VALIDATION_DEADLINE_MS = 9_000L

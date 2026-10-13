@@ -22,6 +22,7 @@ import android.os.SystemClock
 import android.os.Build
 import android.view.ViewGroup
 import com.iptv.player.cast.ProviderConnectionSafety
+import com.iptv.player.cast.ProviderStartGatePolicy
 import com.iptv.player.BuildConfig
 import com.iptv.player.data.model.BufferMode
 import com.iptv.player.data.model.DecoderMode
@@ -128,9 +129,12 @@ class PlayerController(
         fun onPlaybackFailure(failure: PlaybackFailure) {}
         /**
          * A vendor-native owner cannot prove socket closure. Return true only
-         * when the UI launched controlled main-process recovery.
+         * when the UI launched the controlled main-process recovery (or must
+         * defer it until the screen is resumed). [onNotReplaced] is handed to
+         * that launch: if this process is still alive after its watchdog, the
+         * controller forces the gate open and continues the pending start.
          */
-        fun onLocalProcessRecoveryRequired(): Boolean = false
+        fun onLocalProcessRecoveryRequired(onNotReplaced: () -> Unit): Boolean = false
         /**
          * The decode ladder ran dry only because software HD was withheld on
          * this constrained device (SoftwareHdFallbackPolicy). Fired at most
@@ -308,6 +312,8 @@ class PlayerController(
     // owner resumes instead.
     private var suspended = false
     private var recoveryNeededOnResume = false
+    /** Set by a terminal failure; the next start resets the provider gate. */
+    private var lastAttemptFailed = false
 
     // ---- Stall / startup watchdog -----------------------------------------
     // The reconnect loop above is ENTIRELY event-driven (EndReached / error). A
@@ -385,6 +391,7 @@ class PlayerController(
     /** A fatal outcome owns cleanup too; no queued callback can reopen this session. */
     private fun failPlayback() {
         traceAttempt(PlaybackAttemptTrace.Phase.TERMINAL)
+        lastAttemptFailed = true
         release()
         callback.onFatalError()
     }
@@ -456,6 +463,21 @@ class PlayerController(
         suspended = false
         resetDeadline()
         recoveryNeededOnResume = false
+        // Self-healing start (1.6.2): a failed previous attempt, or a native
+        // owner that already asked for a process recycle, must not carry its
+        // ownership state into this channel. The server supersedes a stale
+        // lease of this device on the new request anyway.
+        if (
+            lastAttemptFailed ||
+            ProviderConnectionSafety.snapshot().localProcessRecoveryRequired
+        ) {
+            ProviderStartGate.forceOpen(
+                context,
+                "start_channel",
+                if (lastAttemptFailed) "previous attempt failed" else "stale process recovery flag",
+            )
+        }
+        lastAttemptFailed = false
         // A zap can arrive during preview -> fullscreen's delayed surface move.
         // The callback is about to be cleared, so first finish the host move to
         // the controller's already-updated container. Otherwise playback starts
@@ -678,62 +700,59 @@ class PlayerController(
         val generation = ++startGeneration
 
         var providerDrainAttempted = false
+        var recoveryAttempted = false
         lateinit var create: Runnable
-        fun failClosedForProviderOwnership() {
-            PlaybackLog.log(
-                context,
-                "Controller",
-                "provider connection ownership uncertain -> fail closed",
-            )
-            callback.onPlaybackFailure(
-                PlaybackFailure(
-                    category = PlaybackFailure.Category.RESOURCE,
-                    code = PlaybackFailure.Code.RESOURCE_EXHAUSTED,
-                    phase = PlaybackFailure.Phase.SHUTDOWN,
-                    component = PlaybackFailure.Component.TRANSPORT,
-                    retryAdvice = PlaybackFailure.RetryAdvice.DO_NOT_RETRY,
-                ),
-            )
-            failPlayback()
-        }
         create = Runnable {
             if (generation != startGeneration) return@Runnable
             traceAttempt(PlaybackAttemptTrace.Phase.WAITING_OWNER)
-            var safety = ProviderConnectionSafety.snapshot()
-            if (!safety.newConnectionAllowed) {
-                if (safety.remoteUncertain) {
-                    failClosedForProviderOwnership()
-                    return@Runnable
-                }
-                if (
-                    safety.localPendingCount > 0 &&
-                    !safety.localProcessRecoveryRequired &&
-                    !providerDrainAttempted
-                ) {
-                    // A prior Activity may still be completing an ordinary VLC
-                    // release. Wait behind the shared FIFO instead of presenting
-                    // an error or opening an overlapping Exo connection.
+            // Provider gate (1.6.2): it can delay this start, never refuse it.
+            // One bounded wait behind the shared native queue, one controlled
+            // process recycle for a proven native hang; whatever is still
+            // unsettled after that is forced open. The server replaces a stale
+            // lease of this device on the new request itself. Until 1.6.1 the
+            // remote states and a timed-out drain were a permanent fail-closed
+            // error that only a Force Stop or a power cycle ended.
+            val safety = ProviderConnectionSafety.snapshot()
+            val gate = if (providerDrainAttempted) {
+                ProviderStartGatePolicy.decideAfterWait(safety)
+            } else {
+                ProviderStartGatePolicy.decide(safety)
+            }
+            when (gate) {
+                ProviderStartGatePolicy.Decision.READY -> Unit
+                ProviderStartGatePolicy.Decision.WAIT_FOR_LOCAL_CLEANUP -> {
+                    // A prior screen may still be completing an ordinary VLC
+                    // release. Wait behind the shared FIFO, at most DRAIN_WAIT_MS,
+                    // instead of opening an overlapping connection at once.
                     providerDrainAttempted = true
                     VlcOps.awaitProviderDrain { mainHandler.post(create) }
                     return@Runnable
                 }
-                if (
-                    safety.localPendingCount > 0 &&
-                    !safety.localProcessRecoveryRequired
-                ) {
-                    // The queue drained but the exact token did not: its old JNI
-                    // worker is no longer a viable proof path.
-                    ProviderConnectionSafety.requireProcessRecoveryForPendingLocalStops()
-                    safety = ProviderConnectionSafety.snapshot()
+                ProviderStartGatePolicy.Decision.RECOVER_LOCAL_PROCESS -> {
+                    if (!recoveryAttempted) {
+                        recoveryAttempted = true
+                        val launched = callback.onLocalProcessRecoveryRequired(
+                            onNotReplaced = { mainHandler.post(create) },
+                        )
+                        // Launched: this process is replaced within a second, or
+                        // the watchdog re-enters create, which then forces open.
+                        if (launched) return@Runnable
+                    }
+                    ProviderStartGate.forceOpen(
+                        context,
+                        "engine_start",
+                        "process recovery unavailable",
+                    )
                 }
-                if (
-                    safety.canRecoverLocalProcess &&
-                    callback.onLocalProcessRecoveryRequired()
-                ) {
-                    return@Runnable
+                ProviderStartGatePolicy.Decision.PROCEED_AFTER_RESET -> {
+                    ProviderStartGate.forceOpen(
+                        context,
+                        "engine_start",
+                        if (providerDrainAttempted) "drain timeout" else "no proof path",
+                    )
                 }
-                failClosedForProviderOwnership()
-                return@Runnable
+                ProviderStartGatePolicy.Decision.BLOCKED_BY_REMOTE_OWNER,
+                ProviderStartGatePolicy.Decision.BLOCKED -> Unit // screen-level, never from decide()
             }
             var candidate: PlayerEngine? = null
             try {
@@ -862,6 +881,7 @@ class PlayerController(
                 val elapsed = SystemClock.elapsedRealtime() - retireStartedMs
                 val gap = (ENGINE_SWAP_DELAY_MS - elapsed).coerceIn(0L, ENGINE_SWAP_DELAY_MS)
                 mainHandler.postDelayed({
+                    providerDrainAttempted = true
                     VlcOps.awaitProviderDrain { mainHandler.post(create) }
                 }, gap)
             }
@@ -1761,21 +1781,26 @@ class PlayerController(
         // resumed stream re-matches from its first verified frame.
         ++frameRateMatchGen
         displayModeSwitcher?.restore()
-        val target = engine
-        if (target == null) {
+        if (engine == null) {
             onStopped(true)
             return
         }
-        target.stopAndThen { stopped ->
-            post {
-                onStopped(stopped && suspended && engine === target)
-            }
-        }
+        // 1.6.2: leave nothing behind while the screen is stopped. A stopped
+        // engine still held its decoder, surface and sample buffers; a full
+        // release costs nothing because resume() rebuilds the stage anyway.
+        releaseEngine { released -> onStopped(released && suspended) }
     }
 
     fun resume() {
         suspended = false
-        if (recoveryNeededOnResume) {
+        // A quiesced screen rebuilds its stage. So does a start whose engine
+        // creation stepped aside for a controlled process recycle that did not
+        // happen (1.6.2); a terminal failure keeps its error until the user
+        // retries.
+        if (
+            recoveryNeededOnResume ||
+            (engine == null && currentUrl != null && !lastAttemptFailed)
+        ) {
             recoveryNeededOnResume = false
             currentUrl?.let { startStage(stage) }
             return
