@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "targetVersion": "1.6.2",
-  "stableVersion": "1.6.0",
+  "targetVersion": "1.6.3",
+  "stableVersion": "1.6.2",
   "rolloutPercent": 100,
   "paused": false,
   "emergency": false,
-  "salt": "release-1.6.2"
+  "salt": "release-1.6.3"
 }
