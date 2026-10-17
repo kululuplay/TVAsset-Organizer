@@ -3,9 +3,19 @@
  * Orchestrates the two engines and their reconnect/fallback policy — one
  * connection at a time (full stop -> release -> restart).
  *
- * AUTO + automatic decoder is reason-aware:
- *   audio/source failure: EXO -> VLC_HW -> VLC_SW
- *   invalid video/decode: EXO -> VLC_HW -> VLC_SW
+ * AUTO + automatic decoder is reason-aware and bidirectional between the two
+ * hardware engines (1.6.3):
+ *   decoder-class failure on EXO:    EXO -> VLC_HW -> (SD/MPEG-2 only) VLC_SW
+ *   decoder-class failure on VLC_HW: VLC_HW -> EXO -> (SD/MPEG-2 only) VLC_SW
+ *   network stall / transport error: same stage, reconnect loop (rule A)
+ *
+ * Rule B: no frame 4 s after READY, a decoder/extractor/audio-sink error or
+ * bytes without a playable track set switch engines at once. Rule C: a
+ * dropped-frame share above 25 % over 5 s, a 3 s video freeze with audio and
+ * buffer healthy, or two decoder hiccups in the first 20 s switch too.
+ * What a switch rescued is learned per channel, per stream fingerprint and
+ * per device (PlaybackLearnedRouting) so the next start skips the failing
+ * engine from its first second.
  *
  * Manual choices remain the preferred path for ordinary errors. A confirmed
  * green/frozen/unsupported decode may use one bounded compatibility fallback so
@@ -203,6 +213,23 @@ class PlayerController(
     // every engine. We may try another stage for immediate recovery, but must not
     // remember that accidental winner as a decoder preference for fourteen days.
     private var routeLearningAllowed = true
+
+    // ---- Learned routing (1.6.3) ------------------------------------------
+    // Layer 1 (channel) and layer 2 (fingerprint) suggestions come from
+    // PlaybackLearnedRoutingStore; layer 3 (device default) shapes the base
+    // stage. A suggested stage that fails before proving stable is dropped at
+    // once and the play restarts from the base ladder (usingRememberedRoute).
+    private var learnedSuggestion: PlaybackLearnedRouting.Suggestion? = null
+    private var currentFingerprint: StreamFingerprint? = null
+    private var fingerprintSwitchUsed = false
+    // The last decoder-class failure on this channel (stage, reason): when the
+    // next stage then plays LEARN_STABLE_MS uninterrupted, that is a rescue.
+    private var pendingRescue: Pair<Stage, Reason>? = null
+    private var learningConfirmed = false
+    // Start of the current uninterrupted playback window (reset by rebuffers).
+    private var learnWindowStartMs = 0L
+    // Rule C.3: short decoder hiccups since this stage's first frame.
+    private var hiccupCount = 0
 
     /** Route memory only steers fully-automatic live playback. */
     private val routeMemoryEligible: Boolean
@@ -505,6 +532,13 @@ class PlayerController(
         tunnelingRetryUsed = false
         streamTooHeavyReported = false
         lastVideoVerdict = null
+        learnedSuggestion = null
+        currentFingerprint = null
+        fingerprintSwitchUsed = false
+        pendingRescue = null
+        learningConfirmed = false
+        learnWindowStartMs = 0L
+        hiccupCount = 0
         // Tear down the previous channel's stall/startup watchdog; the (re)start
         // path below re-arms it for this channel.
         cancelWatchdog()
@@ -564,11 +598,29 @@ class PlayerController(
                 "VLC hardware bypassed for Amlogic surface compatibility -> $base",
             )
         }
-        val remembered = rememberedStage()
+        // Learned routing (1.6.3): layer 1 (channel) or layer 2 (fingerprint)
+        // may replace the base stage; layer 3 already shaped [base]. Only a
+        // suggestion that actually changes the start counts as a remembered
+        // route (eligible for the distrust-on-fail restart).
+        val suggestion = if (routeMemoryEligible && !memoryIgnoredThisPlay) {
+            PlaybackLearnedRoutingStore.suggestFor(currentRouteKey, base)
+        } else {
+            null
+        }
+        learnedSuggestion = suggestion
+        val remembered = suggestion?.stage
+            ?.let { VlcHardwareDevicePolicy.compatibleInitialStage(it, bypassVlcHardware) }
+            ?.takeIf { it != base && !(mode == PlayerMode.VLC && it == Stage.EXO) }
         val initial = remembered ?: base
-        // Only treat it as a "remembered route" (eligible for the distrust-on-fail
-        // restart) when memory actually changes the starting stage.
-        usingRememberedRoute = remembered != null && remembered != base
+        usingRememberedRoute = remembered != null
+        if (suggestion != null) {
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "learned route (${suggestion.layer}) ${suggestion.stage}" +
+                    if (remembered == null) " -> not applicable here" else "",
+            )
+        }
 
         // Fast zap: on device/engine combinations proven safe for reuse, keep the
         // current engine alive and swap only the stream. Amlogic Exo deliberately
@@ -630,36 +682,83 @@ class PlayerController(
     }
 
     /**
-     * First stage to try from a COLD start, given the engine choice and decoder
-     * strategy (no route memory). [play] prefers [rememberedStage] over this.
+     * First stage to try from a COLD start, given the engine choice, decoder
+     * strategy and the device's learned default (layer 3). [play] prefers a
+     * channel/fingerprint suggestion over this.
      */
     private fun baseInitialStage(): Stage =
         VlcHardwareDevicePolicy.compatibleInitialStage(
             // A remote per-device start engine applies only while the user's
-            // engine is AUTO; the Amlogic VLC_HW -> EXO substitution still wins.
+            // engine is AUTO and wins over the learned device default; the
+            // Amlogic VLC_HW -> EXO substitution still wins over both.
             preferred = PlaybackRoutingPolicy.initialStage(
                 mode,
                 decoderMode,
-                startEngineOverride = remoteOverrides.startEngine,
+                startEngineOverride = remoteOverrides.startEngine ?: learnedStartEngine(),
             ),
             bypassVlcHardware = bypassVlcHardware,
         )
 
+    /** Layer 3: the device's learned AUTO start engine, never an explicit choice. */
+    private fun learnedStartEngine(): PlayerMode? {
+        if (!routeMemoryEligible || mode != PlayerMode.AUTO) return null
+        return when (PlaybackLearnedRoutingStore.deviceDefault()) {
+            Stage.VLC_HW -> PlayerMode.VLC
+            Stage.EXO -> PlayerMode.EXOPLAYER
+            else -> null
+        }
+    }
+
+    /** Decoder-class failures are evidence for route learning; network ones never are. */
+    private fun isLearnableFailure(reason: Reason): Boolean =
+        reason == Reason.VIDEO ||
+            reason == Reason.DECODE ||
+            reason == Reason.AUDIO ||
+            reason == Reason.SOFTWARE_SLOW
+
     /**
-     * The stage this channel last proved STABLE on, or null when route memory does
-     * not apply (ineligible mode, no key, no/expired entry, distrusted this play).
-     * A purely in-memory read — never touches disk on this hot path.
+     * Learned routing (1.6.3): after LEARN_STABLE_MS of uninterrupted playback
+     * the current stage either rescued the channel from a decoder-class failure
+     * of another stage (recorded on layers 1-3) or re-confirmed a suggestion.
      */
-    private fun rememberedStage(): Stage? {
-        if (memoryIgnoredThisPlay || !routeMemoryEligible) return null
-        val name = PlaybackRouteMemory.bestStage(currentRouteKey) ?: return null
-        val remembered = runCatching { Stage.valueOf(name) }.getOrNull() ?: return null
-        if (bypassVlcHardware && remembered == Stage.VLC_HW) return null
-        // A last-resort Exo rescue may save the current VLC-preferred session,
-        // but the next channel visit must still begin on the engine the user
-        // explicitly selected.
-        if (mode == PlayerMode.VLC && remembered == Stage.EXO) return null
-        return remembered
+    private fun confirmLearning() {
+        learningConfirmed = true
+        if (!routeMemoryEligible || !routeLearningAllowed) return
+        if (expectsVideo && !videoOutputConfirmed) return
+        if (mode == PlayerMode.VLC && stage == Stage.EXO) return
+        val key = currentRouteKey ?: return
+        val fingerprint = currentFingerprint?.key
+        val rescue = pendingRescue
+        if (rescue != null && rescue.first != stage) {
+            val changes = PlaybackLearnedRoutingStore.recordRescue(
+                channelKey = key,
+                fingerprint = fingerprint,
+                failed = rescue.first,
+                rescuedBy = stage,
+                primary = baseInitialStage(),
+            )
+            pendingRescue = null
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "learned: ${rescue.first} --${rescue.second}--> $stage stable ${LEARN_STABLE_MS}ms " +
+                    "fp=${fingerprint ?: "?"} -> $changes",
+            )
+            recordStability(
+                "learned_route",
+                "info",
+                "${rescue.first} --${rescue.second}--> $stage learned=$changes fp=${fingerprint ?: "?"}",
+            )
+            if (changes.devicePromoted) {
+                recordStability("device_default", "warn", "AUTO start engine -> $stage")
+            }
+            return
+        }
+        if (learnedSuggestion?.stage == stage) {
+            PlaybackLearnedRoutingStore.confirm(key, fingerprint, stage)
+        } else if (fingerprint != null) {
+            PlaybackLearnedRoutingStore.rememberFingerprint(key, fingerprint)
+        }
     }
 
     private fun startStage(target: Stage) {
@@ -683,6 +782,9 @@ class PlayerController(
         progressPolicy.reset()
         starvationPolicy.reset()
         playbackBuffering = true
+        hiccupCount = 0
+        learnWindowStartMs = 0L
+        learningConfirmed = false
         val useVlc = target != Stage.EXO
         val forceSoftware = target == Stage.VLC_SW
         startEngine(useVlc, forceSoftware)
@@ -917,6 +1019,8 @@ class PlayerController(
         override fun onBuffering() = dispatch {
             if (source !== engine || suspended) return@dispatch
             playbackBuffering = true
+            // An interruption: the 15 s learning window starts over at the next READY.
+            learnWindowStartMs = 0L
             progressPolicy.onBuffering()
             if (playbackConfirmed && !adaptiveBufferingActive) {
                 adaptiveBufferingActive = true
@@ -956,6 +1060,9 @@ class PlayerController(
             if (source !== engine || suspended) return@dispatch
             playbackBuffering = false
             adaptiveBufferingActive = false
+            if (playbackConfirmed && learnWindowStartMs == 0L) {
+                learnWindowStartMs = SystemClock.elapsedRealtime()
+            }
             traceAttempt(PlaybackAttemptTrace.Phase.READY)
             callback.onPlaying(source.engineName)
             if (!expectsVideo) onPlaybackProgress()
@@ -1011,7 +1118,53 @@ class PlayerController(
         override fun onStartupFailure(message: String?) =
             dispatch { if (source === engine) handleEngineFailure(Reason.STARTUP) }
 
-        override fun onSourceFailure(message: String?, httpStatus: Int?) = dispatch {
+        override fun onStreamFingerprint(fingerprint: StreamFingerprint) = dispatch {
+            if (source !== engine || suspended) return@dispatch
+            val changed = currentFingerprint?.key != fingerprint.key
+            currentFingerprint = fingerprint
+            if (!routeMemoryEligible) return@dispatch
+            PlaybackLearnedRoutingStore.rememberFingerprint(currentRouteKey, fingerprint.key)
+            // Layer 2 before the first frame: a channel never seen before whose
+            // signature is known to need the other engine switches right now
+            // instead of paying the failure first. Once per play; a channel
+            // memory (layer 1) already chose the stage and is left alone.
+            if (!changed || playbackConfirmed || fingerprintSwitchUsed || memoryIgnoredThisPlay) return@dispatch
+            if (learnedSuggestion?.layer == PlaybackLearnedRouting.Layer.CHANNEL) return@dispatch
+            val target = PlaybackLearnedRoutingStore.fingerprintStage(fingerprint.key)
+                ?.let { VlcHardwareDevicePolicy.compatibleInitialStage(it, bypassVlcHardware) }
+                ?.takeIf { it != stage && it !in triedStages && !(mode == PlayerMode.VLC && it == Stage.EXO) }
+                ?: return@dispatch
+            fingerprintSwitchUsed = true
+            learnedSuggestion = PlaybackLearnedRouting.Suggestion(target, PlaybackLearnedRouting.Layer.FINGERPRINT)
+            usingRememberedRoute = true
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "fingerprint ${fingerprint.key} learned $target -> switch before the first frame",
+            )
+            recordStability("fingerprint_route", "info", "${fingerprint.key} $stage -> $target")
+            startStage(target)
+        }
+
+        override fun onVideoHiccup() = dispatch {
+            if (source !== engine || suspended || !playbackConfirmed) return@dispatch
+            val sinceFirstFrameMs = SystemClock.elapsedRealtime() - stageStartMs
+            if (sinceFirstFrameMs > HICCUP_WINDOW_MS) return@dispatch
+            hiccupCount++
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "decoder hiccup #$hiccupCount ${sinceFirstFrameMs}ms after the first frame (stage=$stage)",
+            )
+            if (hiccupCount >= HICCUPS_BEFORE_SWITCH) {
+                // Rule C.3: this decoder cannot keep up with the stream.
+                lastVideoVerdict = VideoVerdict(VideoVerdict.Check.DECODER_HICCUPS)
+                recordStability("stutter_fallback", "warn", "hiccups=$hiccupCount stage=$stage")
+                handleEngineFailure(Reason.VIDEO)
+            }
+        }
+
+        override fun onSourceFailure(message: String?, httpStatus: Int?, networkCause: Boolean) = dispatch {
             if (source !== engine) return@dispatch
             if (suspended) {
                 recoveryNeededOnResume = true
@@ -1046,6 +1199,13 @@ class PlayerController(
                 // 5xx is the panel (cold start, overload): a decoder swap cannot
                 // help and used to park the channel on the software route.
                 PlaybackLog.log(context, "Controller", "server HTTP $httpStatus -> retry same stage $stage")
+                engageReconnect()
+                return@dispatch
+            }
+            if (networkCause) {
+                // Rule A (1.6.3): a transport failure is the same for every
+                // engine; swapping decoders would only add a black screen.
+                PlaybackLog.log(context, "Controller", "network failure -> same stage reconnect $stage")
                 engageReconnect()
                 return@dispatch
             }
@@ -1112,7 +1272,7 @@ class PlayerController(
                 PlaybackFailure.Phase.PLAYBACK,
             ),
         )
-        PlaybackRouteMemory.forget(currentRouteKey, stage.name)
+        noteLearnableFailure(Reason.AUDIO)
 
         val target = LiveAudioStallPolicy.fallbackStage(
             current = stage,
@@ -1192,6 +1352,7 @@ class PlayerController(
         if (playbackConfirmed) return
         playbackConfirmed = true
         stageStartMs = SystemClock.elapsedRealtime()
+        learnWindowStartMs = stageStartMs
         // Start the stall poll alongside the request deadline. A single frame
         // cannot cancel the deadline; sustained output must earn that reset.
         armStallWatchdog()
@@ -1199,8 +1360,6 @@ class PlayerController(
 
     /** Called only after uninterrupted ready samples prove sustained progress. */
     private fun onStablePlayback() {
-        val stableStage = stage
-        val stableKey = currentRouteKey
         if (suspended || !playbackConfirmed || playbackBuffering) return
         PlaybackLog.log(context, "Controller", "sustained playback progress -> recovered")
         resetDeadline()
@@ -1209,25 +1368,7 @@ class PlayerController(
         quickDecodeFailures = 0
         unconfirmedStartFailures = 0
         resetReconnect()
-        // Audio-only streams skip decoder memory; TV requires its verified frame.
-        val stageHonorsExplicitEngine =
-            mode != PlayerMode.VLC || stableStage != Stage.EXO
-        if (
-            routeMemoryEligible &&
-            routeLearningAllowed &&
-            videoOutputConfirmed &&
-            stageHonorsExplicitEngine
-        ) {
-            PlaybackRouteMemory.markStable(stableKey, stableStage.name)
-        } else if (routeMemoryEligible) {
-            PlaybackLog.log(
-                context,
-                "Controller",
-                "route not learned (realVideo=$videoOutputConfirmed, " +
-                    "eligibleFailure=$routeLearningAllowed, " +
-                    "honorsEngine=$stageHonorsExplicitEngine)",
-            )
-        }
+        // Route learning itself waits for LEARN_STABLE_MS (confirmLearning).
         if (isLive && (!expectsVideo || videoOutputConfirmed)) {
             LiveTransportMemory.markStable(currentTransportKey, currentTransportFormat)
         }
@@ -1328,6 +1469,16 @@ class PlayerController(
             if (decision == LivePlaybackProgressPolicy.Decision.STABLE) {
                 onStablePlayback()
             }
+            if (
+                !learningConfirmed &&
+                playbackConfirmed &&
+                !playbackBuffering &&
+                learnWindowStartMs > 0L &&
+                now - learnWindowStartMs >= LEARN_STABLE_MS &&
+                engine?.hasRecentOutputProgress() == true
+            ) {
+                confirmLearning()
+            }
             if (decision == LivePlaybackProgressPolicy.Decision.STALLED) {
                 PlaybackLog.log(context, "Controller", "live stall (no progress ${STALL_TIMEOUT_MS}ms) -> reconnect")
                 recordStability("stall", "warn")
@@ -1386,18 +1537,9 @@ class PlayerController(
                 reason
             }
 
-        // Quality/decode evidence is stronger than the old elapsed-time-only
-        // stable mark. If a route starts dropping frames, shows invalid output,
-        // loses audio or proves too slow after it was learned, remove it
-        // immediately so the next visit cannot start on that degraded path.
-        if (
-            effectiveReason == Reason.VIDEO ||
-            effectiveReason == Reason.DECODE ||
-            effectiveReason == Reason.AUDIO ||
-            effectiveReason == Reason.SOFTWARE_SLOW
-        ) {
-            PlaybackRouteMemory.forget(currentRouteKey, stage.name)
-        }
+        // Decoder-class evidence: what the next stable stage will have rescued,
+        // and a learned stage that fails is dropped at once (TTL & demotion).
+        if (isLearnableFailure(effectiveReason)) noteLearnableFailure(effectiveReason)
 
         // A single pre-playback network/source error is commonly a transient CDN
         // or socket reset, not decoder evidence. Retry the preferred stage once
@@ -1428,7 +1570,6 @@ class PlayerController(
         if (usingRememberedRoute && !memoryIgnoredThisPlay) {
             usingRememberedRoute = false
             memoryIgnoredThisPlay = true
-            PlaybackRouteMemory.markFailed(currentRouteKey, stage.name)
             PlaybackLog.log(
                 context,
                 "Controller",
@@ -1459,11 +1600,12 @@ class PlayerController(
         // connection first, so single-connection is preserved). The counter is NOT
         // reset by a brief first frame, so a 1.5s-then-fail loop escalates instead
         // of restarting the retry count every cycle.
+        // Rule B (1.6.3): a decoder error no longer waits for a second one on
+        // the same hardware decoder; it takes the ladder below at once. Only the
+        // vendor "frame then generic error" shape is still counted here.
         val quickHwFailure = isHardwareStage(stage) &&
-            (
-                effectiveReason == Reason.DECODE ||
-                    (effectiveReason == Reason.ERROR && playedBriefly())
-                )
+            effectiveReason == Reason.ERROR &&
+            playedBriefly()
         if (quickHwFailure) {
             quickDecodeFailures++
             PlaybackLog.log(
@@ -1588,6 +1730,26 @@ class PlayerController(
     }
 
     private fun isHardwareStage(s: Stage): Boolean = s == Stage.EXO || s == Stage.VLC_HW
+
+    /**
+     * A decoder-class failure of the current stage: remember it as the failure
+     * the next stable stage rescues, and drop a learned suggestion that just
+     * failed before proving itself (layer 1/2 demotion).
+     */
+    private fun noteLearnableFailure(reason: Reason) {
+        pendingRescue = stage to reason
+        if (learnedSuggestion?.stage == stage && !learningConfirmed) {
+            val dropped = PlaybackLearnedRoutingStore.recordLearnedFailure(
+                currentRouteKey,
+                currentFingerprint?.key,
+                stage,
+            )
+            if (dropped.any) {
+                PlaybackLog.log(context, "Controller", "learned route $stage failed ($reason) -> dropped $dropped")
+                recordStability("learned_route_dropped", "warn", "$stage $reason dropped=$dropped")
+            }
+        }
+    }
 
     /**
      * True when the current stage rendered a frame but did NOT survive the stable
@@ -1734,6 +1896,8 @@ class PlayerController(
         width = width,
         height = height,
         codec = codec,
+        automaticMode = mode == PlayerMode.AUTO,
+        allowInterlacedSoftwareRescue = bypassVlcHardware && lastVideoVerdict?.interlaced == true,
     )
 
     /**
@@ -1890,6 +2054,16 @@ class PlayerController(
          * so that loop never looks recovered and escalation to software still fires.
          */
         private const val STABLE_PLAYBACK_MS = 10_000L
+
+        /**
+         * Uninterrupted playback a stage must deliver after a decoder-class
+         * failure of another stage before the rescue is learned (1.6.3).
+         */
+        private const val LEARN_STABLE_MS = 15_000L
+
+        /** Rule C.3: decoder hiccups counted only this long after the first frame. */
+        private const val HICCUP_WINDOW_MS = 20_000L
+        private const val HICCUPS_BEFORE_SWITCH = 2
 
         /**
          * Quick hardware decode failures tolerated before forcing the stream onto

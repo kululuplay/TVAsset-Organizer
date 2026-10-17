@@ -4,13 +4,19 @@ import com.iptv.player.player.PlaybackRoutingPolicy.Failure
 import com.iptv.player.player.PlaybackRoutingPolicy.Stage
 
 /**
- * Keeps weak sticks off software HD. On a compatibility-mode / low-RAM device,
- * libVLC software decode of 720p+ or of HEVC/VP9/AV1 turns a green or dead
- * hardware picture into a CPU-bound slideshow with heat and OS kills, so the
- * ladder is better off ending and letting the UI explain the stream is too
- * heavy. A remote per-device override can re-enable the software rung for
- * boxes proven to cope. Purely a ladder exclusion: the Amlogic Exo-first start
- * and every reactive hardware step are untouched.
+ * Keeps sticks off software HD. libVLC software decode of 720p+ or of
+ * HEVC/VP9/AV1 turns a green or dead hardware picture into a CPU-bound
+ * slideshow with heat and OS kills, so the ladder is better off ending and
+ * letting the UI explain the stream is too heavy. Until 1.6.2 only
+ * compatibility-mode / low-RAM devices were protected; since 1.6.3 the AUTO
+ * engine mode withholds the software rung on every device, so AUTO runs
+ * between the two hardware engines and reaches software only for SD
+ * (<= 576p) and light MPEG-1/2 streams. One measured exception remains:
+ * interlaced H.264 up to 1080 on an Amlogic box, where the hardware decoder
+ * stalls and libVLC software with the deinterlacer off plays at full rate;
+ * that is the only route left for those channels. A remote per-device
+ * override can re-enable the software rung for boxes proven to cope. Purely a
+ * ladder exclusion: the Exo-first start and every hardware step are untouched.
  */
 internal object SoftwareHdFallbackPolicy {
 
@@ -33,19 +39,27 @@ internal object SoftwareHdFallbackPolicy {
         return HEAVY_CODEC_MARKERS.any { normalized.contains(it) }
     }
 
-    /** Stages the constrained device must not be routed to for this stream. */
+    /**
+     * Stages this device must not be routed to for this stream.
+     * [automaticMode] is the AUTO engine choice; [allowInterlacedSoftwareRescue]
+     * is the Amlogic interlaced-H.264 exception described above.
+     */
     fun excludedStages(
         constrainedDevice: Boolean,
         width: Int,
         height: Int,
         codec: String?,
         allowSoftwareHdFallback: Boolean,
-    ): Set<Stage> =
-        if (constrainedDevice && !allowSoftwareHdFallback && isHeavyStream(width, height, codec)) {
-            setOf(Stage.VLC_SW)
-        } else {
-            emptySet()
-        }
+        automaticMode: Boolean = false,
+        allowInterlacedSoftwareRescue: Boolean = false,
+    ): Set<Stage> {
+        if (allowSoftwareHdFallback || !isHeavyStream(width, height, codec)) return emptySet()
+        if (constrainedDevice) return setOf(Stage.VLC_SW)
+        if (!automaticMode) return emptySet()
+        val interlacedRescue =
+            allowInterlacedSoftwareRescue && !isHeavyCodec(codec) && height in 1..INTERLACED_RESCUE_MAX_HEIGHT
+        return if (interlacedRescue) emptySet() else setOf(Stage.VLC_SW)
+    }
 
     /**
      * True when the ladder ran dry only because software was withheld for a
@@ -61,6 +75,8 @@ internal object SoftwareHdFallbackPolicy {
             (failure == Failure.VIDEO || failure == Failure.DECODE || failure == Failure.SOFTWARE_SLOW)
 
     private const val HD_MIN_HEIGHT = 720
+    /** Software 1080i H.264 was measured at full rate on a MiTV Stick; nothing above it. */
+    private const val INTERLACED_RESCUE_MAX_HEIGHT = 1080
     private val LIGHT_CODEC_MARKERS = listOf("mpeg2", "mpeg-2", "mp2v", "mpgv", "mpeg1", "mpeg-1", "mp1v")
     private val HEAVY_CODEC_MARKERS = listOf(
         "hevc", "h265", "h.265", "hev1", "hvc1",

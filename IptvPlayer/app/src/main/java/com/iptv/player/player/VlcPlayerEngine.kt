@@ -49,6 +49,7 @@ import com.iptv.player.util.PlaybackRemotePolicy
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.interfaces.IMedia
 import org.videolan.libvlc.util.VLCVideoLayout
 
 class VlcPlayerEngine(
@@ -222,6 +223,13 @@ class VlcPlayerEngine(
                     if (sample.readBytes > 0L && !transportBytesReported) {
                         transportBytesReported = true
                         listener?.onTransportBytes()
+                    }
+                    if (!fingerprintReported && observedTrack.width > 0 && observedTrack.height > 0) {
+                        streamFingerprint()?.let { fingerprint ->
+                            fingerprintReported = true
+                            PlaybackLog.log(context, engineName, "stream fingerprint ${fingerprint.key}")
+                            listener?.onStreamFingerprint(fingerprint)
+                        }
                     }
                     if (
                         sample.decodedVideo > 0L ||
@@ -400,6 +408,7 @@ class VlcPlayerEngine(
     private val eventSession = AtomicLong(0)
     private val pendingOps = AtomicInteger(0)
     private var transportBytesReported = false
+    private var fingerprintReported = false
     private var recoveryOutputCounters: Pair<Int, Int>? = null
     private var recoveryPlaybackTimeMs = -1L
     // Audio twin of videoStatsUsable: playedAbuffers can stay at zero forever.
@@ -760,7 +769,9 @@ class VlcPlayerEngine(
         healthHandler.removeCallbacks(noDisplayedFrameRunnable)
         healthHandler.postDelayed(
             noDisplayedFrameRunnable,
-            NO_DISPLAYED_FRAME_TIMEOUT_MS,
+            // Rule B (1.6.3): a hardware decoder that decodes but never displays
+            // within 6 s is handed to Exo; software keeps the longer bound.
+            if (forceSoftware) NO_DISPLAYED_FRAME_TIMEOUT_SW_MS else NO_DISPLAYED_FRAME_TIMEOUT_HW_MS,
         )
         healthHandler.removeCallbacks(noVideoPipelineRunnable)
         healthHandler.postDelayed(
@@ -1154,6 +1165,7 @@ class VlcPlayerEngine(
         voutObserved.set(false)
         playbackHealth.reset()
         transportBytesReported = false
+        fingerprintReported = false
         recoveryOutputCounters = null
         recoveryPlaybackTimeMs = -1L
         audioOutputEvidence.reset()
@@ -2029,6 +2041,38 @@ class VlcPlayerEngine(
         )
     }
 
+    override fun streamFingerprint(): StreamFingerprint? {
+        if (pendingOps.get() > 0 || nativeHandlesAbandoned.get()) return null
+        val mp = mediaPlayer ?: return null
+        val track = runCatching { mp.currentVideoTrack }.getOrNull() ?: return null
+        val den = track.frameRateDen
+        val fps = if (den > 0) track.frameRateNum.toFloat() / den else 0f
+        return StreamFingerprint.from(
+            videoMime = codecLabel(track.codec),
+            width = track.width,
+            height = track.height,
+            fps = fps,
+            interlaced = null,
+            audioMime = readAudioCodec(mp),
+        )
+    }
+
+    /** First audio track's fourcc from the retained Media (released again). */
+    private fun readAudioCodec(mp: MediaPlayer): String? {
+        val media = runCatching { mp.media }.getOrNull() ?: return null
+        return try {
+            val count = runCatching { media.trackCount }.getOrDefault(0)
+            (0 until count).asSequence()
+                .mapNotNull { index -> runCatching { media.getTrack(index) }.getOrNull() }
+                .firstOrNull { it.type == IMedia.Track.Type.Audio }
+                ?.codec
+        } catch (_: Throwable) {
+            null
+        } finally {
+            media.release()
+        }
+    }
+
     override fun audioTracks(): List<PlayerTrack> = vlcTracks(audio = true)
 
     override fun subtitleTracks(): List<PlayerTrack> = vlcTracks(audio = false)
@@ -2146,7 +2190,8 @@ class VlcPlayerEngine(
 
         private const val HEALTH_POLL_MS = 1500L
         private const val VOUT_STATS_GRACE_MS = 4500L
-        private const val NO_DISPLAYED_FRAME_TIMEOUT_MS = 12_000L
+        private const val NO_DISPLAYED_FRAME_TIMEOUT_HW_MS = 6_000L
+        private const val NO_DISPLAYED_FRAME_TIMEOUT_SW_MS = 12_000L
         private const val NO_VIDEO_PIPELINE_TIMEOUT_MS = 20_000L
         private const val NATIVE_OPERATION_TIMEOUT_MS = 8_000L
         private const val NATIVE_RELEASE_TIMEOUT_MS = 12_000L

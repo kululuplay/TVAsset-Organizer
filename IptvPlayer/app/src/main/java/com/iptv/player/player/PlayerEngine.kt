@@ -134,6 +134,13 @@ interface PlayerEngine {
      */
     fun getStreamInfo(): StreamInfo? = null
 
+    /**
+     * Technical signature of the current stream for route learning (codec,
+     * resolution bucket, frame-rate family, interlace, audio codec), or null
+     * until the video format is known.
+     */
+    fun streamFingerprint(): StreamFingerprint? = null
+
     /** Currently discovered selectable live audio tracks. */
     fun audioTracks(): List<PlayerTrack> = emptyList()
 
@@ -202,6 +209,12 @@ data class VideoVerdict(
         FRAME_STALL,
         NO_FIRST_FRAME,
         INTERLACED_FAIL_FAST,
+        /** Bytes kept flowing but Media3 never built a playable track set (1.6.3). */
+        PREPARE_STALL,
+        /** More than a quarter of the frames dropped over the sliding window (1.6.3). */
+        FRAME_DROP_RATIO,
+        /** Repeated short decoder hiccups right after the first frame (1.6.3). */
+        DECODER_HICCUPS,
         UNSPECIFIED,
     }
 
@@ -260,8 +273,25 @@ interface PlayerListener {
     /**
      * Network/source/manifest startup failure. [httpStatus] is supplied when the
      * backend exposes it so auth/not-found responses never trigger TS/HLS probing.
+     * [networkCause] is true for a transport-level failure (connect, timeout,
+     * reset) that no engine swap can repair: the controller reconnects the same
+     * stage instead of walking the ladder (rule A, 1.6.3).
      */
-    fun onSourceFailure(message: String?, httpStatus: Int? = null) {}
+    fun onSourceFailure(message: String?, httpStatus: Int? = null, networkCause: Boolean = false) {}
+
+    /**
+     * The stream's technical signature became known (may fire again when the
+     * audio format settles). Route learning keys its fingerprint layer on it.
+     */
+    fun onStreamFingerprint(fingerprint: StreamFingerprint) {}
+
+    /**
+     * Video frames paused for a moment and resumed while playback was READY,
+     * the buffer healthy and the media clock advancing: a decoder hiccup, not
+     * a network stall. The controller switches engines on the second one early
+     * in a channel (rule C.3, 1.6.3).
+     */
+    fun onVideoHiccup() {}
 
 
     /**

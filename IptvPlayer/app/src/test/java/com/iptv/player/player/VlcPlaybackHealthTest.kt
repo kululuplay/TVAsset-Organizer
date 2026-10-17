@@ -29,13 +29,15 @@ class VlcPlaybackHealthTest {
     }
 
     @Test
-    fun `advancing audio and input with frozen displayed picture is detected`() {
+    fun `advancing audio and input with frozen displayed picture is detected within three seconds`() {
         val health = VlcPlaybackHealth()
         health.evaluate(sample(bytes = 10_000, decoded = 10, displayed = 10, time = 1_000), 0)
-        health.evaluate(sample(bytes = 120_000, decoded = 20, displayed = 10, time = 3_000), 3_000)
+        assertFalse(
+            health.evaluate(sample(bytes = 60_000, decoded = 15, displayed = 10, time = 2_000), 1_500).videoFrozen,
+        )
         val decision = health.evaluate(
-            sample(bytes = 260_000, decoded = 35, displayed = 10, time = 9_000),
-            7_500,
+            sample(bytes = 120_000, decoded = 20, displayed = 10, time = 3_000),
+            3_000,
         )
 
         assertTrue(decision.videoFrozen)

@@ -30,16 +30,22 @@ internal object LiveVideoRoute {
         width: Int,
         height: Int,
         codec: String?,
+        /** AUTO engine mode: software HD is withheld on every device (1.6.3). */
+        automaticMode: Boolean = false,
+        /** Amlogic interlaced-H.264 exception (SoftwareHdFallbackPolicy). */
+        allowInterlacedSoftwareRescue: Boolean = false,
     ): Resolved {
         val softwareCodecUnavailable = !allowSoftwareHevcRescue && isHevcCodec(codec)
-        // Weak sticks must not be pushed onto software HD/HEVC: it trades a
-        // green picture for a CPU-bound slideshow. Remote override re-enables it.
+        // Sticks must not be pushed onto software HD/HEVC: it trades a green
+        // picture for a CPU-bound slideshow. Remote override re-enables it.
         val softwareHdExcluded = SoftwareHdFallbackPolicy.excludedStages(
             constrainedDevice = constrainedDevice,
             width = width,
             height = height,
             codec = codec,
             allowSoftwareHdFallback = allowSoftwareHdFallback,
+            automaticMode = automaticMode,
+            allowInterlacedSoftwareRescue = allowInterlacedSoftwareRescue,
         )
         val unavailableAwareTriedStages =
             triedStages + VlcHardwareDevicePolicy.unavailableStages(

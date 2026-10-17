@@ -79,11 +79,27 @@ class ExoPlaybackFailureClassifierTest {
     }
 
     @Test
-    fun `network source and parsing failures remain ordinary errors`() {
+    fun `container parsing failures switch engines at once`() {
+        listOf(
+            PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+            PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+        ).forEach { errorCode ->
+            assertEquals(
+                ExoPlaybackFailureClassifier.Failure.CONTAINER,
+                ExoPlaybackFailureClassifier.classifyError(
+                    errorCode = errorCode,
+                    rendererType = null,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `network source and manifest failures remain ordinary errors`() {
         listOf(
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
             PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED,
-            PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+            PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
         ).forEach { errorCode ->
             assertEquals(
                 ExoPlaybackFailureClassifier.Failure.ERROR,

@@ -1137,6 +1137,12 @@ const TELEMETRY_LABELS = {
   process_recovery: "Otomatik oynatıcı süreç yenileme",
   stale_process_recycle: "Uzun aradan sonra temiz yeniden başlatma",
   process_recovery_failed: "Süreç yenileme başarısız (süreç değişmedi)",
+  provider_gate_forced: "Bağlantı kapısı zorla açıldı",
+  learned_route: "Motor rotası öğrenildi",
+  learned_route_dropped: "Öğrenilen rota düşürüldü",
+  fingerprint_route: "Akış parmak izi rotası",
+  device_default: "Cihaz varsayılan motoru değişti",
+  stutter_fallback: "Takılma nedeniyle motor değişimi",
 };
 const telemetryLabel = (t) => TELEMETRY_LABELS[t] || t || "—";
 app.post("/api/request", rateLimited("request"), async (req, res) => {

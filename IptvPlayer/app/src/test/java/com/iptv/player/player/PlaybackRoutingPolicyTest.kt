@@ -111,6 +111,17 @@ class PlaybackRoutingPolicyTest {
                 Failure.VIDEO,
             ),
         )
+        // Bidirectional (1.6.3): a VLC hardware start returns to Exo first and
+        // reaches software only when both hardware engines were tried.
+        assertEquals(
+            Stage.EXO,
+            PlaybackRoutingPolicy.nextStage(
+                PlayerMode.AUTO,
+                DecoderMode.AUTO,
+                Stage.VLC_HW,
+                Failure.VIDEO,
+            ),
+        )
         assertEquals(
             Stage.VLC_SW,
             PlaybackRoutingPolicy.nextStage(
@@ -118,6 +129,7 @@ class PlaybackRoutingPolicyTest {
                 DecoderMode.AUTO,
                 Stage.VLC_HW,
                 Failure.VIDEO,
+                triedStages = setOf(Stage.EXO, Stage.VLC_HW),
             ),
         )
         assertNull(
@@ -142,7 +154,7 @@ class PlaybackRoutingPolicyTest {
             ),
         )
         assertEquals(
-            Stage.VLC_SW,
+            Stage.EXO,
             PlaybackRoutingPolicy.nextStage(
                 PlayerMode.AUTO,
                 DecoderMode.HARDWARE,
@@ -158,6 +170,32 @@ class PlaybackRoutingPolicyTest {
                 Stage.VLC_HW,
                 Failure.VIDEO,
             ),
+        )
+    }
+
+    @Test
+    fun `automatic ladder is bidirectional for a VLC hardware start`() {
+        listOf(Failure.STARTUP, Failure.AUDIO, Failure.VIDEO, Failure.DECODE, Failure.ERROR).forEach { failure ->
+            assertEquals(
+                "AUTO/AUTO VLC_HW $failure",
+                Stage.EXO,
+                PlaybackRoutingPolicy.nextStage(PlayerMode.AUTO, DecoderMode.AUTO, Stage.VLC_HW, failure),
+            )
+        }
+        assertEquals(
+            Stage.EXO,
+            PlaybackRoutingPolicy.nextStage(PlayerMode.AUTO, DecoderMode.HARDWARE, Stage.VLC_HW, Failure.ERROR),
+        )
+        // Software is still the last rung, and an explicit VLC choice is unchanged.
+        assertEquals(
+            Stage.VLC_SW,
+            PlaybackRoutingPolicy.nextStage(
+                PlayerMode.AUTO, DecoderMode.AUTO, Stage.VLC_HW, Failure.DECODE, triedStages = setOf(Stage.EXO),
+            ),
+        )
+        assertEquals(
+            Stage.VLC_SW,
+            PlaybackRoutingPolicy.nextStage(PlayerMode.VLC, DecoderMode.AUTO, Stage.VLC_HW, Failure.VIDEO),
         )
     }
 
