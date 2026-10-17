@@ -111,7 +111,7 @@ class PlaybackRoutingPolicyTest {
                 Failure.VIDEO,
             ),
         )
-        // Bidirectional (1.7.0): a VLC hardware start returns to Exo first and
+        // Bidirectional (1.6.3): a VLC hardware start returns to Exo first and
         // reaches software only when both hardware engines were tried.
         assertEquals(
             Stage.EXO,

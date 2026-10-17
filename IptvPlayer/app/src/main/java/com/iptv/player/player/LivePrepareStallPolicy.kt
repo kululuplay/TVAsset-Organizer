@@ -1,7 +1,7 @@
 package com.iptv.player.player
 
 /**
- * "Exo never opens it, VLC does" detector (1.7.0, rule B, prepare phase).
+ * "Exo never opens it, VLC does" detector (1.6.3, rule B, prepare phase).
  *
  * Media3 finishes preparing a progressive MPEG-TS item only after every track
  * the PMT declares has produced its first sample format. A stream whose PMT

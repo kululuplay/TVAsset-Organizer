@@ -18,7 +18,7 @@ import androidx.media3.extractor.ts.TsExtractor
  * The DVB subtitle transcoding of the `TsExtractor(SubtitleParser.Factory)`
  * constructor is kept (1.11 TextRenderer rejects raw subtitle samples).
  *
- * Why [TS_MODE] stays MODE_SINGLE_PMT (1.7.0 review): it is Media3's own
+ * Why [TS_MODE] stays MODE_SINGLE_PMT (1.6.3 review): it is Media3's own
  * progressive default and the right mode for the single-program streams every
  * provider remuxes. MODE_MULTI_PMT ends track discovery only once every PMT the
  * PAT lists has arrived: a transponder relay whose PAT still names ten
@@ -38,7 +38,7 @@ internal object LiveTsExtractorPolicy {
      * Recovery-point I-frames count as keyframes; access units are detected
      * from NAL units; SCTE-35 splice sections never become a track of their
      * own; HDMV DTS audio (stream type 0x82) is recognised (the last two since
-     * 1.7.0).
+     * 1.6.3).
      */
     const val PAYLOAD_READER_FLAGS: Int =
         DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or

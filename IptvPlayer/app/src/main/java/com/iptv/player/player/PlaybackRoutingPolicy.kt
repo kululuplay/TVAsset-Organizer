@@ -14,7 +14,7 @@ import com.iptv.player.data.model.PlayerMode
  * ordinary source/network failures, but a confirmed invalid video/decode path or
  * unsupported Exo audio may use one bounded compatibility fallback.
  *
- * AUTO is bidirectional between the two hardware engines (1.7.0): a start on
+ * AUTO is bidirectional between the two hardware engines (1.6.3): a start on
  * VLC hardware (learned route, fingerprint rule or device default) escapes to
  * Exo first and reaches software last, exactly as an Exo start reaches VLC
  * hardware first. Software stays the last rung on every path.

@@ -107,7 +107,7 @@ internal class VlcPlaybackHealth(
 
     private companion object {
         /**
-         * Rule C.2 (1.7.0): displayed pictures frozen for 3 s while input,
+         * Rule C.2 (1.6.3): displayed pictures frozen for 3 s while input,
          * decoded frames or the clock keep advancing is a decoder/output
          * failure (was 7 s). Network buffering pauses this deadline above.
          */

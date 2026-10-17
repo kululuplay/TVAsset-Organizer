@@ -3,7 +3,7 @@ package com.iptv.player.player
 import com.iptv.player.player.PlaybackRoutingPolicy.Stage
 
 /**
- * Three-layer autonomous route learning (1.7.0), framework-free.
+ * Three-layer autonomous route learning (1.6.3), framework-free.
  *
  * A fallback the viewer has sat through once should never be walked again:
  *

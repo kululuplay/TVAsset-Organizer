@@ -769,7 +769,7 @@ class VlcPlayerEngine(
         healthHandler.removeCallbacks(noDisplayedFrameRunnable)
         healthHandler.postDelayed(
             noDisplayedFrameRunnable,
-            // Rule B (1.7.0): a hardware decoder that decodes but never displays
+            // Rule B (1.6.3): a hardware decoder that decodes but never displays
             // within 6 s is handed to Exo; software keeps the longer bound.
             if (forceSoftware) NO_DISPLAYED_FRAME_TIMEOUT_SW_MS else NO_DISPLAYED_FRAME_TIMEOUT_HW_MS,
         )

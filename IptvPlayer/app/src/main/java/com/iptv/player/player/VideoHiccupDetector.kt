@@ -1,7 +1,7 @@
 package com.iptv.player.player
 
 /**
- * Counts short decoder stalls (1.7.0, rule C.3): video frames pause for at
+ * Counts short decoder stalls (1.6.3, rule C.3): video frames pause for at
  * least [stallMs] while playback is READY, the input is not buffering, the
  * buffer is healthy and the media clock keeps advancing, then frames resume.
  * One such hiccup is tolerated; the controller switches engines on the second

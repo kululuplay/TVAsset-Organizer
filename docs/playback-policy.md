@@ -268,7 +268,7 @@ Also in 1.6.2: the live HTTP source times out after 10 s without bytes (was
 30 s), so a zombie socket cannot hold a retiring engine or its lease; both
 Media3 players use `WAKE_MODE_NETWORK` (Wi-Fi lock while playing).
 
-## End-game player architecture (1.7.0)
+## End-game player architecture (1.6.3)
 
 Goal: AUTO must never need the manual engine choice that customers reported
 ("stuck in AUTO, fine when I pick Exo or VLC by hand"). Four parts, all

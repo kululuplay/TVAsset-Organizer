@@ -3,7 +3,7 @@ package com.iptv.player.player
 import java.util.ArrayDeque
 
 /**
- * Real-time stutter detector (1.7.0, rule C.1): over a sliding window of
+ * Real-time stutter detector (1.6.3, rule C.1): over a sliding window of
  * [windowMs] the share of dropped frames `dropped / (rendered + dropped)` may
  * not exceed [maxRatio] while the buffer is healthy. Fed with cumulative
  * decoder counters (Media3 `DecoderCounters`), so it needs no per-frame

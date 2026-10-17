@@ -219,7 +219,7 @@ class ExoPlayerEngine(
     private var lastSurfaceWidth = 0
     private var lastSurfaceHeight = 0
     private val droppedFrameHealth = DroppedFrameRecoveryGate()
-    // 1.7.0 end-game detectors: dropped-frame share (rule C.1), short decoder
+    // 1.6.3 end-game detectors: dropped-frame share (rule C.1), short decoder
     // hiccups (rule C.3) and the prepare-phase "bytes but never READY" guard.
     private val frameDropRatio = FrameDropRatioGate()
     private val hiccupDetector = VideoHiccupDetector()
@@ -351,7 +351,7 @@ class ExoPlayerEngine(
             val nowMs = SystemClock.elapsedRealtime()
             val frameAgeMs = lastFrame.takeIf { it > 0L }?.let { nowMs - it }
             val inputBuffering = p.playbackState == Player.STATE_BUFFERING
-            // Rule C.2 (1.7.0): with a healthy buffer and an advancing media
+            // Rule C.2 (1.6.3): with a healthy buffer and an advancing media
             // clock a decoder that stops producing frames is a decoder stall
             // after 3 s; without that evidence the 10 s bound of 1.6.1 applies
             // (a network hiccup must resolve on the open socket first).
@@ -822,7 +822,7 @@ class ExoPlayerEngine(
                         listener?.onError(error.errorCodeName)
                     }
                     ExoPlaybackFailureClassifier.Failure.CONTAINER ->
-                        // Rule B (1.7.0): the extractor cannot parse this stream.
+                        // Rule B (1.6.3): the extractor cannot parse this stream.
                         // The other engine gets it at once; no same-engine retry.
                         reportDecodeFailure("container ${error.errorCodeName}")
                     ExoPlaybackFailureClassifier.Failure.ERROR ->
@@ -1674,7 +1674,7 @@ class ExoPlayerEngine(
         else -> false
     }
 
-    /** Transport-level failures that no decoder swap can repair (rule A, 1.7.0). */
+    /** Transport-level failures that no decoder swap can repair (rule A, 1.6.3). */
     private fun isNetworkTransportFailure(errorCode: Int): Boolean = when (errorCode) {
         PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
@@ -1683,7 +1683,7 @@ class ExoPlayerEngine(
     }
 
     /**
-     * Prepare-phase watchdog (1.7.0, LivePrepareStallPolicy): bytes keep
+     * Prepare-phase watchdog (1.6.3, LivePrepareStallPolicy): bytes keep
      * flowing but Media3 never reaches READY because a declared track never
      * carries data. Checked at the bound and then every PREPARE_STALL_POLL_MS
      * until READY, a frame or a failure retires it.
@@ -2065,7 +2065,7 @@ class ExoPlayerEngine(
             // stop() only cancels the Loader: the old channel's socket closes
             // later on the loader thread (never while a read is blocked). Force
             // it closed on the close executor and prepare the new item at once
-            // (1.7.0): the server replaces this device's previous lease when
+            // (1.6.3): the server replaces this device's previous lease when
             // the new request arrives, so a zap no longer waits up to 1.5 s for
             // the close boundary. The 10 s read timeout bounds the old socket.
             if (providerConnection.retireAndClose()) {
@@ -2241,7 +2241,7 @@ class ExoPlayerEngine(
     }
 
     /**
-     * 1.7.0: the replacement engine no longer waits for this socket's close
+     * 1.6.3: the replacement engine no longer waits for this socket's close
      * boundary (up to 1.5 s); the close runs on the executor while the next
      * engine connects and the server supersedes the old lease. Cast hand-off
      * keeps its bounded wait in [stopAndThen] because the receiver is another
@@ -2407,7 +2407,7 @@ class ExoPlayerEngine(
         private const val TRACK_PENDING_RECHECK_DELAY_MS = 2_800L
         /**
          * If no frame renders this long after READY, treat video as failed.
-         * 4 s (1.7.0, rule B): the decoder has data by then; waiting 8 s only
+         * 4 s (1.6.3, rule B): the decoder has data by then; waiting 8 s only
          * delayed the switch to the other hardware engine.
          */
         private const val NO_FRAME_TIMEOUT_MS = 4_000L
@@ -2416,7 +2416,7 @@ class ExoPlayerEngine(
         // engine is torn down and rebuilt (that costs a black screen); 7 s was
         // inside ordinary provider jitter on weak links.
         private const val VIDEO_FRAME_STALL_MS = 10_000L
-        /** Rule C.2 (1.7.0): frame stall bound while the buffer is healthy and audio advances. */
+        /** Rule C.2 (1.6.3): frame stall bound while the buffer is healthy and audio advances. */
         private const val VIDEO_FRAME_STALL_HEALTHY_MS = 3_000L
         /** Buffered media that makes a frame pause decoder evidence rather than input starvation. */
         private const val HEALTHY_BUFFER_MS = 1_500L

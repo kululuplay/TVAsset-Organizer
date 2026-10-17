@@ -4,7 +4,7 @@
  * connection at a time (full stop -> release -> restart).
  *
  * AUTO + automatic decoder is reason-aware and bidirectional between the two
- * hardware engines (1.7.0):
+ * hardware engines (1.6.3):
  *   decoder-class failure on EXO:    EXO -> VLC_HW -> (SD/MPEG-2 only) VLC_SW
  *   decoder-class failure on VLC_HW: VLC_HW -> EXO -> (SD/MPEG-2 only) VLC_SW
  *   network stall / transport error: same stage, reconnect loop (rule A)
@@ -214,7 +214,7 @@ class PlayerController(
     // remember that accidental winner as a decoder preference for fourteen days.
     private var routeLearningAllowed = true
 
-    // ---- Learned routing (1.7.0) ------------------------------------------
+    // ---- Learned routing (1.6.3) ------------------------------------------
     // Layer 1 (channel) and layer 2 (fingerprint) suggestions come from
     // PlaybackLearnedRoutingStore; layer 3 (device default) shapes the base
     // stage. A suggested stage that fails before proving stable is dropped at
@@ -598,7 +598,7 @@ class PlayerController(
                 "VLC hardware bypassed for Amlogic surface compatibility -> $base",
             )
         }
-        // Learned routing (1.7.0): layer 1 (channel) or layer 2 (fingerprint)
+        // Learned routing (1.6.3): layer 1 (channel) or layer 2 (fingerprint)
         // may replace the base stage; layer 3 already shaped [base]. Only a
         // suggestion that actually changes the start counts as a remembered
         // route (eligible for the distrust-on-fail restart).
@@ -717,7 +717,7 @@ class PlayerController(
             reason == Reason.SOFTWARE_SLOW
 
     /**
-     * Learned routing (1.7.0): after LEARN_STABLE_MS of uninterrupted playback
+     * Learned routing (1.6.3): after LEARN_STABLE_MS of uninterrupted playback
      * the current stage either rescued the channel from a decoder-class failure
      * of another stage (recorded on layers 1-3) or re-confirmed a suggestion.
      */
@@ -1203,7 +1203,7 @@ class PlayerController(
                 return@dispatch
             }
             if (networkCause) {
-                // Rule A (1.7.0): a transport failure is the same for every
+                // Rule A (1.6.3): a transport failure is the same for every
                 // engine; swapping decoders would only add a black screen.
                 PlaybackLog.log(context, "Controller", "network failure -> same stage reconnect $stage")
                 engageReconnect()
@@ -1600,7 +1600,7 @@ class PlayerController(
         // connection first, so single-connection is preserved). The counter is NOT
         // reset by a brief first frame, so a 1.5s-then-fail loop escalates instead
         // of restarting the retry count every cycle.
-        // Rule B (1.7.0): a decoder error no longer waits for a second one on
+        // Rule B (1.6.3): a decoder error no longer waits for a second one on
         // the same hardware decoder; it takes the ladder below at once. Only the
         // vendor "frame then generic error" shape is still counted here.
         val quickHwFailure = isHardwareStage(stage) &&
@@ -2057,7 +2057,7 @@ class PlayerController(
 
         /**
          * Uninterrupted playback a stage must deliver after a decoder-class
-         * failure of another stage before the rescue is learned (1.7.0).
+         * failure of another stage before the rescue is learned (1.6.3).
          */
         private const val LEARN_STABLE_MS = 15_000L
 

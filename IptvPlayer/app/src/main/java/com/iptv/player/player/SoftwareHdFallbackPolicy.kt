@@ -8,7 +8,7 @@ import com.iptv.player.player.PlaybackRoutingPolicy.Stage
  * HEVC/VP9/AV1 turns a green or dead hardware picture into a CPU-bound
  * slideshow with heat and OS kills, so the ladder is better off ending and
  * letting the UI explain the stream is too heavy. Until 1.6.2 only
- * compatibility-mode / low-RAM devices were protected; since 1.7.0 the AUTO
+ * compatibility-mode / low-RAM devices were protected; since 1.6.3 the AUTO
  * engine mode withholds the software rung on every device, so AUTO runs
  * between the two hardware engines and reaches software only for SD
  * (<= 576p) and light MPEG-1/2 streams. One measured exception remains:

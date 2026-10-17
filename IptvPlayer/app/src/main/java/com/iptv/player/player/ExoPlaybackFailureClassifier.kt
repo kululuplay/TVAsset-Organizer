@@ -28,7 +28,7 @@ internal object ExoPlaybackFailureClassifier {
         DECODE,
         /** ERROR_CODE_TIMEOUT: Media3's watchdog stopped a frozen player. */
         STALL,
-        /** The extractor cannot parse this container: the other engine gets it at once (1.7.0). */
+        /** The extractor cannot parse this container: the other engine gets it at once (1.6.3). */
         CONTAINER,
         ERROR,
     }

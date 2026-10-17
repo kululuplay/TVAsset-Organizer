@@ -30,7 +30,7 @@ internal object LiveVideoRoute {
         width: Int,
         height: Int,
         codec: String?,
-        /** AUTO engine mode: software HD is withheld on every device (1.7.0). */
+        /** AUTO engine mode: software HD is withheld on every device (1.6.3). */
         automaticMode: Boolean = false,
         /** Amlogic interlaced-H.264 exception (SoftwareHdFallbackPolicy). */
         allowInterlacedSoftwareRescue: Boolean = false,

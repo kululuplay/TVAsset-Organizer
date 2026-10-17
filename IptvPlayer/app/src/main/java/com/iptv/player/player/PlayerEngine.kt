@@ -209,11 +209,11 @@ data class VideoVerdict(
         FRAME_STALL,
         NO_FIRST_FRAME,
         INTERLACED_FAIL_FAST,
-        /** Bytes kept flowing but Media3 never built a playable track set (1.7.0). */
+        /** Bytes kept flowing but Media3 never built a playable track set (1.6.3). */
         PREPARE_STALL,
-        /** More than a quarter of the frames dropped over the sliding window (1.7.0). */
+        /** More than a quarter of the frames dropped over the sliding window (1.6.3). */
         FRAME_DROP_RATIO,
-        /** Repeated short decoder hiccups right after the first frame (1.7.0). */
+        /** Repeated short decoder hiccups right after the first frame (1.6.3). */
         DECODER_HICCUPS,
         UNSPECIFIED,
     }
@@ -275,7 +275,7 @@ interface PlayerListener {
      * backend exposes it so auth/not-found responses never trigger TS/HLS probing.
      * [networkCause] is true for a transport-level failure (connect, timeout,
      * reset) that no engine swap can repair: the controller reconnects the same
-     * stage instead of walking the ladder (rule A, 1.7.0).
+     * stage instead of walking the ladder (rule A, 1.6.3).
      */
     fun onSourceFailure(message: String?, httpStatus: Int? = null, networkCause: Boolean = false) {}
 
@@ -289,7 +289,7 @@ interface PlayerListener {
      * Video frames paused for a moment and resumed while playback was READY,
      * the buffer healthy and the media clock advancing: a decoder hiccup, not
      * a network stall. The controller switches engines on the second one early
-     * in a channel (rule C.3, 1.7.0).
+     * in a channel (rule C.3, 1.6.3).
      */
     fun onVideoHiccup() {}
 
