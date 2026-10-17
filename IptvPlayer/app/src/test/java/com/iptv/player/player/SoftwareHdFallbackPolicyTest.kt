@@ -45,6 +45,52 @@ class SoftwareHdFallbackPolicyTest {
     }
 
     @Test
+    fun `automatic mode withholds software HD on every device`() {
+        assertEquals(
+            setOf(Stage.VLC_SW),
+            SoftwareHdFallbackPolicy.excludedStages(false, 1920, 1080, "avc", false, automaticMode = true),
+        )
+        assertEquals(
+            setOf(Stage.VLC_SW),
+            SoftwareHdFallbackPolicy.excludedStages(false, 1280, 720, "H.264", false, automaticMode = true),
+        )
+        // SD and light MPEG-2 keep the last-resort software rung; so does a remote override.
+        assertTrue(SoftwareHdFallbackPolicy.excludedStages(false, 720, 576, "avc", false, automaticMode = true).isEmpty())
+        assertTrue(SoftwareHdFallbackPolicy.excludedStages(false, 1920, 1080, "mpeg2", false, automaticMode = true).isEmpty())
+        assertTrue(SoftwareHdFallbackPolicy.excludedStages(false, 1920, 1080, "avc", true, automaticMode = true).isEmpty())
+        // Explicit engine choices on a capable device are unchanged.
+        assertTrue(SoftwareHdFallbackPolicy.excludedStages(false, 1920, 1080, "avc", false, automaticMode = false).isEmpty())
+    }
+
+    @Test
+    fun `interlaced H264 on an Amlogic box keeps its measured software rescue up to 1080`() {
+        assertTrue(
+            SoftwareHdFallbackPolicy.excludedStages(
+                false, 1920, 1080, "avc", false, automaticMode = true, allowInterlacedSoftwareRescue = true,
+            ).isEmpty(),
+        )
+        assertEquals(
+            setOf(Stage.VLC_SW),
+            SoftwareHdFallbackPolicy.excludedStages(
+                false, 3840, 2160, "avc", false, automaticMode = true, allowInterlacedSoftwareRescue = true,
+            ),
+        )
+        assertEquals(
+            setOf(Stage.VLC_SW),
+            SoftwareHdFallbackPolicy.excludedStages(
+                false, 1920, 1080, "hevc", false, automaticMode = true, allowInterlacedSoftwareRescue = true,
+            ),
+        )
+        // A constrained device never gets software HD, interlaced or not.
+        assertEquals(
+            setOf(Stage.VLC_SW),
+            SoftwareHdFallbackPolicy.excludedStages(
+                true, 1920, 1080, "avc", false, automaticMode = true, allowInterlacedSoftwareRescue = true,
+            ),
+        )
+    }
+
+    @Test
     fun `remote override re-enables software HD on a constrained device`() {
         assertTrue(SoftwareHdFallbackPolicy.excludedStages(true, 1920, 1080, "hevc", true).isEmpty())
     }

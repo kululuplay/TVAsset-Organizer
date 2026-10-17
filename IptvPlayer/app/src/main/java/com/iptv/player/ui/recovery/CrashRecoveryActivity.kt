@@ -27,6 +27,7 @@ import com.iptv.player.databinding.ActivityCrashRecoveryBinding
 import com.iptv.player.ui.dashboard.DashboardActivity
 import com.iptv.player.util.LaunchCrashGuard
 import com.iptv.player.util.Logger
+import com.iptv.player.player.PlaybackLearnedRoutingStore
 import com.iptv.player.util.PlaybackRouteMemory
 import com.iptv.player.util.StabilityTelemetry
 import kotlinx.coroutines.launch
@@ -75,6 +76,7 @@ class CrashRecoveryActivity : AppCompatActivity() {
                 settings.setResumeOnLaunch(false)
                 // A learned per-channel decode route may itself be the crasher.
                 PlaybackRouteMemory.clear()
+                PlaybackLearnedRoutingStore.clear()
                 Logger.w("Recovery", "Safe mode: player settings reset to defaults (streak=$streak)")
                 StabilityTelemetry.record(
                     type = "safe_mode",

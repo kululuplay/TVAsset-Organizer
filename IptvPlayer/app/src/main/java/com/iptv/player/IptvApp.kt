@@ -27,6 +27,7 @@ import com.iptv.player.data.ServiceLocator
 import com.iptv.player.playback.android.PlaybackQoeRuntime
 import com.iptv.player.playback.android.PlaybackProcessRecovery
 import com.iptv.player.playback.android.PlaybackWifiLock
+import com.iptv.player.player.PlaybackLearnedRoutingStore
 import com.iptv.player.player.ProviderStartGate
 import com.iptv.player.playback.android.PlaybackProcessRecoveryTargetProvider
 import com.iptv.player.playback.android.StaleProcessGuard
@@ -151,6 +152,8 @@ class IptvApp : Application(), ImageLoaderFactory {
         // Load the per-channel decode-route memory (Tier 2 self-healing) so the
         // player can start a channel on the engine/stage it last played stably on.
         PlaybackRouteMemory.init(this)
+        // Three-layer route learning (channel / stream fingerprint / device).
+        PlaybackLearnedRoutingStore.init(this)
         LiveTransportMemory.init(this)
 
         // Sample the pending-crash flag BEFORE the uploader runs — uploadPendingIfAny

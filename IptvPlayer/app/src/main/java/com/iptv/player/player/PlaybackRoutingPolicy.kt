@@ -13,6 +13,11 @@ import com.iptv.player.data.model.PlayerMode
  * User choices are preferences, not failure traps. Explicit engines are kept for
  * ordinary source/network failures, but a confirmed invalid video/decode path or
  * unsupported Exo audio may use one bounded compatibility fallback.
+ *
+ * AUTO is bidirectional between the two hardware engines (1.7.0): a start on
+ * VLC hardware (learned route, fingerprint rule or device default) escapes to
+ * Exo first and reaches software last, exactly as an Exo start reaches VLC
+ * hardware first. Software stays the last rung on every path.
  */
 internal object PlaybackRoutingPolicy {
 
@@ -122,24 +127,24 @@ internal object PlaybackRoutingPolicy {
             Failure.ERROR -> when (decoderMode) {
                 DecoderMode.AUTO -> when (current) {
                     Stage.EXO -> listOf(Stage.VLC_HW, Stage.VLC_SW)
-                    Stage.VLC_HW -> listOf(Stage.VLC_SW)
+                    Stage.VLC_HW -> listOf(Stage.EXO, Stage.VLC_SW)
                     Stage.VLC_SW -> emptyList()
                 }
                 DecoderMode.HARDWARE -> when (current) {
                     Stage.EXO -> listOf(Stage.VLC_HW)
-                    Stage.VLC_HW,
+                    Stage.VLC_HW -> listOf(Stage.EXO)
                     Stage.VLC_SW -> emptyList()
                 }
                 DecoderMode.SOFTWARE -> emptyList()
             }
             Failure.STARTUP -> when (current) {
                 Stage.EXO -> listOf(Stage.VLC_HW, Stage.VLC_SW)
-                Stage.VLC_HW -> listOf(Stage.VLC_SW, Stage.EXO)
+                Stage.VLC_HW -> listOf(Stage.EXO, Stage.VLC_SW)
                 Stage.VLC_SW -> listOf(Stage.VLC_HW, Stage.EXO)
             }
             Failure.AUDIO -> when (current) {
                 Stage.EXO -> listOf(Stage.VLC_HW, Stage.VLC_SW)
-                Stage.VLC_HW -> listOf(Stage.VLC_SW, Stage.EXO)
+                Stage.VLC_HW -> listOf(Stage.EXO, Stage.VLC_SW)
                 Stage.VLC_SW -> listOf(Stage.VLC_HW, Stage.EXO)
             }
             Failure.VIDEO -> when (current) {
@@ -147,12 +152,12 @@ internal object PlaybackRoutingPolicy {
                 // 1080p50 software decode overload is a common source of frozen
                 // or macro-blocked output on Android TV sticks.
                 Stage.EXO -> listOf(Stage.VLC_HW, Stage.VLC_SW)
-                Stage.VLC_HW -> listOf(Stage.VLC_SW, Stage.EXO)
+                Stage.VLC_HW -> listOf(Stage.EXO, Stage.VLC_SW)
                 Stage.VLC_SW -> listOf(Stage.VLC_HW, Stage.EXO)
             }
             Failure.DECODE -> when (current) {
                 Stage.EXO -> listOf(Stage.VLC_HW, Stage.VLC_SW)
-                Stage.VLC_HW -> listOf(Stage.VLC_SW, Stage.EXO)
+                Stage.VLC_HW -> listOf(Stage.EXO, Stage.VLC_SW)
                 Stage.VLC_SW -> listOf(Stage.VLC_HW, Stage.EXO)
             }
             Failure.SOFTWARE_SLOW ->

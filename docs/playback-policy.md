@@ -267,3 +267,62 @@ driving); `decide()` never returns them.
 Also in 1.6.2: the live HTTP source times out after 10 s without bytes (was
 30 s), so a zombie socket cannot hold a retiring engine or its lease; both
 Media3 players use `WAKE_MODE_NETWORK` (Wi-Fi lock while playing).
+
+## End-game player architecture (1.7.0)
+
+Goal: AUTO must never need the manual engine choice that customers reported
+("stuck in AUTO, fine when I pick Exo or VLC by hand"). Four parts, all
+covered by JVM tests.
+
+**What the review found.** `MODE_SINGLE_PMT` is not the bottleneck and
+stays: it is Media3's progressive default, right for single-program IPTV
+streams, and `MODE_MULTI_PMT` would wait for every PMT a filtered transponder
+relay's PAT still lists (never finishing to prepare) or pair video and audio
+from different programs. The real "Exo loads forever, VLC plays" cause is a
+declared track that never carries data; `LivePrepareStallPolicy` (8 s, >= 1 MiB
+received, no READY) now hands such a stream to the other hardware engine.
+The VLC live cache cap of 3000 ms also stays: libVLC 3.x `AOUT_MAX_ADVANCE_TIME`
+is 3 s and a larger cache made the audio decoder drop every frame of the
+first seconds (and would add the same seconds to every VLC zap). The 1.5 s
+`awaitClosed` before a zap and the `VLC_SW` rung for HD in AUTO were real
+bottlenecks and are gone (below).
+
+**Rules.**
+
+- A, network stall: buffer starvation, clock stalls and Media3 transport
+  failures (`networkCause`) reconnect the same stage; the engine ladder never
+  runs on them. ADAPTIVE grows the Exo reserve after rebuffers as before.
+- B, fast no-frame switch: no frame 4 s after READY (was 8 s), a decoder,
+  container (`PARSING_CONTAINER_*`) or audio-sink error, or bytes without a
+  playable track set switch to the other hardware engine at once; no
+  same-engine retry. VLC hardware: decoded-but-never-displayed 6 s (was 12 s).
+- C, stutter switch, only with a healthy buffer: `FrameDropRatioGate` (> 25 %
+  of the frames dropped over a 5 s window of the decoder counters), a 3 s
+  video freeze while audio advances (`VIDEO_FRAME_STALL_HEALTHY_MS`; 10 s
+  without that evidence), or two decoder hiccups (`VideoHiccupDetector`)
+  within 20 s of the first frame. VLC: `VlcPlaybackHealth` freeze 3 s.
+- Bidirectional ladder: AUTO from VLC_HW goes to EXO first and reaches
+  software last, mirroring the Exo start. `VLC_SW` is withheld for >= 720p in
+  AUTO on every device (`SoftwareHdFallbackPolicy.automaticMode`), except
+  interlaced H.264 up to 1080 on an Amlogic box where it is the only working
+  route (measured on a MiTV Stick); SD and MPEG-1/2 keep the software rung.
+- Asynchronous zap: `play(reset = true)` retires the old socket on the close
+  executor and prepares the new item immediately; `releaseAndThen` no longer
+  waits either. The server replaces the device's previous lease; the 10 s read
+  timeout bounds the old socket. Cast hand-off (`stopAndThen`) still waits.
+
+**Learning** (`PlaybackLearnedRouting`, persisted by
+`PlaybackLearnedRoutingStore`): after a decoder-class failure on engine A and
+15 s of uninterrupted playback on B (`LEARN_STABLE_MS`) the rescue is recorded
+per channel (layer 1, 14 days), per `StreamFingerprint`
+(`H264|1920|50i|eac3`: codec, resolution bucket, frame-rate family, interlace,
+audio codec; layer 2 after two different channels, 30 days; applied on the next
+start of any channel with a remembered fingerprint and pre-emptively when a
+new channel's fingerprint becomes known before its first frame) and per device
+(layer 3: three different channels lost by the primary hardware engine move the
+AUTO start engine, the symmetric evidence moves it back, 30 days). A learned
+stage that fails again is dropped at once. Network, HTTP and start-timeout
+failures never feed the model; remote `startEngine` overrides win; explicit
+engine choices are never overridden. Stability events: `learned_route`,
+`learned_route_dropped`, `fingerprint_route`, `device_default`,
+`stutter_fallback`.

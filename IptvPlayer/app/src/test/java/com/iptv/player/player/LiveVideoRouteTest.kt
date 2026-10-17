@@ -26,6 +26,8 @@ class LiveVideoRouteTest {
         width: Int = 1920,
         height: Int = 1080,
         codec: String? = "H.264",
+        automaticMode: Boolean = false,
+        interlacedRescue: Boolean = false,
     ) = LiveVideoRoute.next(
         mode = mode,
         decoderMode = decoderMode,
@@ -39,7 +41,38 @@ class LiveVideoRouteTest {
         width = width,
         height = height,
         codec = codec,
+        automaticMode = automaticMode,
+        allowInterlacedSoftwareRescue = interlacedRescue,
     )
+
+    @Test
+    fun `automatic mode ends the ladder instead of software HD once both hardware engines failed`() {
+        val resolved = route(
+            amlogic = false,
+            constrained = false,
+            triedStages = setOf(Stage.EXO, Stage.VLC_HW),
+            automaticMode = true,
+        )
+        assertNull(resolved.next)
+        assertTrue(Stage.VLC_SW in resolved.softwareHdExcluded)
+        assertEquals(
+            Stage.VLC_SW,
+            route(
+                amlogic = false,
+                constrained = false,
+                triedStages = setOf(Stage.EXO, Stage.VLC_HW),
+                automaticMode = true,
+                width = 720,
+                height = 576,
+            ).next,
+        )
+    }
+
+    @Test
+    fun `automatic Amlogic interlaced 1080 H264 keeps the measured software rescue`() {
+        assertEquals(Stage.VLC_SW, route(constrained = false, automaticMode = true, interlacedRescue = true).next)
+        assertNull(route(constrained = false, automaticMode = true, interlacedRescue = false).next)
+    }
 
     @Test
     fun `constrained Amlogic 1080 H264 has no other video stage`() {

@@ -219,6 +219,15 @@ class ExoPlayerEngine(
     private var lastSurfaceWidth = 0
     private var lastSurfaceHeight = 0
     private val droppedFrameHealth = DroppedFrameRecoveryGate()
+    // 1.7.0 end-game detectors: dropped-frame share (rule C.1), short decoder
+    // hiccups (rule C.3) and the prepare-phase "bytes but never READY" guard.
+    private val frameDropRatio = FrameDropRatioGate()
+    private val hiccupDetector = VideoHiccupDetector()
+    private val transportBytes = AtomicLong(0L)
+    private val firstBytesAtMs = AtomicLong(0L)
+    private var readyObserved = false
+    private var prepareStallRunnable: Runnable? = null
+    private var fingerprintReportedKey: String? = null
     private val surfaceReadbackPolicy = SurfaceReadbackPolicy(constrainedDevice)
     // Own handler: [handler] is cleared on every zap/release, but a pending
     // socket-close completion must still reach the controller.
@@ -339,17 +348,25 @@ class ExoPlayerEngine(
             }
             lastHealthPositionMs = position
             val lastFrame = lastVideoFrameAtMs.get()
+            val nowMs = SystemClock.elapsedRealtime()
+            val frameAgeMs = lastFrame.takeIf { it > 0L }?.let { nowMs - it }
+            val inputBuffering = p.playbackState == Player.STATE_BUFFERING
+            // Rule C.2 (1.7.0): with a healthy buffer and an advancing media
+            // clock a decoder that stops producing frames is a decoder stall
+            // after 3 s; without that evidence the 10 s bound of 1.6.1 applies
+            // (a network hiccup must resolve on the open socket first).
+            val bufferHealthy = p.totalBufferedDuration >= HEALTHY_BUFFER_MS
+            val frameTimeoutMs =
+                if (bufferHealthy && !inputBuffering) VIDEO_FRAME_STALL_HEALTHY_MS else VIDEO_FRAME_STALL_MS
             val decision = LiveVideoLivenessPolicy.classify(
                 evidence = liveVideoEvidence(
                     player = p,
                     firstFrameRendered = firstFrameRendered && p.videoFormat != null,
                     videoFailureReported = videoFailureReported,
                     clockAdvanceMs = clockAdvance,
-                    frameAgeMs = lastFrame.takeIf { it > 0L }?.let {
-                        SystemClock.elapsedRealtime() - it
-                    },
+                    frameAgeMs = frameAgeMs,
                 ),
-                frameTimeoutMs = VIDEO_FRAME_STALL_MS,
+                frameTimeoutMs = frameTimeoutMs,
                 minimumClockAdvanceMs = VIDEO_CLOCK_EVIDENCE_MS,
             )
             if (decision == LiveVideoLivenessPolicy.Decision.VIDEO_STALL) {
@@ -369,9 +386,48 @@ class ExoPlayerEngine(
                 }
                 reportVideoInvalid(
                     VideoVerdict.Check.FRAME_STALL,
-                    "decoder stopped producing video frames for ${VIDEO_FRAME_STALL_MS}ms",
+                    "decoder stopped producing video frames for ${frameTimeoutMs}ms" +
+                        if (bufferHealthy) " with a healthy buffer" else "",
                 )
                 return
+            }
+            if (expectsVideo && firstFrameRendered && !videoFailureReported) {
+                // Rule C.3: a short frame pause that resumed while audio and the
+                // buffer were fine is a decoder hiccup; the controller counts them.
+                val hiccup = hiccupDetector.sample(
+                    ready = p.playbackState == Player.STATE_READY,
+                    buffering = inputBuffering,
+                    bufferHealthy = bufferHealthy,
+                    clockAdvanceMs = clockAdvance,
+                    frameAgeMs = frameAgeMs,
+                    minimumClockAdvanceMs = VIDEO_CLOCK_EVIDENCE_MS,
+                )
+                if (hiccup == VideoHiccupDetector.Event.HICCUP_RESUMED) {
+                    PlaybackLog.log(
+                        context, engineName,
+                        "video frames paused then resumed with a healthy buffer -> decoder hiccup",
+                    )
+                    listener?.onVideoHiccup()
+                }
+                // Rule C.1: share of dropped frames over the sliding window, from
+                // the decoder counters (no dependence on the 50-drop callback).
+                p.videoDecoderCounters?.let { counters ->
+                    counters.ensureUpdated()
+                    val breach = frameDropRatio.sample(
+                        nowMs = nowMs,
+                        rendered = counters.renderedOutputBufferCount.toLong(),
+                        dropped = counters.droppedBufferCount.toLong(),
+                        buffering = inputBuffering,
+                    )
+                    if (breach != null) {
+                        reportVideoInvalid(
+                            VideoVerdict.Check.FRAME_DROP_RATIO,
+                            "dropped ${breach.dropped} of ${breach.dropped + breach.rendered} frames " +
+                                "in ${breach.windowMs}ms with a healthy buffer",
+                        )
+                        return
+                    }
+                }
             }
             handler.postDelayed(this, VIDEO_HEALTH_POLL_MS)
         }
@@ -418,8 +474,15 @@ class ExoPlayerEngine(
                                 }
                                 override fun onTransferStart(source: DataSource, spec: DataSpec, network: Boolean) = Unit
                                 override fun onBytesTransferred(source: DataSource, spec: DataSpec, network: Boolean, bytes: Int) {
-                                    if (network && bytes > 0 && !receivedBytes) {
+                                    if (!network || bytes <= 0) return
+                                    transportBytes.addAndGet(bytes.toLong())
+                                    if (!receivedBytes) {
                                         receivedBytes = true
+                                        // First bytes of this stream: arm the prepare-phase
+                                        // watchdog (LivePrepareStallPolicy) on the main thread.
+                                        if (firstBytesAtMs.compareAndSet(0L, SystemClock.elapsedRealtime())) {
+                                            handler.post { schedulePrepareStallCheck() }
+                                        }
                                         observer?.onTransportBytes()
                                     }
                                 }
@@ -533,10 +596,14 @@ class ExoPlayerEngine(
                         readyForPlayback = false
                         cancelNoFrameCheck()
                         scheduleAudioClockStallCheck()
+                        // Catch-up drops after a rebuffer are network evidence.
+                        frameDropRatio.onBuffering()
                         listener?.onBuffering()
                     }
                     Player.STATE_READY -> {
                         readyForPlayback = true
+                        readyObserved = true
+                        cancelPrepareStallCheck()
                         cancelAudioClockStallCheck()
                         // Give video a fresh grace period after a long network
                         // rebuffer before judging the prior frame timestamp stale.
@@ -658,6 +725,9 @@ class ExoPlayerEngine(
                 if (firstFrameAtMs == 0L) firstFrameAtMs = nowMs
                 lastVideoFrameAtMs.set(nowMs)
                 droppedFrameHealth.onFirstFrame(nowMs)
+                frameDropRatio.onFirstFrame(nowMs)
+                hiccupDetector.reset()
+                cancelPrepareStallCheck()
                 cancelNoFrameCheck()
                 if (exo.playbackState == Player.STATE_BUFFERING) {
                     scheduleAudioClockStallCheck()
@@ -751,11 +821,17 @@ class ExoPlayerEngine(
                         )
                         listener?.onError(error.errorCodeName)
                     }
+                    ExoPlaybackFailureClassifier.Failure.CONTAINER ->
+                        // Rule B (1.7.0): the extractor cannot parse this stream.
+                        // The other engine gets it at once; no same-engine retry.
+                        reportDecodeFailure("container ${error.errorCodeName}")
                     ExoPlaybackFailureClassifier.Failure.ERROR ->
                         if (isSourceOrManifestFailure(error.errorCode)) {
+                            val httpStatus = findHttpStatus(error)
                             listener?.onSourceFailure(
                                 error.errorCodeName,
-                                findHttpStatus(error),
+                                httpStatus,
+                                networkCause = httpStatus == null && isNetworkTransportFailure(error.errorCode),
                             )
                         } else {
                             listener?.onError(error.errorCodeName)
@@ -808,6 +884,7 @@ class ExoPlayerEngine(
                 decoderReuseEvaluation: DecoderReuseEvaluation?,
             ) {
                 if (!isCurrentEvent(eventTime)) return
+                reportStreamFingerprint()
                 val nextCodec = LiveAudioStallPolicy.codecForMime(format.sampleMimeType)
                 if (nextCodec != audioCodec) {
                     audioCodec = nextCodec
@@ -921,6 +998,7 @@ class ExoPlayerEngine(
                         "${format.sampleMimeType} fps=${format.frameRate} " +
                         "interlaced=${interlaced ?: "unknown"}"
                 )
+                reportStreamFingerprint()
                 // Interlaced H.264 on a decoder family this device already saw
                 // stall (InterlacedExoPolicy): leave before the first frame instead
                 // of paying the frame watchdog on every first visit. Only when the
@@ -1015,7 +1093,7 @@ class ExoPlayerEngine(
     // Media3 1.11 argument order: mode, extractorFlags (the subtitle-parser
     // constructor delegates with MODE_SINGLE_PMT, 0; verified in the bytecode).
     private fun liveTsExtractor(): TsExtractor = TsExtractor(
-        TsExtractor.MODE_SINGLE_PMT,
+        LiveTsExtractorPolicy.TS_MODE,
         /* extractorFlags= */ 0,
         DefaultSubtitleParserFactory(),
         TimestampAdjuster(0),
@@ -1373,6 +1451,7 @@ class ExoPlayerEngine(
                     },
                 )
             ExoPlaybackFailureClassifier.Failure.STALL,
+            ExoPlaybackFailureClassifier.Failure.CONTAINER,
             ExoPlaybackFailureClassifier.Failure.ERROR,
             null -> Unit
         }
@@ -1595,6 +1674,83 @@ class ExoPlayerEngine(
         else -> false
     }
 
+    /** Transport-level failures that no decoder swap can repair (rule A, 1.7.0). */
+    private fun isNetworkTransportFailure(errorCode: Int): Boolean = when (errorCode) {
+        PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> true
+        else -> false
+    }
+
+    /**
+     * Prepare-phase watchdog (1.7.0, LivePrepareStallPolicy): bytes keep
+     * flowing but Media3 never reaches READY because a declared track never
+     * carries data. Checked at the bound and then every PREPARE_STALL_POLL_MS
+     * until READY, a frame or a failure retires it.
+     */
+    private fun schedulePrepareStallCheck() {
+        cancelPrepareStallCheck()
+        if (readyObserved || firstFrameRendered || videoFailureReported || audioReported) return
+        val generation = streamGeneration
+        val check = object : Runnable {
+            override fun run() {
+                if (generation != streamGeneration || player == null) {
+                    prepareStallRunnable = null
+                    return
+                }
+                val abandon = LivePrepareStallPolicy.shouldAbandon(
+                    nowMs = SystemClock.elapsedRealtime(),
+                    firstBytesAtMs = firstBytesAtMs.get(),
+                    bytesReceived = transportBytes.get(),
+                    ready = readyObserved,
+                    firstFrame = firstFrameRendered,
+                    failureReported = videoFailureReported || audioReported,
+                )
+                if (abandon) {
+                    prepareStallRunnable = null
+                    reportPrepareStall()
+                    return
+                }
+                if (readyObserved || firstFrameRendered || videoFailureReported || audioReported) {
+                    prepareStallRunnable = null
+                    return
+                }
+                handler.postDelayed(this, PREPARE_STALL_POLL_MS)
+            }
+        }
+        prepareStallRunnable = check
+        handler.postDelayed(check, LivePrepareStallPolicy.NO_READY_AFTER_BYTES_MS)
+    }
+
+    private fun cancelPrepareStallCheck() {
+        prepareStallRunnable?.let(handler::removeCallbacks)
+        prepareStallRunnable = null
+    }
+
+    private fun reportPrepareStall() {
+        val detail = "${transportBytes.get() / 1024} KiB received in " +
+            "${SystemClock.elapsedRealtime() - firstBytesAtMs.get()}ms without a playable track set"
+        if (expectsVideo) {
+            reportVideoInvalid(VideoVerdict.Check.PREPARE_STALL, detail)
+            return
+        }
+        if (audioReported) return
+        audioReported = true
+        cancelTrackSupportCheck()
+        cancelAudioClockStallCheck()
+        cancelAudioUnderrunCheck()
+        PlaybackLog.log(context, engineName, "$detail -> startup compatibility route")
+        listener?.onStartupFailure(detail)
+    }
+
+    private fun reportStreamFingerprint() {
+        val fingerprint = streamFingerprint() ?: return
+        if (fingerprint.key == fingerprintReportedKey) return
+        fingerprintReportedKey = fingerprint.key
+        PlaybackLog.log(context, engineName, "stream fingerprint ${fingerprint.key}")
+        listener?.onStreamFingerprint(fingerprint)
+    }
+
     private fun findHttpStatus(error: Throwable): Int? {
         var cause: Throwable? = error
         for (depth in 0 until 8) {
@@ -1611,8 +1767,10 @@ class ExoPlayerEngine(
         videoFailureReported = true
         cancelAudioClockStallCheck()
         cancelAudioUnderrunCheck()
+        cancelPrepareStallCheck()
         surfaceFrameHealth.reset()
         droppedFrameHealth.reset()
+        frameDropRatio.reset()
         cancelTrackSupportCheck()
         cancelNoFrameCheck()
         handler.removeCallbacks(surfaceValidationDeadlineRunnable)
@@ -1665,8 +1823,10 @@ class ExoPlayerEngine(
         videoFailureReported = true
         cancelAudioClockStallCheck()
         cancelAudioUnderrunCheck()
+        cancelPrepareStallCheck()
         surfaceFrameHealth.reset()
         droppedFrameHealth.reset()
+        frameDropRatio.reset()
         cancelTrackSupportCheck()
         cancelNoFrameCheck()
         handler.removeCallbacks(surfaceValidationDeadlineRunnable)
@@ -1693,8 +1853,10 @@ class ExoPlayerEngine(
         videoFailureReported = true
         cancelAudioClockStallCheck()
         cancelAudioUnderrunCheck()
+        cancelPrepareStallCheck()
         surfaceFrameHealth.reset()
         droppedFrameHealth.reset()
+        frameDropRatio.reset()
         cancelTrackSupportCheck()
         cancelNoFrameCheck()
         handler.removeCallbacks(surfaceValidationDeadlineRunnable)
@@ -1902,22 +2064,12 @@ class ExoPlayerEngine(
             exo.stop()
             // stop() only cancels the Loader: the old channel's socket closes
             // later on the loader thread (never while a read is blocked). Force
-            // it closed and prepare the new item only after that boundary, so a
-            // zap never holds two provider connections. Bounded, then proceed.
+            // it closed on the close executor and prepare the new item at once
+            // (1.7.0): the server replaces this device's previous lease when
+            // the new request arrives, so a zap no longer waits up to 1.5 s for
+            // the close boundary. The 10 s read timeout bounds the old socket.
             if (providerConnection.retireAndClose()) {
-                val generation = streamGeneration
-                providerConnection.awaitClosed(PROVIDER_CLOSE_TIMEOUT_MS) { closed ->
-                    if (generation != streamGeneration || player !== exo) return@awaitClosed
-                    if (!closed) {
-                        PlaybackLog.log(
-                            context,
-                            engineName,
-                            "provider socket close unproven after ${PROVIDER_CLOSE_TIMEOUT_MS}ms -> zap anyway",
-                        )
-                    }
-                    submitMedia(exo, url, mediaId)
-                }
-                return
+                PlaybackLog.log(context, engineName, "zap: previous provider socket closing in the background")
             }
         }
         submitMedia(exo, url, mediaId)
@@ -1945,6 +2097,13 @@ class ExoPlayerEngine(
         surfaceFrameHealth.reset()
         surfaceReadbackPolicy.reset()
         droppedFrameHealth.reset()
+        frameDropRatio.reset()
+        hiccupDetector.reset()
+        transportBytes.set(0L)
+        firstBytesAtMs.set(0L)
+        readyObserved = false
+        prepareStallRunnable = null
+        fingerprintReportedKey = null
         streamGeneration += 1
         activeMediaId = "live-$streamGeneration"
         firstFrameRendered = false
@@ -2028,6 +2187,7 @@ class ExoPlayerEngine(
 
     /** Health polls that STATE_IDLE/stop must retire along with the stream. */
     private fun cancelStreamHealthChecks() {
+        cancelPrepareStallCheck()
         handler.removeCallbacks(videoProgressRunnable)
         handler.removeCallbacks(surfaceValidationDeadlineRunnable)
         handler.removeCallbacks(nativeAcceptPoll)
@@ -2080,18 +2240,16 @@ class ExoPlayerEngine(
         listener = null
     }
 
+    /**
+     * 1.7.0: the replacement engine no longer waits for this socket's close
+     * boundary (up to 1.5 s); the close runs on the executor while the next
+     * engine connects and the server supersedes the old lease. Cast hand-off
+     * keeps its bounded wait in [stopAndThen] because the receiver is another
+     * device.
+     */
     override fun releaseAndThen(onReleased: (Boolean) -> Unit) {
         release()
-        providerConnection.awaitClosed(PROVIDER_CLOSE_TIMEOUT_MS) { closed ->
-            if (!closed) {
-                PlaybackLog.log(
-                    context,
-                    engineName,
-                    "provider socket close unproven after ${PROVIDER_CLOSE_TIMEOUT_MS}ms",
-                )
-            }
-            onReleased(closed)
-        }
+        onReleased(true)
     }
 
     override fun setListener(listener: PlayerListener?) {
@@ -2104,6 +2262,20 @@ class ExoPlayerEngine(
      * (NO_VALUE when unknown), the sample MIME type (mapped to a friendly codec
      * name) and the peak/average bitrate (bits/s -> kbps).
      */
+    override fun streamFingerprint(): StreamFingerprint? {
+        val p = player ?: return null
+        val video = p.videoFormat ?: return null
+        val fps = if (video.frameRate > 0f) video.frameRate else frameRateEstimator.estimate()
+        return StreamFingerprint.from(
+            videoMime = video.sampleMimeType,
+            width = video.width,
+            height = video.height,
+            fps = fps,
+            interlaced = currentVideoInterlaced,
+            audioMime = p.audioFormat?.sampleMimeType,
+        )
+    }
+
     override fun getStreamInfo(): StreamInfo? {
         val fmt = player?.videoFormat ?: return null
         // MPEG-TS H.264/H.265 formats carry no frame rate; fall back to the
@@ -2233,13 +2405,23 @@ class ExoPlayerEngine(
         private const val TRACK_SUPPORT_CHECK_DELAY_MS = 1200L
         /** Extra settle time for a supported live-TS track not selected yet. */
         private const val TRACK_PENDING_RECHECK_DELAY_MS = 2_800L
-        /** If no frame renders this long after READY, treat video as failed. */
-        private const val NO_FRAME_TIMEOUT_MS = 8000L
+        /**
+         * If no frame renders this long after READY, treat video as failed.
+         * 4 s (1.7.0, rule B): the decoder has data by then; waiting 8 s only
+         * delayed the switch to the other hardware engine.
+         */
+        private const val NO_FRAME_TIMEOUT_MS = 4_000L
         private const val VIDEO_HEALTH_POLL_MS = 2000L
         // A short network hiccup must resolve on the existing socket before the
         // engine is torn down and rebuilt (that costs a black screen); 7 s was
         // inside ordinary provider jitter on weak links.
         private const val VIDEO_FRAME_STALL_MS = 10_000L
+        /** Rule C.2 (1.7.0): frame stall bound while the buffer is healthy and audio advances. */
+        private const val VIDEO_FRAME_STALL_HEALTHY_MS = 3_000L
+        /** Buffered media that makes a frame pause decoder evidence rather than input starvation. */
+        private const val HEALTHY_BUFFER_MS = 1_500L
+        /** Re-check cadence of the prepare-phase watchdog after its first bound. */
+        private const val PREPARE_STALL_POLL_MS = 2_000L
         /** HTTP connect / read bounds for the live socket (1.6.2; were 30 s). */
         private const val LIVE_CONNECT_TIMEOUT_MS = 10_000
         private const val LIVE_READ_TIMEOUT_MS = 10_000

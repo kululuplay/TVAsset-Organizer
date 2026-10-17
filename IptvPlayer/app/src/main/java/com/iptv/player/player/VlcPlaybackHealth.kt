@@ -11,7 +11,9 @@ package com.iptv.player.player
  * dropped by deinterlacing or clock correction. A high ratio must therefore
  * never terminate playback while displayedPictures is still advancing.
  */
-internal class VlcPlaybackHealth {
+internal class VlcPlaybackHealth(
+    private val videoFreezeMs: Long = VIDEO_FREEZE_MS,
+) {
     data class Sample(
         val readBytes: Long,
         val decodedVideo: Long,
@@ -90,7 +92,7 @@ internal class VlcPlaybackHealth {
             // the controller's source reconnect watchdog must handle it instead
             // of poisoning the channel's learned decoder route.
             inputStillProgressing &&
-            nowMs - lastDisplayedProgressAtMs >= VIDEO_FREEZE_MS
+            nowMs - lastDisplayedProgressAtMs >= videoFreezeMs
 
         if (frozen) failureReported = true
         return Decision(
@@ -104,7 +106,12 @@ internal class VlcPlaybackHealth {
         if (current >= old) current - old else 0L
 
     private companion object {
-        private const val VIDEO_FREEZE_MS = 7_000L
+        /**
+         * Rule C.2 (1.7.0): displayed pictures frozen for 3 s while input,
+         * decoded frames or the clock keep advancing is a decoder/output
+         * failure (was 7 s). Network buffering pauses this deadline above.
+         */
+        private const val VIDEO_FREEZE_MS = 3_000L
         private const val MIN_INPUT_PROGRESS_BYTES = 64L * 1024L
         private const val MIN_TIME_PROGRESS_MS = 500L
     }

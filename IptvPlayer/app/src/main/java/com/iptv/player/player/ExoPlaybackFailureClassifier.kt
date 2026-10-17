@@ -28,6 +28,8 @@ internal object ExoPlaybackFailureClassifier {
         DECODE,
         /** ERROR_CODE_TIMEOUT: Media3's watchdog stopped a frozen player. */
         STALL,
+        /** The extractor cannot parse this container: the other engine gets it at once (1.7.0). */
+        CONTAINER,
         ERROR,
     }
 
@@ -61,6 +63,7 @@ internal object ExoPlaybackFailureClassifier {
         // Checked first: a stuck detection is not renderer evidence even when
         // Media3 attributes it to the audio or video renderer index.
         ExoStuckDetectionPolicy.isStuckPlayerError(errorCode) -> Failure.STALL
+        errorCode in CONTAINER_ERROR_CODES -> Failure.CONTAINER
         errorCode in AUDIO_OUTPUT_ERROR_CODES -> Failure.AUDIO
         errorCode in VIDEO_PROCESSING_ERROR_CODES -> Failure.DECODE
         errorCode in DECODER_ERROR_CODES && rendererType == C.TRACK_TYPE_AUDIO ->
@@ -150,6 +153,11 @@ internal object ExoPlaybackFailureClassifier {
         PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED,
         PlaybackException.ERROR_CODE_AUDIO_TRACK_OFFLOAD_WRITE_FAILED,
         PlaybackException.ERROR_CODE_AUDIO_TRACK_OFFLOAD_INIT_FAILED,
+    )
+
+    private val CONTAINER_ERROR_CODES = setOf(
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
     )
 
     private val VIDEO_PROCESSING_ERROR_CODES = setOf(

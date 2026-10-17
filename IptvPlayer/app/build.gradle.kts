@@ -60,8 +60,8 @@ android {
         applicationId = "com.iptv.player"
         minSdk = 23
         targetSdk = 34
-        versionCode = 148
-        versionName = "1.6.2"
+        versionCode = 149
+        versionName = "1.7.0"
         // Device-level checks (certificate trust on old Android, libVLC TLS)
         // that a JVM test cannot cover; run with connectedDebugAndroidTest.
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
