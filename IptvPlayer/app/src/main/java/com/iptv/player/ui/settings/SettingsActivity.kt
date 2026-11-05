@@ -116,7 +116,7 @@ class SettingsActivity : BaseActivity() {
     private var livePreviewSwitch: SwitchCompat? = null
     private var selectedPlayerMode = PlayerMode.AUTO
     private var selectedDecoderMode = DecoderMode.AUTO
-    private var selectedBufferMode = BufferMode.NORMAL
+    private var selectedBufferMode = BufferMode.ADAPTIVE
     private var selectedAfrMode = AfrMode.OFF
     private var selectedScreensaverMinutes = 10
 

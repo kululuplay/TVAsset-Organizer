@@ -1,12 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Paths shared via FileProvider. Each entry is the narrowest directory that
      still has to leave the app:
-     - updates/: APKs staged in the app-private cache, handed to the installer.
+     - updates/: APKs staged in the app-private cache (or external cache fallback),
+                 handed to the installer.
      - logs/:    Logger's redacted log snapshot for the recovery share sheet
                  (external files dir, or the internal files dir fallback). -->
 <paths>
     <cache-path
         name="updates"
+        path="updates/" />
+    <external-cache-path
+        name="external-updates"
+        path="updates/" />
+    <external-files-path
+        name="external-files-updates"
         path="updates/" />
     <external-files-path
         name="logs"

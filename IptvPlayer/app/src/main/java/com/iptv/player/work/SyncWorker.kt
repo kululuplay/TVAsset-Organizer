@@ -20,7 +20,14 @@ class SyncWorker(
             BackgroundSyncOutcome.SUCCESS,
             BackgroundSyncOutcome.DISABLED,
             BackgroundSyncOutcome.ALREADY_RUNNING -> Result.success()
-            BackgroundSyncOutcome.RETRY -> Result.retry()
+            BackgroundSyncOutcome.RETRY ->
+                if (BackgroundSyncRetryPolicy.shouldRetry(runAttemptCount)) {
+                    Result.retry()
+                } else {
+                    // Yield until the next periodic window instead of exhausting
+                    // Android 14+ WorkManager job execution quotas on a down panel.
+                    Result.success()
+                }
             BackgroundSyncOutcome.DEFERRED_FOR_PLAYBACK -> {
                 // Periodic work succeeds so it keeps its normal cadence; a unique,
                 // persistent one-shot performs this missed run after playback.

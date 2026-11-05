@@ -158,8 +158,10 @@ enum class BufferMode(
     }
 
     companion object {
+        // ADAPTIVE starts with NORMAL's 1.5 s/2.5 s reserves and automatically
+        // grows to HIGH (5 s) when a channel or weak Wi-Fi stick rebuffers.
         fun fromName(value: String?): BufferMode =
-            entries.firstOrNull { it.name == value } ?: NORMAL
+            entries.firstOrNull { it.name == value } ?: ADAPTIVE
     }
 }
 

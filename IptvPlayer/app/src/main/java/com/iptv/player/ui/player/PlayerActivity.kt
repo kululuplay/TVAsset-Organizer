@@ -981,18 +981,15 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
             ProviderStartGatePolicy.Decision.BLOCKED_BY_REMOTE_OWNER,
             ProviderStartGatePolicy.Decision.BLOCKED -> Unit // screen-level, never from decide()
         }
-        // Focus is requested before opening/reopening the local stream. TV devices
-        // normally grant immediately; the listener still owns transient/permanent
-        // loss and noisy-output pauses after this boundary.
+        // Request audio focus best-effort: on Fire TV / Android TV sticks a
+        // stuck voice assistant or HDMI-CEC state can refuse audio focus
+        // indefinitely. Log it, but never block foreground TV playback.
         if (!playbackSession.requestAudioFocus()) {
-            localPlaybackRequested = false
-            playbackSession.setPlaying(false)
-            binding.playbackCover.visibility = View.VISIBLE
-            binding.bufferingIndicator.visibility = View.GONE
-            binding.errorMessage.setText(R.string.error_audio_focus_unavailable)
-            binding.errorOverlay.visibility = View.VISIBLE
-            binding.retryButton.requestFocus()
-            return ProviderStartGatePolicy.Decision.BLOCKED
+            com.iptv.player.util.PlaybackLog.log(
+                this,
+                "Player",
+                "audio focus not granted by OS -> proceeding with TV playback",
+            )
         }
         localPlaybackRequested = true
         playbackSession.setPlaying(true)

@@ -163,11 +163,10 @@ internal object PlaybackProcessRecovery {
             return false
         }
 
-        val mainStartTicks = readProcessStartTicks(Process.myPid())
-        if (mainStartTicks == null) {
-            requestInFlight.set(false)
-            return false
-        }
+        // On hardened Android TV / Fire OS kernels where /proc/<pid>/stat is
+        // restricted, fall back to -1L: ProcessRecoveryVerifier uses the Binder
+        // processToken as authoritative proof of identity and death.
+        val mainStartTicks = readProcessStartTicks(Process.myPid()) ?: -1L
 
         val target = Intent(resumeIntent ?: activity.intent).apply {
             component = targetComponent

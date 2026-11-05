@@ -18,6 +18,13 @@ object PlaybackRemotePolicy {
         val vodConnectTimeoutMs: Int = DEFAULT_VOD_CONNECT_TIMEOUT_MS,
         val vodReadTimeoutMs: Int = DEFAULT_VOD_READ_TIMEOUT_MS,
         val allowSourceEngineFallback: Boolean = true,
+        /**
+         * When false (default), ExoPlayer waits a bounded time for the previous
+         * HTTP stream socket to close on zap/engine-swap so strict 1-connection
+         * IPTV panels never see two simultaneous connections. When true, the
+         * old socket closes asynchronously in the background without waiting.
+         */
+        val asyncZapSocketClose: Boolean = false,
     )
 
     /**
@@ -41,6 +48,8 @@ object PlaybackRemotePolicy {
          * true = advisory on every route until PixelCopy proves a healthy frame.
          */
         val nativeFrameTrust: Boolean? = null,
+        /** Per-device override for [Snapshot.asyncZapSocketClose]. */
+        val asyncZapSocketClose: Boolean? = null,
     )
 
     @Volatile private var current = Snapshot()
@@ -57,6 +66,14 @@ object PlaybackRemotePolicy {
      */
     fun deviceOverrides(nowMs: Long = System.currentTimeMillis()): DeviceOverrides =
         if (current.expiresAtEpochMs > nowMs) currentOverrides else DeviceOverrides()
+
+    /**
+     * Effective socket-close policy for zaps and engine swaps: per-device
+     * override wins over the global snapshot flag; defaults to false (bounded
+     * wait to prevent strict 1-connection IPTV panels from blocking the line).
+     */
+    fun effectiveAsyncZapSocketClose(nowMs: Long = System.currentTimeMillis()): Boolean =
+        deviceOverrides(nowMs).asyncZapSocketClose ?: snapshot(nowMs).asyncZapSocketClose
 
     internal fun effective(candidate: Snapshot, nowMs: Long): Snapshot =
         candidate.takeIf { it.expiresAtEpochMs > nowMs } ?: Snapshot()
@@ -76,6 +93,7 @@ object PlaybackRemotePolicy {
                 DEFAULT_VOD_READ_TIMEOUT_MS,
             ).coerceIn(MIN_TIMEOUT_MS, MAX_READ_TIMEOUT_MS),
             allowSourceEngineFallback = prefs.getBoolean(KEY_SOURCE_ENGINE_FALLBACK, true),
+            asyncZapSocketClose = prefs.getBoolean(KEY_ASYNC_ZAP_SOCKET_CLOSE, false),
         )
         currentOverrides = resolveOverrides(context, prefs.getString(KEY_DEVICE_OVERRIDES, null))
     }
@@ -100,6 +118,10 @@ object PlaybackRemotePolicy {
                 "allowSourceEngineFallback",
                 current.allowSourceEngineFallback,
             ),
+            asyncZapSocketClose = json.optBoolean(
+                "asyncZapSocketClose",
+                current.asyncZapSocketClose,
+            ),
         )
         // The rules array is authoritative per response: a policy without it
         // clears any previously stored overrides instead of keeping stale ones.
@@ -116,6 +138,7 @@ object PlaybackRemotePolicy {
             .putInt(KEY_VOD_CONNECT_TIMEOUT, next.vodConnectTimeoutMs)
             .putInt(KEY_VOD_READ_TIMEOUT, next.vodReadTimeoutMs)
             .putBoolean(KEY_SOURCE_ENGINE_FALLBACK, next.allowSourceEngineFallback)
+            .putBoolean(KEY_ASYNC_ZAP_SOCKET_CLOSE, next.asyncZapSocketClose)
             .putString(KEY_DEVICE_OVERRIDES, rulesJson)
             .apply()
     }
@@ -127,6 +150,7 @@ object PlaybackRemotePolicy {
         vodConnectTimeoutMs: Int,
         vodReadTimeoutMs: Int,
         allowSourceEngineFallback: Boolean,
+        asyncZapSocketClose: Boolean = false,
     ): Snapshot = Snapshot(
         policyVersion = policyVersion.coerceIn(1, 1),
         expiresAtEpochMs = expiresAtEpochMs.coerceAtLeast(0L),
@@ -137,6 +161,7 @@ object PlaybackRemotePolicy {
         ),
         vodReadTimeoutMs = vodReadTimeoutMs.coerceIn(MIN_TIMEOUT_MS, MAX_READ_TIMEOUT_MS),
         allowSourceEngineFallback = allowSourceEngineFallback,
+        asyncZapSocketClose = asyncZapSocketClose,
     )
 
     /**
@@ -213,6 +238,7 @@ object PlaybackRemotePolicy {
     private const val KEY_VOD_CONNECT_TIMEOUT = "vod_connect_timeout_ms"
     private const val KEY_VOD_READ_TIMEOUT = "vod_read_timeout_ms"
     private const val KEY_SOURCE_ENGINE_FALLBACK = "source_engine_fallback"
+    private const val KEY_ASYNC_ZAP_SOCKET_CLOSE = "async_zap_socket_close"
     private const val KEY_DEVICE_OVERRIDES = "device_overrides_json"
     private const val MIN_TIMEOUT_MS = 5_000
     private const val MAX_CONNECT_TIMEOUT_MS = 30_000
@@ -230,7 +256,7 @@ object PlaybackRemotePolicy {
  *   "sdkMin":21,"sdkMax":27,"lowRam":true,"totalRamMaxMb":1536},
  *  "set":{"bufferMode":"HIGH","startEngine":"EXOPLAYER","tunneling":true,
  *   "livePreview":false,"allowSoftwareHdFallback":false,"compatibilityProfile":true,
- *   "vlcDeinterlace":false,"nativeFrameTrust":false}}`
+ *   "vlcDeinterlace":false,"nativeFrameTrust":false,"asyncZapSocketClose":false}}`
  * Regexes are case-insensitive and matched with `find` (unanchored). A rule with
  * an invalid or over-long regex, or with nothing valid to set, is ignored.
  */
@@ -294,6 +320,7 @@ object DeviceOverrideMatcher {
             compatibilityProfile = raw.set["compatibilityProfile"] as? Boolean,
             vlcDeinterlace = raw.set["vlcDeinterlace"] as? Boolean,
             nativeFrameTrust = raw.set["nativeFrameTrust"] as? Boolean,
+            asyncZapSocketClose = raw.set["asyncZapSocketClose"] as? Boolean,
         )
         if (set == PlaybackRemotePolicy.DeviceOverrides()) return null
         return Rule(
@@ -344,6 +371,7 @@ object DeviceOverrideMatcher {
                 compatibilityProfile = s.compatibilityProfile ?: merged.compatibilityProfile,
                 vlcDeinterlace = s.vlcDeinterlace ?: merged.vlcDeinterlace,
                 nativeFrameTrust = s.nativeFrameTrust ?: merged.nativeFrameTrust,
+                asyncZapSocketClose = s.asyncZapSocketClose ?: merged.asyncZapSocketClose,
             )
         }
         return merged

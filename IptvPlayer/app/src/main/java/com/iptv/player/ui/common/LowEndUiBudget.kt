@@ -12,6 +12,8 @@ object LowEndUiBudget {
         val memoryCachePercent: Double?,
         val crossfade: Boolean,
         val diskCacheBytes: Long,
+        /** Use 16-bit RGB_565 bitmaps on constrained sticks to halve poster/logo RAM. */
+        val allowRgb565: Boolean = false,
     )
 
     enum class TrimAction { NONE, TRIM, CLEAR }
@@ -23,12 +25,14 @@ object LowEndUiBudget {
                 memoryCachePercent = COMPAT_MEMORY_CACHE_PERCENT,
                 crossfade = false,
                 diskCacheBytes = COMPAT_DISK_CACHE_BYTES,
+                allowRgb565 = true,
             )
         } else {
             ImageCachePolicy(
                 memoryCachePercent = null,
                 crossfade = true,
                 diskCacheBytes = DEFAULT_DISK_CACHE_BYTES,
+                allowRgb565 = false,
             )
         }
 

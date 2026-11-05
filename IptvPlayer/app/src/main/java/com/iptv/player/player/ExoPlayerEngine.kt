@@ -96,7 +96,7 @@ class ExoPlayerEngine(
     /** When false (default) audio is decoded to PCM; true allows HDMI passthrough. */
     private val allowPassthrough: Boolean = false,
     /** Buffer size (user "Buffer size" setting) -> DefaultLoadControl durations. */
-    private val bufferMode: BufferMode = BufferMode.NORMAL,
+    private val bufferMode: BufferMode = BufferMode.ADAPTIVE,
     /**
      * True for television/video playback, false for audio-only radio. Media3 READY
      * is only a transport/cache state; for TV it must never be reported as healthy
@@ -118,12 +118,11 @@ class ExoPlayerEngine(
      */
     private val tunnelingEnabled: Boolean = false,
     /**
-     * Whether a VIDEO verdict for a stream of this width/height/codec would
-     * reach another video stage (the controller's ladder). Where it would not,
-     * pixel-only verdicts are advisory (LiveSurfaceVerdictPolicy). The default
-     * keeps every pixel verdict authoritative, as in 1.5.98.
+     * Whether a VIDEO verdict for a stream of this width/height/codec/interlace
+     * would reach another video stage (the controller's ladder). Where it would
+     * not, pixel-only and quality-only stutter verdicts are advisory.
      */
-    private val videoFallbackAvailable: (Int, Int, String?) -> Boolean = { _, _, _ -> true },
+    private val videoFallbackAvailable: (Int, Int, String?, Boolean?) -> Boolean = { _, _, _, _ -> true },
     /**
      * True while this engine draws the Home preview thumbnail. No PixelCopy
      * is ever requested for that surface (SurfaceValidationPolicy); the
@@ -392,8 +391,11 @@ class ExoPlayerEngine(
                 return
             }
             if (expectsVideo && firstFrameRendered && !videoFailureReported) {
+                val canSwitchForStutter = hasAlternativeStageForCurrentFormat(p.videoFormat)
                 // Rule C.3: a short frame pause that resumed while audio and the
-                // buffer were fine is a decoder hiccup; the controller counts them.
+                // buffer were fine is a decoder hiccup; only switch when an
+                // untried alternative video stage exists, so a stick with no
+                // other route never tears down a playing stream to reconnect.
                 val hiccup = hiccupDetector.sample(
                     ready = p.playbackState == Player.STATE_READY,
                     buffering = inputBuffering,
@@ -402,7 +404,7 @@ class ExoPlayerEngine(
                     frameAgeMs = frameAgeMs,
                     minimumClockAdvanceMs = VIDEO_CLOCK_EVIDENCE_MS,
                 )
-                if (hiccup == VideoHiccupDetector.Event.HICCUP_RESUMED) {
+                if (hiccup == VideoHiccupDetector.Event.HICCUP_RESUMED && canSwitchForStutter) {
                     PlaybackLog.log(
                         context, engineName,
                         "video frames paused then resumed with a healthy buffer -> decoder hiccup",
@@ -419,7 +421,7 @@ class ExoPlayerEngine(
                         dropped = counters.droppedBufferCount.toLong(),
                         buffering = inputBuffering,
                     )
-                    if (breach != null) {
+                    if (breach != null && canSwitchForStutter) {
                         reportVideoInvalid(
                             VideoVerdict.Check.FRAME_DROP_RATIO,
                             "dropped ${breach.dropped} of ${breach.dropped + breach.rendered} frames " +
@@ -1019,6 +1021,7 @@ class ExoPlayerEngine(
                         format.width.coerceAtLeast(0),
                         format.height.coerceAtLeast(0),
                         codecLabel(format.sampleMimeType),
+                        interlaced,
                     )
                     if (failFast(alternativeRoute)) {
                         reportVideoInvalid(
@@ -1897,17 +1900,20 @@ class ExoPlayerEngine(
         if (previewSurface) return true
         val fallbackAvailable =
             if (trust == LiveSurfaceVerdictPolicy.Trust.DEAD_END_ONLY && !pixelsProvenThisStream) {
-                val format = player?.videoFormat
-                format == null || videoFallbackAvailable(
-                    format.width.coerceAtLeast(0),
-                    format.height.coerceAtLeast(0),
-                    codecLabel(format.sampleMimeType),
-                )
+                hasAlternativeStageForCurrentFormat(player?.videoFormat)
             } else {
                 true // Not consulted for STRICT, ALWAYS or proven pixels.
             }
         return LiveSurfaceVerdictPolicy.pixelsAdvisory(trust, fallbackAvailable, pixelsProvenThisStream)
     }
+
+    private fun hasAlternativeStageForCurrentFormat(format: Format? = player?.videoFormat): Boolean =
+        format == null || videoFallbackAvailable(
+            format.width.coerceAtLeast(0),
+            format.height.coerceAtLeast(0),
+            codecLabel(format.sampleMimeType),
+            currentVideoInterlaced,
+        )
 
     private fun nativeFramesLive(nowMs: Long): Boolean =
         LiveSurfaceVerdictPolicy.nativeLive(nativeCadence.snapshot(nowMs), readyForPlayback)
@@ -2062,13 +2068,21 @@ class ExoPlayerEngine(
         // channel whose resolution differs from the one fullscreen started on.
         if (reset) {
             exo.stop()
-            // stop() only cancels the Loader: the old channel's socket closes
-            // later on the loader thread (never while a read is blocked). Force
-            // it closed on the close executor and prepare the new item at once
-            // (1.6.3): the server replaces this device's previous lease when
-            // the new request arrives, so a zap no longer waits up to 1.5 s for
-            // the close boundary. The 10 s read timeout bounds the old socket.
-            if (providerConnection.retireAndClose()) {
+            val closing = providerConnection.retireAndClose()
+            if (closing && !PlaybackRemotePolicy.effectiveAsyncZapSocketClose()) {
+                val expectedGen = streamGeneration
+                PlaybackLog.log(
+                    context,
+                    engineName,
+                    "zap: awaiting previous provider socket close (max ${ZAP_CLOSE_TIMEOUT_MS}ms)",
+                )
+                providerConnection.awaitClosed(ZAP_CLOSE_TIMEOUT_MS) {
+                    if (expectedGen != streamGeneration || player !== exo) return@awaitClosed
+                    submitMedia(exo, url, mediaId)
+                }
+                return
+            }
+            if (closing) {
                 PlaybackLog.log(context, engineName, "zap: previous provider socket closing in the background")
             }
         }
@@ -2249,7 +2263,11 @@ class ExoPlayerEngine(
      */
     override fun releaseAndThen(onReleased: (Boolean) -> Unit) {
         release()
-        onReleased(true)
+        if (PlaybackRemotePolicy.effectiveAsyncZapSocketClose()) {
+            onReleased(true)
+        } else {
+            providerConnection.awaitClosed(PROVIDER_CLOSE_TIMEOUT_MS, onReleased)
+        }
     }
 
     override fun setListener(listener: PlayerListener?) {
@@ -2410,14 +2428,14 @@ class ExoPlayerEngine(
          * 4 s (1.6.3, rule B): the decoder has data by then; waiting 8 s only
          * delayed the switch to the other hardware engine.
          */
-        private const val NO_FRAME_TIMEOUT_MS = 4_000L
+        private const val NO_FRAME_TIMEOUT_MS = 5_500L
         private const val VIDEO_HEALTH_POLL_MS = 2000L
         // A short network hiccup must resolve on the existing socket before the
         // engine is torn down and rebuilt (that costs a black screen); 7 s was
         // inside ordinary provider jitter on weak links.
         private const val VIDEO_FRAME_STALL_MS = 10_000L
-        /** Rule C.2 (1.6.3): frame stall bound while the buffer is healthy and audio advances. */
-        private const val VIDEO_FRAME_STALL_HEALTHY_MS = 3_000L
+        /** Rule C.2: frame stall bound while the buffer is healthy and audio advances. */
+        private const val VIDEO_FRAME_STALL_HEALTHY_MS = 4_500L
         /** Buffered media that makes a frame pause decoder evidence rather than input starvation. */
         private const val HEALTHY_BUFFER_MS = 1_500L
         /** Re-check cadence of the prepare-phase watchdog after its first bound. */
@@ -2434,6 +2452,8 @@ class ExoPlayerEngine(
         private const val PLAYBACK_DIAGNOSTIC_POLL_MS = 1_000L
         /** Bound on waiting for the loader thread to close the provider socket. */
         private const val PROVIDER_CLOSE_TIMEOUT_MS = 1_500L
+        /** Shorter bound on same-engine zap socket close before opening next stream. */
+        private const val ZAP_CLOSE_TIMEOUT_MS = 600L
     }
 }
 
@@ -2569,7 +2589,9 @@ internal class ExoProviderConnection(
     }
 
     private companion object {
-        private val SHARED_CLOSE_EXECUTOR = Executors.newSingleThreadExecutor { runnable ->
+        // Cached pool so one socket stuck in a 10 s read/close timeout never
+        // blocks subsequent channel zaps from closing their retired sockets.
+        private val SHARED_CLOSE_EXECUTOR = Executors.newCachedThreadPool { runnable ->
             Thread(runnable, "exo-provider-close").apply { isDaemon = true }
         }
     }
