@@ -213,13 +213,15 @@ class AboutActivity : BaseActivity() {
         // Delete APKs left behind by previous updates. A successful download is
         // kept (it is handed to the system installer) but never cleaned up after,
         // so without this purge every update added another ~30-40 MB file and
-        // the app's on-device size kept swelling. Older builds staged in the
-        // external files dir, so sweep that location once as well.
+        // the app's on-device size kept swelling. Older builds and API 23 legacy
+        // installer staging also use external cache/files dirs, so sweep those too.
         runCatching {
-            listOfNotNull(dir, getExternalFilesDir(null)).forEach { location ->
-                location.listFiles { f -> f.name.startsWith("update-") && f.name.endsWith(".apk") }
-                    ?.forEach { it.delete() }
-            }
+            val externalUpdates = externalCacheDir?.let { File(it, UPDATE_DIR) }
+            listOfNotNull(dir, externalUpdates, externalCacheDir, getExternalFilesDir(null))
+                .forEach { location ->
+                    location.listFiles { f -> f.name.startsWith("update-") && f.name.endsWith(".apk") }
+                        ?.forEach { it.delete() }
+                }
         }
 
         binding.btnUpdateNow.visibility = View.GONE
@@ -239,7 +241,10 @@ class AboutActivity : BaseActivity() {
             val ok = withContext(Dispatchers.IO) {
                 var success = false
                 try {
-                    val request = Request.Builder().url(info.apkUrl.orEmpty()).build()
+                    val request = Request.Builder()
+                        .url(info.apkUrl.orEmpty())
+                        .header("Accept", "application/octet-stream")
+                        .build()
                     val call = ServiceLocator.httpClient.newCall(request)
                     activeCall = call
                     call.execute().use { resp ->
@@ -279,12 +284,16 @@ class AboutActivity : BaseActivity() {
                                     }
                                 }
                                 output.flush()
+                                // Ensure all filesystem buffers are flushed to storage before
+                                // PackageParser / PackageInstaller inspects the archive.
+                                runCatching { output.fd.sync() }
                                 // A clean EOF can still be a proxy-truncated or
                                 // substituted response. Keep it for the validator,
                                 // which reports the precise size/checksum failure
                                 // and then removes the rejected file.
                             }
                         }
+                        runCatching { outFile.setReadable(true, false) }
                         success = true
                     }
                     success

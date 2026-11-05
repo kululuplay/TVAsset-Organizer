@@ -247,8 +247,9 @@ class IptvApp : Application(), ImageLoaderFactory {
 
     /**
      * The one Coil loader for the whole app (every `ImageView.load {}` goes
-     * through it). Weak sticks get a small bitmap cache and no crossfade so
-     * poster/logo rails cannot crowd the decoder out of the app heap.
+     * through it). Weak sticks get a small bitmap cache, RGB_565 pixel format
+     * and no crossfade so poster/logo rails cannot crowd the decoder out of
+     * the app heap.
      */
     override fun newImageLoader(): ImageLoader {
         val policy = LowEndUiBudget.imageCache(
@@ -262,6 +263,7 @@ class IptvApp : Application(), ImageLoaderFactory {
                 }
             }
             .respectCacheHeaders(false)
+            .allowRgb565(policy.allowRgb565)
             .crossfade(policy.crossfade)
             .memoryCache {
                 MemoryCache.Builder(this)

@@ -184,7 +184,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
 
     private var decoderMode = DecoderMode.AUTO
     private var playerMode = PlayerMode.AUTO
-    private var bufferMode = BufferMode.NORMAL
+    private var bufferMode = BufferMode.ADAPTIVE
     private var playbackResourceToken: PlaybackResourceToken? = null
     private var allowPassthrough = false
 
@@ -741,7 +741,10 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         if (!castHandoffStopped || !foreground || isFinishing || isDestroyed) return
         castHandoffStopped = false
         castLocalRestorePending = false
-        pauseAfterBackgroundRestore = !playbackSession.requestAudioFocus()
+        if (!playbackSession.requestAudioFocus()) {
+            PlaybackLog.log(this, "VOD", "audio focus not granted after Cast -> proceeding")
+        }
+        pauseAfterBackgroundRestore = false
         // The receiver can advance well beyond the local hand-off snapshot. Use
         // its final buffered-media position without ever moving the viewer back
         // if a disconnect callback reports a transient zero/older value.
@@ -1484,25 +1487,17 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         binding.audioButton.alpha = if (hasAudio) 1f else 0.42f
         binding.subtitleButton.alpha = if (hasSubtitles) 1f else 0.42f
 
-        // Explicit XML targets do not automatically skip a disabled view on all
-        // Android TV builds. Rebuild the horizontal focus chain around whichever
-        // track buttons are currently available.
-        val actions = buildList<View> {
-            if (hasAudio) add(binding.audioButton)
-            if (hasSubtitles) add(binding.subtitleButton)
-            add(binding.aspectButton)
-            add(binding.sleepButton)
-            add(binding.castButton)
-        }
-        val first = actions.first()
-        binding.backButton.nextFocusRightId = first.id
-        actions.forEachIndexed { index, view ->
-            val previous = actions.getOrNull(index - 1) ?: binding.backButton
-            val next = actions.getOrNull(index + 1)
-            view.nextFocusLeftId = previous.id
-            view.nextFocusRightId = next?.id ?: View.NO_ID
-        }
-        binding.playPauseButton.nextFocusUpId = actions[actions.size / 2].id
+        VodChromeFocusChain.apply(
+            backButton = binding.backButton,
+            playPauseButton = binding.playPauseButton,
+            audioButton = binding.audioButton,
+            subtitleButton = binding.subtitleButton,
+            aspectButton = binding.aspectButton,
+            sleepButton = binding.sleepButton,
+            castButton = binding.castButton,
+            hasAudio = hasAudio,
+            hasSubtitles = hasSubtitles,
+        )
     }
 
     // ---- Controls auto-hide --------------------------------------------
@@ -3119,7 +3114,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
             ProviderConnectionSafety.newConnectionAllowed &&
             !playbackSession.requestAudioFocus()
         ) {
-            pauseAfterBackgroundRestore = true
+            PlaybackLog.log(this, "VOD", "audio focus not granted on start -> proceeding")
         }
         if (
             castHandoffStopped &&

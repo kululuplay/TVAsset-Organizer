@@ -220,11 +220,22 @@ class PlaybackRemotePolicyDeviceOverridesTest {
     }
 
     @Test
-    fun `vlcDeinterlace is a nullable boolean override`() {
+    fun `vlcDeinterlace and asyncZapSocketClose are nullable boolean overrides`() {
         val rules = DeviceOverrideMatcher.parseRules(
-            listOf(raw(mapOf("model" to "aftt"), mapOf("vlcDeinterlace" to false))),
+            listOf(
+                raw(mapOf("model" to "aftt"), mapOf("vlcDeinterlace" to false, "asyncZapSocketClose" to false)),
+                raw(mapOf("model" to "shield"), mapOf("asyncZapSocketClose" to true)),
+            ),
         )
         assertEquals(false, DeviceOverrideMatcher.resolve(rules, fireTvStick).vlcDeinterlace)
+        assertEquals(false, DeviceOverrideMatcher.resolve(rules, fireTvStick).asyncZapSocketClose)
         assertNull(DeviceOverrideMatcher.resolve(rules, shield).vlcDeinterlace)
+        assertEquals(true, DeviceOverrideMatcher.resolve(rules, shield).asyncZapSocketClose)
+    }
+
+    @Test
+    fun `BufferMode defaults to ADAPTIVE when unset or unknown`() {
+        assertEquals(BufferMode.ADAPTIVE, BufferMode.fromName(null))
+        assertEquals(BufferMode.ADAPTIVE, BufferMode.fromName("UNKNOWN"))
     }
 }

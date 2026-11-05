@@ -61,7 +61,7 @@ class PlayerController(
     private val mode: PlayerMode,
     private val decoderMode: DecoderMode = DecoderMode.AUTO,
     private val allowPassthrough: Boolean = false,
-    private val bufferMode: BufferMode = BufferMode.NORMAL,
+    private val bufferMode: BufferMode = BufferMode.ADAPTIVE,
     // Live TV must not be considered healthy merely because audio/cache reached
     // READY. A verified video frame is the readiness boundary. Radio has no video
     // frame, so it deliberately confirms playback from onPlaying instead.
@@ -416,10 +416,40 @@ class PlayerController(
     }
 
     /** A fatal outcome owns cleanup too; no queued callback can reopen this session. */
-    private fun failPlayback() {
+    private fun failPlayback(httpStatus: Int? = null, hlsRejected: Boolean = false) {
         traceAttempt(PlaybackAttemptTrace.Phase.TERMINAL)
         lastAttemptFailed = true
+        val recycleProcess = synchronized(consecutiveFailurePolicy) {
+            consecutiveFailurePolicy.recordTerminalFailure(httpStatus, hlsRejected)
+        }
         release()
+        if (recycleProcess) {
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "repeated terminal playback failures -> request controlled process recycle",
+            )
+            recordStability(
+                "consecutive_failure_recycle",
+                "fatal",
+                "stage=$stage",
+            )
+            ProviderConnectionSafety.block(ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP)
+            val launched = callback.onLocalProcessRecoveryRequired {
+                ProviderStartGate.forceOpen(
+                    context,
+                    "terminal_failure",
+                    "consecutive failure recovery not replaced",
+                )
+                callback.onFatalError()
+            }
+            if (launched) return
+            ProviderStartGate.forceOpen(
+                context,
+                "terminal_failure",
+                "consecutive failure recovery not launched",
+            )
+        }
         callback.onFatalError()
     }
 
@@ -551,7 +581,7 @@ class PlayerController(
         currentTransportFormat = if (isLive) StreamFormat.TS else null
         currentUrl = if (isLive) LiveStreamUrl.applyFormat(url, StreamFormat.TS) else url
         if (MediaTransportPolicy.isHlsUrl(currentUrl.orEmpty())) {
-            failPlayback()
+            failPlayback(hlsRejected = true)
             return
         }
         currentTransportFormat?.let(callback::onTransportResolved)
@@ -904,10 +934,10 @@ class PlayerController(
                             preferSoftwareAudio = constrained || bypassVlcHardware,
                             expectsVideo = expectsVideo,
                             tunnelingEnabled = tunnelingActive,
-                            // Pixel-only verdicts become advisory where a VIDEO
+                            // Pixel-only and stutter verdicts become advisory where a VIDEO
                             // failure has nowhere else to go (LiveSurfaceVerdictPolicy).
-                            videoFallbackAvailable = { width, height, codec ->
-                                hasAlternativeVideoStage(exo, width, height, codec)
+                            videoFallbackAvailable = { width, height, codec, interlaced ->
+                                hasAlternativeVideoStage(exo, width, height, codec, interlaced)
                             },
                             previewSurface = previewSurface,
                         )
@@ -1192,7 +1222,7 @@ class PlayerController(
             if (LiveTransportPolicy.isAuthoritativeHttpFailure(httpStatus)) {
                 // Authorization/resource rejection cannot be repaired by a decoder swap.
                 PlaybackLog.log(context, "Controller", "terminal source HTTP $httpStatus")
-                failPlayback()
+                failPlayback(httpStatus = httpStatus)
                 return@dispatch
             }
             if (StartupErrorRoutingPolicy.retrySameStage(httpStatus)) {
@@ -1200,6 +1230,12 @@ class PlayerController(
                 // help and used to park the channel on the software route.
                 PlaybackLog.log(context, "Controller", "server HTTP $httpStatus -> retry same stage $stage")
                 engageReconnect()
+                return@dispatch
+            }
+            if (manifestFailure) {
+                // Manifest/container parsing failure on Media3: hand off to libVLC immediately.
+                PlaybackLog.log(context, "Controller", "manifest parse failure -> switch engine from $stage")
+                handleEngineFailure(Reason.DECODE, reportFailure = false)
                 return@dispatch
             }
             if (networkCause) {
@@ -1362,6 +1398,9 @@ class PlayerController(
     private fun onStablePlayback() {
         if (suspended || !playbackConfirmed || playbackBuffering) return
         PlaybackLog.log(context, "Controller", "sustained playback progress -> recovered")
+        synchronized(consecutiveFailurePolicy) {
+            consecutiveFailurePolicy.onStablePlayback()
+        }
         resetDeadline()
         traceAttempt(PlaybackAttemptTrace.Phase.STABLE)
         lastVideoVerdict = null
@@ -1724,6 +1763,27 @@ class PlayerController(
             return
         }
 
+        // Quality-only stutter verdicts (FRAME_DROP_RATIO / DECODER_HICCUPS) exist
+        // solely to switch to an untried engine. When no alternative stage exists,
+        // tearing down the playing stream and reconnecting the same engine creates
+        // an endless black-screen rebuffer loop on weak sticks.
+        if (
+            effectiveReason == Reason.VIDEO &&
+            ConsecutiveFailureRecoveryPolicy.shouldKeepPlayingOnStutter(
+                check = lastVideoVerdict?.check,
+                hasAlternativeVideoStage = false,
+            )
+        ) {
+            PlaybackLog.log(
+                context,
+                "Controller",
+                "stutter verdict (${lastVideoVerdict?.check}) has no untried stage -> keep $stage playing",
+            )
+            lastVideoVerdict = null
+            if (playbackConfirmed) armStallWatchdog()
+            return
+        }
+
         // No further engine/decode path (or a confirmed-playback drop): hand off
         // to the bounded live-TV reconnect loop.
         engageReconnect()
@@ -1883,6 +1943,7 @@ class PlayerController(
         width: Int,
         height: Int,
         codec: String?,
+        interlaced: Boolean? = null,
     ): LiveVideoRoute.Resolved = LiveVideoRoute.next(
         mode = mode,
         decoderMode = decoderMode,
@@ -1897,7 +1958,8 @@ class PlayerController(
         height = height,
         codec = codec,
         automaticMode = mode == PlayerMode.AUTO,
-        allowInterlacedSoftwareRescue = bypassVlcHardware && lastVideoVerdict?.interlaced == true,
+        allowInterlacedSoftwareRescue =
+            bypassVlcHardware && (interlaced == true || lastVideoVerdict?.interlaced == true),
     )
 
     /**
@@ -1912,10 +1974,11 @@ class PlayerController(
         width: Int,
         height: Int,
         codec: String?,
+        interlaced: Boolean? = null,
     ): Boolean {
         if (source !== engine || suspended) return true
         if (usingRememberedRoute && !memoryIgnoredThisPlay && baseInitialStage() != stage) return true
-        return resolveRoute(stage, Reason.VIDEO, width, height, codec).next != null
+        return resolveRoute(stage, Reason.VIDEO, width, height, codec, interlaced).next != null
     }
 
     /** Current video stream info for the diagnostics overlay, or null. */
@@ -2021,6 +2084,8 @@ class PlayerController(
     }
 
     private companion object {
+        private val consecutiveFailurePolicy = ConsecutiveFailureRecoveryPolicy()
+
         /**
          * Gap between asking an engine to retire and creating the next one. Each
          * backend removes its SurfaceView only after native decoder shutdown;

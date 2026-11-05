@@ -9,15 +9,16 @@ import org.junit.Test
 class LowEndUiBudgetTest {
 
     @Test
-    fun `standard devices keep Coil defaults with a 128 MB disk cache`() {
+    fun `standard devices keep Coil defaults with a 128 MB disk cache and ARGB_8888`() {
         val policy = LowEndUiBudget.imageCache(compat = false, lowRamDevice = false)
         assertNull(policy.memoryCachePercent)
         assertTrue(policy.crossfade)
         assertEquals(128L * 1024 * 1024, policy.diskCacheBytes)
+        assertFalse(policy.allowRgb565)
     }
 
     @Test
-    fun `compat or low-RAM devices get a 10 percent cache and no crossfade`() {
+    fun `compat or low-RAM devices get a 10 percent cache, no crossfade, and RGB_565`() {
         listOf(
             LowEndUiBudget.imageCache(compat = true, lowRamDevice = false),
             LowEndUiBudget.imageCache(compat = false, lowRamDevice = true),
@@ -25,6 +26,7 @@ class LowEndUiBudgetTest {
             assertEquals(0.10, policy.memoryCachePercent!!, 1e-9)
             assertFalse(policy.crossfade)
             assertEquals(64L * 1024 * 1024, policy.diskCacheBytes)
+            assertTrue(policy.allowRgb565)
         }
     }
 

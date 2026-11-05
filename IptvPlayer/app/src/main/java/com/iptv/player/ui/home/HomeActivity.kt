@@ -36,6 +36,7 @@ import com.iptv.player.data.model.StreamFormat
 import com.iptv.player.databinding.ActivityHomeBinding
 import com.iptv.player.playback.android.PlaybackQoeRuntime
 import com.iptv.player.playback.android.PlaybackProcessRecovery
+import com.iptv.player.playback.android.PlaybackProcessRecoveryTargetProvider
 import com.iptv.player.playback.core.PlaybackEndReason
 import com.iptv.player.playback.core.PlaybackContentIdentity
 import com.iptv.player.playback.core.PlaybackObservation
@@ -75,7 +76,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-class HomeActivity : BaseActivity() {
+class HomeActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider {
 
     /**
      * Home normally participates in idle protection, but it also owns the live
@@ -1941,6 +1942,7 @@ class HomeActivity : BaseActivity() {
             val launched = PlaybackProcessRecovery.requestIfRequired(
                 this@HomeActivity,
                 reason = "preview_native_owner_unresolved",
+                resumeIntent = playbackProcessRecoveryIntent(),
                 onNotReplaced = onNotReplaced,
             )
             return launched ||
@@ -2013,15 +2015,29 @@ class HomeActivity : BaseActivity() {
             ProviderStartGatePolicy.Decision.BLOCKED_BY_REMOTE_OWNER,
             ProviderStartGatePolicy.Decision.BLOCKED -> Unit // screen-level, never from decide()
         }
+        // Best-effort audio focus: on Fire TV / Android TV sticks a stuck voice
+        // assistant or HDMI-CEC state can refuse audio focus indefinitely. Never
+        // block foreground TV stream startup when the OS denies focus.
         if (!playbackSession.requestAudioFocus()) {
-            localPreviewPlaybackRequested = false
-            playbackSession.setPlaying(false)
-            return ProviderStartGatePolicy.Decision.BLOCKED
+            com.iptv.player.util.PlaybackLog.log(
+                this,
+                "Home",
+                "audio focus not granted by OS -> proceeding with TV playback",
+            )
         }
         localPreviewPlaybackRequested = true
         playbackSession.setPlaying(true)
         return ProviderStartGatePolicy.Decision.READY
     }
+
+    override fun playbackProcessRecoveryIntent(): Intent =
+        Intent(this, HomeActivity::class.java).apply {
+            putExtra(EXTRA_RADIO_MODE, radioMode)
+            putExtra(
+                EXTRA_INITIAL_CATEGORY,
+                lastSelectedCategoryId ?: intent.getStringExtra(EXTRA_INITIAL_CATEGORY),
+            )
+        }
 
     /**
      * Controlled recycle for a proven native hang. True when it launched or
@@ -2033,6 +2049,7 @@ class HomeActivity : BaseActivity() {
         val launched = PlaybackProcessRecovery.requestIfRequired(
             this,
             reason = reason,
+            resumeIntent = playbackProcessRecoveryIntent(),
             onNotReplaced = {
                 ProviderStartGate.forceOpen(this, "preview_start", "$reason: process not replaced")
                 resumePreviewPlayback()

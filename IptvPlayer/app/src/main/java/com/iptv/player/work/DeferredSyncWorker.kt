@@ -17,10 +17,20 @@ class DeferredSyncWorker(
             SyncScheduler.markDeferredComplete()
             Result.success()
         }
-        BackgroundSyncOutcome.RETRY -> Result.retry()
+        BackgroundSyncOutcome.RETRY ->
+            if (BackgroundSyncRetryPolicy.shouldRetry(runAttemptCount)) {
+                Result.retry()
+            } else {
+                SyncScheduler.markDeferredComplete()
+                Result.failure()
+            }
         BackgroundSyncOutcome.DEFERRED_FOR_PLAYBACK -> {
             SyncScheduler.deferUntilPlaybackIdle(applicationContext)
-            Result.retry()
+            if (BackgroundSyncRetryPolicy.shouldRetry(runAttemptCount)) {
+                Result.retry()
+            } else {
+                Result.success()
+            }
         }
     }
 }

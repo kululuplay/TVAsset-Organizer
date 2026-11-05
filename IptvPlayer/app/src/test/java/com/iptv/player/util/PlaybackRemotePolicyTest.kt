@@ -15,12 +15,14 @@ class PlaybackRemotePolicyTest {
             vodConnectTimeoutMs = 1,
             vodReadTimeoutMs = Int.MAX_VALUE,
             allowSourceEngineFallback = false,
+            asyncZapSocketClose = true,
         )
 
         assertTrue(snapshot.disablePixelCopyValidation)
         assertEquals(5_000, snapshot.vodConnectTimeoutMs)
         assertEquals(60_000, snapshot.vodReadTimeoutMs)
         assertFalse(snapshot.allowSourceEngineFallback)
+        assertTrue(snapshot.asyncZapSocketClose)
     }
 
     @Test
@@ -36,6 +38,7 @@ class PlaybackRemotePolicyTest {
         assertEquals(18_000, snapshot.vodConnectTimeoutMs)
         assertEquals(28_000, snapshot.vodReadTimeoutMs)
         assertTrue(snapshot.allowSourceEngineFallback)
+        assertFalse(snapshot.asyncZapSocketClose)
     }
 
     @Test
@@ -46,6 +49,7 @@ class PlaybackRemotePolicyTest {
             vodConnectTimeoutMs = 30_000,
             vodReadTimeoutMs = 60_000,
             allowSourceEngineFallback = false,
+            asyncZapSocketClose = true,
         )
 
         val effective = PlaybackRemotePolicy.effective(expired, nowMs = 2L)
@@ -53,5 +57,6 @@ class PlaybackRemotePolicyTest {
         assertFalse(effective.disablePixelCopyValidation)
         assertEquals(15_000, effective.vodConnectTimeoutMs)
         assertTrue(effective.allowSourceEngineFallback)
+        assertFalse(effective.asyncZapSocketClose)
     }
 }

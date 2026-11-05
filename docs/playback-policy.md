@@ -33,6 +33,7 @@ panel reports how many were dropped) and never fails the whole policy.
   "ttlSeconds": 7200,
   "disablePixelCopyValidation": false,
   "allowSourceEngineFallback": true,
+  "asyncZapSocketClose": false,
   "vodConnectTimeoutMs": 15000,
   "vodReadTimeoutMs": 20000,
   "deviceOverrides": [
@@ -56,7 +57,8 @@ panel reports how many were dropped) and never fails the whole policy.
         "allowSoftwareHdFallback": false,
         "compatibilityProfile": true,
         "vlcDeinterlace": false,
-        "nativeFrameTrust": false
+        "nativeFrameTrust": false,
+        "asyncZapSocketClose": false
       }
     }
   ]

@@ -150,7 +150,7 @@ function parsePlaybackPolicy(raw) {
   const policy = {};
   policy.policyVersion = integer(source.policyVersion, 1, 1) ?? 1;
   policy.ttlSeconds = integer(source.ttlSeconds, 300, 604_800) ?? 7_200;
-  for (const key of ["disablePixelCopyValidation", "allowSourceEngineFallback"]) {
+  for (const key of ["disablePixelCopyValidation", "allowSourceEngineFallback", "asyncZapSocketClose"]) {
     if (typeof source[key] === "boolean") policy[key] = source[key];
   }
   putIf(
@@ -186,6 +186,7 @@ const OVERRIDE_BOOL_SETS = [
   "compatibilityProfile",
   "vlcDeinterlace",
   "nativeFrameTrust",
+  "asyncZapSocketClose",
 ];
 
 function sanitizeOverrideRule(rule) {

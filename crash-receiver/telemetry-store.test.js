@@ -36,6 +36,7 @@ test("playback policy exposes only typed in-range kill switches", () => {
         vodConnectTimeoutMs: 12_000,
         vodReadTimeoutMs: 45_000,
         allowSourceEngineFallback: false,
+        asyncZapSocketClose: true,
         arbitraryUrl: "https://user:pass@example.test",
       }),
     ),
@@ -44,6 +45,7 @@ test("playback policy exposes only typed in-range kill switches", () => {
       ttlSeconds: 7_200,
       disablePixelCopyValidation: true,
       allowSourceEngineFallback: false,
+      asyncZapSocketClose: true,
       vodConnectTimeoutMs: 12_000,
       vodReadTimeoutMs: 45_000,
     },
@@ -61,7 +63,7 @@ test("device override rules keep only closed-schema matches and sets", () => {
   const rules = sanitizeDeviceOverrides([
     {
       match: { model: "AFTM|AFTT", sdkMax: 27, lowRam: true, totalRamMaxMb: 1536, junk: 1 },
-      set: { bufferMode: "high", startEngine: "ExoPlayer", tunneling: true, livePreview: false, evil: "x" },
+      set: { bufferMode: "high", startEngine: "ExoPlayer", tunneling: true, livePreview: false, asyncZapSocketClose: false, evil: "x" },
     },
     { match: { model: "AFT(" }, set: { bufferMode: "HIGH" } }, // invalid regex
     { match: { model: "a".repeat(129) }, set: { bufferMode: "HIGH" } }, // too long
@@ -73,7 +75,7 @@ test("device override rules keep only closed-schema matches and sets", () => {
   assert.deepEqual(rules, [
     {
       match: { model: "AFTM|AFTT", sdkMax: 27, lowRam: true, totalRamMaxMb: 1536 },
-      set: { bufferMode: "HIGH", startEngine: "EXOPLAYER", tunneling: true, livePreview: false },
+      set: { bufferMode: "HIGH", startEngine: "EXOPLAYER", tunneling: true, livePreview: false, asyncZapSocketClose: false },
     },
     { match: {}, set: { compatibilityProfile: true } },
   ]);
