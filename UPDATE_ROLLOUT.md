@@ -135,6 +135,12 @@ once the devices below the new minimum run 1.5.97 or newer.
 
 ## Automatic emergency brake (release health gate)
 
+> **Switched off since 23 Nov 2026** (`gh workflow disable release-health.yml`). The crash
+> receiver that answers `GET /api/release-health` is not hosted anywhere, the two
+> secrets never existed, and every scheduled run failed. Re-arm it with
+> `gh workflow enable release-health.yml` once a receiver and both secrets exist.
+> Until then a bad release is stopped by hand: set `paused: true` (see above).
+
 The crash receiver aggregates per-session playback QoE (`docs/qoe-dashboard.md`)
 and exposes `GET /api/release-health` (`docs/release-health.md`). The workflow
 `.github/workflows/release-health.yml` runs `scripts/release_health_gate.py`
