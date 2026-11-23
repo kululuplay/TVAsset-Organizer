@@ -2686,6 +2686,15 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
      */
     private fun onPlaybackFinished(completionToken: Long) {
         val meta = resumeMeta ?: return
+        val endedAtMs = bestResumePosition()
+        val durationMs = maxOf(activeDurationMs(), lastKnownDurationMs)
+        if (VodCompletionPolicy.endedEarly(endedAtMs, durationMs)) {
+            // The provider closed the stream long before its end. That is not
+            // "watched": keep the bookmark and do not move on to the next episode.
+            PlaybackLog.log(this, "VOD", "ended early at ${endedAtMs / 1000}s of ${durationMs / 1000}s -> bookmark kept")
+            persistResume(durable = true)
+            return
+        }
         // Completion must survive an immediate Back press so watched badges do
         // not randomly disappear when lifecycleScope is cancelled on destroy.
         // Clear the resume row from the explicit EndReached event rather than
@@ -2792,8 +2801,26 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         return VodNextEpisodeFinder.findNext(refreshed, season, episode)
     }
 
-    /** Swaps the player onto [next], reusing the live engine, and plays from start. */
+    /**
+     * Swaps the player onto [next]. An earlier bookmark of that episode is
+     * resumed: starting at zero would let the periodic save overwrite it.
+     */
     private fun startEpisode(next: Episode, prev: ResumeMeta) {
+        lifecycleScope.launch {
+            val resumeAt = try {
+                repo.getResumeForProfile(activeProfileId, "ep_" + next.id)
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (_: Throwable) {
+                0L
+            }
+            // The user restarted the finished episode or left while the bookmark was read.
+            if (!playbackEnded || isFinishing || isDestroyed) return@launch
+            startEpisodeAt(next, prev, resumeAt)
+        }
+    }
+
+    private fun startEpisodeAt(next: Episode, prev: ResumeMeta, resumeAt: Long) {
         flushWatchTime()
         watchTime.sample(SystemClock.elapsedRealtime(), 0, false)
         nextEpisodePrompt.dismiss(restoreFocus = false)
@@ -2812,7 +2839,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         binding.titleText.text = next.title
         nowKind = "Dizi"
         NowPlaying.set(this, next.title, nowKind)
-        // Fresh playback session: re-evaluate the track hint and never resume.
+        // Fresh playback session: re-evaluate the track hint; no resume prompt.
         trackHint.shown = false
         autoResume = false
         castHandoffStopped = false
@@ -2829,7 +2856,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         // restoring the configured decoder after a prior software fallback, this
         // prevents a late duplicate EndReached from the old Media from advancing
         // two episodes at once.
-        rebuildRoute(resumeAt = 0L, targetRoute = initialRoute)
+        rebuildRoute(resumeAt = resumeAt, targetRoute = initialRoute)
         showControls()
     }
 

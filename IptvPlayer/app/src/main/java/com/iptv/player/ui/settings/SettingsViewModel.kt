@@ -106,6 +106,4 @@ class SettingsViewModel : ViewModel() {
 
     fun setAutoSyncHours(hours: Int) =
         viewModelScope.launch { settings.setAutoSyncHours(hours) }
-
-    fun clearSource() = viewModelScope.launch { settings.clearSource() }
 }

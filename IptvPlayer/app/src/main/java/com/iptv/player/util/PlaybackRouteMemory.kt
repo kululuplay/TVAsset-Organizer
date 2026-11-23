@@ -53,9 +53,10 @@ object PlaybackRouteMemory {
     // v7 lines simply load with an empty record, so no schema bump is needed.
     private const val SCHEMA = 7
 
+    // VLC_HARDWARE / VLC_SOFTWARE are the names the film player writes.
     internal fun acceptsStoredRoute(version: Int, stage: String): Boolean =
-        stage in setOf("EXO", "VLC_HW", "VLC_SW") &&
-            (version == SCHEMA || (version in 4..6 && stage != "VLC_SW"))
+        stage in setOf("EXO", "VLC_HW", "VLC_SW", "VLC_HARDWARE", "VLC_SOFTWARE") &&
+            (version == SCHEMA || (version in 4..6 && stage != "VLC_SW" && stage != "VLC_SOFTWARE"))
 
     /** A line may also carry only a quality record (no stable stage learned yet). */
     internal fun acceptsStoredEntry(version: Int, stage: String): Boolean =

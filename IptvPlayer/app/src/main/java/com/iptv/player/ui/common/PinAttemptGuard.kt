@@ -7,6 +7,7 @@
  */
 package com.iptv.player.ui.common
 
+import android.os.SystemClock
 import com.iptv.player.data.ServiceLocator
 
 object PinAttemptGuard {
@@ -26,18 +27,18 @@ object PinAttemptGuard {
     }
 
     /** Milliseconds until PIN input is accepted again; 0 when not locked. */
-    fun remainingLockMs(nowMs: Long = System.currentTimeMillis()): Long =
+    fun remainingLockMs(nowMs: Long = SystemClock.elapsedRealtime()): Long =
         policy.remainingLockMs(state(), nowMs)
 
     /** Whole seconds left in the lockout (rounded up); 0 when not locked. */
-    fun remainingLockSeconds(nowMs: Long = System.currentTimeMillis()): Int =
+    fun remainingLockSeconds(nowMs: Long = SystemClock.elapsedRealtime()): Int =
         policy.remainingLockSeconds(state(), nowMs)
 
-    fun isLocked(nowMs: Long = System.currentTimeMillis()): Boolean =
+    fun isLocked(nowMs: Long = SystemClock.elapsedRealtime()): Boolean =
         policy.isLocked(state(), nowMs)
 
     /** Records a wrong PIN and returns true when this attempt started a lockout. */
-    fun registerFailure(nowMs: Long = System.currentTimeMillis()): Boolean {
+    fun registerFailure(nowMs: Long = SystemClock.elapsedRealtime()): Boolean {
         val next = policy.onFailure(state(), nowMs)
         persist(next)
         return policy.isLocked(next, nowMs)

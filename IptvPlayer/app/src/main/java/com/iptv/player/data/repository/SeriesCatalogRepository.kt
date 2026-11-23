@@ -343,31 +343,41 @@ internal class SeriesCatalogRepository(
             // Small categories commit together so posters do not jump every time
             // one response arrives. Large categories publish bounded batches.
             ids.chunked(20).forEach { batch ->
-                val updates = mutableListOf<Pair<String, Long>>()
+                // A null date means "asked, nothing usable": only the check time is stamped.
+                val updates = mutableListOf<Pair<String, Long?>>()
                 coroutineScope {
                     batch.chunked(2).forEach { pair ->
                         if (throttledStatus.get() != 0) return@forEach
-                        pair.map { id -> async {
+                        pair.map { id -> async<Pair<String, Long?>?> {
                             try {
                                 val info = api.getSeriesInfo(config.username, config.password, id)
-                                val episodes = info.episodes ?: return@async null
+                                val episodes = info.episodes ?: return@async id to null
                                 id to MetadataPolicy.episodeTimestamp(
                                     episodes.values.flatten().map { it.added } + info.info?.lastEpisodeAdded, now,
                                 )
                             } catch (e: CancellationException) { throw e }
                             catch (e: HttpException) {
-                                if (SeriesDateSweepPolicy.isThrottleStatus(e.code())) throttledStatus.compareAndSet(0, e.code())
-                                null
+                                if (SeriesDateSweepPolicy.isThrottleStatus(e.code())) {
+                                    throttledStatus.compareAndSet(0, e.code())
+                                    null
+                                } else id to null
                             }
-                            catch (_: Exception) { null }
+                            // Offline: ask again on the next sweep.
+                            catch (_: java.io.IOException) { null }
+                            // An unusable answer still counts as checked; otherwise the same
+                            // broken series head every later sweep and starve the rest.
+                            catch (_: Exception) { id to null }
                         } }.awaitAll().filterNotNull().let(updates::addAll)
                     }
                 }
                 val committed = support.commitSnapshot(config, generation) {
-                    updates.forEach { (id, date) -> seriesDao.updateEpisodeDate(id, date, now) }
+                    updates.forEach { (id, date) ->
+                        if (date != null) seriesDao.updateEpisodeDate(id, date, now)
+                        else seriesDao.markEpisodeDateChecked(id, now)
+                    }
                 }
                 if (!committed) return@withContext staleDataset(CatalogDataset.SERIES_CATEGORY)
-                applied += updates.size
+                applied += updates.count { it.second != null }
                 val status = throttledStatus.get()
                 if (status != 0) {
                     val backoff = SeriesDateSweepPolicy.backoffMs(status)

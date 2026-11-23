@@ -148,10 +148,12 @@ object PinLockHelper {
     /**
      * Keyword heuristic for adult content. Word-boundary anchored so common
      * substrings (e.g. "Essex", "Sussex") don't trip the "sex" token, while
-     * still catching "Sex TV", "Porno", "XXX", "Erotic", "18+/+18".
+     * still catching "Sex TV", "Porno", "XXX", "Erotic", "18+/+18". Turkish and
+     * German names are listed too ("Erotik", "Yetişkin", "Erwachsene", "FSK 18",
+     * "Ab 18"); "seks" needs both boundaries so "Seksenler" stays unlocked.
      */
     private val ADULT_REGEX = Regex(
-        "\\b(adult|xxx|porn|erotic|sex)",
+        "\\b(adult|xxx|porn|erotic|erotik|sex|seks\\b|yet[iİ][sş]k[iİ]n|erwachsene|(fsk|ab)\\s*18\\b)",
         RegexOption.IGNORE_CASE
     )
 

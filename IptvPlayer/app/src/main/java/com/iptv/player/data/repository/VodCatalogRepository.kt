@@ -491,7 +491,10 @@ internal class VodCatalogRepository(
             listOf(
                 cachedEntity.copy(
                     name = enriched.name,
-                    streamUrl = secureValues.encrypt(enriched.streamUrl),
+                    // A blank URL here means the stored one could not be decrypted
+                    // just now; writing it back would erase the film's address.
+                    streamUrl = if (enriched.streamUrl.isBlank()) cachedEntity.streamUrl
+                    else secureValues.encrypt(enriched.streamUrl),
                     posterUrl = enriched.posterUrl,
                     backdropUrl = enriched.backdropUrl,
                     rating = enriched.rating,

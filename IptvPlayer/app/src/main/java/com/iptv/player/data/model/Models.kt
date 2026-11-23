@@ -172,4 +172,10 @@ data class SourceConfig(
     val username: String = "",
     val password: String = "",
     val m3uUrl: String = ""
-)
+) {
+    /** False when the fields a sync needs are blank, e.g. a stored login that could not be decrypted. */
+    fun isUsable(): Boolean = when (type) {
+        SourceType.XTREAM -> serverUrl.isNotBlank() && username.isNotBlank()
+        SourceType.M3U_URL -> m3uUrl.isNotBlank()
+    }
+}

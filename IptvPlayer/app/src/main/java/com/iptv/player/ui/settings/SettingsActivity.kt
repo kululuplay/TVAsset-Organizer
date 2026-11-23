@@ -1717,7 +1717,7 @@ class SettingsActivity : BaseActivity() {
             .setPositiveButton(R.string.settings_logout) { _, _ ->
                 lifecycleScope.launch {
                     SplashPrefetch.cancel()
-                    ServiceLocator.settings.clearSource()
+                    ServiceLocator.repository.deactivateSource()
                     val intent = Intent(this@SettingsActivity, LoginActivity::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                     startActivity(intent)

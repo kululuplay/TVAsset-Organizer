@@ -13,7 +13,10 @@ class PinAttemptPolicy(
     private val maxLockMs: Long = DEFAULT_MAX_LOCK_MS,
 ) {
 
-    /** Persistent attempt bookkeeping; [lockedUntilMs] is a wall-clock deadline. */
+    /**
+     * Persistent attempt bookkeeping; [lockedUntilMs] is a deadline on the
+     * monotonic clock (elapsedRealtime), which the user cannot move.
+     */
     data class State(val failures: Int = 0, val lockedUntilMs: Long = 0L) {
         companion object {
             val CLEAR = State()
@@ -21,8 +24,13 @@ class PinAttemptPolicy(
     }
 
     /** Milliseconds until input may be accepted again; 0 when not locked. */
-    fun remainingLockMs(state: State, nowMs: Long): Long =
-        (state.lockedUntilMs - nowMs).coerceAtLeast(0L)
+    fun remainingLockMs(state: State, nowMs: Long): Long {
+        val remaining = state.lockedUntilMs - nowMs
+        // A real lock is never further away than the longest lock: anything
+        // beyond is a deadline from before a reboot (the clock restarted at 0)
+        // or an old wall-clock value, and must not lock the user out for hours.
+        return if (remaining > maxLockMs) 0L else remaining.coerceAtLeast(0L)
+    }
 
     fun isLocked(state: State, nowMs: Long): Boolean = remainingLockMs(state, nowMs) > 0L
 

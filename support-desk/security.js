@@ -11,7 +11,8 @@ const equal = (a, b) => crypto.timingSafeEqual(Buffer.from(hash(a), "hex"), Buff
 
 function redact(value) {
   return String(value || "")
-    .replace(/(https?:\/\/)[^/@\s]+:[^/@\s]+@/gi, "$1<redacted>@")
+    // [^/@\s:] for the user part: without the ":" exclusion a log of "a:a:a:..." backtracks quadratically.
+    .replace(/(https?:\/\/)[^/@\s:]+:[^/@\s]+@/gi, "$1<redacted>@")
     .replace(/(\/(?:live|movie|series)\/)[^/\s?#]+\/[^/\s?#]+\//gi, "$1<redacted>/<redacted>/")
     .replace(/([?&](?:username|user|password|pass|token|access_token|refresh_token|api_key|apikey|key)=)[^&#\s]+/gi, "$1<redacted>")
     .replace(/\b((?:authorization|proxy-authorization|x-kululu-key|cookie|set-cookie)\s*:\s*).+$/gim, "$1<redacted>")

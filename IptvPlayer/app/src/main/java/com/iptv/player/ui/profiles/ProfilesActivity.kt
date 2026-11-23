@@ -93,7 +93,7 @@ class ProfilesActivity : BaseActivity() {
                 if (alreadyActive) return@launch
 
                 SplashPrefetch.cancel()
-                settings.saveSource(profile.config)
+                ServiceLocator.repository.activateSource(profile.config)
                 settings.setActiveProfileId(profile.id)
 
                 val intent = Intent(this@ProfilesActivity, SplashActivity::class.java)

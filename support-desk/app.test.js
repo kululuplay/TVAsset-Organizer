@@ -49,3 +49,15 @@ test("redaction covers URLs JSON and prefixed authorization", () => { for (const
 test("metadata allowlist and strict UUID", () => { const body = { requestId: uid(), type: "diagnostic", message: "test", metadata: { model: "Fire TV", username: "private", password: "private", apiLevel: 25 } }; assert.deepEqual(ticketPayload(body).metadata, { model: "Fire TV", apiLevel: 25 }); assert.equal(ticketPayload({ ...body, requestId: [body.requestId] }), null); });
 test("limiter has fixed quota, expiration and bounded keys that evict rather than refuse", () => { let now = 0; const rate = new RateLimit(1, () => now); assert.equal(rate.take("one", 1, 100), true); assert.equal(rate.take("one", 1, 100), false); assert.equal(rate.take("two", 1, 100), true); assert.equal(rate.rows.has("one"), false); assert.equal(rate.rows.size, 1); now = 101; assert.equal(rate.take("two", 1, 100), true); assert.equal(rate.rows.size, 1); });
 test("installation secrets are only stored hashed", async t => { const f = await fixture(t); const id = uid(), secret = "x".repeat(43); await f.call("/api/v1/installations", { installationId: id, secret }); assert.equal(f.store.devices.get(id), hash(secret)); });
+test("credential redaction stays linear on a hostile log", () => {
+  assert.equal(redact("see http://user:pa:ss@host/x"), "see http://<redacted>@host/x");
+  const started = process.hrtime.bigint();
+  redact("http://" + "a:".repeat(100000));
+  assert.ok(Number(process.hrtime.bigint() - started) / 1e6 < 500, "redaction of a 200 KB log must not backtrack");
+});
+test("one address cannot spend the shared ticket budget", async t => {
+  const f = await fixture(t);
+  const ticket = device => f.call("/api/v1/tickets", { requestId: uid(), type: "movie", message: "Film" }, device);
+  for (let d = 0; d < 3; d++) { const device = await f.install(); for (let i = 0; i < 20; i++) assert.equal((await ticket(device)).status, 201); }
+  assert.equal((await ticket(await f.install())).status, 429);
+});

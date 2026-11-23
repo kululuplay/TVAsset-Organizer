@@ -70,4 +70,15 @@ class PinAttemptPolicyTest {
         val state = failTimes(80)
         assertEquals(300_000L, policy.remainingLockMs(state, 1_000L))
     }
+
+    @Test
+    fun `a deadline further away than the longest lock is not a lock`() {
+        // After a reboot the monotonic clock restarts at zero, and installs
+        // before 1.6.5 stored a wall-clock deadline: neither may lock for hours.
+        val stale = PinAttemptPolicy.State(failures = 7, lockedUntilMs = 9_000_000L)
+        assertFalse(policy.isLocked(stale, 20_000L))
+        assertEquals(0L, policy.remainingLockMs(stale, 20_000L))
+        // The failure count survives, so the next wrong PIN locks at once.
+        assertTrue(policy.isLocked(policy.onFailure(stale, 20_000L), 20_000L))
+    }
 }

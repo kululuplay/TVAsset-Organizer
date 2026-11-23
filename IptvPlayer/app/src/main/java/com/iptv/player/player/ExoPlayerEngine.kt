@@ -2112,6 +2112,9 @@ class ExoPlayerEngine(
         surfaceReadbackPolicy.reset()
         droppedFrameHealth.reset()
         frameDropRatio.reset()
+        // The next channel's fingerprint is built before its first frame; it
+        // must not inherit this channel's frame rate.
+        frameRateEstimator.reset()
         hiccupDetector.reset()
         transportBytes.set(0L)
         firstBytesAtMs.set(0L)

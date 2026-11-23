@@ -156,4 +156,11 @@ class PlaybackRouteMemoryTest {
         lastStableStage = null,
         updatedAtMs = 1L,
     )
+
+    @Test
+    fun `film player route names survive a restart`() {
+        assertTrue(PlaybackRouteMemory.acceptsStoredRoute(7, "VLC_HARDWARE"))
+        assertTrue(PlaybackRouteMemory.acceptsStoredRoute(7, "VLC_SOFTWARE"))
+        assertFalse(PlaybackRouteMemory.acceptsStoredRoute(6, "VLC_SOFTWARE"))
+    }
 }

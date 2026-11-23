@@ -327,6 +327,8 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
      */
     private fun requestZap(delta: Int) {
         if (pinPromptInFlight) return
+        // The first channel is still being prepared: there is no player to switch yet.
+        if (!::controller.isInitialized) return
         val target = (if (delta > 0) viewModel.next() else viewModel.previous()) ?: return
         if (requiresParentalAuthorization(target)) {
             zapHandler.removeCallbacksAndMessages(null)

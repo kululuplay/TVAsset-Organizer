@@ -297,7 +297,11 @@ jobs:
 
       - name: Validate release secrets
         run: |
-          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+          # TELEMETRY_INGEST_KEY is not a signing secret, but a release built
+          # without it ships with crash upload, heartbeat, QoE, announcements
+          # and the remote playback policy all switched off (Telemetry.isEnabled).
+          # v1.5.64 to v1.6.4 went out that way unnoticed.
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD TELEMETRY_INGEST_KEY; do
             if [ -z "${!name}" ]; then
               echo "::error::$name is required for a signed release"
               exit 1
