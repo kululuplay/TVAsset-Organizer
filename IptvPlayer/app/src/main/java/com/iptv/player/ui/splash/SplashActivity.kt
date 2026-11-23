@@ -242,6 +242,18 @@ class SplashActivity : BaseActivity() {
                 delay(ROUTE_DELAY_MS)
                 go(LoginActivity::class.java)
             }
+            // A login is stored but cannot be decrypted (Keystore key lost or
+            // unavailable): ask for it again instead of syncing with blank
+            // credentials. Nothing is deleted, so a passing failure heals itself
+            // on the next launch.
+            settings.getSourceConfig()?.isUsable() != true -> {
+                Logger.w("Splash", "stored login unreadable -> login screen")
+                startActivity(
+                    Intent(this, LoginActivity::class.java)
+                        .putExtra(LoginActivity.EXTRA_RELOGIN, true),
+                )
+                finish()
+            }
             else -> runBrandedSplash()
         }
     }

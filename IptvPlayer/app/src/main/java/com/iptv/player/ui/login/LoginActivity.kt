@@ -39,7 +39,8 @@ class LoginActivity : BaseActivity() {
         setupUi()
 
         lifecycleScope.launch {
-            if (ServiceLocator.settings.hasSource.first()) {
+            // EXTRA_RELOGIN: the splash sent us here because the stored login is unreadable.
+            if (!intent.getBooleanExtra(EXTRA_RELOGIN, false) && ServiceLocator.settings.hasSource.first()) {
                 goHome()
                 return@launch
             }
@@ -253,6 +254,7 @@ class LoginActivity : BaseActivity() {
     }
 
     companion object {
+        const val EXTRA_RELOGIN = "relogin"
         private const val FIXED_SERVER_URL = KululuEndpoint.HTTPS_SERVER_URL
     }
 }

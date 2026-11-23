@@ -74,21 +74,38 @@ internal class LibraryRepository(
     /**
      * All favorites across every content type (live channels, movies, series),
      * normalized into a single list for the dedicated Favorites screen. Rows whose
-     * underlying content is no longer cached are skipped.
+     * underlying content is no longer cached, or whose category is hidden in
+     * Content Manager (same rule as [observeFavorites]), are skipped.
      */
     fun observeAllFavorites(): Flow<List<FavoriteItem>> =
-        favoriteDao.observeAll().map { rows -> rows.mapNotNull { resolveFavorite(it.channelId) } }
+        combine(
+            favoriteDao.observeAll(),
+            settings.hiddenCategories(ContentType.LIVE),
+            settings.hiddenCategories(ContentType.VOD),
+            settings.hiddenCategories(ContentType.SERIES),
+        ) { rows, live, vod, series ->
+            rows.mapNotNull { resolveFavorite(it.channelId, live, vod, series) }
+        }
 
-    private suspend fun resolveFavorite(id: String): FavoriteItem? = when {
-        id.startsWith("vod_") -> vodDao.getById(id.removePrefix("vod_"))?.let {
-            FavoriteItem(id, FavoriteKind.MOVIE, it.name, it.posterUrl, it.id, it.categoryName)
-        }
-        id.startsWith("series_") -> seriesDao.getById(id.removePrefix("series_"))?.let {
-            FavoriteItem(id, FavoriteKind.SERIES, it.name, it.posterUrl, it.id, it.categoryName)
-        }
-        else -> channelDao.getById(id)?.toModel(isFav = true)?.let {
-            FavoriteItem(id, FavoriteKind.CHANNEL, it.name, it.logoUrl, it.id, it.categoryName, it.streamUrl)
-        }
+    private suspend fun resolveFavorite(
+        id: String,
+        hiddenLive: Collection<String>,
+        hiddenVod: Collection<String>,
+        hiddenSeries: Collection<String>,
+    ): FavoriteItem? = when {
+        id.startsWith("vod_") -> vodDao.getById(id.removePrefix("vod_"))
+            ?.takeIf { it.categoryId == null || it.categoryId !in hiddenVod }?.let {
+                FavoriteItem(id, FavoriteKind.MOVIE, it.name, it.posterUrl, it.id, it.categoryName)
+            }
+        id.startsWith("series_") -> seriesDao.getById(id.removePrefix("series_"))
+            ?.takeIf { it.categoryId == null || it.categoryId !in hiddenSeries }?.let {
+                FavoriteItem(id, FavoriteKind.SERIES, it.name, it.posterUrl, it.id, it.categoryName)
+            }
+        else -> channelDao.getById(id)
+            ?.takeIf { it.categoryId == null || it.categoryId !in hiddenLive }
+            ?.toModel(isFav = true)?.let {
+                FavoriteItem(id, FavoriteKind.CHANNEL, it.name, it.logoUrl, it.id, it.categoryName, it.streamUrl)
+            }
     }
 
     fun observeRecent(limit: Int = 20): Flow<List<Channel>> =

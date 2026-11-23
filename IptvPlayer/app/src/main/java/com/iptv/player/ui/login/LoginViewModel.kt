@@ -78,7 +78,7 @@ class LoginViewModel : ViewModel() {
                         httpStatus = test.httpStatus,
                     )
                     is Outcome.Success -> {
-                        settings.saveSource(config)
+                        repo.activateSource(config)
                         // Mirror the logged-in account into the Profiles list (reusing an
                         // existing match so re-logins don't duplicate) and make it active,
                         // so the Profiles screen isn't empty after a successful login.

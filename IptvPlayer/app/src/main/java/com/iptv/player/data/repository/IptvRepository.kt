@@ -155,6 +155,12 @@ class IptvRepository(
 
     suspend fun testSource(config: SourceConfig): Outcome<Unit> = source.testSource(config)
 
+    /** Saves [config] as the active source; a different account starts from an empty catalog. */
+    suspend fun activateSource(config: SourceConfig) = source.activateSource(config)
+
+    /** Logout: removes the login and the lists synced with it. */
+    suspend fun deactivateSource() = source.deactivateSource()
+
     /**
      * Replaces the live channel snapshot. [force] (a manual user refresh) trusts
      * a much smaller server list that the shrink guard would otherwise reject.

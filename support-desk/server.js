@@ -11,6 +11,8 @@ async function main() {
   const databaseUrl = new URL(process.env.DATABASE_URL);
   if (!["127.0.0.1", "localhost"].includes(databaseUrl.hostname)) throw new Error("Support database must be local");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5, connectionTimeoutMillis: 5000, statement_timeout: 10000 });
+  // Without a listener an idle client losing its connection (database restart) exits the process.
+  pool.on("error", error => console.error("[pg] idle client error:", error.code || error.message));
   await pool.query(fs.readFileSync(path.join(__dirname, "schema.sql"), "utf8"));
   const store = new PgStore(pool);
   await store.maintain();

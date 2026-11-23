@@ -113,7 +113,8 @@ function createApp({ store, origin, adminUser, adminPasswordHash, secureCookies 
   });
 
   app.post("/api/v1/installations", async (req, res) => {
-    if (!limit(req, res, `register:${req.ip}`, 30, 3600000) || !limit(req, res, "register:global", 3000, 86400000)) return;
+    // The per-address day budgets keep one address from spending the budgets every customer shares.
+    if (!limit(req, res, `register:${req.ip}`, 30, 3600000) || !limit(req, res, `register-day:${req.ip}`, 60, 86400000) || !limit(req, res, "register:global", 3000, 86400000)) return;
     const { installationId, secret } = req.body || {};
     if (typeof installationId !== "string" || typeof secret !== "string" || !UUID.test(installationId) || !SECRET.test(secret)) return fail(res, 400, "invalid_installation");
     if (!await store.register(installationId.toLowerCase(), hash(secret))) return fail(res, 409, "installation_conflict");
@@ -135,7 +136,7 @@ function createApp({ store, origin, adminUser, adminPasswordHash, secureCookies 
     if (!limit(req, res, `write:${req.installation}`, 20, 3600000)) return;
     const ticket = ticketPayload(req.body);
     if (!ticket) return fail(res, 400, "invalid_ticket");
-    if (!limit(req, res, "tickets:global", 5000, 86400000)) return;
+    if (!limit(req, res, `tickets:${req.ip}`, 60, 86400000) || !limit(req, res, "tickets:global", 5000, 86400000)) return;
     if (ticket.type === "diagnostic" && (!limit(req, res, `reports:${req.ip}`, 20, 86400000) || !limit(req, res, "reports:global", 500, 86400000))) return;
     res.status(201).json({ ok: true, ...await store.create(req.installation, ticket) });
   });

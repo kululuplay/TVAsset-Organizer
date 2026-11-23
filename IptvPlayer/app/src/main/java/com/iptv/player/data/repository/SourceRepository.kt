@@ -36,6 +36,31 @@ internal class SourceRepository(
 ) {
 
     /**
+     * Makes [config] the active source. Stored stream URLs carry the login they
+     * were synced with, so another account starts from an empty catalog instead
+     * of playing with the previous one. Favorites, recents and channel overrides
+     * stay: their ids are stable on the same panel.
+     */
+    suspend fun activateSource(config: SourceConfig) {
+        val previous = settings.getSourceConfig()
+        settings.saveSource(config)
+        if (!SourceIdentity.matches(previous, config)) clearCatalog()
+    }
+
+    /** Logout: drop the login and every list that was synced with it. */
+    suspend fun deactivateSource() {
+        settings.clearSource()
+        clearCatalog()
+    }
+
+    private suspend fun clearCatalog() = withContext(Dispatchers.IO) {
+        db.withTransaction {
+            val sql = db.openHelper.writableDatabase
+            CATALOG_TABLES.forEach { sql.execSQL("DELETE FROM `$it`") }
+        }
+    }
+
+    /**
      * Encrypt sensitive values written by versions before secure field storage.
      * The Room schema is unchanged; only column payloads gain a versioned AES-GCM
      * envelope. The transaction makes an interrupted migration retryable.
@@ -210,5 +235,14 @@ internal class SourceRepository(
             val addr = InetAddress.getByName(host)
             DiagnosticResult("dns", true, addr.hostAddress ?: host)
         }.getOrElse { DiagnosticResult("dns", false, "cannot resolve") }
+    }
+
+    private companion object {
+        /** Everything synced from the source; profiles and the user's own lists are not in here. */
+        val CATALOG_TABLES = listOf(
+            "channels", "channels_fts", "programs",
+            "vod", "vod_categories", "vod_fts",
+            "series", "series_categories", "series_fts", "episodes",
+        )
     }
 }

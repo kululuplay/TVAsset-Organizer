@@ -239,6 +239,9 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: pgSslConfig(),
 });
+// An idle client that loses its connection (database restart) emits "error" on
+// the pool; without a listener Node exits the whole process.
+pool.on("error", (e) => console.error("[pg] idle client error:", e.code || e.message));
 
 async function initDb() {
   await pool.query(`
@@ -638,6 +641,17 @@ const INGEST_LIMITS = {
   // cannot turn the aggregate queries into a load test.
   releaseHealth: createRateLimiter({ max: 60, windowMs: HOUR_MS, maxKeys: MAP_MAX_ENTRIES }),
 };
+// The device id comes from the request itself, so a caller can mint a new one
+// (and a new bucket) per request. Every address therefore also has a ceiling
+// worth IP_DEVICES devices; it is that wide because carrier NAT puts many real
+// devices behind one address.
+const IP_DEVICES = 50;
+const INGEST_IP_LIMITS = Object.fromEntries(
+  Object.entries(INGEST_LIMITS).map(([name, limiter]) => [
+    name,
+    createRateLimiter({ max: limiter.max * IP_DEVICES, windowMs: HOUR_MS, maxKeys: MAP_MAX_ENTRIES }),
+  ]),
+);
 // perIp: ignore the client-supplied deviceId (a caller could rotate it to get
 // a fresh bucket per request) and key on the address only.
 function rateLimited(name, { perIp = false } = {}) {
@@ -645,8 +659,10 @@ function rateLimited(name, { perIp = false } = {}) {
   return (req, res, next) => {
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const deviceId = perIp ? null : clip(body.deviceId ?? req.query.deviceId, 128);
-    const key = `${name}:${deviceId || "ip:" + (clientIp(req) || "?")}`;
-    const r = limiter.check(key);
+    const ip = clientIp(req) || "?";
+    const key = `${name}:${deviceId || "ip:" + ip}`;
+    let r = limiter.check(key);
+    if (r.ok && deviceId) r = INGEST_IP_LIMITS[name].check(ip);
     if (!r.ok) {
       res.set("Retry-After", String(r.retryAfterSec));
       return res.status(429).json({ error: "rate_limited", retryAfterSec: r.retryAfterSec });
@@ -668,7 +684,9 @@ function redactSensitive(v) {
       /([?&](?:username|user|password|pass|token|access_token|refresh_token|api_key|apikey|key)=)[^&#\s]+/gi,
       "$1<redacted>",
     )
-    .replace(/(https?:\/\/)[^/@\s]+:[^/@\s]+@/gi, "$1<redacted>@")
+    // The user part must not cross a ":": with [^/@\s]+ on both sides a log of
+    // "a:a:a:..." backtracked quadratically (80 KB took over a second).
+    .replace(/(https?:\/\/)[^/@\s:]+:[^/@\s]+@/gi, "$1<redacted>@")
     .replace(
       /^((?:authorization|proxy-authorization|x-kululu-key|cookie|set-cookie)\s*:\s*).+$/gim,
       "$1<redacted>",
@@ -1237,6 +1255,8 @@ async function sendTelegram(text) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
   await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: "POST",
+    // A hanging Telegram must not pile up open requests behind every crash.
+    signal: AbortSignal.timeout(10_000),
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: TELEGRAM_CHAT_ID,
@@ -1407,6 +1427,7 @@ function sweepMemoryMaps() {
   geoCache.sweep((e) => now - e.at >= GEO_TTL_MS);
   sharingAlertedAt.sweep((at) => now - at >= SHARING_ALERT_DEBOUNCE_MS);
   for (const limiter of Object.values(INGEST_LIMITS)) limiter.sweep();
+  for (const limiter of Object.values(INGEST_IP_LIMITS)) limiter.sweep();
 }
 
 // Delete rows older than the configured age, per table. 0 days disables a sweep.

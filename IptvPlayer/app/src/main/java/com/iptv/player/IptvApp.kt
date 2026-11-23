@@ -328,8 +328,7 @@ class IptvApp : Application(), ImageLoaderFactory {
             // popup is already up, bail and re-deliver on the next safe resume.
             if (!claimDialog()) return@launch
             if (!claimAnnouncement(ann.id)) { releaseDialog(); return@launch }
-            settings.setLastShownAnnouncementId(ann.id)
-            // The DataStore write above suspends (disk I/O); the activity may have
+            // The settings read above suspends (disk I/O); the activity may have
             // gone away meanwhile, so re-check before touching its window.
             if (!isShowable(activity)) { releaseDialog(); return@launch }
             runCatching {
@@ -344,6 +343,9 @@ class IptvApp : Application(), ImageLoaderFactory {
                 dialog.setOnDismissListener { releaseDialog() }
                 dialog.show()
                 ok.requestFocus()
+            }.onSuccess {
+                // Only an announcement that was really shown is remembered as shown.
+                settings.setLastShownAnnouncementId(ann.id)
             }.onFailure {
                 releaseDialog()
                 Logger.w("IptvApp", "announcement dialog failed: ${it.message}")

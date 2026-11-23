@@ -1391,6 +1391,9 @@ class VlcPlayerEngine(
                 deferredPlay = null
                 opsSeq.incrementAndGet()
                 invalidateEventSession()
+                // The players are quarantined: no health check may touch them again.
+                healthHandler.removeCallbacksAndMessages(null)
+                surfaceFrameHealth.reset()
                 if (firstAbandon) {
                     PlaybackLog.log(context, engineName, "native start timed out")
                     // Abandoning LibVLC is engine-wide. Even if a newer zap already
@@ -1705,6 +1708,9 @@ class VlcPlayerEngine(
                 nativeHandlesAbandoned.set(true)
                 deferredPlay = null
                 invalidateEventSession()
+                // The players are quarantined: no health check may touch them again.
+                healthHandler.removeCallbacksAndMessages(null)
+                surfaceFrameHealth.reset()
                 PlaybackLog.log(context, engineName, "native pause timed out")
                 finishPending()
             },
@@ -1735,6 +1741,9 @@ class VlcPlayerEngine(
                 nativeHandlesAbandoned.set(true)
                 deferredPlay = null
                 invalidateEventSession()
+                // The players are quarantined: no health check may touch them again.
+                healthHandler.removeCallbacksAndMessages(null)
+                surfaceFrameHealth.reset()
                 PlaybackLog.log(context, engineName, "native resume timed out")
                 if (mediaPlayer === mp) listener?.onError("VLC resume timeout")
                 finishPending()

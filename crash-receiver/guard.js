@@ -77,7 +77,7 @@ function createRateLimiter({ max, windowMs, maxKeys = 5000, now = Date.now }) {
     const t = now();
     return buckets.sweep((b) => t - b.at >= windowMs);
   };
-  return { check, sweep, buckets };
+  return { check, sweep, buckets, max };
 }
 
 function timingSafeEqualStr(a, b) {

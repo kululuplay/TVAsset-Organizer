@@ -435,13 +435,16 @@ class PlayerController(
                 "stage=$stage",
             )
             ProviderConnectionSafety.block(ProviderConnectionSafety.Uncertainty.LOCAL_NATIVE_STOP)
+            val failedAttempt = attemptEpoch
             val launched = callback.onLocalProcessRecoveryRequired {
                 ProviderStartGate.forceOpen(
                     context,
                     "terminal_failure",
                     "consecutive failure recovery not replaced",
                 )
-                callback.onFatalError()
+                // The watchdog answers seconds later: a channel started meanwhile
+                // must not get this attempt's error screen.
+                if (failedAttempt == attemptEpoch) callback.onFatalError()
             }
             if (launched) return
             ProviderStartGate.forceOpen(
@@ -1499,11 +1502,14 @@ class PlayerController(
             }
             val pos = engine?.playbackPositionMs() ?: -1L
             val now = SystemClock.elapsedRealtime()
+            // Read once per tick: the libVLC check moves its counter baseline on
+            // every call, so a second read in the same tick is always false.
+            val outputHealthy = engine?.hasRecentOutputProgress() == true
             val decision = progressPolicy.sample(
                 nowMs = now,
                 positionMs = pos,
                 buffering = playbackBuffering,
-                outputHealthy = engine?.hasRecentOutputProgress() == true,
+                outputHealthy = outputHealthy,
             )
             if (decision == LivePlaybackProgressPolicy.Decision.STABLE) {
                 onStablePlayback()
@@ -1514,7 +1520,7 @@ class PlayerController(
                 !playbackBuffering &&
                 learnWindowStartMs > 0L &&
                 now - learnWindowStartMs >= LEARN_STABLE_MS &&
-                engine?.hasRecentOutputProgress() == true
+                outputHealthy
             ) {
                 confirmLearning()
             }

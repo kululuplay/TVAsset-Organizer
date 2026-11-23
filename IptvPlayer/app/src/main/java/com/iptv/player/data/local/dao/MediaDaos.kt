@@ -232,6 +232,9 @@ interface SeriesDao {
     @Query("UPDATE series SET latestEpisodeAt = :latest, episodeCheckedAt = :checkedAt WHERE id = :id")
     suspend fun updateEpisodeDate(id: String, latest: Long, checkedAt: Long)
 
+    @Query("UPDATE series SET episodeCheckedAt = :checkedAt WHERE id = :id")
+    suspend fun markEpisodeDateChecked(id: String, checkedAt: Long)
+
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSeries(items: List<SeriesEntity>)

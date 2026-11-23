@@ -391,10 +391,15 @@ class SettingsStore(
     suspend fun setLockAdult(enabled: Boolean) =
         dataStore.edit { it[Keys.LOCK_ADULT] = enabled }
 
-    /** Defaults to [DEFAULT_PIN] until the user sets their own. */
+    /**
+     * Defaults to [DEFAULT_PIN] until the user sets their own. A stored PIN that
+     * can no longer be decrypted (Keystore key lost) also reads as the default:
+     * returning "" there would read as "no PIN" and switch the lock off.
+     */
     suspend fun getPin(): String? = withContext(ioDispatcher) {
         dataStore.data.first()[Keys.PIN]
             ?.let(secureValues::decrypt)
+            ?.takeIf { it.isNotEmpty() }
             ?: DEFAULT_PIN
     }
 
@@ -406,7 +411,7 @@ class SettingsStore(
     suspend fun hasPin(): Boolean = !getPin().isNullOrEmpty()
 
     // ---- PIN attempt throttling -----------------------------------------
-    // Wrong-attempt counter and lockout deadline (wall clock, ms). Kept in a tiny
+    // Wrong-attempt counter and lockout deadline (elapsedRealtime, ms). Kept in a tiny
     // SharedPreferences file (same approach as the locale mirror) so the PIN
     // dialog can read it synchronously on the main thread when it opens.
 
