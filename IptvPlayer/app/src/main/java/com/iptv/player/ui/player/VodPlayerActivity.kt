@@ -3109,7 +3109,10 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
             activeDurationMs(),
             lastKnownDurationMs,
         ).coerceAtLeast(0L)
-        if (duration <= 0L) return
+        // Before the player knows the media, a near-zero position would clear an
+        // existing bookmark. A real position is saved even when the stream never
+        // reports a duration (TS films), or it would never reach Continue Watching.
+        if (duration <= 0L && position < 10_000L) return
         lastKnownDurationMs = duration
         // Exiting can destroy lifecycleScope before Room commits. A final
         // lifecycle save therefore uses the app scope; periodic saves remain

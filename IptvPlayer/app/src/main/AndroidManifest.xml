@@ -126,10 +126,13 @@
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
             android:screenOrientation="landscape" />
 
-        <!-- On-demand player (VOD / series episodes) with resume + tracks. -->
+        <!-- On-demand player (VOD / series episodes) with resume + tracks.
+             singleTop: a second OK press before the player is visible must not
+             stack a second player with its own session and bookmark writes. -->
         <activity
             android:name=".ui.player.VodPlayerActivity"
             android:exported="false"
+            android:launchMode="singleTop"
             android:persistableMode="persistNever"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
             android:screenOrientation="landscape" />
