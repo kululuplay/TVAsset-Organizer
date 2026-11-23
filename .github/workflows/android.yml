@@ -181,12 +181,16 @@ jobs:
       - name: Test, lint and assemble APKs
         run: |
           chmod +x ./gradlew
+          # --rerun on the unit tests: two of them write the support contract
+          # files that a later step reads. Restored from the build cache the
+          # tests do not run and the files are missing (a docs-only commit after
+          # a green run failed that way).
           # R8 and universal native APK packaging need more heap than local
           # builds. Bound workers so packaging/lint do not overcommit the runner.
           ./gradlew --no-daemon --no-parallel --max-workers=2 \
             "-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8" \
             -Pkotlin.daemon.jvmargs=-Xmx2g \
-            :app:testDebugUnitTest \
+            :app:testDebugUnitTest --rerun \
             :app:lintDebug \
             :app:assembleDebug \
             :app:assembleRelease \
