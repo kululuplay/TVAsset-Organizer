@@ -177,6 +177,19 @@ internal class VodPlaybackCoordinator(
     companion object {
         const val MAX_SOURCE_RETRIES_PER_ROUTE = 1
 
+        /**
+         * Wait before a restart after a source/network failure. In the field all
+         * three opens of a failed film start fell inside about three seconds and
+         * met the same refusal, so the other engine now waits longer than the
+         * first retry instead of following it at once. The number of opens is
+         * unchanged: each one may cost a provider connection.
+         */
+        fun restartDelayMs(reason: StartReason, sourceFailure: Boolean): Long = when {
+            reason == StartReason.SOURCE_RETRY -> 1_000L
+            reason == StartReason.ROUTE_FALLBACK && sourceFailure -> 3_000L
+            else -> 0L
+        }
+
         fun reduce(state: State, event: Event): Transition = when (event) {
             is Event.Replace -> replace(state, event.selection)
             is Event.Ready -> ready(state, event.generation)

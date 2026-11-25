@@ -51,6 +51,7 @@ import com.iptv.player.player.StreamInfo
 import com.iptv.player.player.TvPlaybackSession
 import com.iptv.player.player.ProviderStartGate
 import com.iptv.player.player.VlcOps
+import com.iptv.player.player.VodPlaybackRoutingPolicy
 import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NowPlaying
 import com.iptv.player.util.PlaybackProblemDialog
@@ -130,6 +131,9 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
 
     /** Opaque, URL/title-free QoE session for the current fullscreen channel. */
     private var qoeSessionId: PlaybackSessionId? = null
+
+    /** Last typed failure with the session it belongs to, for the reason on the error card. */
+    private var lastPlaybackFailure: Pair<PlaybackSessionId?, PlaybackFailure>? = null
     private val loadingOverlayPolicy = LiveLoadingOverlayPolicy()
     private var playbackResourceToken: PlaybackResourceToken? = null
 
@@ -196,6 +200,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         // Manual retry after the reconnect window expired: re-open the same
         // channel and reset the reconnect state. An explicit user action also
         // restarts the automatic-retry schedule from scratch.
+        binding.reportButton.setOnClickListener { reportPlaybackProblem() }
         binding.retryButton.setOnClickListener {
             if (castOwnsPlayback) {
                 castController.reloadCurrentMedia()
@@ -465,7 +470,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
             // A visible error gives focus to the Retry button. Let the focused
             // Android view process its normal confirm DOWN/UP pair so OK retries
             // playback instead of toggling the player overlay behind it.
-            if (binding.retryButton.hasFocus()) {
+            if (focusedErrorButton() != null) {
                 // Gamepad A is a player-level confirm but is not guaranteed to
                 // synthesize Button.performClick() on every TV framework.
                 if (keyCode == KeyEvent.KEYCODE_BUTTON_A) {
@@ -506,14 +511,15 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
         if (isGlobalConfirmKey(keyCode)) {
-            if (binding.retryButton.hasFocus()) {
+            val errorButton = focusedErrorButton()
+            if (errorButton != null) {
                 if (keyCode == KeyEvent.KEYCODE_BUTTON_A) {
                     val release = confirmPress.onUp(
                         keyCode,
                         event.eventTime,
                         canceled = event.isCanceled,
                     ) ?: return true
-                    if (!release.canceled) binding.retryButton.performClick()
+                    if (!release.canceled) errorButton.performClick()
                     return true
                 }
                 // If focus moved to Retry while a player-level confirm was held,
@@ -609,15 +615,7 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         actions.add { toggleStats() }
 
         labels.add(getString(R.string.support_playback_problem_channel))
-        actions.add {
-            val channel = currentChannel
-            val kind = LivePlaybackQoePolicy.sessionDescriptor(radio = viewModel.radioMode).content
-            PlaybackProblemDialog.show(
-                this, qoeSessionId,
-                PlaybackContentIdentity.forStream(channel?.streamUrl, kind, channel?.id),
-                channel?.name.orEmpty(),
-            )
-        }
+        actions.add { reportPlaybackProblem() }
 
         PlayerDialogs.showOptions(
             this,
@@ -911,7 +909,22 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
 
     override fun onPlaybackFailure(failure: PlaybackFailure) {
         if (castOwnsPlayback || castLoadPending) return
+        lastPlaybackFailure = qoeSessionId to failure
         PlaybackQoeRuntime.recordFailure(qoeSessionId, failure)
+    }
+
+    /** The Retry or Report button of the error card, when one of them has focus. */
+    private fun focusedErrorButton(): View? =
+        binding.retryButton.takeIf { it.hasFocus() } ?: binding.reportButton.takeIf { it.hasFocus() }
+
+    private fun reportPlaybackProblem() {
+        val channel = currentChannel
+        val kind = LivePlaybackQoePolicy.sessionDescriptor(radio = viewModel.radioMode).content
+        PlaybackProblemDialog.show(
+            this, qoeSessionId,
+            PlaybackContentIdentity.forStream(channel?.streamUrl, kind, channel?.id),
+            channel?.name.orEmpty(),
+        )
     }
 
     override fun onRetrying(attempt: Int) {
@@ -942,7 +955,20 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         binding.bufferingIndicator.visibility = View.GONE
         PlaybackQoeRuntime.setRebuffering(qoeSessionId, false)
         playbackSession.setPlaying(false)
-        binding.errorMessage.setText(R.string.error_live_playback_failed)
+        // Say why, with the code support asks for: the same wording and codes
+        // as the film player, for the failure of this session only.
+        val customerError = lastPlaybackFailure?.takeIf { it.first == qoeSessionId }
+            ?.let { VodPlaybackRoutingPolicy.customerError(it.second) }
+        val reason = customerError?.let { LiveErrorMessages.messageRes(it.message) }
+        binding.errorMessage.text = if (customerError == null) {
+            getString(R.string.error_live_playback_failed)
+        } else {
+            getString(
+                R.string.vod_error_message_with_support_code,
+                getString(reason ?: R.string.error_live_playback_failed),
+                customerError.supportCode,
+            )
+        }
         binding.errorOverlay.visibility = View.VISIBLE
         binding.retryButton.requestFocus()
         finishQoeSession(PlaybackEndReason.FATAL_FAILURE)

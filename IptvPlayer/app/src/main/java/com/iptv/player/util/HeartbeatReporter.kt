@@ -229,8 +229,9 @@ object HeartbeatReporter {
      * signature applies nothing (never the unsigned `playbackPolicy`), logs once
      * per process and spools one `policy_signature_rejected` event per hour.
      * Without a key (dev/local builds) the legacy unsigned object is applied.
+     * [RemoteConfig] hands the same two fields from its file to this rule.
      */
-    private fun applyPlaybackPolicy(context: Context, root: JSONObject) {
+    internal fun applyPlaybackPolicy(context: Context, root: JSONObject) {
         val legacy = root.optJSONObject("playbackPolicy")
         val signed = root.optJSONObject("playbackPolicySigned")
         val payload = signed?.optString("payload")?.takeIf { it.isNotEmpty() }

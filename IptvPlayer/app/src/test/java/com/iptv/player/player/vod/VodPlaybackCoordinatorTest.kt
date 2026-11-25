@@ -95,6 +95,16 @@ class VodPlaybackCoordinatorTest {
     }
 
     @Test
+    fun `engine fallback after a source failure waits longer than the first retry`() {
+        val retry = VodPlaybackCoordinator.restartDelayMs(VodPlaybackCoordinator.StartReason.SOURCE_RETRY, true)
+        val fallback = VodPlaybackCoordinator.restartDelayMs(VodPlaybackCoordinator.StartReason.ROUTE_FALLBACK, true)
+        assertTrue(retry > 0L && fallback > retry)
+        // A decoder failure is not a refused connection: the other route starts at once.
+        assertEquals(0L, VodPlaybackCoordinator.restartDelayMs(VodPlaybackCoordinator.StartReason.ROUTE_FALLBACK, false))
+        assertEquals(0L, VodPlaybackCoordinator.restartDelayMs(VodPlaybackCoordinator.StartReason.NEW_ITEM, true))
+    }
+
+    @Test
     fun `source failure retries same route then probes one alternate engine`() {
         val coordinator = VodPlaybackCoordinator()
         val first = start(coordinator)

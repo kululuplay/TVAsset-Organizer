@@ -47,6 +47,16 @@ internal object VodErrorMessages {
     }
 }
 
+/** The live error card reuses the film player wording where it does not speak of a film. */
+internal object LiveErrorMessages {
+    fun messageRes(message: VodPlaybackRoutingPolicy.CustomerMessage): Int? = when (message) {
+        VodPlaybackRoutingPolicy.CustomerMessage.CONTENT_UNAVAILABLE,
+        VodPlaybackRoutingPolicy.CustomerMessage.RANGE_REJECTED,
+        VodPlaybackRoutingPolicy.CustomerMessage.GENERIC -> null
+        else -> VodErrorMessages.messageRes(message)
+    }
+}
+
 internal object VodQoeMapping {
     fun engine(route: VodPlaybackRoutingPolicy.Route): PlaybackEngineKind =
         if (route == VodPlaybackRoutingPolicy.Route.EXO) {

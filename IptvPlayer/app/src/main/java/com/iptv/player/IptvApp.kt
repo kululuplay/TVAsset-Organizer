@@ -200,6 +200,7 @@ class IptvApp : Application(), ImageLoaderFactory {
                 if (startedActivities++ == 0) {
                     StaleProcessGuard.onForeground()
                     HeartbeatReporter.start(this@IptvApp)
+                    com.iptv.player.util.RemoteConfig.start(this@IptvApp)
                     com.iptv.player.util.PlaybackSupportReporter.start(this@IptvApp)
                 }
             }
@@ -209,6 +210,7 @@ class IptvApp : Application(), ImageLoaderFactory {
                 if (startedActivities == 0) {
                     StaleProcessGuard.onBackground()
                     HeartbeatReporter.stop()
+                    com.iptv.player.util.RemoteConfig.stop()
                     com.iptv.player.util.PlaybackSupportReporter.stop()
                     // Orderly background stop: the next launch must NOT read this as
                     // an abnormal exit. (A native crash / OOM-kill skips this path.)

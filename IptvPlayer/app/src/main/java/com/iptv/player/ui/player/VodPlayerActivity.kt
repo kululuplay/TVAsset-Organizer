@@ -143,7 +143,6 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         private const val NEXT_EPISODE_COUNTDOWN_SECONDS = 8
         // A decoder path is considered recovered only after continuous playback.
         private const val STABLE_PLAYBACK_MS = 10_000L
-        private const val VOD_RETRY_DELAY_MS = 1_000L
         // A dead CDN/socket can stay in VLC's buffering state forever without
         // emitting EncounteredError. Bound every startup/retry so the viewer
         // always reaches recovery or a visible Retry action.
@@ -1179,6 +1178,11 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     private fun setupControls() {
         binding.backButton.setOnClickListener { finish() }
         binding.retryButton.setOnClickListener { retryFromConfiguredDecoder() }
+        binding.reportButton.setOnClickListener {
+            PlaybackProblemDialog.show(
+                this, qoeSessionId, supportContentKey(), binding.titleText.text.toString(),
+            )
+        }
         binding.playPauseButton.setOnClickListener { togglePlayPause() }
         binding.skipForwardButton.setOnClickListener { seekBy(SKIP_MS) }
         binding.skipBackButton.setOnClickListener { seekBy(-SKIP_MS) }
@@ -2503,9 +2507,13 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                     rebuildRoute(resumeAt, start.route)
                 }
             }
-            if (start.reason == VodPlaybackCoordinator.StartReason.SOURCE_RETRY) {
+            val restartDelayMs = VodPlaybackCoordinator.restartDelayMs(
+                start.reason,
+                VodPlaybackRoutingPolicy.routeFailure(failure) == VodPlaybackRoutingPolicy.Failure.SOURCE,
+            )
+            if (restartDelayMs > 0L) {
                 setBuffering(true)
-                handler.postDelayed(runRecovery, VOD_RETRY_DELAY_MS)
+                handler.postDelayed(runRecovery, restartDelayMs)
             } else {
                 runRecovery.run()
             }
