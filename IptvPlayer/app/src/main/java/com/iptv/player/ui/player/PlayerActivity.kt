@@ -51,7 +51,6 @@ import com.iptv.player.player.StreamInfo
 import com.iptv.player.player.TvPlaybackSession
 import com.iptv.player.player.ProviderStartGate
 import com.iptv.player.player.VlcOps
-import com.iptv.player.player.VodPlaybackRoutingPolicy
 import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NowPlaying
 import com.iptv.player.util.PlaybackProblemDialog
@@ -957,18 +956,11 @@ class PlayerActivity : BaseActivity(), PlayerController.Callback,
         playbackSession.setPlaying(false)
         // Say why, with the code support asks for: the same wording and codes
         // as the film player, for the failure of this session only.
-        val customerError = lastPlaybackFailure?.takeIf { it.first == qoeSessionId }
-            ?.let { VodPlaybackRoutingPolicy.customerError(it.second) }
-        val reason = customerError?.let { LiveErrorMessages.messageRes(it.message) }
-        binding.errorMessage.text = if (customerError == null) {
-            getString(R.string.error_live_playback_failed)
-        } else {
-            getString(
-                R.string.vod_error_message_with_support_code,
-                getString(reason ?: R.string.error_live_playback_failed),
-                customerError.supportCode,
-            )
-        }
+        binding.errorMessage.text = LiveErrorMessages.text(
+            this,
+            lastPlaybackFailure?.takeIf { it.first == qoeSessionId }?.second,
+            R.string.error_live_playback_failed,
+        )
         binding.errorOverlay.visibility = View.VISIBLE
         binding.retryButton.requestFocus()
         finishQoeSession(PlaybackEndReason.FATAL_FAILURE)

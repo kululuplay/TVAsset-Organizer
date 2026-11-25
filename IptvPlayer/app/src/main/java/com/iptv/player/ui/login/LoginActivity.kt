@@ -8,12 +8,14 @@ package com.iptv.player.ui.login
 
 import android.content.Intent
 import android.os.Bundle
+import android.provider.Settings
 import android.text.method.HideReturnsTransformationMethod
 import android.text.method.PasswordTransformationMethod
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
+import com.iptv.player.BuildConfig
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.databinding.ActivityLoginBinding
@@ -101,11 +103,25 @@ class LoginActivity : BaseActivity() {
         binding.inputPassword.hideSoftKeyboard()
         binding.btnConnect.requestFocus()
         viewModel.loginXtream(
-            serverUrl = FIXED_SERVER_URL,
+            serverUrl = debugServerUrl() ?: FIXED_SERVER_URL,
             username = username,
             password = password,
         )
     }
+
+    /**
+     * Debug builds only: `adb shell settings put global kululu_debug_server http://host:port`
+     * signs in against another address of the portal. An emulator behind an
+     * antivirus that rewrites TLS cannot reach the HTTPS portal at all. A release
+     * build never reads the setting.
+     */
+    private fun debugServerUrl(): String? =
+        if (!BuildConfig.DEBUG) {
+            null
+        } else {
+            runCatching { Settings.Global.getString(contentResolver, "kululu_debug_server") }.getOrNull()
+                ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        }
 
     private fun observeState() {
         lifecycleScope.launch {

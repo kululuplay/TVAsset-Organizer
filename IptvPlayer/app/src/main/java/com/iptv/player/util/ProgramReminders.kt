@@ -1,6 +1,7 @@
 /*
  * ProgramReminders.kt
- * Reminders for programmes picked in the guide. The guide reaches three hours
+ * Reminders for programmes picked in the guide panel of the live screen (the
+ * programme info dialog). The guide reaches a few hours
  * ahead, so a reminder is a short-lived note: a small list in preferences and
  * a text notice shortly before the start, shown while the app is in front. A
  * toast takes no focus, so it is safe over the players. An app that is closed

@@ -265,8 +265,8 @@
     <string name="guide_match_epg">EPG kimliğini eşle</string>
     <string name="guide_no_source">Kaynak ayarlanmadı</string>
     <string name="guide_updated">Rehber güncellendi</string>
-    <string name="reminder_set">Hatırlatıcı kuruldu: %1$s</string>
-    <string name="reminder_removed">Hatırlatıcı kaldırıldı</string>
+    <string name="reminder_add">Hatırlat</string>
+    <string name="reminder_remove">Hatırlatıcıyı kaldır</string>
     <string name="reminder_due">%2$s kanalında birazdan başlıyor: %1$s</string>
     <string name="guide_update_failed">Rehber güncellenemedi</string>
     <string name="mini_player_close">Mini oynatıcıyı kapat</string>

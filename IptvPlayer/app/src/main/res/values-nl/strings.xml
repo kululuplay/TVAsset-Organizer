@@ -223,8 +223,8 @@
     <string name="guide_match_epg">EPG-id koppelen</string>
     <string name="guide_no_source">Geen bron geconfigureerd</string>
     <string name="guide_updated">Gids bijgewerkt</string>
-    <string name="reminder_set">Herinnering ingesteld: %1$s</string>
-    <string name="reminder_removed">Herinnering verwijderd</string>
+    <string name="reminder_add">Herinner mij</string>
+    <string name="reminder_remove">Herinnering verwijderen</string>
     <string name="reminder_due">Begint zo op %2$s: %1$s</string>
     <string name="guide_update_failed">Kan gids niet bijwerken</string>
     <string name="mini_player_close">Miniplayer sluiten</string>

@@ -16,7 +16,6 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.iptv.player.R
 import com.iptv.player.data.model.Program
-import com.iptv.player.util.ProgramReminders
 
 class GuideProgramAdapter(
     private val onClicked: (Program) -> Unit
@@ -51,8 +50,7 @@ class GuideProgramAdapter(
         private val title: TextView = itemView.findViewById(R.id.programTitle)
 
         fun bind(program: Program) {
-            val reminder = ProgramReminders.isSet(itemView.context, program.epgChannelId, program.startMs)
-            time.text = (if (reminder) "\u23F0 " else "") + EpgTimeFormatter.range(itemView.context, program)
+            time.text = EpgTimeFormatter.range(itemView.context, program)
             title.text = program.title
             bindLive(program, System.currentTimeMillis())
 

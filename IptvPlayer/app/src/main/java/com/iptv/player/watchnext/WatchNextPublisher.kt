@@ -39,6 +39,10 @@ object WatchNextPublisher {
     @Volatile
     private var writeFailureLogged = false
 
+    /** Last card count written to the log, so the log says when the row changes and nothing else. */
+    @Volatile
+    private var loggedCardCount = -1
+
     /** Call once from the application, after ServiceLocator.init. */
     fun start(context: Context) {
         // The Watch Next table exists from Android 8.0.
@@ -166,6 +170,10 @@ object WatchNextPublisher {
                     )
                 }
             }
+        }
+        if (cards.size != loggedCardCount) {
+            loggedCardCount = cards.size
+            Logger.i(TAG, "Watch Next row: ${cards.size} cards (${rowIds.size} kept, ${obsolete.size} removed)")
         }
         return true
     }

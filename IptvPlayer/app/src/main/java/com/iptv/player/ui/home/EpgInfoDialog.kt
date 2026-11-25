@@ -11,6 +11,8 @@ import com.iptv.player.data.model.Channel
 import com.iptv.player.data.model.Program
 import com.iptv.player.databinding.DialogEpgInfoBinding
 import com.iptv.player.ui.common.BaseActivity
+import com.iptv.player.util.ProgramReminder
+import com.iptv.player.util.ProgramReminders
 import java.text.DateFormat
 import java.util.Date
 
@@ -48,6 +50,27 @@ object EpgInfoDialog {
 
         val dialog = AlertDialog.Builder(activity).setView(binding.root).create()
         binding.closeButton.setOnClickListener { dialog.dismiss() }
+        // A programme that has not started can be given a reminder (ProgramReminders).
+        fun renderReminder() {
+            binding.reminderButton.setText(
+                if (ProgramReminders.isSet(activity, program.epgChannelId, program.startMs)) {
+                    R.string.reminder_remove
+                } else {
+                    R.string.reminder_add
+                },
+            )
+        }
+        if (now < program.startMs) {
+            binding.reminderButton.visibility = View.VISIBLE
+            renderReminder()
+            binding.reminderButton.setOnClickListener {
+                ProgramReminders.toggle(
+                    activity,
+                    ProgramReminder(program.epgChannelId, channel?.name.orEmpty(), program.title, program.startMs),
+                )
+                renderReminder()
+            }
+        }
         dialog.setOnKeyListener { _, code, event ->
             when (code) {
                 KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
@@ -62,7 +85,11 @@ object EpgInfoDialog {
                     true
                 }
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                    if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) dialog.dismiss()
+                    if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) {
+                        // OK closes the dialog from anywhere except on the reminder button.
+                        if (binding.reminderButton.hasFocus()) binding.reminderButton.performClick()
+                        else dialog.dismiss()
+                    }
                     true
                 }
                 else -> false

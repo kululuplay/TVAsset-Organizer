@@ -105,6 +105,17 @@
             android:text="@string/epg_popup_controls"
             android:textColor="@color/text_muted"
             android:textSize="12sp" />
+        <!-- Shown for a programme that has not started: sets or removes its reminder. -->
+        <Button
+            android:id="@+id/reminderButton"
+            style="@style/Widget.Iptv.Button"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:layout_marginEnd="12dp"
+            android:minWidth="136dp"
+            android:nextFocusRight="@+id/closeButton"
+            android:text="@string/reminder_add"
+            android:visibility="gone" />
         <Button
             android:id="@+id/closeButton"
             style="@style/Widget.Iptv.Button"

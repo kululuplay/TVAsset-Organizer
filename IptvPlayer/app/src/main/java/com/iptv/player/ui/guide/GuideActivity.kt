@@ -20,11 +20,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.iptv.player.R
 import com.iptv.player.data.model.Channel
-import com.iptv.player.data.model.Program
 import com.iptv.player.databinding.ActivityGuideBinding
 import com.iptv.player.ui.common.BaseActivity
-import com.iptv.player.util.ProgramReminder
-import com.iptv.player.util.ProgramReminders
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.text.DateFormat
@@ -98,7 +95,7 @@ class GuideActivity : BaseActivity() {
         binding.channelList.layoutManager = LinearLayoutManager(this)
         binding.channelList.adapter = channelAdapter
 
-        programAdapter = GuideProgramAdapter(onClicked = { toggleReminder(it) })
+        programAdapter = GuideProgramAdapter(onClicked = { /* no-op: timeline preview */ })
         binding.programList.layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.programList.adapter = programAdapter
@@ -160,23 +157,6 @@ class GuideActivity : BaseActivity() {
                 binding.btnRefresh.isEnabled = true
             }
         }
-    }
-
-    /** OK on a programme that has not started sets or removes its reminder. */
-    private fun toggleReminder(program: Program) {
-        if (program.startMs <= System.currentTimeMillis()) return
-        val set = ProgramReminders.toggle(
-            this,
-            ProgramReminder(
-                epgChannelId = program.epgChannelId,
-                channelName = binding.focusedChannelName.text.toString(),
-                title = program.title,
-                startMs = program.startMs,
-            ),
-        )
-        val message = if (set) getString(R.string.reminder_set, program.title) else getString(R.string.reminder_removed)
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
-        programAdapter.notifyDataSetChanged()
     }
 
     private fun onChannelFocused(channel: Channel) {

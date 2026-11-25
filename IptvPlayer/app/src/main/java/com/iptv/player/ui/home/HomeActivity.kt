@@ -62,6 +62,7 @@ import com.iptv.player.ui.common.SleepTimer
 import com.iptv.player.ui.common.hideSoftKeyboard
 import com.iptv.player.ui.common.isAdult
 import com.iptv.player.player.LiveStreamUrl
+import com.iptv.player.ui.player.LiveErrorMessages
 import com.iptv.player.ui.player.RemoteConfirmPress
 import com.iptv.player.util.DebugOverlayBinder
 import com.iptv.player.util.NewContentNotifier
@@ -154,6 +155,9 @@ class HomeActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider {
     private var previewStreamFormat = StreamFormat.TS
     private var resolvedPreviewStreamFormat: StreamFormat? = null
     private var previewQoeSessionId: PlaybackSessionId? = null
+
+    /** Last typed failure with the session it belongs to, for the reason in the failure notice. */
+    private var lastPreviewFailure: Pair<PlaybackSessionId?, PlaybackFailure>? = null
 
     /** Debounce job so scrolling channels doesn't thrash the single stream socket. */
     private var previewJob: kotlinx.coroutines.Job? = null
@@ -1936,6 +1940,7 @@ class HomeActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider {
         }
         override fun onPlaybackFailure(failure: PlaybackFailure) {
             if (castOwnsPreviewPlayback || castLoadPending) return
+            lastPreviewFailure = previewQoeSessionId to failure
             PlaybackQoeRuntime.recordFailure(previewQoeSessionId, failure)
         }
         override fun onLocalProcessRecoveryRequired(onNotReplaced: () -> Unit): Boolean {
@@ -1956,7 +1961,12 @@ class HomeActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider {
             previewState = LivePreviewPressPolicy.Phase.FAILED
             pendingFullscreenChannelId = null
             binding.previewLoading.visibility = View.GONE
-            binding.previewStatus.setText(R.string.preview_playback_failed)
+            // This is where live TV is watched: say why, with the support code.
+            binding.previewStatus.text = LiveErrorMessages.text(
+                this@HomeActivity,
+                lastPreviewFailure?.takeIf { it.first == previewQoeSessionId }?.second,
+                R.string.preview_playback_failed,
+            )
             binding.previewStatus.visibility = View.VISIBLE
             PlaybackQoeRuntime.setRebuffering(previewQoeSessionId, false)
             playbackSession.setPlaying(false)

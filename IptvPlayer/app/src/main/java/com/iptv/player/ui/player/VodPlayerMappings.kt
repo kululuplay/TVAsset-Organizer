@@ -10,9 +10,11 @@
  */
 package com.iptv.player.ui.player
 
+import android.content.Context
 import com.iptv.player.R
 import com.iptv.player.player.VodPlaybackRoutingPolicy
 import com.iptv.player.playback.core.PlaybackEngineKind
+import com.iptv.player.playback.core.PlaybackFailure
 import com.iptv.player.playback.core.PlaybackTransportKind
 import java.util.Locale
 
@@ -54,6 +56,21 @@ internal object LiveErrorMessages {
         VodPlaybackRoutingPolicy.CustomerMessage.RANGE_REJECTED,
         VodPlaybackRoutingPolicy.CustomerMessage.GENERIC -> null
         else -> VodErrorMessages.messageRes(message)
+    }
+
+    /**
+     * Text of a live error notice: the reason and the code support asks for when
+     * the failure of this session is known, otherwise the screen's own line.
+     */
+    fun text(context: Context, failure: PlaybackFailure?, genericRes: Int): String {
+        val customerError = failure?.let(VodPlaybackRoutingPolicy::customerError)
+            ?: return context.getString(genericRes)
+        return context.getString(
+            R.string.vod_error_message_with_support_code,
+            context.getString(messageRes(customerError.message) ?: genericRes),
+            // The codes are shared with the film player; on a channel "VOD-" would mislead support.
+            customerError.supportCode.replaceFirst("VOD-", "LIVE-"),
+        )
     }
 }
 
