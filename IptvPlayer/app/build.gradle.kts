@@ -202,6 +202,8 @@ dependencies {
 
     // --- Android TV (Leanback) ---
     implementation("androidx.leanback:leanback:1.0.0")
+    // Watch Next row ("Continue watching") on the Android TV / Google TV home screen.
+    implementation("androidx.tvprovider:tvprovider:1.0.0")
 
     // --- Persistence (Room) ---
     // Room's compiler must support Kotlin 2.2 / KSP2 used by Media3's toolchain.

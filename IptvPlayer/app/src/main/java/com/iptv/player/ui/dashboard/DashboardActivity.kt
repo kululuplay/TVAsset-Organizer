@@ -12,12 +12,14 @@ import android.util.TypedValue
 import android.view.View
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.iptv.player.R
 import com.iptv.player.data.ServiceLocator
 import com.iptv.player.databinding.ActivityDashboardBinding
 import com.iptv.player.databinding.ItemDashboardCardBinding
 import com.iptv.player.databinding.ItemDashboardQuickActionBinding
+import com.iptv.player.playback.android.StaleProcessGuard
 import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.RequestDialog
 import com.iptv.player.ui.favorites.FavoritesActivity
@@ -34,6 +36,7 @@ import com.iptv.player.util.LaunchCrashGuard
 import com.iptv.player.util.Logger
 import com.iptv.player.util.NetworkSignal
 import com.iptv.player.util.WeatherProvider
+import com.iptv.player.watchnext.WatchNextEntryActivity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -88,7 +91,34 @@ class DashboardActivity : BaseActivity() {
                 Logger.i("Dashboard", "launch confirmed stable")
             }
         }
+        // A Watch Next card on the TV home screen may have asked for one title.
+        // Posted like the block above, so the app's stale-process check of this
+        // first resume has already run.
+        if (savedInstanceState == null) binding.root.post { openWatchNextRequest() }
         Logger.i("Dashboard", "onCreate end")
+    }
+
+    /**
+     * Opens the title a Watch Next card asked for through the in-app Continue
+     * Watching screen, so its adult PIN guard applies. The id came from outside
+     * the app: unless it is a resume row of the active profile, the app simply
+     * stays on the dashboard.
+     */
+    private fun openWatchNextRequest() {
+        // A process that is being recycled after a long absence leaves the
+        // request alone: the relaunched app picks it up.
+        if (isFinishing || isDestroyed || StaleProcessGuard.onInput(this, isPress = false)) return
+        val id = WatchNextEntryActivity.takeRequest(this) ?: return
+        lifecycleScope.launch {
+            val known = runCatching { ServiceLocator.repository.getResume(id) > 0L }
+                .getOrDefault(false)
+            // The viewer may already have moved on with the remote.
+            if (!known || !lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@launch
+            startActivity(
+                Intent(this@DashboardActivity, ContinueWatchingActivity::class.java)
+                    .putExtra(WatchNextEntryActivity.EXTRA_CONTENT_ID, id)
+            )
+        }
     }
 
     override fun onResume() {

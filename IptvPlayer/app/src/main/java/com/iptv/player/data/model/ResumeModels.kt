@@ -34,7 +34,9 @@ data class ContinueItem(
     val vodId: String?,
     val seriesId: String?,
     val seasonNumber: Int,
-    val episodeNumber: Int
+    val episodeNumber: Int,
+    /** When the position was last saved (epoch ms); 0 when unknown. */
+    val updatedAt: Long = 0L
 ) {
     /** Watched fraction as a 0..100 percentage for the progress bar. */
     val progressPercent: Int

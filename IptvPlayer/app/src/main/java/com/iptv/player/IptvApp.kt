@@ -50,6 +50,7 @@ import com.iptv.player.util.RequestReporter
 import com.iptv.player.util.ResolvedRequestCenter
 import com.iptv.player.util.StabilityTelemetry
 import com.iptv.player.util.trustBundledRootOnLegacyAndroid
+import com.iptv.player.watchnext.WatchNextPublisher
 import com.iptv.player.work.SyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -133,6 +134,10 @@ class IptvApp : Application(), ImageLoaderFactory {
         BundledRootTrust.install(this)
         ServiceLocator.init(this)
         StaleProcessGuard.install(this)
+
+        // Mirror "Continue watching" into the Watch Next row of the TV home
+        // screen. Does nothing where that row does not exist (Fire OS, phones).
+        WatchNextPublisher.start(this)
 
         // Hold a Wi-Fi performance lock while a stream plays so cheap sticks do
         // not drop into Wi-Fi power-save mid-channel. Best effort only.
