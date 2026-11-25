@@ -224,6 +224,9 @@
     <string name="guide_match_epg">EPG-ID zuordnen</string>
     <string name="guide_no_source">Keine Quelle konfiguriert</string>
     <string name="guide_updated">Programm aktualisiert</string>
+    <string name="reminder_set">Erinnerung gesetzt: %1$s</string>
+    <string name="reminder_removed">Erinnerung entfernt</string>
+    <string name="reminder_due">Beginnt gleich auf %2$s: %1$s</string>
     <string name="guide_update_failed">Programm konnte nicht aktualisiert werden</string>
     <string name="mini_player_close">Mini-Player schließen</string>
     <string name="number_zap_no_channel">Kein Kanal %1$s</string>

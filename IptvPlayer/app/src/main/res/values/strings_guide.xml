@@ -2,6 +2,9 @@
 <!-- Feature-scoped strings for the EPG / TV guide. English defaults only. -->
 <resources>
     <string name="guide_updated">Guide updated</string>
+    <string name="reminder_set">Reminder set: %1$s</string>
+    <string name="reminder_removed">Reminder removed</string>
+    <string name="reminder_due">Starting soon on %2$s: %1$s</string>
     <string name="guide_update_failed">Could not update guide</string>
     <string name="guide_no_source">No source configured</string>
     <string name="guide_match_epg">Match EPG id</string>
