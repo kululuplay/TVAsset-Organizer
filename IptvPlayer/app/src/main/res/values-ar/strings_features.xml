@@ -60,6 +60,8 @@
     <string name="sleep_timer_off">إيقاف</string>
     <string name="sleep_timer_minutes">%d دقيقة</string>
     <string name="sleep_timer_set">تم ضبط مؤقت النوم على %d دقيقة</string>
+    <string name="playback_speed">سرعة التشغيل</string>
+    <string name="playback_speed_passthrough">لا يمكن تغيير سرعة التشغيل ما دام تمرير الصوت مفعّلاً.</string>
     <string name="audio_delay">تأخير الصوت</string>
     <string name="subtitle_delay">تأخير الترجمة</string>
     <string name="delay_ms">%d مل/ث</string>

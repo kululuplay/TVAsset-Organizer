@@ -493,8 +493,18 @@
                     android:contentDescription="@string/aspect_ratio"
                     android:nextFocusDown="@id/aspectButton"
                     android:nextFocusLeft="@id/subtitleButton"
-                    android:nextFocusRight="@id/sleepButton"
+                    android:nextFocusRight="@id/speedButton"
                     android:src="@drawable/ic_aspect_ratio"
+                    android:nextFocusUp="@id/seekBar" />
+                <ImageButton
+                    android:id="@+id/speedButton"
+                    style="@style/Widget.Iptv.IconButton"
+                    android:layout_marginStart="@dimen/space_xs"
+                    android:contentDescription="@string/playback_speed"
+                    android:nextFocusDown="@id/speedButton"
+                    android:nextFocusLeft="@id/aspectButton"
+                    android:nextFocusRight="@id/sleepButton"
+                    android:src="@drawable/ic_speed"
                     android:nextFocusUp="@id/seekBar" />
                 <ImageButton
                     android:id="@+id/sleepButton"
@@ -502,7 +512,7 @@
                     android:layout_marginStart="@dimen/space_xs"
                     android:contentDescription="@string/sleep_timer"
                     android:nextFocusDown="@id/sleepButton"
-                    android:nextFocusLeft="@id/aspectButton"
+                    android:nextFocusLeft="@id/speedButton"
                     android:nextFocusRight="@id/castButton"
                     android:src="@drawable/ic_bedtime"
                     android:nextFocusUp="@id/seekBar" />

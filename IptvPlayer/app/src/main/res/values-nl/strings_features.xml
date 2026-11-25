@@ -60,6 +60,8 @@
     <string name="sleep_timer_off">Uit</string>
     <string name="sleep_timer_minutes">%d min</string>
     <string name="sleep_timer_set">Slaaptimer ingesteld op %d min</string>
+    <string name="playback_speed">Afspeelsnelheid</string>
+    <string name="playback_speed_passthrough">De afspeelsnelheid kan niet worden gewijzigd zolang audio-passthrough is ingeschakeld.</string>
     <string name="audio_delay">Audiovertraging</string>
     <string name="subtitle_delay">Ondertitelvertraging</string>
     <string name="delay_ms">%d ms</string>

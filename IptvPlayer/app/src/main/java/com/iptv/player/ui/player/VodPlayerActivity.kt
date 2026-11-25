@@ -86,6 +86,7 @@ import com.iptv.player.util.PlaybackLog
 import com.iptv.player.util.PlaybackRouteMemory
 import com.iptv.player.util.PlaybackRemotePolicy
 import com.iptv.player.util.PlaybackProblemDialog
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -179,6 +180,8 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     private var prefetchedResumeId: String? = null
 
     private var aspect: AspectRatio = AspectRatio.ORIGINAL
+    // Per item and never saved: a new film or episode starts at normal speed.
+    private var playbackSpeed = VodPlaybackSpeedPolicy.DEFAULT
     private var userSeeking = false
 
     private var decoderMode = DecoderMode.AUTO
@@ -1189,6 +1192,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         binding.audioButton.setOnClickListener { trackSelection.showTrackMenu(isAudio = true) }
         binding.subtitleButton.setOnClickListener { trackSelection.showTrackMenu(isAudio = false) }
         binding.aspectButton.setOnClickListener { cycleAspect() }
+        binding.speedButton.setOnClickListener { showSpeedDialog() }
         binding.sleepButton.setOnClickListener { showSleepDialog() }
         binding.castButton.setOnClickListener { castController.onCastButtonClicked() }
         binding.nextEpisodePlayNow.setOnClickListener { playPendingNextEpisode() }
@@ -1291,6 +1295,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
             binding.skipBackButton,
             binding.skipForwardButton,
             binding.aspectButton,
+            binding.speedButton,
             binding.sleepButton,
             binding.castButton,
             binding.seekBar,
@@ -1497,6 +1502,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
             audioButton = binding.audioButton,
             subtitleButton = binding.subtitleButton,
             aspectButton = binding.aspectButton,
+            speedButton = binding.speedButton,
             sleepButton = binding.sleepButton,
             castButton = binding.castButton,
             hasAudio = hasAudio,
@@ -1669,6 +1675,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         engine.setAspectMode(VodAspectNative.asVodAspectMode(aspect))
         engine.setListener(media3Listener)
         engine.bind(binding.videoContainer)
+        engine.setPlaybackSpeed(playbackSpeed)
         media3VodEngine = engine
         media3Generation = VodEngine.NO_GENERATION
         updateTrackButtons()
@@ -1965,6 +1972,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                 // same owner reservation while Playing is still being dispatched.
                 val deferredPosition = pendingSeekMs.coerceAtLeast(0L)
                 val selectedAspect = aspect
+                val selectedSpeed = playbackSpeed
                 val containerWidth = binding.videoContainer.width
                 val containerHeight = binding.videoContainer.height
                 pauseAfterBackgroundRestore = false
@@ -1983,6 +1991,8 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                         containerWidth,
                         containerHeight,
                     )
+                    // A rebuilt player starts at 1x: set the chosen speed on every start.
+                    player.rate = selectedSpeed
                     if (restoreAsPaused) player.pause()
                 }
                 startSurfaceValidation()
@@ -2853,6 +2863,7 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         castHandoffStopped = false
         prefetchedResumeId = null
         lastKnownDurationMs = 0L
+        playbackSpeed = VodPlaybackSpeedPolicy.DEFAULT
         uhdEscalated = false
         playbackErrorAttempts = 0
         softwareFallbackAttempted = false
@@ -3079,6 +3090,47 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                 activeDialog = null
                 showControls()
                 binding.sleepButton.requestFocus()
+            }
+        }
+    }
+
+    // ---- Playback speed -------------------------------------------------
+
+    private fun showSpeedDialog() {
+        if (castHandoffStopped) return
+        if (allowPassthrough) {
+            // An encoded bitstream cannot be stretched in time, so speed is not
+            // offered while the passthrough setting is on.
+            Toast.makeText(this, R.string.playback_speed_passthrough, Toast.LENGTH_LONG).show()
+            return
+        }
+        val speeds = VodPlaybackSpeedPolicy.SPEEDS
+        activeDialog = PlayerDialogs.showOptions(
+            this,
+            getString(R.string.playback_speed),
+            speeds.map { speed ->
+                PlayerDialogs.Option(
+                    VodPlaybackSpeedPolicy.label(speed, Locale.getDefault()),
+                    speed == playbackSpeed,
+                )
+            },
+        ) { which ->
+            activeDialog = null
+            val speed = speeds[which]
+            // Kept for the item: buildMedia3Player and the VLC Playing event apply
+            // it again to every rebuilt backend.
+            playbackSpeed = speed
+            PlaybackLog.log(this, "VOD", "playback speed $speed")
+            if (isMedia3Route()) {
+                media3VodEngine?.setPlaybackSpeed(speed)
+            } else {
+                owners.postBoundedCommand(label = "playback speed") { it.rate = speed }
+            }
+        }.apply {
+            setOnDismissListener {
+                activeDialog = null
+                showControls()
+                binding.speedButton.requestFocus()
             }
         }
     }

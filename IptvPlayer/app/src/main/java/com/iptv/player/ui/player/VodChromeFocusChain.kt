@@ -28,6 +28,7 @@ internal object VodChromeFocusChain {
         audioId: Int,
         subtitleId: Int,
         aspectId: Int,
+        speedId: Int,
         sleepId: Int,
         castId: Int,
         hasAudio: Boolean,
@@ -38,6 +39,7 @@ internal object VodChromeFocusChain {
             if (hasAudio) add(audioId)
             if (hasSubtitles) add(subtitleId)
             add(aspectId)
+            add(speedId)
             add(sleepId)
             add(castId)
         }
@@ -61,6 +63,7 @@ internal object VodChromeFocusChain {
         audioButton: View,
         subtitleButton: View,
         aspectButton: View,
+        speedButton: View,
         sleepButton: View,
         castButton: View,
         hasAudio: Boolean,
@@ -70,6 +73,7 @@ internal object VodChromeFocusChain {
             audioButton.id to audioButton,
             subtitleButton.id to subtitleButton,
             aspectButton.id to aspectButton,
+            speedButton.id to speedButton,
             sleepButton.id to sleepButton,
             castButton.id to castButton,
         )
@@ -78,6 +82,7 @@ internal object VodChromeFocusChain {
             audioId = audioButton.id,
             subtitleId = subtitleButton.id,
             aspectId = aspectButton.id,
+            speedId = speedButton.id,
             sleepId = sleepButton.id,
             castId = castButton.id,
             hasAudio = hasAudio,

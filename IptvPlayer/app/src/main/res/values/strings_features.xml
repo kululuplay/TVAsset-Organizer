@@ -62,6 +62,8 @@
     <string name="sleep_timer_off">Off</string>
     <string name="sleep_timer_minutes">%d min</string>
     <string name="sleep_timer_set">Sleep timer set for %d min</string>
+    <string name="playback_speed">Playback speed</string>
+    <string name="playback_speed_passthrough">Playback speed cannot be changed while audio passthrough is on.</string>
     <string name="audio_delay">Audio delay</string>
     <string name="subtitle_delay">Subtitle delay</string>
     <string name="delay_ms">%d ms</string>
