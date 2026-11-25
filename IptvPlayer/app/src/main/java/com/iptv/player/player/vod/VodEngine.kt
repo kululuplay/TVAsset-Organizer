@@ -82,6 +82,10 @@ interface VodEngine {
     @MainThread
     fun setAspectMode(mode: VodAspectMode)
 
+    /** 1f is normal speed. The engine keeps the value for every later [play]. */
+    @MainThread
+    fun setPlaybackSpeed(speed: Float)
+
     @MainThread
     fun setListener(listener: Listener?)
 

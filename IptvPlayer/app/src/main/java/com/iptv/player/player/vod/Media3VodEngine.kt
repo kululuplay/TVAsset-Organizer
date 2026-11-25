@@ -421,6 +421,13 @@ class Media3VodEngine(
     }
 
     @MainThread
+    override fun setPlaybackSpeed(speed: Float) {
+        checkMainThread()
+        // ExoPlayer keeps its playback parameters across stop() and a new item.
+        if (!released) ensurePlayer().setPlaybackSpeed(speed)
+    }
+
+    @MainThread
     override fun setListener(listener: VodEngine.Listener?) {
         checkMainThread()
         if (!released || listener == null) this.listener = listener

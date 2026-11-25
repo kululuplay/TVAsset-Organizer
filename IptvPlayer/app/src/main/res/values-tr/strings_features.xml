@@ -61,6 +61,8 @@
     <string name="sleep_timer_off">Kapalı</string>
     <string name="sleep_timer_minutes">%d dk</string>
     <string name="sleep_timer_set">Uyku zamanlayıcı %d dk için ayarlandı</string>
+    <string name="playback_speed">Oynatma hızı</string>
+    <string name="playback_speed_passthrough">Ses aktarımı (passthrough) açıkken oynatma hızı değiştirilemez.</string>
     <string name="audio_delay">Ses gecikmesi</string>
     <string name="subtitle_delay">Altyazı gecikmesi</string>
     <string name="delay_ms">%d ms</string>

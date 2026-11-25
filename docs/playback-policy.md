@@ -12,6 +12,31 @@ SharedPreferences and exposes two cheap reads:
 Both return defaults (all-null overrides) once `expiresAtEpochMs` has passed,
 so a box that stops hearing the server always falls back to its own settings.
 
+## Delivery since 1.6.6: `remote-config.json`
+
+The crash-receiver below is not hosted, so no heartbeat answer reaches the
+field. From 1.6.6 the app (`util/RemoteConfig.kt`) reads
+`remote-config.json` from the main branch of this repository when it comes to
+the front and every 30 minutes after that. The file carries the same
+`playbackPolicySigned` envelope (`docs/policy-signing.md`) and the announcement:
+
+```json
+{
+  "schema": 1,
+  "playbackPolicySigned": { "payload": "{...}", "sig": "...", "kid": "1" },
+  "announcement": { "id": 3, "message": "Text shown once on every device" }
+}
+```
+
+Write it with `scripts/sign_remote_config.py` (it signs, checks the signature
+against `IptvPlayer/app/policy_public_key.pem`, and sets `expiresAtEpochMs`
+from `--days`, default 90); the change is live once it is on main. The private
+key is on the operator's PC, outside every repository. A policy that is not
+renewed runs out at its expiry and devices return to their own defaults; to
+withdraw a rule sooner, publish a policy without it. Rules match a device
+class (model, RAM, Android level), never one single device. The schema and
+the consumers below are unchanged.
+
 ## Where the policy comes from
 
 1. **Panel** — the "Oynatma politikası" section on `/` saves the JSON into the

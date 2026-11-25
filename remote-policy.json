@@ -1,0 +1,8 @@
+{
+  "deviceOverrides": [
+    {
+      "match": { "manufacturer": "^Amazon$", "model": "^(AFTMM|AFTSS)$" },
+      "set": { "startEngine": "VLC" }
+    }
+  ]
+}

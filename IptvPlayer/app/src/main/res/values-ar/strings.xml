@@ -234,6 +234,9 @@
     <string name="guide_match_epg">مطابقة معرّف EPG</string>
     <string name="guide_no_source">لم يتم تكوين مصدر</string>
     <string name="guide_updated">تم تحديث الدليل</string>
+    <string name="reminder_add">ذكّرني</string>
+    <string name="reminder_remove">إزالة التذكير</string>
+    <string name="reminder_due">يبدأ قريبًا على %2$s: %1$s</string>
     <string name="guide_update_failed">تعذّر تحديث الدليل</string>
     <string name="mini_player_close">إغلاق المشغّل المصغّر</string>
     <string name="number_zap_no_channel">لا توجد قناة %1$s</string>

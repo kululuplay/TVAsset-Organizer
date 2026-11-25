@@ -15,6 +15,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- In-app updates: download + install the latest APK from GitHub Releases. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Watch Next row ("Continue watching") on the Android TV / Google TV home screen. -->
+    <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
 
     <!-- Package visibility (API 30+): without these, queryIntentActivities() in
          ApkInstaller sees no installer for a downloaded APK and cannot grant it
@@ -27,6 +29,11 @@
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+        <!-- Voice search: SearchActivity shows its microphone button only when
+             a speech recogniser answers this action. -->
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
         </intent>
     </queries>
 
@@ -72,6 +79,14 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Opened by a Watch Next card on the TV home screen. No UI: it remembers
+             the requested title and restarts through the splash, so the login,
+             profile and PIN checks of a normal start all apply. -->
+        <activity
+            android:name=".watchnext.WatchNextEntryActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay" />
 
         <!-- First-run setup wizard. -->
         <activity

@@ -223,6 +223,9 @@
     <string name="guide_match_epg">Associer l\'ID EPG</string>
     <string name="guide_no_source">Aucune source configurée</string>
     <string name="guide_updated">Guide mis à jour</string>
+    <string name="reminder_add">Me le rappeler</string>
+    <string name="reminder_remove">Supprimer le rappel</string>
+    <string name="reminder_due">Commence bientôt sur %2$s : %1$s</string>
     <string name="guide_update_failed">Impossible de mettre à jour le guide</string>
     <string name="mini_player_close">Fermer le mini-lecteur</string>
     <string name="number_zap_no_channel">Aucune chaîne %1$s</string>

@@ -14,7 +14,7 @@ import android.view.KeyEvent
 
 internal object SearchInputKeyPolicy {
 
-    enum class Action { LET_IME_HANDLE, FOCUS_FILTERS, FOCUS_CLEAR_BUTTON, PASS_THROUGH }
+    enum class Action { LET_IME_HANDLE, FOCUS_FILTERS, FOCUS_VOICE_BUTTON, FOCUS_CLEAR_BUTTON, PASS_THROUGH }
 
     fun decide(
         keyCode: Int,
@@ -22,6 +22,8 @@ internal object SearchInputKeyPolicy {
         towardEnd: Int,
         cursorAtEnd: Boolean,
         clearButtonVisible: Boolean,
+        // The voice button sits between the field and the clear button.
+        voiceButtonVisible: Boolean = false,
     ): Action {
         val dpad = keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
             keyCode == KeyEvent.KEYCODE_DPAD_UP ||
@@ -32,7 +34,12 @@ internal object SearchInputKeyPolicy {
         if (imeVisible && dpad) return Action.LET_IME_HANDLE
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_DOWN -> Action.FOCUS_FILTERS
-            towardEnd -> if (cursorAtEnd && clearButtonVisible) Action.FOCUS_CLEAR_BUTTON else Action.PASS_THROUGH
+            towardEnd -> when {
+                !cursorAtEnd -> Action.PASS_THROUGH
+                voiceButtonVisible -> Action.FOCUS_VOICE_BUTTON
+                clearButtonVisible -> Action.FOCUS_CLEAR_BUTTON
+                else -> Action.PASS_THROUGH
+            }
             else -> Action.PASS_THROUGH
         }
     }

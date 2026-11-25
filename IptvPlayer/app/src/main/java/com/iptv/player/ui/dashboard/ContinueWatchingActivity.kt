@@ -29,6 +29,7 @@ import com.iptv.player.ui.common.BaseActivity
 import com.iptv.player.ui.common.PinLockHelper
 import com.iptv.player.ui.common.isAdult
 import com.iptv.player.ui.player.VodPlayerActivity
+import com.iptv.player.watchnext.WatchNextEntryActivity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
@@ -55,10 +56,17 @@ class ContinueWatchingActivity : BaseActivity() {
     private var pendingFocusPosition = 0
     private var navigationInFlight = false
 
+    /** Title a Watch Next card of the TV home screen asked for; resumed once the list is known. */
+    private var watchNextId: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityContinueWatchingBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        if (savedInstanceState == null) {
+            watchNextId = intent.getStringExtra(WatchNextEntryActivity.EXTRA_CONTENT_ID)
+        }
 
         restoredFocusId = savedInstanceState?.getString(STATE_FOCUSED_ID)
         lastFocusedId = restoredFocusId
@@ -150,6 +158,11 @@ class ContinueWatchingActivity : BaseActivity() {
                             adapter.lockedAdultIds =
                                 if (lockEnabled) adultIds else emptySet()
                             renderItems(items)
+                            // Same path as a click on the card, PIN guard included.
+                            watchNextId?.let { id ->
+                                watchNextId = null
+                                items.firstOrNull { it.contentId == id }?.let(::resume)
+                            }
                         }
                 } catch (cancelled: CancellationException) {
                     throw cancelled

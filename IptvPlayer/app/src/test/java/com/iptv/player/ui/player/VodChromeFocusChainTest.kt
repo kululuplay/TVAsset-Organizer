@@ -6,12 +6,13 @@ import org.junit.Test
 class VodChromeFocusChainTest {
 
     @Test
-    fun `all track buttons enabled builds full five-action chain`() {
+    fun `all track buttons enabled builds full six-action chain`() {
         val plan = VodChromeFocusChain.plan(
             backId = 1,
             audioId = 2,
             subtitleId = 3,
             aspectId = 4,
+            speedId = 7,
             sleepId = 5,
             castId = 6,
             hasAudio = true,
@@ -19,13 +20,14 @@ class VodChromeFocusChainTest {
             noId = -1,
         )
         assertEquals(2, plan.backNextFocusRightId)
-        assertEquals(4, plan.playPauseNextFocusUpId)
+        assertEquals(7, plan.playPauseNextFocusUpId)
         assertEquals(
             listOf(
                 VodChromeFocusChain.ChainLink(2, 1, 3),
                 VodChromeFocusChain.ChainLink(3, 2, 4),
-                VodChromeFocusChain.ChainLink(4, 3, 5),
-                VodChromeFocusChain.ChainLink(5, 4, 6),
+                VodChromeFocusChain.ChainLink(4, 3, 7),
+                VodChromeFocusChain.ChainLink(7, 4, 5),
+                VodChromeFocusChain.ChainLink(5, 7, 6),
                 VodChromeFocusChain.ChainLink(6, 5, -1),
             ),
             plan.links,
@@ -39,6 +41,7 @@ class VodChromeFocusChainTest {
             audioId = 2,
             subtitleId = 3,
             aspectId = 4,
+            speedId = 7,
             sleepId = 5,
             castId = 6,
             hasAudio = false,
@@ -49,8 +52,9 @@ class VodChromeFocusChainTest {
         assertEquals(5, plan.playPauseNextFocusUpId)
         assertEquals(
             listOf(
-                VodChromeFocusChain.ChainLink(4, 1, 5),
-                VodChromeFocusChain.ChainLink(5, 4, 6),
+                VodChromeFocusChain.ChainLink(4, 1, 7),
+                VodChromeFocusChain.ChainLink(7, 4, 5),
+                VodChromeFocusChain.ChainLink(5, 7, 6),
                 VodChromeFocusChain.ChainLink(6, 5, -1),
             ),
             plan.links,

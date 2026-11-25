@@ -4,6 +4,7 @@
     <string name="search_filters">İçerik filtreleri</string>
     <string name="search_filter_all">Tümü</string>
     <string name="search_clear">Aramayı temizle</string>
+    <string name="search_voice">Sesli arama</string>
     <string name="search_idle_title">Ne izlemek istersiniz?</string>
     <string name="search_idle_message">Arşivinizde aramak için bir içerik veya kanal adı girin.</string>
     <string name="search_loading">Arşiviniz aranıyor…</string>

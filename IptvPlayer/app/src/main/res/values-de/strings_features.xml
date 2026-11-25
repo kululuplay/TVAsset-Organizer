@@ -60,6 +60,8 @@
     <string name="sleep_timer_off">Aus</string>
     <string name="sleep_timer_minutes">%d Min.</string>
     <string name="sleep_timer_set">Sleep-Timer auf %d Min. gestellt</string>
+    <string name="playback_speed">Wiedergabegeschwindigkeit</string>
+    <string name="playback_speed_passthrough">Die Wiedergabegeschwindigkeit lässt sich nicht ändern, solange Audio-Passthrough eingeschaltet ist.</string>
     <string name="audio_delay">Audio-Verzögerung</string>
     <string name="subtitle_delay">Untertitel-Verzögerung</string>
     <string name="delay_ms">%d ms</string>

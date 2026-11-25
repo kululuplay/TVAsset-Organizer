@@ -4,6 +4,7 @@
     <string name="search_filters">مرشحات المحتوى</string>
     <string name="search_filter_all">الكل</string>
     <string name="search_clear">مسح البحث</string>
+    <string name="search_voice">البحث الصوتي</string>
     <string name="search_idle_title">ماذا تريد أن تشاهد؟</string>
     <string name="search_idle_message">أدخل عنوانًا أو اسم قناة للبحث في مكتبتك.</string>
     <string name="search_loading">جارٍ البحث في مكتبتك…</string>

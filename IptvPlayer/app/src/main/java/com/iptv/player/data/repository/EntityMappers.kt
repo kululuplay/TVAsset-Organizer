@@ -116,7 +116,8 @@ internal interface EntityMappers {
         vodId = vodId,
         seriesId = seriesId,
         seasonNumber = seasonNumber,
-        episodeNumber = episodeNumber
+        episodeNumber = episodeNumber,
+        updatedAt = updatedAt
     )
 }
 

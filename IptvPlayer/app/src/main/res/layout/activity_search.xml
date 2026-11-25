@@ -102,6 +102,23 @@
                 android:maxLines="1"
                 android:nextFocusDown="@id/filterAll" />
 
+            <!-- Shown by SearchActivity only when the device has a speech recogniser. -->
+            <ImageButton
+                android:id="@+id/searchVoiceButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_search_clear_button"
+                android:contentDescription="@string/search_voice"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:nextFocusDown="@id/filterAll"
+                android:padding="12dp"
+                android:src="@drawable/ic_mic"
+                android:stateListAnimator="@animator/control_focus"
+                android:visibility="gone"
+                app:tint="@color/text_primary" />
+
             <ImageButton
                 android:id="@+id/searchClearButton"
                 android:layout_width="48dp"

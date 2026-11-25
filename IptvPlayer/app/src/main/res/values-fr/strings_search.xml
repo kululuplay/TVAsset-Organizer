@@ -4,6 +4,7 @@
     <string name="search_filters">Filtres de contenu</string>
     <string name="search_filter_all">Tout</string>
     <string name="search_clear">Effacer la recherche</string>
+    <string name="search_voice">Recherche vocale</string>
     <string name="search_idle_title">Que souhaitez-vous regarder ?</string>
     <string name="search_idle_message">Saisissez un titre ou le nom d’une chaîne pour parcourir votre bibliothèque.</string>
     <string name="search_loading">Recherche dans votre bibliothèque…</string>

@@ -60,6 +60,8 @@
     <string name="sleep_timer_off">Désactivé</string>
     <string name="sleep_timer_minutes">%d min</string>
     <string name="sleep_timer_set">Minuteur de veille réglé sur %d min</string>
+    <string name="playback_speed">Vitesse de lecture</string>
+    <string name="playback_speed_passthrough">La vitesse de lecture ne peut pas être modifiée tant que le passthrough audio est activé.</string>
     <string name="audio_delay">Décalage audio</string>
     <string name="subtitle_delay">Décalage des sous-titres</string>
     <string name="delay_ms">%d ms</string>

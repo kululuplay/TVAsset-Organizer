@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "playbackPolicySigned": {
+    "payload": "{\"deviceOverrides\":[{\"match\":{\"manufacturer\":\"^Amazon$\",\"model\":\"^(AFTMM|AFTSS)$\"},\"set\":{\"startEngine\":\"VLC\"}}],\"policyVersion\":1,\"expiresAtEpochMs\":1803370739066}",
+    "sig": "MEUCIGF8ZGQD0RPn2pZ7qOJ/JOyNX280XV09feJzGmEzhKvKAiEA2qizfAdH3ArrfJOOwua1ez8yOfTZ70qpOEzfyuOuMN8=",
+    "kid": "1"
+  }
+}

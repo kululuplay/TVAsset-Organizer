@@ -60,8 +60,8 @@ android {
         applicationId = "com.iptv.player"
         minSdk = 23
         targetSdk = 34
-        versionCode = 151
-        versionName = "1.6.5"
+        versionCode = 152
+        versionName = "1.6.6"
         // Device-level checks (certificate trust on old Android, libVLC TLS)
         // that a JVM test cannot cover; run with connectedDebugAndroidTest.
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -202,6 +202,8 @@ dependencies {
 
     // --- Android TV (Leanback) ---
     implementation("androidx.leanback:leanback:1.0.0")
+    // Watch Next row ("Continue watching") on the Android TV / Google TV home screen.
+    implementation("androidx.tvprovider:tvprovider:1.0.0")
 
     // --- Persistence (Room) ---
     // Room's compiler must support Kotlin 2.2 / KSP2 used by Media3's toolchain.

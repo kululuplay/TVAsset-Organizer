@@ -50,6 +50,7 @@ import com.iptv.player.util.RequestReporter
 import com.iptv.player.util.ResolvedRequestCenter
 import com.iptv.player.util.StabilityTelemetry
 import com.iptv.player.util.trustBundledRootOnLegacyAndroid
+import com.iptv.player.watchnext.WatchNextPublisher
 import com.iptv.player.work.SyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -134,6 +135,10 @@ class IptvApp : Application(), ImageLoaderFactory {
         ServiceLocator.init(this)
         StaleProcessGuard.install(this)
 
+        // Mirror "Continue watching" into the Watch Next row of the TV home
+        // screen. Does nothing where that row does not exist (Fire OS, phones).
+        WatchNextPublisher.start(this)
+
         // Hold a Wi-Fi performance lock while a stream plays so cheap sticks do
         // not drop into Wi-Fi power-save mid-channel. Best effort only.
         runCatching { PlaybackWifiLock.install(this) }
@@ -200,6 +205,8 @@ class IptvApp : Application(), ImageLoaderFactory {
                 if (startedActivities++ == 0) {
                     StaleProcessGuard.onForeground()
                     HeartbeatReporter.start(this@IptvApp)
+                    com.iptv.player.util.RemoteConfig.start(this@IptvApp)
+                    com.iptv.player.util.ProgramReminders.start(this@IptvApp)
                     com.iptv.player.util.PlaybackSupportReporter.start(this@IptvApp)
                 }
             }
@@ -209,6 +216,8 @@ class IptvApp : Application(), ImageLoaderFactory {
                 if (startedActivities == 0) {
                     StaleProcessGuard.onBackground()
                     HeartbeatReporter.stop()
+                    com.iptv.player.util.RemoteConfig.stop()
+                    com.iptv.player.util.ProgramReminders.stop()
                     com.iptv.player.util.PlaybackSupportReporter.stop()
                     // Orderly background stop: the next launch must NOT read this as
                     // an abnormal exit. (A native crash / OOM-kill skips this path.)
