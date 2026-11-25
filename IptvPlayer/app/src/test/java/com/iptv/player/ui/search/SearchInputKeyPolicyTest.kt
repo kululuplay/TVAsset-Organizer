@@ -29,6 +29,14 @@ class SearchInputKeyPolicyTest {
     }
 
     @Test
+    fun `the voice button sits between the field and the clear button`() {
+        assertEquals(Action.FOCUS_VOICE_BUTTON, SearchInputKeyPolicy.decide(right, false, right, true, true, true))
+        assertEquals(Action.FOCUS_VOICE_BUTTON, SearchInputKeyPolicy.decide(right, false, right, true, false, true))
+        assertEquals(Action.PASS_THROUGH, SearchInputKeyPolicy.decide(right, false, right, false, true, true))
+        assertEquals(Action.LET_IME_HANDLE, SearchInputKeyPolicy.decide(right, true, right, true, true, true))
+    }
+
+    @Test
     fun `letters are never intercepted`() {
         assertEquals(Action.PASS_THROUGH, SearchInputKeyPolicy.decide(KeyEvent.KEYCODE_A, true, right, true, true))
         assertEquals(Action.PASS_THROUGH, SearchInputKeyPolicy.decide(KeyEvent.KEYCODE_A, false, right, true, true))

@@ -4,6 +4,7 @@
     <string name="search_filters">Inhoudsfilters</string>
     <string name="search_filter_all">Alles</string>
     <string name="search_clear">Zoekopdracht wissen</string>
+    <string name="search_voice">Gesproken zoekopdracht</string>
     <string name="search_idle_title">Wat wil je kijken?</string>
     <string name="search_idle_message">Voer een titel of zendernaam in om je bibliotheek te doorzoeken.</string>
     <string name="search_loading">Je bibliotheek wordt doorzocht…</string>

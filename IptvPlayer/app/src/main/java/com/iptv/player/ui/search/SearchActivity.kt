@@ -7,6 +7,7 @@ package com.iptv.player.ui.search
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.speech.RecognizerIntent
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.KeyEvent
@@ -16,6 +17,7 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
@@ -63,6 +65,7 @@ class SearchActivity : BaseActivity() {
         private const val STATE_SERIES_POSITION = "search_series_position"
 
         private const val FOCUS_INPUT = "input"
+        private const val FOCUS_VOICE = "voice"
         private const val FOCUS_CLEAR = "clear"
         private const val FOCUS_FILTER_ALL = "filter_all"
         private const val FOCUS_FILTER_LIVE = "filter_live"
@@ -128,6 +131,23 @@ class SearchActivity : BaseActivity() {
     private var lastMoviePosition = 0
     private var lastSeriesId: String? = null
     private var lastSeriesPosition = 0
+
+    // Registered at construction so the result still arrives when the system
+    // recreated this screen behind the recogniser.
+    private val voiceSearch =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            // A start the system refused answers here without pause and resume.
+            navigationInFlight = false
+            if (result.resultCode != RESULT_OK) return@registerForActivityResult
+            val spoken = VoiceSearchPolicy.bestResult(
+                runCatching {
+                    result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                }.getOrNull(),
+            ) ?: return@registerForActivityResult
+            // Same path as typing: the TextWatcher starts the search.
+            binding.searchInput.setText(spoken)
+            binding.searchInput.setSelection(binding.searchInput.text?.length ?: 0)
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -364,6 +384,14 @@ class SearchActivity : BaseActivity() {
     }
 
     private fun setupActions() {
+        // Many Fire TV devices have no speech recogniser: no button there.
+        binding.searchVoiceButton.visibility =
+            if (voiceSearchIntent().resolveActivity(packageManager) != null) View.VISIBLE
+            else View.GONE
+        binding.searchVoiceButton.setOnClickListener { startVoiceSearch() }
+        binding.searchVoiceButton.setOnFocusChangeListener { _, focused ->
+            if (focused) lastKnownFocusRegion = FOCUS_VOICE
+        }
         binding.searchClearButton.setOnClickListener {
             clearSearch(focusInput = true)
         }
@@ -819,6 +847,7 @@ class SearchActivity : BaseActivity() {
                         towardEnd = towardEnd,
                         cursorAtEnd = atEnd,
                         clearButtonVisible = binding.searchClearButton.visibility == View.VISIBLE,
+                        voiceButtonVisible = binding.searchVoiceButton.visibility == View.VISIBLE,
                     )
                 ) {
                     // The on-screen keyboard owns the D-pad while it is showing;
@@ -829,6 +858,11 @@ class SearchActivity : BaseActivity() {
                         selectedFilterView().requestFocus()
                         return true
                     }
+                    SearchInputKeyPolicy.Action.FOCUS_VOICE_BUTTON -> {
+                        binding.searchInput.hideSoftKeyboard()
+                        binding.searchVoiceButton.requestFocus()
+                        return true
+                    }
                     SearchInputKeyPolicy.Action.FOCUS_CLEAR_BUTTON -> {
                         binding.searchInput.hideSoftKeyboard()
                         binding.searchClearButton.requestFocus()
@@ -837,10 +871,34 @@ class SearchActivity : BaseActivity() {
                     SearchInputKeyPolicy.Action.PASS_THROUGH -> Unit
                 }
             }
-            binding.searchClearButton.hasFocus() -> {
+            binding.searchVoiceButton.hasFocus() -> {
                 when (event.keyCode) {
                     towardStart -> {
                         focusSearchInput()
+                        return true
+                    }
+                    towardEnd -> {
+                        // Last control of the row while the clear button is
+                        // hidden: stay, never let focus search leave the row.
+                        if (binding.searchClearButton.visibility == View.VISIBLE) {
+                            binding.searchClearButton.requestFocus()
+                        }
+                        return true
+                    }
+                    KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        selectedFilterView().requestFocus()
+                        return true
+                    }
+                }
+            }
+            binding.searchClearButton.hasFocus() -> {
+                when (event.keyCode) {
+                    towardStart -> {
+                        if (binding.searchVoiceButton.visibility == View.VISIBLE) {
+                            binding.searchVoiceButton.requestFocus()
+                        } else {
+                            focusSearchInput()
+                        }
                         return true
                     }
                     KeyEvent.KEYCODE_DPAD_DOWN -> {
@@ -1092,6 +1150,11 @@ class SearchActivity : BaseActivity() {
                 if (!seriesSettled) return
                 if (!focusSeriesResult()) focusRetryOrSelectedFilter()
             }
+            FOCUS_VOICE -> if (binding.searchVoiceButton.visibility == View.VISIBLE) {
+                binding.searchVoiceButton.requestFocus()
+            } else {
+                focusSearchInput()
+            }
             FOCUS_CLEAR -> if (binding.searchClearButton.visibility == View.VISIBLE) {
                 binding.searchClearButton.requestFocus()
             } else {
@@ -1156,6 +1219,7 @@ class SearchActivity : BaseActivity() {
 
     private fun focusedRegion(): String = when {
         binding.searchInput.hasFocus() -> FOCUS_INPUT
+        binding.searchVoiceButton.hasFocus() -> FOCUS_VOICE
         binding.searchClearButton.hasFocus() -> FOCUS_CLEAR
         binding.filterAll.hasFocus() -> FOCUS_FILTER_ALL
         binding.filterLive.hasFocus() -> FOCUS_FILTER_LIVE
@@ -1200,6 +1264,34 @@ class SearchActivity : BaseActivity() {
     private fun isImeVisible(): Boolean {
         val insets = ViewCompat.getRootWindowInsets(binding.root) ?: return false
         return insets.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())
+    }
+
+    private fun voiceSearchIntent(): Intent =
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+            )
+            .apply {
+                // A blank tag means the app follows the device: so does the recogniser.
+                ServiceLocator.settings.languageTagBlocking()
+                    .takeIf { it.isNotBlank() }
+                    ?.let { putExtra(RecognizerIntent.EXTRA_LANGUAGE, it) }
+            }
+
+    private fun startVoiceSearch() {
+        // Same single-launch guard as the results: two quick OK presses must
+        // not stack two recognisers. onResume releases it.
+        if (navigationInFlight) return
+        navigationInFlight = true
+        binding.searchInput.hideSoftKeyboard()
+        try {
+            voiceSearch.launch(voiceSearchIntent())
+        } catch (_: RuntimeException) {
+            // The recogniser can be gone or refuse after the button was shown.
+            navigationInFlight = false
+            Toast.makeText(this, R.string.error_unknown, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun clearSearch(focusInput: Boolean) {

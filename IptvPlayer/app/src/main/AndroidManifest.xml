@@ -28,6 +28,11 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="application/vnd.android.package-archive" />
         </intent>
+        <!-- Voice search: SearchActivity shows its microphone button only when
+             a speech recogniser answers this action. -->
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
     </queries>
 
     <!-- TV apps must not require a touchscreen. -->

@@ -4,6 +4,7 @@
     <string name="search_filters">Content filters</string>
     <string name="search_filter_all">All</string>
     <string name="search_clear">Clear search</string>
+    <string name="search_voice">Voice search</string>
     <string name="search_idle_title">What would you like to watch?</string>
     <string name="search_idle_message">Enter a title or channel name to search your library.</string>
     <string name="search_loading">Searching your library…</string>

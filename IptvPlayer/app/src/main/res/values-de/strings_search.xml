@@ -4,6 +4,7 @@
     <string name="search_filters">Inhaltsfilter</string>
     <string name="search_filter_all">Alle</string>
     <string name="search_clear">Suche löschen</string>
+    <string name="search_voice">Sprachsuche</string>
     <string name="search_idle_title">Was möchten Sie sehen?</string>
     <string name="search_idle_message">Geben Sie einen Titel oder Sendernamen ein, um Ihre Mediathek zu durchsuchen.</string>
     <string name="search_loading">Mediathek wird durchsucht…</string>
