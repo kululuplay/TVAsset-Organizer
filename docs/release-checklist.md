@@ -44,7 +44,14 @@ of the version list them.
 
 ## After the release
 
-The day after, read the field numbers from the support desk database (start
-time, fatal sessions, engine rescues by version) and compare them with the
-previous version. Automatic crash reports arrive in the support desk as
-diagnostic reports that begin with "Otomatik rapor".
+The day after, read the field numbers of the new version and compare them
+with the previous one (read-only):
+
+```bash
+ssh root@<support desk> 'cd /tmp && sudo -u postgres psql -d kululu_support -q -v ver=1.6.6'   < support-desk/field-report.sql
+```
+
+It prints start times, fatal sessions, engine switches and rebuffers by kind
+and by device model, the channels that fail to connect, and the automatic
+crash reports (diagnostic reports that begin with "Otomatik rapor"). Compare
+per device model or per channel: the mix differs between versions.
