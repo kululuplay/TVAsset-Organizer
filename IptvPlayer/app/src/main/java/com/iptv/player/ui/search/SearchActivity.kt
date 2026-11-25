@@ -386,7 +386,7 @@ class SearchActivity : BaseActivity() {
     private fun setupActions() {
         // Many Fire TV devices have no speech recogniser: no button there.
         binding.searchVoiceButton.visibility =
-            if (voiceSearchIntent().resolveActivity(packageManager) != null) View.VISIBLE
+            if (runCatching { voiceSearchIntent().resolveActivity(packageManager) }.getOrNull() != null) View.VISIBLE
             else View.GONE
         binding.searchVoiceButton.setOnClickListener { startVoiceSearch() }
         binding.searchVoiceButton.setOnFocusChangeListener { _, focused ->

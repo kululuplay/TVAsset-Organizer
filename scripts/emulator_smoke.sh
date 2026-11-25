@@ -12,6 +12,9 @@ adb=${ADB:-adb}
 package=${PACKAGE:-com.iptv.player}
 
 $adb install -r "$apk" >/dev/null
+# The package manager force-stops the package once more just after install
+# returns; a start inside that moment is killed and looks like a failure.
+sleep 5
 $adb logcat -c
 $adb shell monkey -p "$package" -c android.intent.category.LEANBACK_LAUNCHER 1 >/dev/null 2>&1 ||
   $adb shell monkey -p "$package" -c android.intent.category.LAUNCHER 1 >/dev/null

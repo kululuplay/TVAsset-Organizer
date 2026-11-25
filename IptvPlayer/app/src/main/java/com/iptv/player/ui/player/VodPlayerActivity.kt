@@ -1234,7 +1234,9 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
     private fun setBuffering(visible: Boolean) {
         val wasBuffering = healthWatch.bufferingSinceMs > 0L
         binding.bufferingOverlay.visibility = if (visible) View.VISIBLE else View.GONE
-        PlaybackQoeRuntime.setRebuffering(qoeSessionId, visible)
+        // Loading that a seek asked for is not a stall. Counted as one, a viewer who
+        // skipped through films looked like a broken device in the support desk numbers.
+        PlaybackQoeRuntime.setRebuffering(qoeSessionId, visible && seekTimeline.targetMs == null)
         if (visible && playbackStarted) {
             handler.removeCallbacks(stablePlaybackRunnable)
         } else if (!visible && playbackStarted && activeIsPlaying()) {
@@ -1675,7 +1677,8 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
         engine.setAspectMode(VodAspectNative.asVodAspectMode(aspect))
         engine.setListener(media3Listener)
         engine.bind(binding.videoContainer)
-        engine.setPlaybackSpeed(playbackSpeed)
+        // Normal speed touches nothing: a fresh player already runs at 1x.
+        if (playbackSpeed != VodPlaybackSpeedPolicy.DEFAULT) engine.setPlaybackSpeed(playbackSpeed)
         media3VodEngine = engine
         media3Generation = VodEngine.NO_GENERATION
         updateTrackButtons()
@@ -1991,8 +1994,9 @@ class VodPlayerActivity : BaseActivity(), PlaybackProcessRecoveryTargetProvider 
                         containerWidth,
                         containerHeight,
                     )
-                    // A rebuilt player starts at 1x: set the chosen speed on every start.
-                    player.rate = selectedSpeed
+                    // A rebuilt player starts at 1x: set a chosen speed on every start.
+                    // Normal speed sends no rate command at all.
+                    if (selectedSpeed != VodPlaybackSpeedPolicy.DEFAULT) player.rate = selectedSpeed
                     if (restoreAsPaused) player.pause()
                 }
                 startSurfaceValidation()
